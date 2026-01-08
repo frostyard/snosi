@@ -1,0 +1,3 @@
+#!/bin/bash
+# Post-install script for sysext
+# Add any customizations here

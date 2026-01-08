@@ -1,0 +1,11 @@
+[Unit]
+DefaultDependencies=no
+Before=local-fs.target sysinit.target
+
+[Mount]
+What=/usr/share/factory/opt/incus
+Where=/opt/incus
+Options=bind
+
+[Install]
+WantedBy=local-fs.target
