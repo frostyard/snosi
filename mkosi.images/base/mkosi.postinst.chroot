@@ -18,3 +18,23 @@ fi
 
 # Clean up .old files
 rm -f /*.old || true
+
+
+# Use proper home directory for new users
+sed -i 's|.*HOME=/home|HOME=/var/home|' "/etc/default/useradd"
+
+# Enable mounts
+systemctl enable home.mount
+systemctl enable root.mount
+systemctl enable srv.mount
+systemctl enable mnt.mount
+systemctl enable media.mount
+systemctl enable opt.mount
+systemctl enable usr-local.mount
+
+
+# Add build information to os-release
+# echo "BUILD_ID=\"$BUILD_ID\"" >> /usr/lib/os-release
+
+# remove bls-garbage-collect from /etc/systemd/system/basic.garget.wants
+rm -rf /etc/systemd/system/basic.target.wants/bls-garbage-collect.service

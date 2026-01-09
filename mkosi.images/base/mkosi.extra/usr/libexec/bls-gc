@@ -1,0 +1,85 @@
+#!/bin/bash
+
+set -e
+set -o pipefail
+
+# Error logging function
+log_error() {
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo "ERROR: bls-gc script failed with exit code $exit_code at line $1" | logger -t bls-gc -p user.error
+        echo "ERROR: bls-gc script failed with exit code $exit_code at line $1" >&2
+    fi
+}
+
+# Set up error trap
+trap 'log_error $LINENO' ERR
+
+# This script removes unused kernels from the /boot/EFI/Linux directory
+# using the Boot Loader Specification (BLS) entries found in /boot/loader/entries.
+# TODO: remove this when bootc fixes issue https://github.com/bootc-dev/bootc/issues/1808
+BLS_DIR="/boot/loader/entries"
+BOOT_DIR="/boot/EFI/Linux"
+if [ ! -d "$BLS_DIR" ] || [ ! -d "$BOOT_DIR" ]; then
+    echo "ERROR: BLS directory or Boot directory does not exist." | logger -t bls-gc -p user.error
+    echo "BLS directory or Boot directory does not exist." >&2
+    exit 1
+fi
+
+# Check if there are at least 3 directories in BOOT_DIR
+shopt -s nullglob
+boot_dirs=("$BOOT_DIR"/*/)
+if [ ${#boot_dirs[@]} -lt 3 ]; then
+    echo "INFO: Fewer than 3 directories in $BOOT_DIR. Skipping cleanup." | logger -t bls-gc -p user.info
+    echo "Fewer than 3 directories in $BOOT_DIR. Skipping cleanup." >&2
+    exit 0
+fi
+shopt -u nullglob
+
+# Collect all used kernel versions from BLS entries
+# the boot configuration file has this line:
+# linux /EFI/Linux/5a8097188a7d98e9d85f23d8a6003fe352182e65a7eb57ef9707c56686f7cfefcdba1fff7813be1badc2bd2454e4ebf67e9521f5537e5ce36da702a033971479/vmlinuz
+# ignore the last part (the vmlinuz) and get the long hash-like string
+used_kernels=()
+for entry in "$BLS_DIR"/*.conf; do
+    if [ -f "$entry" ]; then
+        kernel_path=$(grep -E '^linux ' "$entry" | awk '{print $2}')
+        if [[ $kernel_path =~ /EFI/Linux/([^/]+)/vmlinuz ]]; then
+            kernel_version="${BASH_REMATCH[1]}"
+            # Validate kernel_version: non-empty and 64 hex chars (128 non-hex chars)
+            if [[ -n "$kernel_version" && "$kernel_version" =~ ^[a-fA-F0-9]{128}$ ]]; then
+                echo "Found used kernel: $kernel_version" | logger -t bls-gc -p user.info
+                used_kernels+=("$kernel_version")
+            else
+                echo "WARNING: Ignoring invalid kernel version '$kernel_version' from entry '$entry'" | logger -t bls-gc -p user.warning
+            fi
+        fi
+    fi
+done
+
+# Remove unused kernels from the Boot directory
+shopt -s nullglob
+if [ ${#used_kernels[@]} -eq 0 ]; then
+    echo "WARNING: No valid used kernels found. Aborting cleanup to avoid deleting all kernels." | logger -t bls-gc -p user.warning
+    echo "No valid used kernels found. Aborting cleanup to avoid deleting all kernels." >&2
+    exit 2
+fi
+
+for kernel_dir in "$BOOT_DIR"/*; do
+    kernel_name=$(basename "$kernel_dir")
+    # Only act on directories
+    if [ -d "$kernel_dir" ]; then
+        found=0
+        for used in "${used_kernels[@]}"; do
+            if [ "$kernel_name" = "$used" ]; then
+                found=1
+                break
+            fi
+        done
+        if [ $found -eq 0 ]; then
+            echo "Found and removing unused kernel directory: $kernel_name" | logger -t bls-gc -p user.info
+            rm -r "$kernel_dir"
+        fi
+    fi
+done
+echo "Cleanup complete." | logger -t bls-gc -p user.info
