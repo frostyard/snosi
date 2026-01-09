@@ -20,9 +20,6 @@ jobs:
     name: Snosi Desktop
     runs-on: ubuntu-24.04
     steps:
-      - name: install git
-        run: |
-          sudo apt-get update && sudo apt-get install -y git-core jq
       - name: setup-mkosi
         uses: systemd/mkosi@v26
       - name: checkout repo
