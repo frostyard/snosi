@@ -18,7 +18,7 @@ concurrency:
 jobs:
   build:
     name: Snosi Desktop
-    runs-on: generic
+    runs-on: ubuntu-24.04
     steps:
       - name: install git
         run: |
