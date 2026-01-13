@@ -34,7 +34,7 @@ if [ -z "$EXISTING_OUTPUT_FILE" ]; then
 fi
 
 # Copy and rename the existing output file to the new extension filename, keeping the same compression
-mv "$EXISTING_OUTPUT_FILE" "$EXTFILENAME.${EXISTING_OUTPUT_FILE##*.}"
+cp "$EXISTING_OUTPUT_FILE" "$EXTFILENAME.${EXISTING_OUTPUT_FILE##*.}"
 echo "Created extension file: $EXTFILENAME.${EXISTING_OUTPUT_FILE##*.}"
 
 # remove existing output file symlink if it exists

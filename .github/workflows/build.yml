@@ -1,0 +1,74 @@
+name: Build Snow Linux
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: snosi
+  IMAGE_DESC: "Snow Linux - A minimal bootc-enabled OS image"
+  IMAGE_KEYWORDS: "linux,os,bootc,systemd,debian"
+  IMAGE_LICENSE: Apache-2.0
+  IMAGE_LOGO_URL: "" # Optional: URL to logo image
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate build date
+        id: date
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+
+      - name: Generate version tag
+        id: version
+        run: echo "tag=1.0.$(date -u +%Y%m%d)" >> $GITHUB_OUTPUT
+
+      - name: Install mkosi
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip systemd-container
+          pip3 install mkosi
+
+      - name: Build image with mkosi
+        env:
+          # These are picked up by mkosi.postoutput script
+          CREATED_DATE: ${{ steps.date.outputs.date }}
+          DEFAULT_TAG: ${{ steps.version.outputs.tag }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_DESC: ${{ env.IMAGE_DESC }}
+          IMAGE_KEYWORDS: ${{ env.IMAGE_KEYWORDS }}
+          IMAGE_LICENSE: ${{ env.IMAGE_LICENSE }}
+          IMAGE_LOGO_URL: ${{ env.IMAGE_LOGO_URL }}
+          # These are automatically available from GitHub context
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          sudo -E mkosi build
+
+      - name: Login to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to registry
+        if: github.event_name != 'pull_request'
+        run: |
+          skopeo copy \
+            oci:output/snow \
+            docker://ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
+          skopeo copy \
+            oci:output/snow \
+            docker://ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
