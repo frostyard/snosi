@@ -1,1 +1,1 @@
-deb [arch=all,amd64 signed-by=/etc/apt/keyrings/frostyard.gpg] https://repo.frostyard.org/ stable main
+deb [arch=all,amd64 signed-by=/etc/apt/keyrings/frostyard.gpg] https://repository.frostyard.org/ stable main
