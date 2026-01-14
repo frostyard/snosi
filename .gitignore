@@ -9,3 +9,4 @@ mkosi.key
 mkosi.crt
 .mkosi-private
 .envrc
+mkosi.images/base/mkosi.extra/usr/share/homebrew.tar.zst
