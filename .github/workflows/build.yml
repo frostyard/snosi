@@ -95,7 +95,16 @@ jobs:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           sudo -E mkosi build
-
+      - name: Publish to frostyard repo
+        uses: frostyard/repogen/.github/actions/publish-to-r2@main
+        with:
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          r2-bucket: frostyardrepo
+          packages-dir: ./output
+          package-type: sysext # or sysext
+          base-url: https://repository.frostyard.org # required for sysext
       - name: Login to GitHub Container Registry
         if: github.event_name != 'pull_request'
         run: skopeo login ghcr.io -u ${{ github.actor }} --password ${{ secrets.GHCR_PAT }}
