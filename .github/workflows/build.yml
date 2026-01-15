@@ -96,6 +96,7 @@ jobs:
         run: |
           sudo -E mkosi build
       - name: Publish to frostyard repo
+        if: github.event_name != 'pull_request'
         uses: frostyard/repogen/.github/actions/publish-to-r2@main
         with:
           r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
