@@ -95,6 +95,7 @@ jobs:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           sudo -E mkosi build
+          sudo ./sysextmv.sh
       - name: Publish to frostyard repo
         if: github.event_name != 'pull_request'
         uses: frostyard/repogen/.github/actions/publish-to-r2@main
