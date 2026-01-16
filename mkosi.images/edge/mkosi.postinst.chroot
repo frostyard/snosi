@@ -19,3 +19,7 @@ ${SUDO} mkdir -p /usr/share/icons/hicolor/{16x16/apps,24x24/apps,32x32/apps,48x4
 for i in "16" "24" "32" "48" "64" "128" "256"; do
         ${SUDO} ln -sf /usr/lib/microsoft-edge/product_logo_$i.png /usr/share/icons/hicolor/${i}x${i}/apps/microsoft-edge.png
 done
+
+# edit /usr/share/gnome-control-center/default-apps/microsoft-edge.xml
+# to replace any occurrence of /opt/microsoft/msedge/microsoft-edge with /usr/lib/microsoft-edge
+${SUDO} sed -i 's|/opt/microsoft/msedge/microsoft-edge|/usr/lib/microsoft-edge/microsoft-edge|g' /usr/share/gnome-control-center/default-apps/microsoft-edge.xml
