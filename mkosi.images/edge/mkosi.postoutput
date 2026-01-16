@@ -1,11 +1,11 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 set -e
-KEYPACKAGE=code
+KEYPACKAGE=microsoft-edge-stable
 KEYVERSION=NIL
 
-# find the first file in the output directory that matches the pattern "vscode.manifest"
-MANIFEST_FILE=$(find "$OUTPUTDIR" -maxdepth 1 -type f -name "vscode.manifest" | head -n 1)
+# find the first file in the output directory that matches the pattern "edge.manifest"
+MANIFEST_FILE=$(find "$OUTPUTDIR" -maxdepth 1 -type f -name "edge.manifest" | head -n 1)
 echo "Found manifest file: $MANIFEST_FILE"
 KEYVERSION=$(cat $MANIFEST_FILE | jq -r --arg KEYPACKAGE ${KEYPACKAGE} '.packages[] | select (.name == $KEYPACKAGE) | .version')
 echo "Determined version: $KEYVERSION for package: $KEYPACKAGE"

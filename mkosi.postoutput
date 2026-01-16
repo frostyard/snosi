@@ -120,3 +120,4 @@ jq --arg digest "sha256:$NEW_MANIFEST_DIGEST" --argjson size "$NEW_MANIFEST_SIZE
 mv "$OCI_DIR/index.json.new" "$OCI_DIR/index.json"
 
 echo "OCI annotations added successfully"
+
