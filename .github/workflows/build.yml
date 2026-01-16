@@ -103,6 +103,7 @@ jobs:
           r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           r2-bucket: frostyardrepo
+          skip-duplicates: true
           gpg-private-key: ${{ secrets.REPOGEN_GPG_KEY }}
           packages-dir: ./output/sysexts
           package-type: sysext # or sysext
