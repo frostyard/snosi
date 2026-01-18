@@ -1,0 +1,25 @@
+#!/bin/bash
+# Post-install script for sysext
+# Add any customizations here
+set -euo pipefail
+set -x
+
+
+if [[ "${UID}" == "0" ]]; then
+        SUDO=""
+else
+        SUDO="sudo"
+fi
+
+
+${SUDO} mv /opt/microsoft/msedge /usr/lib/microsoft-edge
+${SUDO} rm -rf /opt/microsoft
+${SUDO} ln -sf /usr/lib/microsoft-edge/microsoft-edge /usr/bin/microsoft-edge-stable
+${SUDO} mkdir -p /usr/share/icons/hicolor/{16x16/apps,24x24/apps,32x32/apps,48x48/apps,64x64/apps,128x128/apps,256x256/apps}
+for i in "16" "24" "32" "48" "64" "128" "256"; do
+        ${SUDO} ln -sf /usr/lib/microsoft-edge/product_logo_$i.png /usr/share/icons/hicolor/${i}x${i}/apps/microsoft-edge.png
+done
+
+# edit /usr/share/gnome-control-center/default-apps/microsoft-edge.xml
+# to replace any occurrence of /opt/microsoft/msedge/microsoft-edge with /usr/lib/microsoft-edge
+${SUDO} sed -i 's|/opt/microsoft/msedge/microsoft-edge|/usr/lib/microsoft-edge/microsoft-edge|g' /usr/share/gnome-control-center/default-apps/microsoft-edge.xml
