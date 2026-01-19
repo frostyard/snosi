@@ -146,7 +146,7 @@ jobs:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           sudo rm -rf output/
-          sudo -E mkosi --profile loaded build
+          sudo -E mkosi --profile snow --profile backports --profile oci --profile bootc --profile loaded build
       - name: Push to registry
         if: github.event_name != 'pull_request'
         env:

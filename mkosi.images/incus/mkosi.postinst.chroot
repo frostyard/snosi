@@ -1,0 +1,6 @@
+#!/bin/bash
+# Post-install script for sysext
+# Add any customizations here
+set -euo pipefail
+
+set -x

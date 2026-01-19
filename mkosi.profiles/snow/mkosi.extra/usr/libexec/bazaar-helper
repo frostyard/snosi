@@ -1,0 +1,7 @@
+#!/usr/bin/bash
+
+if ! flatpak list --system --columns=application | grep -q '^io\.github\.kolunmi\.Bazaar$'; then
+    flatpak install --system -y io.github.kolunmi.Bazaar
+fi
+
+/usr/bin/flatpak run io.github.kolunmi.Bazaar "$@"

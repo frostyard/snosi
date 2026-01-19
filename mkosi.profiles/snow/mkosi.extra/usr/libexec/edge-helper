@@ -1,0 +1,7 @@
+#!/usr/bin/bash
+
+if ! flatpak list --system --columns=application | grep -q '^com\.microsoft\.Edge$'; then
+    flatpak install --system -y com.microsoft.Edge
+fi
+
+/usr/bin/flatpak run com.microsoft.Edge "$@"

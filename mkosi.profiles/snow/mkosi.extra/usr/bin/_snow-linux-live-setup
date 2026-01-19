@@ -1,0 +1,23 @@
+#!/bin/sh
+
+set -eux
+
+# if /etc/snow/oem-complete exists, exit immediately
+if [ -f /etc/snow/oem-complete ]; then
+		exit 0
+fi
+
+# create a group called "snow-first-setup" with custom gid 1501
+if ! getent group snow-first-setup >/dev/null; then
+		groupadd -g 1501 snow-first-setup
+fi
+
+
+# create a user called "snow" with custom uid 1500 and add to snow-first-setup group
+if ! id -u snow >/dev/null 2>&1; then
+		useradd -m -u 1500 -g snow-first-setup -G sudo,snow-first-setup -s /bin/bash snow
+fi
+passwd --delete snow
+
+
+systemctl daemon-reload

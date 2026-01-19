@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# Install incus-agent inside the virtual machine
+
+# This script mounts a 9p share containing the incus-agent install files
+# and runs the install script from there.
+# It only runs if the 9pnet_virtio driver is available
+# and only succeeds if running in a VM in Incus.
+
+# The incus agent is used to provide better integration with the host,
+# including features like stopping the vm from the host,
+# and command execution.
+
+
+# check for /sys/bus/virtio/drivers/9pnet_virtio to see if 9p is supported
+if [ ! -d /sys/bus/virtio/drivers/9pnet_virtio ]; then
+    echo "9pnet_virtio driver not found, incus-agent installation aborted."
+    exit 1
+fi
+set -ouex pipefail
+
+echo "::group::Executing install-incus-agent"
+trap 'echo "::endgroup::"' EXIT
+
+# mount 9p share
+MOUNT_POINT="/mnt/incus-agent-share"
+mkdir -p "$MOUNT_POINT"
+mount -t 9p config "$MOUNT_POINT"
+if [ $? -ne 0 ]; then
+    echo "Failed to mount 9p share, incus-agent installation aborted."
+    exit 1
+fi
+
+# Set up cleanup trap to ensure unmounting happens even on failure
+trap 'popd 2>/dev/null || true; umount "$MOUNT_POINT" 2>/dev/null || true; rmdir "$MOUNT_POINT" 2>/dev/null || true; echo "::endgroup::"' EXIT
+
+# cd into the mounted share
+pushd "$MOUNT_POINT"
+# run the install script
+./install.sh
+# cd back
+popd
+# unmount the share
+umount "$MOUNT_POINT"
+# remove the mount point
+rmdir "$MOUNT_POINT"
+echo "Incus agent installation completed successfully."
+
+systemctl daemon-reload
+
+systemctl start incus-agent.service
