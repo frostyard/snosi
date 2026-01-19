@@ -1,0 +1,113 @@
+#!/bin/bash
+set -euo pipefail
+
+# This script runs inside the image after package installation
+# It performs final customizations
+
+echo "Running post-installation customizations..."
+# Build Initramfs
+KERNEL_VERSION="$(basename "$(find /usr/lib/modules -maxdepth 1 -type d | grep -v -E "*.img" | tail -n 1)")"
+
+dracut --force --no-hostonly --reproducible --zstd --verbose --add etc-overlay \
+  --kver "$KERNEL_VERSION" "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
+
+if [ -f "/boot/vmlinuz-$KERNEL_VERSION" ]; then
+  cp -f "/boot/vmlinuz-$KERNEL_VERSION" "/usr/lib/modules/$KERNEL_VERSION/vmlinuz"
+  echo "vmlinuz moved successfully"
+fi
+
+# Clean up .old files
+rm -f /*.old || true
+
+
+# Update os-release info
+echo "Updating os-release..."
+if [[ -f /usr/lib/os-release ]]; then
+    sed -i 's/^PRETTY_NAME=.*/PRETTY_NAME="Snow Linux"/' /usr/lib/os-release
+    sed -i 's/^NAME=.*/NAME="Snow Linux"/' /usr/lib/os-release
+    sed -i 's/^ID=.*/ID="snow"/' /usr/lib/os-release
+
+    # Add ID_LIKE if not present
+    if ! grep -q "^ID_LIKE=" /usr/lib/os-release; then
+        echo "ID_LIKE=debian" >> /usr/lib/os-release
+    fi
+
+    # Ensure VERSION_ID is set for sysext compatibility
+    if ! grep -q "^VERSION_ID=" /usr/lib/os-release; then
+        echo 'VERSION_ID="1.0"' >> /usr/lib/os-release
+    fi
+
+    # Add SYSEXT_LEVEL for system extension matching
+    # This allows sysexts to match against this specific base image version
+    if ! grep -q "^SYSEXT_LEVEL=" /usr/lib/os-release; then
+        echo 'SYSEXT_LEVEL="1.0"' >> /usr/lib/os-release
+    fi
+
+    # Update BUILD_ID if set in environment
+    if [[ -n "${BUILD_ID:-}" ]]; then
+        if grep -q "^BUILD_ID=" /usr/lib/os-release; then
+            sed -i "s/^BUILD_ID=.*/BUILD_ID=\"$BUILD_ID\"/" /usr/lib/os-release
+        else
+            echo "BUILD_ID=\"$BUILD_ID\"" >> /usr/lib/os-release
+        fi
+    fi
+fi
+
+
+# Use proper home directory for new users
+sed -i 's|.*HOME=/home|HOME=/var/home|' "/etc/default/useradd"
+
+# Enable mounts
+systemctl enable home.mount
+systemctl enable root.mount
+systemctl enable srv.mount
+systemctl enable mnt.mount
+systemctl enable media.mount
+systemctl enable opt.mount
+systemctl enable usr-local.mount
+systemctl enable gdm.service
+
+# Add build information to os-release
+# echo "BUILD_ID=\"$BUILD_ID\"" >> /usr/lib/os-release
+
+# remove bls-garbage-collect from /etc/systemd/system/basic.garget.wants
+rm -rf /etc/systemd/system/basic.target.wants/bls-garbage-collect.service
+
+
+
+# Remove fish desktop entry
+rm -f /usr/share/applications/fish.desktop
+
+
+
+
+
+# Write build date
+echo "Writing build date..."
+mkdir -p /etc
+date -u +"%Y-%m-%dT%H:%M:%SZ" > /etc/snow_build_date
+
+# Generate package list
+echo "Generating package list..."
+mkdir -p /usr/share/frostyard
+apt list --installed 2>/dev/null > /usr/share/frostyard/"${IMAGE_ID}".packages.txt || true
+
+# Clean up machine-id for first boot
+rm -f /etc/machine-id
+touch /etc/machine-id
+
+# Remove SSH host keys
+rm -f /etc/ssh/ssh_host_*
+
+# Clean up apt caches
+rm -rf /var/lib/apt/lists/*
+
+# Set up systemd-sysext infrastructure
+echo "Setting up systemd-sysext base infrastructure..."
+mkdir -p /var/lib/extensions
+mkdir -p /var/lib/confexts
+mkdir -p /usr/lib/extension-release.d
+
+
+
+echo "Post-installation complete."

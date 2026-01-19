@@ -9,6 +9,7 @@ on:
 
 env:
   IMAGE_NAME: snosi
+  REPO_NAME: snosi
   IMAGE_DESC: "Snow Linux - A minimal bootc-enabled OS image"
   IMAGE_KEYWORDS: "linux,os,bootc,systemd,debian"
   IMAGE_LICENSE: Apache-2.0
@@ -80,7 +81,7 @@ jobs:
       - name: setup-mkosi
         uses: systemd/mkosi@main
 
-      - name: Build image with mkosi
+      - name: Build main and sysexts
         env:
           # These are picked up by mkosi.postoutput script
           CREATED_DATE: ${{ steps.date.outputs.date }}
@@ -96,7 +97,7 @@ jobs:
         run: |
           sudo -E mkosi build
           sudo ./sysextmv.sh
-      - name: Publish to frostyard repo
+      - name: Publish sysexts to frostyard repo
         if: github.event_name != 'pull_request'
         uses: frostyard/repogen/.github/actions/publish-to-r2@main
         with:
@@ -109,17 +110,34 @@ jobs:
           packages-dir: ./output/sysexts
           package-type: sysext # or sysext
           base-url: https://repository.frostyard.org # required for sysext
+      - name: Build snow
+        env:
+          # These are picked up by mkosi.postoutput script
+          CREATED_DATE: ${{ steps.date.outputs.date }}
+          DEFAULT_TAG: ${{ steps.version.outputs.tag }}
+          IMAGE_NAME: snow
+          IMAGE_DESC: ${{ env.IMAGE_DESC }}
+          IMAGE_KEYWORDS: ${{ env.IMAGE_KEYWORDS }}
+          IMAGE_LICENSE: ${{ env.IMAGE_LICENSE }}
+          IMAGE_LOGO_URL: ${{ env.IMAGE_LOGO_URL }}
+          # These are automatically available from GitHub context
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          sudo -E mkosi --profile 10-image-snow --profile 20-kernel-backports --profile 80-finalize-bootc --profile 90-output-oci build
+
       - name: Login to GitHub Container Registry
         if: github.event_name != 'pull_request'
         run: skopeo login ghcr.io -u ${{ github.actor }} --password ${{ secrets.GHCR_PAT }}
         env:
           GITHUB_TOKEN: ${{ secrets.GHCR_PAT }}
 
-      - name: Push to registry
+      - name: Push snow to registry
         if: github.event_name != 'pull_request'
         env:
           REGISTRY: ghcr.io
-          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          IMAGE_NAME: snow
+          IMAGE: ghcr.io/${{ github.repository_owner }}/snosi-${{ env.IMAGE_NAME }}
         run: |
           # Push with version tag
           skopeo copy \
@@ -131,12 +149,15 @@ jobs:
             --dest-creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
             oci:output/snow \
             docker://${IMAGE}:latest
-      - name: Build loaded image with mkosi
+      - name: cleanup snow build output
+        run: |
+          sudo -E mkosi clean
+      - name: Build snow loaded
         env:
           # These are picked up by mkosi.postoutput script
           CREATED_DATE: ${{ steps.date.outputs.date }}
           DEFAULT_TAG: ${{ steps.version.outputs.tag }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}-loaded
+          IMAGE_NAME: snow-loaded
           IMAGE_DESC: ${{ env.IMAGE_DESC }}
           IMAGE_KEYWORDS: ${{ env.IMAGE_KEYWORDS }}
           IMAGE_LICENSE: ${{ env.IMAGE_LICENSE }}
@@ -145,13 +166,13 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
-          sudo rm -rf output/
-          sudo -E mkosi --profile loaded build
-      - name: Push to registry
+          sudo -E mkosi --profile 10-image-snow --profile 20-kernel-backports --profile 30-packages-loaded --profile 40-name-snowloaded --profile 80-finalize-bootc --profile 90-output-oci build
+      - name: Push snowloaded to registry
         if: github.event_name != 'pull_request'
         env:
           REGISTRY: ghcr.io
-          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-loaded
+          IMAGE_NAME: snow-loaded
+          IMAGE: ghcr.io/${{ github.repository_owner }}/snosi-${{ env.IMAGE_NAME }}
         run: |
           # Push with version tag
           skopeo copy \
@@ -162,4 +183,74 @@ jobs:
           skopeo copy \
             --dest-creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
             oci:output/snowloaded \
+            docker://${IMAGE}:latest
+      - name: cleanup snowloaded build output
+        run: |
+          sudo -E mkosi clean
+      - name: Build snowfield
+        env:
+          # These are picked up by mkosi.postoutput script
+          CREATED_DATE: ${{ steps.date.outputs.date }}
+          DEFAULT_TAG: ${{ steps.version.outputs.tag }}
+          IMAGE_NAME: snowfield
+          IMAGE_DESC: ${{ env.IMAGE_DESC }}
+          IMAGE_KEYWORDS: ${{ env.IMAGE_KEYWORDS }}
+          IMAGE_LICENSE: ${{ env.IMAGE_LICENSE }}
+          IMAGE_LOGO_URL: ${{ env.IMAGE_LOGO_URL }}
+          # These are automatically available from GitHub context
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          sudo -E mkosi --profile 10-image-snow --profile 20-kernel-surface --profile 40-name-snowfield --profile 80-finalize-bootc --profile 90-output-oci build
+      - name: Push snowfield to registry
+        if: github.event_name != 'pull_request'
+        env:
+          REGISTRY: ghcr.io
+          IMAGE_NAME: snowfield
+          IMAGE: ghcr.io/${{ github.repository_owner }}/snosi-${{ env.IMAGE_NAME }}
+        run: |
+          # Push with version tag
+          skopeo copy \
+            --dest-creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
+            oci:output/snowfield \
+            docker://${IMAGE}:${{ steps.version.outputs.tag }}
+          # Push latest tag
+          skopeo copy \
+            --dest-creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
+            oci:output/snowfield \
+            docker://${IMAGE}:latest
+      - name: cleanup snowfield build output
+        run: |
+          sudo -E mkosi clean
+      - name: Build snowfieldloaded
+        env:
+          # These are picked up by mkosi.postoutput script
+          CREATED_DATE: ${{ steps.date.outputs.date }}
+          DEFAULT_TAG: ${{ steps.version.outputs.tag }}
+          IMAGE_NAME: snowfieldloaded
+          IMAGE_DESC: ${{ env.IMAGE_DESC }}
+          IMAGE_KEYWORDS: ${{ env.IMAGE_KEYWORDS }}
+          IMAGE_LICENSE: ${{ env.IMAGE_LICENSE }}
+          IMAGE_LOGO_URL: ${{ env.IMAGE_LOGO_URL }}
+          # These are automatically available from GitHub context
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          sudo -E mkosi --profile 10-image-snow --profile 20-kernel-surface --profile 30-packages-loaded --profile 40-name-snowfieldloaded --profile 80-finalize-bootc --profile 90-output-oci build
+      - name: Push snowfieldloaded to registry
+        if: github.event_name != 'pull_request'
+        env:
+          REGISTRY: ghcr.io
+          IMAGE_NAME: snowfield-loaded
+          IMAGE: ghcr.io/${{ github.repository_owner }}/snosi-${{ env.IMAGE_NAME }}
+        run: |
+          # Push with version tag
+          skopeo copy \
+            --dest-creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
+            oci:output/snowfieldloaded \
+            docker://${IMAGE}:${{ steps.version.outputs.tag }}
+          # Push latest tag
+          skopeo copy \
+            --dest-creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
+            oci:output/snowfieldloaded \
             docker://${IMAGE}:latest

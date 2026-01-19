@@ -1,0 +1,47 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+set -e
+KEYPACKAGE=incus
+KEYVERSION=NIL
+
+# find the first file in the output directory that matches the pattern "incus.manifest"
+MANIFEST_FILE=$(find "$OUTPUTDIR" -maxdepth 1 -type f -name "incus.manifest" | head -n 1)
+echo "Found manifest file: $MANIFEST_FILE"
+KEYVERSION=$(cat $MANIFEST_FILE | jq -r --arg KEYPACKAGE ${KEYPACKAGE} '.packages[] | select (.name == $KEYPACKAGE) | .version')
+echo "Determined version: $KEYVERSION for package: $KEYPACKAGE"
+
+cat "$MANIFEST_FILE" | jq --arg KEYPACKAGE ${KEYPACKAGE} --arg KEYVERSION ${KEYVERSION} -c '.config.key_package=$KEYPACKAGE | .config.key_version=$KEYVERSION' > "$MANIFEST_FILE.tmp"
+mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
+
+ARCH=$(cat $MANIFEST_FILE | jq -r --arg KEYPACKAGE ${KEYPACKAGE} '.packages[] | select (.name == $KEYPACKAGE) | .architecture')
+
+echo "Architecture: $ARCH"
+echo "Image ID: $IMAGE_ID"
+
+EXTFILENAME="$OUTPUTDIR/${IMAGE_ID}_${KEYVERSION}_${ARCH}"
+
+# find the existing output file which will be named ${IMAGE_ID}.raw{.gz,.xz,.zst,.bz2,.lz4}
+EXISTING_OUTPUT_FILE=""
+for ext in raw raw.gz raw.xz raw.zst raw.bz2 raw.lz4; do
+    if [ -f "$OUTPUTDIR/${IMAGE_ID}.$ext" ]; then
+        EXISTING_OUTPUT_FILE="$OUTPUTDIR/${IMAGE_ID}.$ext"
+        break
+    fi
+done
+if [ -z "$EXISTING_OUTPUT_FILE" ]; then
+    echo "Error: No existing output file found for image ID: $IMAGE_ID"
+    exit 1
+fi
+
+# Copy and rename the existing output file to the new extension filename, keeping the same compression
+cp "$EXISTING_OUTPUT_FILE" "$EXTFILENAME.${EXISTING_OUTPUT_FILE##*.}"
+echo "Created extension file: $EXTFILENAME.${EXISTING_OUTPUT_FILE##*.}"
+
+# remove existing output file symlink if it exists
+if [ -L "$OUTPUTDIR/${IMAGE_ID}" ]; then
+    rm "$OUTPUTDIR/${IMAGE_ID}"
+fi
+# create a symlink to the new extension file
+ln -s "$(basename "$EXTFILENAME.${EXISTING_OUTPUT_FILE##*.}")" "$OUTPUTDIR/${IMAGE_ID}"
+echo "Created symlink: $OUTPUTDIR/${IMAGE_ID} -> $(basename "$EXTFILENAME.${EXISTING_OUTPUT_FILE##*.}")"
+

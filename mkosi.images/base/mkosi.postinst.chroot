@@ -5,20 +5,6 @@ set -euo pipefail
 # It performs final customizations
 
 echo "Running post-installation customizations..."
-# Build Initramfs
-KERNEL_VERSION="$(basename "$(find /usr/lib/modules -maxdepth 1 -type d | grep -v -E "*.img" | tail -n 1)")"
-
-dracut --force --no-hostonly --reproducible --zstd --verbose --add etc-overlay \
-  --kver "$KERNEL_VERSION" "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
-
-if [ -f "/boot/vmlinuz-$KERNEL_VERSION" ]; then
-  cp -f "/boot/vmlinuz-$KERNEL_VERSION" "/usr/lib/modules/$KERNEL_VERSION/vmlinuz"
-  echo "vmlinuz moved successfully"
-fi
-
-# Clean up .old files
-rm -f /*.old || true
-
 
 # Use proper home directory for new users
 sed -i 's|.*HOME=/home|HOME=/var/home|' "/etc/default/useradd"

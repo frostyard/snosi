@@ -1,0 +1,8 @@
+[org.gnome.shell] 
+enabled-extensions=['logomenu@aryan_k', 'ubuntu-appindicators@ubuntu.com', 'hotedge@jonathan.jdoda.ca']
+
+[org.gnome.desktop.interface]
+enable-hot-corners=false
+
+[org.gnome.desktop.wm.preferences]
+button-layout='appmenu:minimize,maximize,close'
