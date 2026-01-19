@@ -148,7 +148,7 @@ jobs:
             docker://${IMAGE}:latest
       - name: cleanup snow build output
         run: |
-          mkosi clean
+          sudo -E mkosi clean
       - name: Build snow loaded
         env:
           # These are picked up by mkosi.postoutput script
@@ -163,7 +163,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
-          sudo -E mkosi --profile 10-image-snow --profile 20-kernel-backports --profile 30-packages-loaded --profile 80-finalize-bootc --profile 90-output-oci build
+          sudo -E mkosi --profile 10-image-snow --profile 20-kernel-backports --profile 30-packages-loaded --profile 40-name-snowloaded --profile 80-finalize-bootc --profile 90-output-oci build
       - name: Push snowloaded to registry
         if: github.event_name != 'pull_request'
         env:
@@ -182,7 +182,7 @@ jobs:
             docker://${IMAGE}:latest
       - name: cleanup snowloaded build output
         run: |
-          mkosi clean
+          sudo -E mkosi clean
       - name: Build snowfield
         env:
           # These are picked up by mkosi.postoutput script
@@ -197,7 +197,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
-          sudo -E mkosi --profile 10-image-snow --profile 20-kernel-surface --profile 80-finalize-bootc --profile 90-output-oci build
+          sudo -E mkosi --profile 10-image-snow --profile 20-kernel-surface --profile 40-name-snowfield --profile 80-finalize-bootc --profile 90-output-oci build
       - name: Push snowfield to registry
         if: github.event_name != 'pull_request'
         env:
@@ -213,4 +213,38 @@ jobs:
           skopeo copy \
             --dest-creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
             oci:output/snowfield \
+            docker://${IMAGE}:latest
+      - name: cleanup snowfield build output
+        run: |
+          sudo -E mkosi clean
+      - name: Build snowfieldloaded
+        env:
+          # These are picked up by mkosi.postoutput script
+          CREATED_DATE: ${{ steps.date.outputs.date }}
+          DEFAULT_TAG: ${{ steps.version.outputs.tag }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}-snowfieldloaded
+          IMAGE_DESC: ${{ env.IMAGE_DESC }}
+          IMAGE_KEYWORDS: ${{ env.IMAGE_KEYWORDS }}
+          IMAGE_LICENSE: ${{ env.IMAGE_LICENSE }}
+          IMAGE_LOGO_URL: ${{ env.IMAGE_LOGO_URL }}
+          # These are automatically available from GitHub context
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          sudo -E mkosi --profile 10-image-snow --profile 20-kernel-surface --profile 30-packages-loaded --profile 40-name-snowfieldloaded --profile 80-finalize-bootc --profile 90-output-oci build
+      - name: Push snowfieldloaded to registry
+        if: github.event_name != 'pull_request'
+        env:
+          REGISTRY: ghcr.io
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-snowfieldloaded
+        run: |
+          # Push with version tag
+          skopeo copy \
+            --dest-creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
+            oci:output/snowfieldloaded \
+            docker://${IMAGE}:${{ steps.version.outputs.tag }}
+          # Push latest tag
+          skopeo copy \
+            --dest-creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
+            oci:output/snowfieldloaded \
             docker://${IMAGE}:latest

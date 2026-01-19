@@ -61,9 +61,11 @@ All image builds must either have stock or backports profile -- that's the kerne
 - docker = base << docker sysext
 
 ```bash
-snowloaded> mkosi build --profile snow --profile loaded --profile backports --profile bootc
-snow> mkosi build --profile snow --profile backports --profile bootc
-cayo> mkosi build --profile bootc --profile stock --profile cayo
+snow> mkosi --profile 10-image-snow --profile 20-kernel-backports --profile 80-finalize-bootc --profile 90-output-oci build
+snowloaded> mkosi --profile 10-image-snow --profile 20-kernel-backports --profile 30-packages-loaded --profile 40-name-snowloaded --profile 80-finalize-bootc --profile 90-output-oci build
+snowfield> mkosi --profile 10-image-snow --profile 20-kernel-surface --profile 40-name-snowfield --profile 80-finalize-bootc --profile 90-output-oci build
+snowfieldloaded> mkosi --profile 10-image-snow --profile 20-kernel-surface --profile 30-packages-loaded --profile 40-name-snowfieldloaded --profile 80-finalize-bootc --profile 90-output-oci build
+
 ```
 
 ## Profiles
@@ -91,6 +93,16 @@ These define extra packages to be added to image variants. The only current exam
 Stacking packages has not been tested, and might not work without extra config/processing, e.g.`hci` plus `zfs`. For now only add one profile from the `30-packages` group.
 
 - 30-packages-loaded: adds edge, vscode, nordvpn for `snow-loaded` image
+
+### Image Variants "40-name-XXX"
+
+Use these profiles to change the name of the image being output. For example, when building snowfield, we add the `20-kernel-surface` profile and the `10-image-snow` profiles, but we want the image to be named `snowfield`.
+
+These profiles override the output names from the `10-image-XXX` image profiles for image variants.
+
+- 40-name-snowfield: change image name to snowfield
+- 40-name-snowloaded: change image name to snowloaded
+- 40-name-snowfieldloaded: change image name to snowfieldloaded
 
 ### Finalization "80-finalize-XXX"
 
