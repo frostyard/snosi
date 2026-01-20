@@ -1,0 +1,19 @@
+[Unit]
+Description=Reloading after merging extensions
+After=systemd-sysext.service
+Before=sysinit.target
+DefaultDependencies=no
+ConditionDirectoryNotEmpty=|/etc/extensions
+ConditionDirectoryNotEmpty=|/run/extensions
+ConditionDirectoryNotEmpty=|/var/lib/extensions
+ConditionDirectoryNotEmpty=|/.extra/sysext
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=systemd-tmpfiles --create --graceful --no-pager
+ExecStart=systemd-sysusers --no-pager
+ExecStart=systemctl daemon-reload
+
+[Install]
+WantedBy=sysinit.target
