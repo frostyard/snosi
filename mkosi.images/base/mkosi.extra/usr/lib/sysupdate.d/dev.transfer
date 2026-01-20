@@ -1,0 +1,20 @@
+[Transfer]
+Features=devel
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/dev/
+MatchPattern=dev_@v_@a.raw.zst \
+             dev_@v_@a.raw.xz \
+             dev_@v_@a.raw.gz \
+             dev_@v_@a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=dev_@v_@a.raw.zst \
+             dev_@v_@a.raw.xz \
+             dev_@v_@a.raw.gz \
+             dev_@v_@a.raw
+CurrentSymlink=dev.raw

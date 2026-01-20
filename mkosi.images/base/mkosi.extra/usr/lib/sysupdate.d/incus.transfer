@@ -1,0 +1,20 @@
+[Transfer]
+Features=incus
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/incus/
+MatchPattern=incus_@v_@a.raw.zst \
+             incus_@v_@a.raw.xz \
+             incus_@v_@a.raw.gz \
+             incus_@v_@a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=incus_@v_@a.raw.zst \
+             incus_@v_@a.raw.xz \
+             incus_@v_@a.raw.gz \
+             incus_@v_@a.raw
+CurrentSymlink=incus.raw
