@@ -41,3 +41,19 @@ fi
 if [[ -f /usr/incus/share/lxc/config/common.conf.d/00-lxcfs.conf ]]; then
     sed -i 's|/opt/incus|/usr/incus|g' /usr/incus/share/lxc/config/common.conf.d/00-lxcfs.conf
 fi
+
+# Fix wrapper scripts in /usr/bin that reference /opt/incus
+for script in /usr/bin/distrobuilder /usr/bin/incus /usr/bin/lxc-to-incus; do
+    if [[ -f "$script" ]] && [[ ! -L "$script" ]]; then
+        sed -i 's|/opt/incus|/usr/incus|g' "$script"
+    fi
+done
+
+# Fix symlinks in /usr/bin that point to /opt/incus/bin/
+for link in fuidshift incus-migrate incus-simplestreams lxd-to-incus; do
+    if [[ -L "/usr/bin/$link" ]]; then
+        target=$(readlink "/usr/bin/$link")
+        new_target="${target/\/opt\/incus/\/usr\/incus}"
+        ln -sf "$new_target" "/usr/bin/$link"
+    fi
+done
