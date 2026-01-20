@@ -32,7 +32,7 @@ if [[ -d /usr/lib/systemd/system/ ]]; then
     find /usr/lib/systemd/system/ -type f -exec sed -i 's|/opt/incus|/usr/incus|g' {} +
 fi
 
-# replace any occurrence of "/opt/incus" in /usr/incus/lib/systemd/*  "/usr/incus/"
+# replace any occurrence of "/opt/incus" in /usr/incus/lib/systemd/* with "/usr/incus"
 if [[ -d /usr/incus/lib/systemd/ ]]; then
     find /usr/incus/lib/systemd/ -type f -exec sed -i 's|/opt/incus|/usr/incus|g' {} +
 fi
