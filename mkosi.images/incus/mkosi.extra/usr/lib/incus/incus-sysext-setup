@@ -1,0 +1,45 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# incus-sysext-setup: Idempotent post-merge configuration for incus sysext
+#
+# This script handles /etc configurations that cannot be done declaratively
+# via tmpfiles.d or sysusers.d, specifically the subuid/subgid setup required
+# for user namespace support in incus.
+
+set -euo pipefail
+
+# Subordinate UID/GID range for root user (matches incus-base.postinst)
+SUBUID_START=1000000
+SUBUID_COUNT=1000000000
+
+setup_subuid_subgid() {
+    local file="$1"
+    local flag="$2"
+
+    # Create the file if it doesn't exist
+    if [[ ! -f "$file" ]]; then
+        touch "$file"
+        chmod 644 "$file"
+    fi
+
+    # Check if root already has an entry
+    if grep -q "^root:" "$file"; then
+        echo "root already has entry in $file, skipping"
+        return 0
+    fi
+
+    # Add the subordinate ID range for root
+    echo "Adding root entry to $file"
+    usermod "$flag" "${SUBUID_START}-$((SUBUID_START + SUBUID_COUNT - 1))" root
+}
+
+main() {
+    echo "incus-sysext-setup: Configuring subordinate UID/GID ranges..."
+
+    setup_subuid_subgid /etc/subuid --add-subuids
+    setup_subuid_subgid /etc/subgid --add-subgids
+
+    echo "incus-sysext-setup: Configuration complete"
+}
+
+main "$@"

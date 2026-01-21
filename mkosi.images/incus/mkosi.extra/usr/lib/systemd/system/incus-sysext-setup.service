@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# incus-sysext-setup.service: One-shot service to configure /etc after sysext merge
+#
+# This service runs after systemd-sysusers and systemd-tmpfiles-setup to handle
+# configurations that cannot be done declaratively (specifically subuid/subgid).
+
+[Unit]
+Description=Incus Sysext Post-Merge Configuration
+Documentation=man:incus(1)
+DefaultDependencies=no
+After=systemd-sysusers.service systemd-tmpfiles-setup.service local-fs.target
+Before=incus.socket incus-user.socket incus-lxcfs.service incus-startup.service
+ConditionPathExists=!/run/incus-sysext-setup.done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/incus/incus-sysext-setup
+ExecStartPost=/usr/bin/touch /run/incus-sysext-setup.done
+
+[Install]
+WantedBy=multi-user.target

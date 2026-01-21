@@ -2,3 +2,4 @@ enable incus.socket
 enable incus-user.socket
 enable incus-lxcfs.service
 enable incus-startup.service
+enable incus-sysext-setup.service
