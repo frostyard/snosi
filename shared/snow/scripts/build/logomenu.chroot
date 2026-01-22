@@ -11,7 +11,7 @@ DESTINATION="$SRCDIR/shared/snow/tree/usr/share/gnome-shell/extensions/logomenu@
 # remove any existing logomenu directory
 rm -rf "$DESTINATION"
 # clone the logomenu repository
-git clone --depth 1 "$REPOSITORY" "$DESTINATION"
+git clone --depth 1 "$REPOSITORY" "$DESTINATION" || { echo "Error: failed to clone repository $REPOSITORY to $DESTINATION" >&2; exit 1; }
 # remove the .git directory if it exists
 rm -rf "$DESTINATION/.git"
 # set the permissions: 755 for directories and 644 for files in the logomenu directory
