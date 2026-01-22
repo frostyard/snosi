@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# Grab latest surface linux secure boot key, this will be enrolled during install if snowfield is selected.
+mkdir -p /usr/share/linux-surface-secureboot
+curl https://github.com/linux-surface/linux-surface/raw/refs/heads/master/pkg/keys/surface.cer -Lo /usr/share/linux-surface-secureboot/surface.cer
