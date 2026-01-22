@@ -201,9 +201,52 @@ External repositories are configured in `mkosi.sandbox/etc/apt/` for packages no
 - **linux-surface**: Surface kernel packages
 - **Frostyard**: Custom packages (nbc, chairlift, updex)
 
+## Immutable OS Filesystem Layout
+
+The images produced by snosi are **immutable atomic systems**. Understanding the filesystem layout is essential for packaging decisions:
+
+```
+/                   ← Read-only root filesystem (erofs/squashfs)
+├── usr/            ← Read-only, contains all OS binaries and libraries
+├── etc/            ← Overlay: base layer from /usr/etc, writes go to persistent storage
+├── var/            ← Persistent, writable (logs, caches, container storage, databases)
+├── home/           ← Persistent, writable (user data)
+├── opt/            ← Bind mount to /var/opt (writable, persistent)
+└── run/            ← tmpfs, ephemeral
+```
+
+### Key Constraints
+
+| Path     | Behavior                 | Implication                                           |
+| -------- | ------------------------ | ----------------------------------------------------- |
+| `/usr/*` | Read-only after boot     | All binaries, libraries, icons must live here         |
+| `/etc/*` | Overlay on `/usr/etc`    | Base configs in image, user changes persist           |
+| `/opt/*` | Bind mount to `/var/opt` | Writable, but **problematic for sysexts** (see below) |
+| `/var/*` | Persistent, writable     | Container storage, logs, state - but not binaries     |
+
+### Why `/opt` Is Problematic
+
+Many third-party packages (Chrome, Edge, VS Code, Slack, etc.) install to `/opt` because they expect a traditional mutable filesystem.
+
+On the **base bootc image**, `/opt` is a bind mount to `/var/opt`, making it writable and persistent. This works fine for packages baked into the main image—you relocate them to `/usr/lib` at build time, and `/opt` remains available for user-installed software.
+
+However, **sysexts change the equation**. System extensions use overlay filesystems to merge their contents with the base system. If a sysext contains files in `/opt`:
+
+1. **The sysext merge makes `/opt` read-only** - the overlay takes precedence over the bind mount
+2. **Applications expecting writable `/opt` break** - they can no longer write configs, caches, or updates
+3. **The bind mount to `/var/opt` is shadowed** - user data in `/var/opt` becomes inaccessible
+
+This is why we **always relocate `/opt` contents to `/usr/lib`** during build, for both main images and sysexts. It keeps `/opt` available as a writable bind mount for runtime use while ensuring package binaries are in the read-only, atomically-updated `/usr` tree.
+
 ## Extending the Build
 
 ### Adding a New Package Set
+
+Most packages "just work" - you add them to a `mkosi.conf` and they install correctly to `/usr`. However, some packages require post-installation scripts to relocate files or fix paths.
+
+#### Simple Package (No Scripts Needed)
+
+For packages that install to standard locations (`/usr/bin`, `/usr/lib`, `/usr/share`):
 
 1. Create `shared/packages/mypackages/mkosi.conf`:
 
@@ -219,11 +262,79 @@ External repositories are configured in `mkosi.sandbox/etc/apt/` for packages no
    Include=%D/shared/packages/mypackages/mkosi.conf
    ```
 
+#### Complex Package Example: Microsoft Edge
+
+Microsoft Edge installs to `/opt/microsoft/msedge/`, which won't work on an immutable OS. The [edge package](shared/packages/edge/) includes a post-installation script to fix this:
+
+**Directory structure:**
+
+```
+shared/packages/edge/
+├── mkosi.conf                 # Package definition
+└── mkosi.postinst.d/
+    └── edge.chroot            # Post-installation script
+```
+
+**[mkosi.conf](shared/packages/edge/mkosi.conf):**
+
+```ini
+[Content]
+Packages=microsoft-edge-stable
+```
+
+**[edge.chroot](shared/packages/edge/mkosi.postinst.d/edge.chroot):** (runs inside the build chroot)
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+# Move Edge from /opt to /usr/lib (read-only safe location)
+mv /opt/microsoft/msedge /usr/lib/microsoft-edge
+rm -rf /opt/microsoft
+
+# Create symlink for the binary
+ln -sf /usr/lib/microsoft-edge/microsoft-edge /usr/bin/microsoft-edge-stable
+
+# Fix icon paths (Edge expects /opt paths)
+mkdir -p /usr/share/icons/hicolor/{16x16,24x24,32x32,48x48,64x64,128x128,256x256}/apps
+for size in 16 24 32 48 64 128 256; do
+    ln -sf /usr/lib/microsoft-edge/product_logo_${size}.png \
+           /usr/share/icons/hicolor/${size}x${size}/apps/microsoft-edge.png
+done
+
+# Fix GNOME Control Center default apps XML
+sed -i 's|/opt/microsoft/msedge/microsoft-edge|/usr/lib/microsoft-edge/microsoft-edge|g' \
+    /usr/share/gnome-control-center/default-apps/microsoft-edge.xml
+```
+
+**Profile usage** ([snowloaded/mkosi.conf](mkosi.profiles/snowloaded/mkosi.conf)):
+
+```ini
+[Content]
+PostInstallationScripts=%D/shared/packages/edge/mkosi.postinst.d/edge.chroot
+
+[Include]
+Include=%D/shared/packages/edge/mkosi.conf
+```
+
+#### When You Need Post-Installation Scripts
+
+You need a `mkosi.postinst.chroot` script when a package:
+
+| Issue                                        | Solution                                                   |
+| -------------------------------------------- | ---------------------------------------------------------- |
+| Installs binaries to `/opt`                  | Move to `/usr/lib/<package>`, symlink binary to `/usr/bin` |
+| Has hardcoded `/opt` paths in configs        | Use `sed` to rewrite paths                                 |
+| Expects to write to `/etc` at install time   | Move default configs to `/usr/share/factory/etc`           |
+| Creates state directories in wrong locations | Ensure state goes to `/var`                                |
+| Relies on `update-alternatives`              | Create symlinks manually                                   |
+
 ### Adding a New Profile
 
 1. Create `mkosi.profiles/myprofile/mkosi.conf`
 2. Set output name and include required components
-3. Add a just target:
+3. Add post-installation scripts for any packages that need relocation
+4. Add a just target:
    ```just
    myprofile: clean
        mkosi --profile myprofile build
@@ -231,21 +342,115 @@ External repositories are configured in `mkosi.sandbox/etc/apt/` for packages no
 
 ### Adding a New Sysext
 
-1. Create `mkosi.images/mysysext/mkosi.conf`:
+System extensions have **additional constraints** beyond regular packages because they overlay onto an already-running immutable system.
 
-   ```ini
-   [Output]
-   ImageId=mysysext
-   Overlay=yes
-   Format=sysext
+#### Sysext Filesystem Constraints
 
-   [Content]
-   Bootable=no
-   BaseTrees=%O/base
-   Packages=...
-   ```
+```
+mysysext.raw (erofs image)
+└── usr/                    ← ONLY /usr is merged into the base system
+    ├── bin/
+    ├── lib/
+    └── share/
+```
 
-2. The sysext will be built automatically with `just sysexts`
+Sysexts can **only** provide files under `/usr`. They cannot:
+
+- Add files to `/etc` (the overlay is already mounted)
+- Add files to `/var` (it's persistent state, not part of the image)
+- Run post-installation scripts on the target system (no dpkg triggers)
+
+#### Sysext Script Types
+
+| Script                  | When It Runs               | Purpose                            |
+| ----------------------- | -------------------------- | ---------------------------------- |
+| `mkosi.postinst.chroot` | Build time, in chroot      | Relocate files, fix paths          |
+| `mkosi.finalize`        | Build time, outside chroot | Capture `/etc` to factory defaults |
+| `mkosi.postoutput`      | After image creation       | Rename output, update manifests    |
+
+#### Example: Incus Sysext
+
+The [incus sysext](mkosi.images/incus/) needs special handling because:
+
+1. **Incus packages install configs to `/etc`** - but sysexts can't modify `/etc` at runtime
+2. **The sysext needs versioned filenames** - for update management
+
+**[mkosi.finalize](mkosi.images/incus/mkosi.finalize):** (captures `/etc` for tmpfiles.d)
+
+```bash
+#!/bin/bash
+set -e
+
+# Copy /etc to /usr/share/factory/etc so systemd-tmpfiles
+# can symlink configs into /etc at boot time
+mkdir -p "$BUILDROOT/usr/share/factory/"
+cp --archive --no-target-directory --update=none \
+   "$BUILDROOT/etc" "$BUILDROOT/usr/share/factory/etc"
+```
+
+This pattern allows configs to be "injected" into `/etc` via systemd-tmpfiles rules when the sysext is activated.
+
+**[mkosi.postoutput](mkosi.images/incus/mkosi.postoutput):** (versioned naming)
+
+```bash
+#!/bin/bash
+# Extract version from manifest and rename output file
+KEYVERSION=$(jq -r '.packages[] | select(.name == "incus") | .version' "$MANIFEST_FILE")
+ARCH=$(jq -r '.packages[] | select(.name == "incus") | .architecture' "$MANIFEST_FILE")
+
+# Rename: incus.raw → incus_6.20-debian13_amd64.raw
+cp "$OUTPUTDIR/incus.raw" "$OUTPUTDIR/incus_${KEYVERSION}_${ARCH}.raw"
+ln -s "incus_${KEYVERSION}_${ARCH}.raw" "$OUTPUTDIR/incus"
+```
+
+#### Sysext Checklist
+
+When creating a new sysext, verify:
+
+- [ ] All binaries are under `/usr/bin` or `/usr/lib`
+- [ ] No files in `/opt` (relocate during build)
+- [ ] Configs captured to `/usr/share/factory/etc` if needed
+- [ ] No runtime dependencies on post-install scripts
+- [ ] Symlinks/alternatives created manually (no `update-alternatives`)
+- [ ] State directories expected in `/var` (not baked into image)
+
+#### Basic Sysext Template
+
+```ini
+# mkosi.images/mysysext/mkosi.conf
+[Output]
+ImageId=mysysext
+Overlay=yes
+Format=sysext
+
+[Content]
+Bootable=no
+BaseTrees=%O/base
+Packages=mypackage
+```
+
+If the package needs relocation, add:
+
+```bash
+# mkosi.images/mysysext/mkosi.postinst.chroot
+#!/bin/bash
+set -euo pipefail
+
+# Move from /opt to /usr/lib
+mv /opt/mypackage /usr/lib/mypackage
+ln -sf /usr/lib/mypackage/bin/mybin /usr/bin/mybin
+```
+
+```bash
+# mkosi.images/mysysext/mkosi.finalize
+#!/bin/bash
+set -e
+
+# Capture /etc for systemd-tmpfiles
+mkdir -p "$BUILDROOT/usr/share/factory/"
+cp --archive --no-target-directory --update=none \
+   "$BUILDROOT/etc" "$BUILDROOT/usr/share/factory/etc"
+```
 
 ## License
 
