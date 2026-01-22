@@ -413,6 +413,7 @@ When creating a new sysext, verify:
 - [ ] No runtime dependencies on post-install scripts
 - [ ] Symlinks/alternatives created manually (no `update-alternatives`)
 - [ ] State directories expected in `/var` (not baked into image)
+- [ ] Use tmpfiles.d, sysusers.d and systemd presets first, as a last resort add a one-shot systemd unit for any preconfiguration that usually would happen in the debian package's postinst scripts
 
 #### Basic Sysext Template
 
