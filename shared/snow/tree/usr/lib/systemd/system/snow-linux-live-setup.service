@@ -13,5 +13,6 @@ ExecStart=/usr/bin/_snow-linux-live-setup
 ExecStartPost=/usr/bin/systemctl disable %n
 
 [Install]
+WantedBy=multi-user.target
 RequiredBy=multi-user.target
 RequiredBy=display-manager.service

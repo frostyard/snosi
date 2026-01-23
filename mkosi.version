@@ -1,5 +1,8 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
+
+# defaulted version tag based on date/time
+# overridden by GHA IMAGE_VERSION variable so it can be used outside mkosi
 set -e
 
 date +%Y%m%d%H%M%S

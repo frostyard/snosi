@@ -78,7 +78,7 @@ jobs:
 
       - name: Generate version tag
         id: version
-        run: echo "tag=1.0.$(date -u +%Y%m%d)" >> $GITHUB_OUTPUT
+        run: echo "tag=$(date +%Y%m%d%H%M%S)" >> $GITHUB_OUTPUT
 
       - name: setup-mkosi
         uses: systemd/mkosi@main
@@ -89,6 +89,7 @@ jobs:
           CREATED_DATE: ${{ steps.date.outputs.date }}
           DEFAULT_TAG: ${{ steps.version.outputs.tag }}
           IMAGE_NAME: ${{ matrix.profile }}
+          IMAGE_VERSION: ${{ steps.version.outputs.tag }}
           IMAGE_KEYWORDS: ${{ env.IMAGE_KEYWORDS }}
           IMAGE_LICENSE: ${{ env.IMAGE_LICENSE }}
           IMAGE_LOGO_URL: ${{ env.IMAGE_LOGO_URL }}
