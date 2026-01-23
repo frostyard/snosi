@@ -9,6 +9,8 @@ echo "Running post-installation customizations..."
 # Use proper home directory for new users
 sed -i 's|.*HOME=/home|HOME=/var/home|' "/etc/default/useradd"
 
+systemctl preset-all
+
 # Enable mounts
 systemctl enable home.mount
 systemctl enable root.mount
