@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+
+# This script runs inside the image after package installation
+# It performs final customizations
+
+echo "Running finalize customizations..."
+
+
+systemctl mask systemd-networkd-wait-online.service
