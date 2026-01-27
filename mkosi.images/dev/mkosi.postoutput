@@ -45,3 +45,5 @@ fi
 ln -s "$(basename "$EXTFILENAME.${EXISTING_OUTPUT_FILE##*.}")" "$OUTPUTDIR/${IMAGE_ID}"
 echo "Created symlink: $OUTPUTDIR/${IMAGE_ID} -> $(basename "$EXTFILENAME.${EXISTING_OUTPUT_FILE##*.}")"
 
+# make manifest with versioned filename
+cp "$MANIFEST_FILE" "$OUTPUTDIR/$IMAGE_ID.$KEYVERSION.manifest.json"

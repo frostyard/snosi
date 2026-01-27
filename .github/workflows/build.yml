@@ -98,6 +98,7 @@ jobs:
         run: |
           sudo -E mkosi build
           sudo ./sysextmv.sh
+          sudo ./manifestsmv.sh
       - name: Publish sysexts to frostyard repo
         if: github.event_name != 'pull_request'
         uses: frostyard/repogen/.github/actions/publish-to-r2@main
@@ -111,3 +112,11 @@ jobs:
           packages-dir: ./output/sysexts
           package-type: sysext # or sysext
           base-url: https://repository.frostyard.org # required for sysext
+      - uses: ryand56/r2-upload-action@latest
+        with:
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          r2-bucket: frostyardrepo
+          source-dir: output/manifests
+          destination-dir: manifests/

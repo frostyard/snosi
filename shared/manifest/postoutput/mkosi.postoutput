@@ -1,0 +1,16 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+set -e
+# find the first file in the output directory that matches the pattern "$IMAGE_ID.manifest"
+MANIFEST_FILE=$(find "$OUTPUTDIR" -maxdepth 1 -type f -name "$IMAGE_ID.manifest" | head -n 1)
+echo "Found manifest file: $MANIFEST_FILE"
+echo "Image ID: $IMAGE_ID"
+echo "Image Version: $IMAGE_VERSION"
+
+# if $IMAGE_VERSION is empty, exit with no error
+if [ -z "$IMAGE_VERSION" ]; then
+    echo "IMAGE_VERSION is empty, skipping manifest copy."
+    exit 0
+fi
+
+cp "$MANIFEST_FILE" "$OUTPUTDIR/$IMAGE_ID.$IMAGE_VERSION.manifest.json"
