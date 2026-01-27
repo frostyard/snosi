@@ -1,7 +1,42 @@
 #!/usr/bin/bash
+set -e
 
-if ! flatpak list --system --columns=application | grep -q '^com\.microsoft\.Edge$'; then
-    flatpak install --system -y com.microsoft.Edge
+APP_FLATPAK="com.microsoft.Edge"
+APP_SNAP="microsoft-edge"
+NATIVE_BINARY="microsoft-edge"
+
+show_error() {
+  MSG="Microsoft Edge is not installed. Please install it using your preferred method."
+
+  zenity --error \
+    --title="Microsoft Edge Not Found" \
+    --text="$MSG" \
+    --width=420
+
+  exit 1
+}
+
+run_and_exit() {
+  exec "$@"
+  # If exec fails, ensure we do not continue
+  echo "Failed to launch: $*" >&2
+  exit 1
+}
+
+# Run native package if installed
+if command -v "$NATIVE_BINARY" >/dev/null 2>&1; then
+  run_and_exit "$NATIVE_BINARY" "$@"
 fi
 
-/usr/bin/flatpak run com.microsoft.Edge "$@"
+# Run snap if installed
+if snap list 2>/dev/null | grep -q "^${APP_SNAP}\b"; then
+run_and_exit snap run "$APP_SNAP" "$@"
+fi
+
+# Run flatpak if installed
+if flatpak list --system --columns=application | grep -q "^${APP_FLATPAK}$"; then
+run_and_exit flatpak run "$APP_FLATPAK" "$@"
+fi
+
+# Throw an error if no package was found
+show_error
