@@ -98,7 +98,7 @@ jobs:
         run: |
           sudo -E mkosi build
           sudo ./sysextmv.sh
-          sudo ./manifestsmv.sh
+          sudo ./manifestmv.sh
       - name: Publish sysexts to frostyard repo
         if: github.event_name != 'pull_request'
         uses: frostyard/repogen/.github/actions/publish-to-r2@main
