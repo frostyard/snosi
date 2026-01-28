@@ -3,7 +3,7 @@
 # move manifest files in output directory to a dedicated manifests subdirectory
 set -e
 if [ -z "$OUTPUTDIR" ]; then
-    echo "Error: OUTPUTDIR is not set."
+    echo "WARNING: OUTPUTDIR is not set. Defaulting to './output'."
     OUTPUTDIR="output"
 fi
 MANIFEST_DIR="$OUTPUTDIR/manifests"
