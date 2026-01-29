@@ -61,24 +61,18 @@ systemctl enable gdm.service
 # remove bls-garbage-collect from /etc/systemd/system/basic.garget.wants
 rm -rf /etc/systemd/system/basic.target.wants/bls-garbage-collect.service
 
-
-
 # Remove fish desktop entry
 rm -f /usr/share/applications/fish.desktop
 
-
-
-
-
-# Write build date
-echo "Writing build date..."
-mkdir -p /etc
-date -u +"%Y-%m-%dT%H:%M:%SZ" > /etc/snow_build_date
 
 # Generate package list
 echo "Generating package list..."
 mkdir -p /usr/share/frostyard
 apt list --installed 2>/dev/null > /usr/share/frostyard/"${IMAGE_ID}".packages.txt || true
+
+# Write build date
+echo "Writing build date..."
+date -u +"%Y-%m-%dT%H:%M:%SZ" > /usr/share/frostyard/snow_build_date
 
 # Clean up machine-id for first boot
 rm -f /etc/machine-id
