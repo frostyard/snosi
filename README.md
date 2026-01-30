@@ -8,30 +8,33 @@ snosi builds immutable, bootable OCI container images based on Debian Trixie. Th
 
 The project produces:
 
-| Image               | Description                                        | Output Format |
-| ------------------- | -------------------------------------------------- | ------------- |
-| **snow**            | GNOME desktop with backports kernel                | OCI archive   |
-| **snowloaded**      | snow + Edge browser + Incus virtualization         | OCI archive   |
-| **snowfield**       | snow with linux-surface kernel for Surface devices | OCI archive   |
-| **snowfieldloaded** | snowfield + Edge + Incus                           | OCI archive   |
-| **docker**          | Docker CE container runtime                        | sysext        |
-| **incus**           | Incus container/VM manager                         | sysext        |
-| **podman**          | Podman + Distrobox                                 | sysext        |
+| Image               | Description                                            | Output Format |
+| ------------------- | ------------------------------------------------------ | ------------- |
+| **snow**            | GNOME desktop with backports kernel                    | OCI archive   |
+| **snowloaded**      | snow + Edge + VSCode + Bitwarden + Incus               | OCI archive   |
+| **snowfield**       | snow with linux-surface kernel for Surface devices     | OCI archive   |
+| **snowfieldloaded** | snowfield + Edge + VSCode + Bitwarden + Incus          | OCI archive   |
+| **1password-cli**   | 1Password CLI tool                                     | sysext        |
+| **debdev**          | Debian development tools (debootstrap, distro-info)   | sysext        |
+| **dev**             | Build essentials, Python, cmake, valgrind, gdb         | sysext        |
+| **docker**          | Docker CE container runtime                            | sysext        |
+| **incus**           | Incus container/VM manager                             | sysext        |
+| **podman**          | Podman + Distrobox                                     | sysext        |
 
 ## Architecture
 
 ```
-                          base            ← Debian Trixie + bootc foundation
-                            │
-                ┌───────────┴───────────┐
-                │                       │
-             sysexts                  profiles
-          ┌────┼────┐                   │
-      docker  incus  podman           snow ────────────────────┐
-                                        │                      │
-                              ┌─────────┼─────────┐            │
-                              │         │         │            │
-                         snowloaded  snowfield  snowfieldloaded
+                              base                ← Debian Trixie + bootc foundation
+                                │
+                ┌───────────────┴───────────────┐
+                │                               │
+             sysexts                         profiles
+    ┌────┬────┬────┬────┬────┬────┐            │
+    │    │    │    │    │    │    │          snow ────────────────────┐
+  1pass debdev dev docker incus podman        │                      │
+                                    ┌─────────┼─────────┐            │
+                                    │         │         │            │
+                               snowloaded  snowfield  snowfieldloaded
 ```
 
 ### Base Image
@@ -49,11 +52,14 @@ The `base` image ([mkosi.images/base/mkosi.conf](mkosi.images/base/mkosi.conf)) 
 
 Sysexts are overlay images that extend the base system without modifying it. They're built with `Format=sysext` and `Overlay=yes`:
 
-| Sysext     | Contents                               | Config                                                           |
-| ---------- | -------------------------------------- | ---------------------------------------------------------------- |
-| **docker** | Docker CE, containerd, buildx, compose | [mkosi.images/docker/mkosi.conf](mkosi.images/docker/mkosi.conf) |
-| **incus**  | Incus, QEMU/KVM, OVMF, virt-viewer     | [mkosi.images/incus/mkosi.conf](mkosi.images/incus/mkosi.conf)   |
-| **podman** | Podman, Distrobox, buildah, crun       | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf) |
+| Sysext           | Contents                                    | Config                                                                       |
+| ---------------- | ------------------------------------------- | ---------------------------------------------------------------------------- |
+| **1password-cli**| 1Password CLI tool                          | [mkosi.images/1password-cli/mkosi.conf](mkosi.images/1password-cli/mkosi.conf) |
+| **debdev**       | debootstrap, distro-info, archive keyrings  | [mkosi.images/debdev/mkosi.conf](mkosi.images/debdev/mkosi.conf)             |
+| **dev**          | build-essential, cmake, Python, valgrind, gdb | [mkosi.images/dev/mkosi.conf](mkosi.images/dev/mkosi.conf)                   |
+| **docker**       | Docker CE, containerd, buildx, compose      | [mkosi.images/docker/mkosi.conf](mkosi.images/docker/mkosi.conf)             |
+| **incus**        | Incus, QEMU/KVM, OVMF, virt-viewer          | [mkosi.images/incus/mkosi.conf](mkosi.images/incus/mkosi.conf)               |
+| **podman**       | Podman, Distrobox, buildah, crun            | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf)             |
 
 ## How Profiles Work
 
@@ -87,11 +93,13 @@ shared/
 ├── packages/
 │   ├── snow/mkosi.conf        ← GNOME desktop packages (~490 lines)
 │   ├── edge/mkosi.conf        ← Microsoft Edge browser
+│   ├── vscode/mkosi.conf      ← Visual Studio Code
+│   ├── bitwarden/mkosi.conf   ← Bitwarden password manager
 │   └── virt/mkosi.conf        ← Incus virtualization
 └── snow/
     ├── tree/                  ← Extra files overlaid into image
     └── scripts/
-        ├── build/             ← Build-time scripts (brew, surface-cert)
+        ├── build/             ← Build-time scripts (brew, surface-cert, etc.)
         └── postinstall/       ← Post-installation customizations
 ```
 
@@ -103,6 +111,7 @@ The [snow profile](mkosi.profiles/snow/mkosi.conf) composes a GNOME desktop imag
 [Output]
 ImageId=snow
 Output=snow
+ManifestFormat=json
 
 [Content]
 # Overlay additional files into the image
@@ -110,6 +119,9 @@ ExtraTrees=%D/shared/snow/tree
 
 # Build-time scripts
 BuildScripts=%D/shared/snow/scripts/build/brew.chroot
+BuildScripts=%D/shared/snow/scripts/build/hotedge.chroot
+BuildScripts=%D/shared/snow/scripts/build/logomenu.chroot
+BuildScripts=%D/shared/snow/scripts/build/bazaar.chroot
 BuildScripts=%D/shared/snow/scripts/build/surface-cert.chroot
 
 # Post-installation scripts (run after packages installed)
@@ -119,24 +131,25 @@ PostInstallationScripts=%D/shared/snow/scripts/postinstall/snow.postinst.chroot
 # Finalization (prepare for boot)
 FinalizeScripts=%D/shared/outformat/oci/finalize/mkosi.finalize.chroot
 
-# Post-output (tag OCI image)
+# Post-output (tag OCI image, process manifest)
 PostOutputScripts=%D/shared/outformat/oci/postoutput/mkosi.postoutput
+PostOutputScripts=%D/shared/manifest/postoutput/mkosi.postoutput
 
 [Include]
 # Package sets
-Include=%D/shared/packages/snow/mkosi.conf   # GNOME desktop
+Include=%D/shared/packages/snow/mkosi.conf    # GNOME desktop
 Include=%D/shared/kernel/backports/mkosi.conf # Backports kernel
 Include=%D/shared/outformat/oci/mkosi.conf    # OCI output format
 ```
 
 ### Profile Comparison
 
-| Profile             | Kernel    | Extra Packages | Include Path                                         |
-| ------------------- | --------- | -------------- | ---------------------------------------------------- |
-| **snow**            | backports | —              | `kernel/backports`, `packages/snow`, `outformat/oci` |
-| **snowfield**       | surface   | —              | `kernel/surface`, `packages/snow`, `outformat/oci`   |
-| **snowloaded**      | backports | Edge, Incus    | + `packages/edge`, `packages/virt`                   |
-| **snowfieldloaded** | surface   | Edge, Incus    | + `packages/edge`, `packages/virt`                   |
+| Profile             | Kernel    | Extra Packages                      | Include Path                                         |
+| ------------------- | --------- | ----------------------------------- | ---------------------------------------------------- |
+| **snow**            | backports | —                                   | `kernel/backports`, `packages/snow`, `outformat/oci` |
+| **snowfield**       | surface   | —                                   | `kernel/surface`, `packages/snow`, `outformat/oci`   |
+| **snowloaded**      | backports | Edge, VSCode, Bitwarden, Incus      | + `packages/edge`, `packages/vscode`, `packages/bitwarden`, `packages/virt` |
+| **snowfieldloaded** | surface   | Edge, VSCode, Bitwarden, Incus      | + `packages/edge`, `packages/vscode`, `packages/bitwarden`, `packages/virt` |
 
 ## Building Images
 
@@ -200,6 +213,34 @@ External repositories are configured in `mkosi.sandbox/etc/apt/` for packages no
 - **Incus**: Zabbly repository
 - **linux-surface**: Surface kernel packages
 - **Frostyard**: Custom packages (nbc, chairlift, updex)
+
+## CI/CD Pipeline
+
+The project uses GitHub Actions for automated builds and publishing:
+
+### build.yml - System Extensions
+
+Triggered on push/PR to main, this workflow:
+
+1. Builds the base image and all sysexts (1password-cli, debdev, dev, docker, incus, podman)
+2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
+3. Uploads package manifests for version tracking
+
+### build-images.yml - OCI Images
+
+Triggered on push/PR to main or via repository dispatch, this workflow:
+
+1. Runs a matrix build of all 4 profiles (snow, snowloaded, snowfield, snowfieldloaded)
+2. Pushes OCI images to GitHub Container Registry (ghcr.io) with version and `latest` tags
+3. Uploads manifests to R2 for tracking
+
+## Frostyard Custom Packages
+
+The Frostyard repository provides custom packages for Snow Linux:
+
+- **nbc** (Next Boot Control): CLI tool for managing bootc updates and boot entries
+- **chairlift**: System extension manager with GUI integration
+- **updex**: Update executor service for applying staged updates
 
 ## Immutable OS Filesystem Layout
 
