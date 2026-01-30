@@ -494,6 +494,101 @@ cp --archive --no-target-directory --update=none \
    "$BUILDROOT/etc" "$BUILDROOT/usr/share/factory/etc"
 ```
 
+### Adding External Downloads with Checksum Verification
+
+Some build scripts download files directly from external URLs (not via apt). These downloads use SHA256 checksum verification for security and reproducibility.
+
+#### Files Involved
+
+```
+shared/download/
+├── verified-download.sh   # Helper function for verified downloads
+├── checksums.json         # Pinned URLs and SHA256 checksums
+└── update-checksums.sh    # Manual helper to update a checksum
+```
+
+**checksums.json** contains entries like:
+
+```json
+{
+  "bitwarden": {
+    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2025.12.1/Bitwarden-2025.12.1-amd64.deb",
+    "sha256": "33a5056f43b6205fe168f64f3fc7d52cef4c5ccbe06951584d037664aa3c6c50",
+    "version": "2025.12.1"
+  }
+}
+```
+
+#### Using Verified Downloads in Build Scripts
+
+In any `.chroot` build script:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+source "$SRCDIR/shared/download/verified-download.sh"
+verified_download "mykey" "/path/to/output"
+```
+
+The `verified_download` function:
+1. Reads the URL and checksum from `checksums.json` using the provided key
+2. Downloads the file with retries
+3. Verifies the SHA256 checksum matches
+4. Fails the build with a clear error if verification fails
+
+#### Adding a New External Download
+
+1. **Add the entry to checksums.json:**
+
+   ```bash
+   # Download the file and compute checksum
+   curl -fsSL -o /tmp/myfile "https://example.com/myfile.tar.gz"
+   sha256sum /tmp/myfile
+   ```
+
+   Then add to `shared/download/checksums.json`:
+
+   ```json
+   {
+     "mykey": {
+       "url": "https://example.com/myfile.tar.gz",
+       "sha256": "<computed_sha256>",
+       "version": "1.2.3"
+     }
+   }
+   ```
+
+   Or use the helper script:
+
+   ```bash
+   ./shared/download/update-checksums.sh mykey "https://example.com/myfile.tar.gz" "1.2.3"
+   ```
+
+2. **Use in your build script:**
+
+   ```bash
+   source "$SRCDIR/shared/download/verified-download.sh"
+   verified_download "mykey" "/tmp/myfile.tar.gz"
+   ```
+
+#### Pinning Strategy
+
+- **GitHub releases**: Use the direct release asset URL with version in path (not `latest` redirects)
+- **Raw files from repos**: Pin to a specific commit SHA, not `HEAD` or branch names
+- **Version field**: Store the version/commit for tracking; the GitHub Action uses this to detect updates
+
+#### Automated Update Checking
+
+The `.github/workflows/check-dependencies.yml` workflow runs weekly to check for updates:
+
+1. Compares pinned versions against latest releases/commits
+2. If updates are found, downloads new files and computes checksums
+3. Creates a PR with updated `checksums.json`
+4. **Requires manual review** before merging - verify builds work with new versions
+
+To check manually or trigger an update PR, use the "Run workflow" button in GitHub Actions.
+
 ## License
 
 See individual package licenses. This build system configuration is provided as-is.

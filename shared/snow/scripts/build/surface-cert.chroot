@@ -1,5 +1,7 @@
 #!/bin/bash
+set -euo pipefail
 
-# Grab latest surface linux secure boot key, this will be enrolled during install if snowfield is selected.
+# Grab pinned surface linux secure boot key, this will be enrolled during install if snowfield is selected.
+source "$SRCDIR/shared/download/verified-download.sh"
 mkdir -p /usr/share/linux-surface-secureboot
-curl https://github.com/linux-surface/linux-surface/raw/refs/heads/master/pkg/keys/surface.cer -Lo /usr/share/linux-surface-secureboot/surface.cer
+verified_download "surface-cert" "/usr/share/linux-surface-secureboot/surface.cer"

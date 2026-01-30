@@ -11,9 +11,9 @@ else
     SUDO="sudo"
 fi
 
+source "$SRCDIR/shared/download/verified-download.sh"
 mkdir -p debs
-curl --location --fail --output debs/bitwarden.deb \
-    "https://bitwarden.com/download/?app=desktop&platform=linux&variant=deb"
+verified_download "bitwarden" "debs/bitwarden.deb"
 
 dpkg -i debs/bitwarden.deb
 rm -rf debs

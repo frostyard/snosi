@@ -1,0 +1,114 @@
+name: Check External Dependencies
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly on Monday 9am UTC
+  workflow_dispatch:
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for dependency updates
+        id: check
+        run: |
+          CHECKSUMS="shared/download/checksums.json"
+          UPDATES=""
+
+          # Check Bitwarden
+          CURRENT_BW=$(jq -r '.bitwarden.version' "$CHECKSUMS")
+          LATEST_BW=$(curl -s https://api.github.com/repos/bitwarden/clients/releases | jq -r '[.[] | select(.tag_name | startswith("desktop-v"))][0].tag_name' | sed 's/desktop-v//')
+          if [[ "$LATEST_BW" != "$CURRENT_BW" ]]; then
+            UPDATES="${UPDATES}bitwarden: $CURRENT_BW -> $LATEST_BW\n"
+            echo "bitwarden_update=true" >> $GITHUB_OUTPUT
+            echo "bitwarden_version=$LATEST_BW" >> $GITHUB_OUTPUT
+          fi
+
+          # Check Homebrew install script
+          CURRENT_BREW=$(jq -r '.["brew-install"].version' "$CHECKSUMS")
+          LATEST_BREW=$(curl -s https://api.github.com/repos/Homebrew/install/commits/HEAD | jq -r '.sha' | head -c 12)
+          CURRENT_BREW_SHORT=$(echo "$CURRENT_BREW" | head -c 12)
+          if [[ "$LATEST_BREW" != "$CURRENT_BREW_SHORT" ]]; then
+            UPDATES="${UPDATES}brew-install: $CURRENT_BREW_SHORT -> $LATEST_BREW\n"
+            echo "brew_update=true" >> $GITHUB_OUTPUT
+            echo "brew_commit=$LATEST_BREW" >> $GITHUB_OUTPUT
+          fi
+
+          # Check Surface cert (less frequent changes)
+          CURRENT_SURF=$(jq -r '.["surface-cert"].version' "$CHECKSUMS")
+          LATEST_SURF=$(curl -s https://api.github.com/repos/linux-surface/linux-surface/commits?path=pkg/keys/surface.cer | jq -r '.[0].sha' | head -c 12)
+          CURRENT_SURF_SHORT=$(echo "$CURRENT_SURF" | head -c 12)
+          if [[ "$LATEST_SURF" != "$CURRENT_SURF_SHORT" ]]; then
+            UPDATES="${UPDATES}surface-cert: $CURRENT_SURF_SHORT -> $LATEST_SURF\n"
+            echo "surface_update=true" >> $GITHUB_OUTPUT
+            echo "surface_commit=$LATEST_SURF" >> $GITHUB_OUTPUT
+          fi
+
+          if [[ -n "$UPDATES" ]]; then
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            echo -e "Updates available:\n$UPDATES"
+          else
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "All dependencies up to date"
+          fi
+
+      - name: Update checksums
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          CHECKSUMS="shared/download/checksums.json"
+
+          if [[ "${{ steps.check.outputs.bitwarden_update }}" == "true" ]]; then
+            VER="${{ steps.check.outputs.bitwarden_version }}"
+            URL="https://github.com/bitwarden/clients/releases/download/desktop-v${VER}/Bitwarden-${VER}-amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.bitwarden.url=$u | .bitwarden.sha256=$s | .bitwarden.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "${{ steps.check.outputs.brew_update }}" == "true" ]]; then
+            COMMIT="${{ steps.check.outputs.brew_commit }}"
+            URL="https://raw.githubusercontent.com/Homebrew/install/${COMMIT}/install.sh"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
+              '.["brew-install"].url=$u | .["brew-install"].sha256=$s | .["brew-install"].version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "${{ steps.check.outputs.surface_update }}" == "true" ]]; then
+            COMMIT="${{ steps.check.outputs.surface_commit }}"
+            URL="https://github.com/linux-surface/linux-surface/raw/${COMMIT}/pkg/keys/surface.cer"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
+              '.["surface-cert"].url=$u | .["surface-cert"].sha256=$s | .["surface-cert"].version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+      - name: Create Pull Request
+        if: steps.check.outputs.has_updates == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update external dependency checksums"
+          title: "chore: update external dependency checksums"
+          body: |
+            Automated update of pinned external dependencies.
+
+            **Please verify the builds work before merging.**
+          branch: auto-update-checksums
+          delete-branch: true

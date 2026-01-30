@@ -1,13 +1,16 @@
 #!/bin/bash
+set -euo pipefail
 
 # this script installs Homebrew in a temporary location and then
 # creates a compressed tarball of the installation at
 # mkosi.images/base/mkosi.extra/usr/share/homebrew.tar.zst
 
+source "$SRCDIR/shared/download/verified-download.sh"
+
 # delete "$SRCDIR/shared/snow/tree/usr/share/homebrew.tar.zst" if it exists
 rm -f "$SRCDIR/mkosi.images/base/mkosi.extra/usr/share/homebrew.tar.zst"
 
-curl --retry 3 -fsSLo "/tmp/brew-install" "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
+verified_download "brew-install" "/tmp/brew-install"
 touch /.dockerenv
 env --ignore-environment "PATH=/usr/bin:/bin:/usr/sbin:/sbin" "HOME=/home/linuxbrew" "NONINTERACTIVE=1" /usr/bin/bash /tmp/brew-install
 mkdir -p /out && \
