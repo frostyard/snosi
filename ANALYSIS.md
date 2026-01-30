@@ -25,12 +25,14 @@ Most scripts use `set -e` for error handling, but inconsistencies exist:
 **Location:** `mkosi.images/*/mkosi.postoutput`
 
 All six sysext postoutput scripts (1password-cli, debdev, dev, docker, incus, podman) contain nearly identical code (~49 lines each). The only differences are:
+
 - `KEYPACKAGE` variable (e.g., `docker-ce`, `incus`, `podman`, `debootstrap`, `build-essential`, `1password-cli`)
 - Manifest filename pattern
 
 **Current duplication:** ~294 lines of duplicated code across 6 files.
 
 **Recommendation:** Create a shared script that accepts the key package name as a parameter:
+
 ```bash
 #!/bin/bash
 # shared/sysext-postoutput.sh
@@ -54,19 +56,25 @@ These directories do not exist (confirmed via glob search), which is actually co
 Several scripts download files from external sources without verifying checksums:
 
 #### Bitwarden Download
+
 **Location:** `shared/packages/bitwarden/mkosi.postinst.d/bitwarden.chroot:15-16`
+
 ```bash
 curl --location --fail --output debs/bitwarden.deb \
     "https://bitwarden.com/download/?app=desktop&platform=linux&variant=deb"
 ```
+
 - No checksum verification
 - Dynamic URL that could change content
 
 #### Surface Certificate
+
 **Location:** `shared/snow/scripts/build/surface-cert.chroot:5`
+
 ```bash
 curl https://github.com/linux-surface/linux-surface/raw/refs/heads/master/pkg/keys/surface.cer -Lo /usr/share/linux-surface-secureboot/surface.cer
 ```
+
 - Downloads directly from GitHub raw content
 - No checksum verification
 - Secure boot certificate—high trust requirement
@@ -76,6 +84,7 @@ curl https://github.com/linux-surface/linux-surface/raw/refs/heads/master/pkg/ke
 ### 2.2 Homebrew Install Script Execution
 
 **Location:** `shared/snow/scripts/build/brew.chroot:10-12`
+
 ```bash
 curl --retry 3 -fsSLo "/tmp/brew-install" "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh"
 touch /.dockerenv
@@ -98,15 +107,15 @@ env --ignore-environment "PATH=/usr/bin:/bin:/usr/sbin:/sbin" "HOME=/home/linuxb
 
 The following inaccuracies were identified and corrected in README.md:
 
-| Section | Issue | Status |
-|---------|-------|--------|
-| Product table | Missing 1password-cli, debdev, dev sysexts | Fixed |
-| Product table | snowloaded description incomplete | Fixed |
-| Architecture diagram | Missing 3 sysexts | Fixed |
-| Shared components | Missing bitwarden, vscode packages | Fixed |
-| Profile comparison | Incorrect "Extra Packages" column | Fixed |
-| Missing sections | No CI/CD docs, no frostyard package explanation | Fixed |
-| Example snow profile | Outdated script references | Fixed |
+| Section              | Issue                                           | Status |
+| -------------------- | ----------------------------------------------- | ------ |
+| Product table        | Missing 1password-cli, debdev, dev sysexts      | Fixed  |
+| Product table        | snowloaded description incomplete               | Fixed  |
+| Architecture diagram | Missing 3 sysexts                               | Fixed  |
+| Shared components    | Missing bitwarden, vscode packages              | Fixed  |
+| Profile comparison   | Incorrect "Extra Packages" column               | Fixed  |
+| Missing sections     | No CI/CD docs, no frostyard package explanation | Fixed  |
+| Example snow profile | Outdated script references                      | Fixed  |
 
 ### 3.2 Missing Inline Comments in Scripts
 
@@ -114,7 +123,7 @@ Many scripts lack explanatory comments:
 
 - `shared/snow/scripts/build/brew.chroot`: The `touch /.dockerenv` trick is undocumented
 - `shared/outformat/oci/postoutput/mkosi.postoutput`: Complex OCI tagging logic could use more explanation
-- Build scripts in general could benefit from explaining *why* certain operations are needed
+- Build scripts in general could benefit from explaining _why_ certain operations are needed
 
 ### 3.3 No Architecture Decision Records
 
@@ -135,6 +144,7 @@ These are partially explained in README but formal ADRs would help future mainta
 **Location:** `saved-unused/10-image-cayo/`
 
 Contains ~90+ files from an old image configuration ("cayo"). This includes:
+
 - Complete mkosi.conf
 - Extensive mkosi.extra tree with systemd units, tmpfiles, sysusers configs
 - APT repository configurations
@@ -142,6 +152,7 @@ Contains ~90+ files from an old image configuration ("cayo"). This includes:
 **Impact:** Adds ~100+ files to repository that aren't used in the current build.
 
 **Recommendation:** Either:
+
 1. Remove entirely if no longer needed
 2. Move to a separate branch for reference
 3. Document why it's kept (if intentional)
@@ -165,12 +176,12 @@ While searching, I confirmed that `mkosi.images/1password-cli/mkosi.postinst.d/`
 
 ### High Priority
 
-1. **Add checksum verification for external downloads**
+1. [x] **Add checksum verification for external downloads**
    - Create a download helper script with built-in verification
    - Maintain a checksums file for pinned versions
    - Affects: bitwarden.chroot, surface-cert.chroot, brew.chroot
 
-2. **Consolidate sysext postoutput scripts**
+2. [x] **Consolidate sysext postoutput scripts**
    - Create `shared/sysext-postoutput.sh` accepting package name as parameter
    - Reduces maintenance burden and potential for drift
    - Estimated: ~250 lines of code eliminated
@@ -214,20 +225,24 @@ While searching, I confirmed that `mkosi.images/1password-cli/mkosi.postinst.d/`
 ## Appendix: Files Reviewed
 
 ### Configuration Files
+
 - `mkosi.conf` (root)
 - `mkosi.profiles/*/mkosi.conf` (4 profiles)
 - `mkosi.images/*/mkosi.conf` (7 images)
 - `shared/packages/*/mkosi.conf` (5 package sets)
 
 ### Scripts
+
 - `shared/snow/scripts/build/brew.chroot`
 - `shared/snow/scripts/build/surface-cert.chroot`
 - `shared/packages/bitwarden/mkosi.postinst.d/bitwarden.chroot`
 - `mkosi.images/*/mkosi.postoutput` (6 sysexts)
 
 ### CI/CD
+
 - `.github/workflows/build.yml`
 - `.github/workflows/build-images.yml`
 
 ### Other
+
 - `saved-unused/` directory contents (partial)

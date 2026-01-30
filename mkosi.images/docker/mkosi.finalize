@@ -1,0 +1,7 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+set -e
+
+# Capture /etc in /usr/share/factory/etc for tmpfiles.d to copy at boot
+mkdir -p "$BUILDROOT/usr/share/factory/"
+cp --archive --no-target-directory --update=none "$BUILDROOT/etc" "$BUILDROOT/usr/share/factory/etc"
