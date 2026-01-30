@@ -1,5 +1,5 @@
 [org.gnome.shell] 
-enabled-extensions=['logomenu@aryan_k', 'ubuntu-appindicators@ubuntu.com', 'hotedge@jonathan.jdoda.ca']
+enabled-extensions=['logomenu@aryan_k', 'ubuntu-appindicators@ubuntu.com', 'hotedge@jonathan.jdoda.ca', 'bazaar-integration@kolunmi.github.io']
 
 [org.gnome.desktop.interface]
 enable-hot-corners=false
