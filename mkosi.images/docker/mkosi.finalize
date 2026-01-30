@@ -2,6 +2,21 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 set -e
 
-# Capture /etc in /usr/share/factory/etc for tmpfiles.d to copy at boot
-mkdir -p "$BUILDROOT/usr/share/factory/"
-cp --archive --no-target-directory --update=none "$BUILDROOT/etc" "$BUILDROOT/usr/share/factory/etc"
+# Capture only the required /etc paths in /usr/share/factory/etc for tmpfiles.d to copy at boot
+mkdir -p "$BUILDROOT/usr/share/factory/etc"
+
+# /etc/default/docker (file)
+if [ -e "$BUILDROOT/etc/default/docker" ]; then
+    mkdir -p "$BUILDROOT/usr/share/factory/etc/default"
+    cp --archive --update=none "$BUILDROOT/etc/default/docker" "$BUILDROOT/usr/share/factory/etc/default/"
+fi
+
+# /etc/docker (directory)
+if [ -d "$BUILDROOT/etc/docker" ]; then
+    cp --archive --update=none "$BUILDROOT/etc/docker" "$BUILDROOT/usr/share/factory/etc/"
+fi
+
+# /etc/containerd (directory)
+if [ -d "$BUILDROOT/etc/containerd" ]; then
+    cp --archive --update=none "$BUILDROOT/etc/containerd" "$BUILDROOT/usr/share/factory/etc/"
+fi
