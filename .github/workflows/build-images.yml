@@ -27,7 +27,7 @@ jobs:
       attestations: write
     strategy:
       matrix:
-        profile: ["snow", "snowloaded", "snowfield", "snowfieldloaded"]
+        profile: ["cayo", "snow", "snowloaded", "snowfield", "snowfieldloaded"]
 
     steps:
       - name: Aggressive cleanup

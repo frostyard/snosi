@@ -1,0 +1,2 @@
+# disable audit messages in journal
+disable systemd-journald-audit.socket
