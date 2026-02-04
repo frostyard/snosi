@@ -1,0 +1,12 @@
+[Unit]
+DefaultDependencies=no
+Before=local-fs.target sysinit.target
+After=var.mount
+
+[Mount]
+What=/run/media
+Where=/media
+Options=bind
+
+[Install]
+WantedBy=local-fs.target
