@@ -1,0 +1,4 @@
+# Pin backports lower than default
+Package: *
+Pin: release a=trixie-backports
+Pin-Priority: 100

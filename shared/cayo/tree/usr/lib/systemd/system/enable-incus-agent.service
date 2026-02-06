@@ -1,0 +1,13 @@
+[Unit]
+Description=Install Incus Agent
+ConditionPathExists=/dev/virtio-ports/org.linuxcontainers.incus
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/install-incus-agent
+ExecStartPost=/usr/bin/systemctl disable enable-incus-agent.service
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,4 @@
+mask systemd-boot-update.service
+mask apt-daily-upgrade.timer
+mask apt-daily.timer
+mask dpkg-db-backup.timer
