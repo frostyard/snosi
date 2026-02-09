@@ -1,8 +1,8 @@
 {
   "bitwarden": {
-    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2025.12.1/Bitwarden-2025.12.1-amd64.deb",
-    "sha256": "33a5056f43b6205fe168f64f3fc7d52cef4c5ccbe06951584d037664aa3c6c50",
-    "version": "2025.12.1"
+    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.1.0/Bitwarden-2026.1.0-amd64.deb",
+    "sha256": "6db36b2ed691901483a1c2355bdef5ca102a1f53a26cf4be2173b9e1a4b252e5",
+    "version": "2026.1.0"
   },
   "surface-cert": {
     "url": "https://github.com/linux-surface/linux-surface/raw/d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a/pkg/keys/surface.cer",
