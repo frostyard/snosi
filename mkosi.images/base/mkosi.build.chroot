@@ -1,0 +1,64 @@
+#!/bin/bash
+set -euo pipefail
+
+MULTIARCH="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
+
+# Install Rust via rustup (Debian's rustc 1.85 is too old for bootc deps)
+export CARGO_HOME=/tmp/rust
+export RUSTUP_HOME=/tmp/rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --profile minimal -y
+. "${RUSTUP_HOME}/env"
+
+# Build and install OSTree
+git clone https://github.com/ostreedev/ostree.git --depth 1 /tmp/ostree
+pushd /tmp/ostree
+git submodule update --init
+env NOCONFIGURE=1 ./autogen.sh
+./configure \
+    --prefix=/usr \
+    --libdir="/usr/lib/${MULTIARCH}" \
+    --sysconfdir=/etc \
+    --with-curl \
+    --with-dracut
+make -j"$(nproc)"
+
+# Install into DESTDIR for the final image
+make install DESTDIR="$DESTDIR"
+
+# Also install into the build chroot so bootc can link against it
+make install DESTDIR=
+ldconfig
+popd
+
+# Build and install Bootc
+git clone https://github.com/frostyard/bootc.git --depth 1 /tmp/bootc
+pushd /tmp/bootc
+export PKG_CONFIG_PATH="/usr/lib/${MULTIARCH}/pkgconfig:/usr/share/pkgconfig"
+make bin
+make install-all DESTDIR="$DESTDIR"
+popd
+
+# Build dummy libostree-1-1 equivs package for dependent packages
+mkdir -p /tmp/equivs
+cat > /tmp/equivs/libostree-fix <<EOF
+Section: misc
+Priority: optional
+Standards-Version: 3.9.2
+
+Package: libostree-1-1
+Version: 2025.6
+Maintainer: Snow Linux <snow@snowlinux.org>
+Architecture: $(dpkg --print-architecture)
+Description: Dummy package to provide libostree-1-1
+EOF
+
+pushd /tmp/equivs
+equivs-build libostree-fix
+popd
+
+# Place the .deb where postinst can find it
+mkdir -p "$DESTDIR/tmp/equivs"
+cp /tmp/equivs/*.deb "$DESTDIR/tmp/equivs/"
+
+# Cleanup temp files
+rm -rf /tmp/ostree /tmp/bootc /tmp/equivs /tmp/rust

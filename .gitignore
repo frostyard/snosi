@@ -14,3 +14,4 @@ mkosi.profiles/snow/mkosi.extra/usr/share/homebrew.tar.zst
 shared/snow/tree/usr/share/homebrew.tar.zst
 shared/snow/tree/usr/share/gnome-shell/extensions/hotedge@jonathan.jdoda.ca
 shared/snow/tree/usr/share/gnome-shell/extensions/logomenu@aryan_k
+.claude/settings.local.json
