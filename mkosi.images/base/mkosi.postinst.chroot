@@ -24,3 +24,10 @@ systemctl enable usr-local.mount
 
 # remove bls-garbage-collect from /etc/systemd/system/basic.garget.wants
 rm -rf /etc/systemd/system/basic.target.wants/bls-garbage-collect.service
+
+# Install dummy libostree-1-1 equivs package and hold it
+if [ -d /tmp/equivs ] && ls /tmp/equivs/*.deb 1>/dev/null 2>&1; then
+    dpkg -i /tmp/equivs/*.deb
+    apt-mark hold libostree-1-1
+    rm -rf /tmp/equivs
+fi
