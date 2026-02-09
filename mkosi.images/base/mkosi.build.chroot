@@ -31,7 +31,7 @@ ldconfig
 popd
 
 # Build and install Bootc
-git clone https://github.com/frostyard/bootc.git --depth 1 /tmp/bootc
+git clone https://github.com/bootc-dev/bootc.git --depth 1 /tmp/bootc
 pushd /tmp/bootc
 export PKG_CONFIG_PATH="/usr/lib/${MULTIARCH}/pkgconfig:/usr/share/pkgconfig"
 make bin
