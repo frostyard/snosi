@@ -43,7 +43,7 @@ The `base` image ([mkosi.images/base/mkosi.conf](mkosi.images/base/mkosi.conf)) 
 
 - Debian Trixie (testing) with main, contrib, non-free, and non-free-firmware repositories
 - systemd, systemd-boot, and boot infrastructure
-- Network management (NetworkManager, iwd)
+- Network management (NetworkManager, wpasupplicant)
 - Container tooling prerequisites (erofs-utils, skopeo)
 - Firmware packages for common hardware
 - Core utilities (fish, zsh, vim, git)
