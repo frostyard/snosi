@@ -55,6 +55,14 @@ systemctl enable opt.mount
 systemctl enable usr-local.mount
 systemctl enable gdm.service
 
+# Enable gnome-remote-desktop user services
+# (systemctl --user enable doesn't work in chroot, create symlinks directly)
+# this doesn't turn on remote desktop by default, just ensures the services are enabled when the user enables them in settings
+mkdir -p /etc/systemd/user/gnome-session.target.wants
+ln -sf /usr/lib/systemd/user/gnome-remote-desktop.service /etc/systemd/user/gnome-session.target.wants/gnome-remote-desktop.service
+ln -sf /usr/lib/systemd/user/gnome-remote-desktop-handover.service /etc/systemd/user/gnome-session.target.wants/gnome-remote-desktop-handover.service
+ln -sf /usr/lib/systemd/user/gnome-remote-desktop-headless.service /etc/systemd/user/gnome-session.target.wants/gnome-remote-desktop-headless.service
+
 # Add build information to os-release
 # echo "BUILD_ID=\"$BUILD_ID\"" >> /usr/lib/os-release
 
