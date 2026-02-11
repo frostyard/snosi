@@ -74,6 +74,19 @@ The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput
 - External downloads must go through `verified_download()` with entries in `checksums.json`
 - Pin external URLs to specific versions/commits, never `latest` or branch names
 
+## User Service Enablement in Chroot
+
+`systemctl --user enable` does not work inside a mkosi chroot (no user session/D-Bus). System services are enabled via `systemctl enable` in `snow.postinst.chroot`, but user services require manually creating symlinks:
+
+```bash
+mkdir -p /etc/systemd/user/<target>.wants
+ln -sf /usr/lib/systemd/user/<service> /etc/systemd/user/<target>.wants/<service>
+```
+
+The target (e.g. `gnome-session.target`) comes from the service's `WantedBy=` in its `[Install]` section.
+
+**Known issue:** `deb-systemd-helper` creates `.dsh-also` tracking files in `/var/lib/systemd/deb-systemd-user-helper-enabled/` during the build but may not create the actual enablement symlinks in `/etc/systemd/user/`. If a user service isn't auto-starting after reboot, check whether its symlink is missing from `/etc/systemd/user/<target>.wants/` and compare against its `.dsh-also` file. There may be other services with this same gap that haven't been noticed yet.
+
 ## CI/CD
 
 - `build.yml` - Builds base + sysexts, publishes to Frostyard repo (Cloudflare R2)
