@@ -1,0 +1,81 @@
+name: Check Package Updates
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # Daily at 8am UTC
+  workflow_dispatch:
+
+jobs:
+  check-packages:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check latest package versions
+        run: |
+          docker run --rm \
+            -v "$PWD/mkosi.sandbox/etc/apt/sources.list.d:/etc/apt/sources.list.d" \
+            -v "$PWD/mkosi.sandbox/etc/apt/keyrings:/etc/apt/keyrings" \
+            -v "$PWD/mkosi.sandbox/etc/apt/trusted.gpg.d:/etc/apt/trusted.gpg.d" \
+            debian:trixie bash -c '
+              apt-get update -qq 2>/dev/null
+              for pkg in microsoft-edge-stable code docker-ce 1password-cli nordvpn; do
+                version=$(apt-cache policy "$pkg" 2>/dev/null | grep "Candidate:" | awk "{print \$2}")
+                echo "${pkg}=${version}"
+              done
+            ' > latest-versions.txt
+          cat latest-versions.txt
+
+      - name: Compare and update versions
+        id: compare
+        run: |
+          VERSIONS_FILE="shared/download/package-versions.json"
+          HAS_UPDATES=false
+          SUMMARY=""
+
+          while IFS='=' read -r pkg version; do
+            [ -z "$pkg" ] && continue
+            [ "$version" = "(none)" ] && continue
+            [ -z "$version" ] && continue
+
+            current=$(jq -r --arg p "$pkg" '.[$p] // ""' "$VERSIONS_FILE")
+
+            if [ "$current" != "$version" ]; then
+              HAS_UPDATES=true
+              if [ -z "$current" ]; then
+                SUMMARY="${SUMMARY}${pkg}: (new) -> ${version}\n"
+              else
+                SUMMARY="${SUMMARY}${pkg}: ${current} -> ${version}\n"
+              fi
+              jq --arg p "$pkg" --arg v "$version" '.[$p] = $v' "$VERSIONS_FILE" > tmp.json && mv tmp.json "$VERSIONS_FILE"
+            fi
+          done < latest-versions.txt
+
+          echo "has_updates=$HAS_UPDATES" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_UPDATES" = "true" ]; then
+            echo -e "Updates found:\n$SUMMARY"
+            {
+              echo "summary<<EOF"
+              echo -e "$SUMMARY"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "All packages up to date"
+          fi
+
+      - name: Commit and push
+        if: steps.compare.outputs.has_updates == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add shared/download/package-versions.json
+          git commit -m "$(cat <<EOF
+          chore: update package versions
+
+          ${{ steps.compare.outputs.summary }}
+          EOF
+          )"
+          git push
