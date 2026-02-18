@@ -93,6 +93,7 @@ shared/
 ├── packages/
 │   ├── snow/mkosi.conf        ← GNOME desktop packages (~490 lines)
 │   ├── edge/mkosi.conf        ← Microsoft Edge browser
+│   ├── azurevpn/mkosi.conf    ← Azure VPN Client
 │   ├── vscode/mkosi.conf      ← Visual Studio Code
 │   ├── bitwarden/mkosi.conf   ← Bitwarden password manager
 │   └── virt/mkosi.conf        ← Incus virtualization
@@ -148,8 +149,8 @@ Include=%D/shared/outformat/oci/mkosi.conf    # OCI output format
 | ------------------- | --------- | ------------------------------ | --------------------------------------------------------------------------- |
 | **snow**            | backports | —                              | `kernel/backports`, `packages/snow`, `outformat/oci`                        |
 | **snowfield**       | surface   | —                              | `kernel/surface`, `packages/snow`, `outformat/oci`                          |
-| **snowloaded**      | backports | Edge, VSCode, Bitwarden, Incus | + `packages/edge`, `packages/vscode`, `packages/bitwarden`, `packages/virt` |
-| **snowfieldloaded** | surface   | Edge, VSCode, Bitwarden, Incus | + `packages/edge`, `packages/vscode`, `packages/bitwarden`, `packages/virt` |
+| **snowloaded**      | backports | Azure VPN, Edge, VSCode, Bitwarden, Incus | + `packages/edge`, `packages/vscode`, `packages/bitwarden`, `packages/virt` |
+| **snowfieldloaded** | surface   | Azure VPN, Edge, VSCode, Bitwarden, Incus | + `packages/edge`, `packages/vscode`, `packages/bitwarden`, `packages/virt` |
 
 ## Building Images
 

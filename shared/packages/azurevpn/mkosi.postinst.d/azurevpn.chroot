@@ -1,0 +1,44 @@
+#!/bin/bash
+# Post-install script for sysext
+# Add any customizations here
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+if [[ "${UID}" == "0" ]]; then
+        SUDO=""
+else
+        SUDO="sudo"
+fi
+
+source "$SRCDIR/shared/download/verified-download.sh"
+mkdir -p debs
+verified_download "microsoft-azurevpnclient" "debs/microsoft-azurevpnclient.deb"
+
+dpkg -i debs/microsoft-azurevpnclient.deb
+rm -rf debs
+
+# Move from /opt
+${SUDO} mv /opt/microsoft/microsoft-azurevpnclient /usr/lib/microsoft-azurevpnclient
+${SUDO} rm -rf /opt/microsoft
+
+# Create needed links and fixes for new location
+${SUDO} ln -sf /usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient /usr/bin/microsoft-azurevpnclient
+
+${SUDO} sed -i \
+    -e 's|/opt/microsoft/microsoft-azurevpnclient|/usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient|' \
+    /usr/share/polkit-1/rules.d/microsoft-azurevpnclient.rules
+${SUDO} sed -i \
+    -e 's|Path=/opt/microsoft/microsoft-azurevpnclient/|Path=/usr/lib/microsoft-azurevpnclient/|' \
+    -e 's|/opt/microsoft/microsoft-azurevpnclient/microsoft-azurevpnclient|/usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient|' \
+    /usr/share/applications/microsoft-azurevpnclient.desktop
+
+# Fix library paths after migration from /opt
+${SUDO} patchelf --set-rpath '$ORIGIN/lib' /usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient
+${SUDO} patchelf --set-rpath '$ORIGIN' /usr/lib/microsoft-azurevpnclient/lib/libflutter_secure_storage_linux_plugin.so
+${SUDO} patchelf --set-rpath '$ORIGIN' /usr/lib/microsoft-azurevpnclient/lib/libflutter_window_close_plugin.so
+${SUDO} patchelf --set-rpath '$ORIGIN' /usr/lib/microsoft-azurevpnclient/lib/libLinuxCore.so
+${SUDO} patchelf --set-rpath '$ORIGIN' /usr/lib/microsoft-azurevpnclient/lib/liburl_launcher_linux_plugin.so
+${SUDO} patchelf --set-rpath '$ORIGIN' /usr/lib/microsoft-azurevpnclient/lib/libXplatSharedLibrary.so

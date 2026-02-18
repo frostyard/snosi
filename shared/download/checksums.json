@@ -4,6 +4,11 @@
     "sha256": "6db36b2ed691901483a1c2355bdef5ca102a1f53a26cf4be2173b9e1a4b252e5",
     "version": "2026.1.0"
   },
+  "microsoft-azurevpnclient": {
+    "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_3.0.0_amd64.deb",
+    "sha256": "9e5d360433d1d374d9a1051bb29a65103e81ca74ebeaa35155d1f0e9fc94577b",
+    "version": "3.0.0"
+  },
   "surface-cert": {
     "url": "https://github.com/linux-surface/linux-surface/raw/d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a/pkg/keys/surface.cer",
     "sha256": "081202cf3ea30519046bbb9faf5dafe24c3fdf56b79afea62778f24913ab6d64",
