@@ -22,7 +22,7 @@ jobs:
             -v "$PWD/mkosi.sandbox/etc/apt/trusted.gpg.d:/etc/apt/trusted.gpg.d" \
             debian:trixie bash -c '
               apt-get update -qq 2>/dev/null
-              for pkg in microsoft-edge-stable code docker-ce 1password-cli nordvpn; do
+              for pkg in microsoft-edge-stable code docker-ce 1password-cli; do
                 version=$(apt-cache policy "$pkg" 2>/dev/null | grep "Candidate:" | awk "{print \$2}")
                 echo "${pkg}=${version}"
               done

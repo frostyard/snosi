@@ -4,7 +4,7 @@ Monitor external APT packages for updates and trigger rebuilds automatically.
 
 ## Problem
 
-External packages (Edge, VS Code, Docker, 1Password, NordVPN) update independently. Builds only run on push to main, so the images can ship stale versions until the next unrelated commit triggers a rebuild.
+External packages (Edge, VS Code, Docker, 1Password) update independently. Builds only run on push to main, so the images can ship stale versions until the next unrelated commit triggers a rebuild.
 
 ## Approach
 
@@ -18,7 +18,6 @@ A daily GitHub Actions workflow queries the external APT repos for latest packag
 | `code` | packages.microsoft.com/repos/code | Desktop images |
 | `docker-ce` | download.docker.com/linux/debian | Docker sysext |
 | `1password-cli` | downloads.1password.com | 1password-cli sysext |
-| `nordvpn` | repo.nordvpn.com | Desktop images (TBD) |
 
 Excluded: Frostyard (we control releases), Linux Surface (kernel-level, managed separately).
 
@@ -33,8 +32,7 @@ Sits alongside `checksums.json`. Stores the last-seen candidate version for each
   "microsoft-edge-stable": "136.0.3240.50-1",
   "code": "1.100.0-1749588012",
   "docker-ce": "5:28.2.2-1~debian.13~trixie",
-  "1password-cli": "2.30.3-1",
-  "nordvpn": "3.20.1"
+  "1password-cli": "2.30.3-1"
 }
 ```
 
@@ -57,7 +55,7 @@ Run a `debian:trixie` container with `mkosi.sandbox/etc/apt/` mounted in. This r
       -v $PWD/mkosi.sandbox/etc/apt/trusted.gpg.d:/etc/apt/trusted.gpg.d \
       debian:trixie bash -c '
         apt-get update -qq 2>/dev/null
-        for pkg in microsoft-edge-stable code docker-ce 1password-cli nordvpn; do
+        for pkg in microsoft-edge-stable code docker-ce 1password-cli; do
           version=$(apt-cache policy "$pkg" | grep Candidate: | awk "{print \$2}")
           echo "$pkg=$version"
         done
