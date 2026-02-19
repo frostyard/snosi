@@ -1,0 +1,40 @@
+name: Validate Scripts and Config
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  shell-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: |
+          git ls-files '*.sh' '*.chroot' | xargs -r shellcheck -S error -s bash -x
+
+  mkosi-config-sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: setup-mkosi
+        uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf
+
+      - name: Validate mkosi configuration summaries
+        run: |
+          sudo mkosi summary > /dev/null
+          for profile in snow snowloaded snowfield snowfieldloaded; do
+            sudo mkosi --profile "$profile" summary > /dev/null
+          done
