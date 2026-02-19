@@ -1,4 +1,7 @@
-# monorepo plan
+# monorepo plan (archival reference only)
+
+> Archived planning notes for a previous repository layout.  
+> This file is not used by current mkosi builds or CI workflows.
 
 ```
                           base            <- stuff that makes debian + bootc
