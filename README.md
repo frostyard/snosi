@@ -214,6 +214,8 @@ External repositories are configured in `mkosi.sandbox/etc/apt/` for packages no
 - **linux-surface**: Surface kernel packages
 - **Frostyard**: Custom packages (nbc, chairlift, updex)
 
+Legacy/archival files under `saved-unused/` are kept for historical reference and are not part of active build inputs.
+
 ## CI/CD Pipeline
 
 The project uses GitHub Actions for automated builds and publishing:
