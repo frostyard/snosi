@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # this script clones the Bazaar Companion repository into the appropriate location
 # in the build tree so that it can be included in the final image.
@@ -11,12 +12,12 @@ DESTINATION="$SRCDIR/shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-in
 # remove any existing bazaar-companion directory
 rm -rf "$DESTINATION"
 # clone the bazaar-companion repository
-mkdir -p "/tmp/bazaar-companion"
+rm -rf /tmp/bazaar-companion
 git clone --depth 1 "$REPOSITORY" "/tmp/bazaar-companion"
 
 # Move subdirectory into the extension folder
-mkdir -p "$DESINATION"
-mv "/tmp/bazaar-companion/src/*" "$DESTINATION"
+mkdir -p "$DESTINATION"
+mv /tmp/bazaar-companion/src/* "$DESTINATION"
 
 # set the permissions: 755 for directories and 644 for files in the hotedge directory
 find "$DESTINATION" -type d -exec chmod 755 {} +
