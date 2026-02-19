@@ -1,19 +1,29 @@
 #!/bin/bash
+set -euo pipefail
 
-# this script clones the logomenu repository into the appropriate location
+# this script downloads a pinned logomenu source archive into the appropriate location
 # in the build tree so that it can be included in the final image.
 # logomenu is a GNOME Shell extension that adds a custom logo menu to the screen.
 
-
-REPOSITORY=https://github.com/frostyard/logomenu.git
 DESTINATION="$SRCDIR/shared/snow/tree/usr/share/gnome-shell/extensions/logomenu@aryan_k"
+source "$SRCDIR/shared/download/verified-download.sh"
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
+ARCHIVE="$TMPDIR/logomenu.tar.gz"
 
 # remove any existing logomenu directory
 rm -rf "$DESTINATION"
-# clone the logomenu repository
-git clone --depth 1 "$REPOSITORY" "$DESTINATION" || { echo "Error: failed to clone repository $REPOSITORY to $DESTINATION" >&2; exit 1; }
-# remove the .git directory if it exists
-rm -rf "$DESTINATION/.git"
+verified_download "logomenu" "$ARCHIVE"
+tar -xzf "$ARCHIVE" -C "$TMPDIR"
+
+SOURCE_DIR=$(find "$TMPDIR" -maxdepth 1 -type d -name 'logomenu-*' | head -n 1)
+if [[ -z "$SOURCE_DIR" ]]; then
+    echo "Error: failed to locate extracted logomenu source directory" >&2
+    exit 1
+fi
+
+mkdir -p "$DESTINATION"
+cp -a "$SOURCE_DIR"/. "$DESTINATION"/
 # set the permissions: 755 for directories and 644 for files in the logomenu directory
 find "$DESTINATION" -type d -exec chmod 755 {} +
 find "$DESTINATION" -type f -exec chmod 644 {} +

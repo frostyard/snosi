@@ -1,19 +1,29 @@
 #!/bin/bash
+set -euo pipefail
 
-# this script clones the hotedge repository into the appropriate location
+# this script downloads a pinned hotedge source archive into the appropriate location
 # in the build tree so that it can be included in the final image.
 # hotedge is a GNOME Shell extension that adds a hot corner to the screen.
 
-
-REPOSITORY=https://github.com/frostyard/hotedge.git
 DESTINATION="$SRCDIR/shared/snow/tree/usr/share/gnome-shell/extensions/hotedge@jonathan.jdoda.ca"
+source "$SRCDIR/shared/download/verified-download.sh"
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
+ARCHIVE="$TMPDIR/hotedge.tar.gz"
 
 # remove any existing hotedge directory
 rm -rf "$DESTINATION"
-# clone the hotedge repository
-git clone --depth 1 "$REPOSITORY" "$DESTINATION"
-# remove the .git directory if it exists
-rm -rf "$DESTINATION/.git"
+verified_download "hotedge" "$ARCHIVE"
+tar -xzf "$ARCHIVE" -C "$TMPDIR"
+
+SOURCE_DIR=$(find "$TMPDIR" -maxdepth 1 -type d -name 'hotedge-*' | head -n 1)
+if [[ -z "$SOURCE_DIR" ]]; then
+    echo "Error: failed to locate extracted hotedge source directory" >&2
+    exit 1
+fi
+
+mkdir -p "$DESTINATION"
+cp -a "$SOURCE_DIR"/. "$DESTINATION"/
 # set the permissions: 755 for directories and 644 for files in the hotedge directory
 find "$DESTINATION" -type d -exec chmod 755 {} +
 find "$DESTINATION" -type f -exec chmod 644 {} +
