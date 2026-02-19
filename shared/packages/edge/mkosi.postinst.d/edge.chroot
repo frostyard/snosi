@@ -2,7 +2,9 @@
 # Post-install script for sysext
 # Add any customizations here
 set -euo pipefail
-set -x
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
 
 
 if [[ "${UID}" == "0" ]]; then
