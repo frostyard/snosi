@@ -9,6 +9,7 @@ VM_MEMORY="${VM_MEMORY:-4096}"
 VM_CPUS="${VM_CPUS:-2}"
 SSH_PORT="${SSH_PORT:-2222}"
 QEMU_PID="${QEMU_PID:-}"
+QEMU_CONSOLE_LOG="${QEMU_CONSOLE_LOG:-}"
 DISK_IMAGE="${DISK_IMAGE:-}"
 
 create_disk() {
@@ -43,7 +44,8 @@ vm_start() {
     local ovmf
     ovmf=$(find_ovmf)
 
-    local pidfile="/tmp/qemu-test.pid"
+    local pidfile="${disk%.raw}.pid"
+    local consolelog="${disk%.raw}-console.log"
 
     qemu-system-x86_64 \
         -enable-kvm -cpu host \
@@ -52,16 +54,24 @@ vm_start() {
         -drive "file=$disk,format=raw,if=virtio" \
         -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT}-:22" \
         -device virtio-net-pci,netdev=net0 \
-        -nographic -serial mon:stdio \
+        -nographic \
+        -serial "file:$consolelog" \
         -daemonize -pidfile "$pidfile"
 
     QEMU_PID=$(cat "$pidfile")
+    QEMU_CONSOLE_LOG="$consolelog"
     echo "VM started (PID: $QEMU_PID, SSH port: $SSH_PORT)"
+    echo "Console log: $consolelog"
 }
 
 vm_stop() {
     if [[ -n "$QEMU_PID" ]] && kill -0 "$QEMU_PID" 2>/dev/null; then
         kill "$QEMU_PID"
+        # Wait for QEMU to exit
+        local i=0
+        while kill -0 "$QEMU_PID" 2>/dev/null && (( i++ < 10 )); do
+            sleep 0.5
+        done
         echo "VM stopped (PID: $QEMU_PID)"
     else
         echo "VM is not running"

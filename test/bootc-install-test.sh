@@ -28,7 +28,7 @@ source "$SCRIPT_DIR/lib/vm.sh"
 : "${BOOT_TIMEOUT:=300}"
 
 # Internal state
-TMPDIR=""
+WORK_DIR=""
 IMAGE_LOADED=""     # non-empty if we loaded an image into podman
 IMAGE_REF=""        # the podman-resolvable image reference
 
@@ -55,9 +55,9 @@ cleanup() {
     fi
 
     # Remove temp directory
-    if [[ -n "$TMPDIR" && -d "$TMPDIR" ]]; then
-        rm -rf "$TMPDIR"
-        echo "Removed temp directory: $TMPDIR"
+    if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then
+        rm -rf "$WORK_DIR"
+        echo "Removed temp directory: $WORK_DIR"
     fi
 }
 
@@ -75,8 +75,8 @@ INPUT="$1"
 trap cleanup EXIT
 
 # Create a working temp directory
-TMPDIR=$(mktemp -d)
-echo "Temp directory: $TMPDIR"
+WORK_DIR=$(mktemp -d)
+echo "Temp directory: $WORK_DIR"
 
 # ---------------------------------------------------------------
 # Step 1 - LOAD: Get the image into podman storage
@@ -114,14 +114,14 @@ fi
 # ---------------------------------------------------------------
 echo ""
 echo "=== Step 2: Generate SSH keypair ==="
-ssh_keygen
+ssh_keygen "$WORK_DIR"
 
 # ---------------------------------------------------------------
 # Step 3 - Create sparse disk image
 # ---------------------------------------------------------------
 echo ""
 echo "=== Step 3: Create disk image ==="
-create_disk "$TMPDIR/disk.raw"
+create_disk "$WORK_DIR/disk.raw"
 
 # ---------------------------------------------------------------
 # Step 4 - INSTALL: Run bootc install to-disk via podman
@@ -131,7 +131,7 @@ echo "=== Step 4: Install image to disk ==="
 podman run --rm --privileged --pid=host \
     -v /var/lib/containers:/var/lib/containers \
     -v /dev:/dev \
-    -v "$TMPDIR:$TMPDIR" \
+    -v "$WORK_DIR:$WORK_DIR" \
     -v "${SSH_KEY}.pub:${SSH_KEY}.pub:ro" \
     --security-opt label=type:unconfined_t \
     "$IMAGE_REF" \
@@ -139,6 +139,7 @@ podman run --rm --privileged --pid=host \
         --generic-image \
         --via-loopback \
         --skip-fetch-check \
+        --composefs-backend \
         --root-ssh-authorized-keys "${SSH_KEY}.pub" \
         "$DISK_IMAGE"
 

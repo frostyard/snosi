@@ -18,12 +18,13 @@ SSH_OPTS=(
 )
 
 # ssh_keygen - Generate a temporary ED25519 keypair.
-# Sets SSH_KEY to the private key path inside a temp directory.
-# The caller is responsible for cleaning up the temp directory.
+# Usage: ssh_keygen [directory]
+# If directory is provided, the keypair is created there.
+# Otherwise, a new temp directory is created (caller must clean up).
+# Sets SSH_KEY to the private key path.
 ssh_keygen() {
-    local tmpdir
-    tmpdir=$(mktemp -d)
-    SSH_KEY="$tmpdir/id_ed25519"
+    local keydir="${1:-$(mktemp -d)}"
+    SSH_KEY="$keydir/id_ed25519"
     ssh-keygen -t ed25519 -f "$SSH_KEY" -N "" -q
     echo "Generated SSH keypair: $SSH_KEY"
 }
@@ -56,5 +57,9 @@ wait_for_ssh() {
     done
 
     echo "Error: SSH not reachable after ${SSH_TIMEOUT}s" >&2
+    if [[ -n "${QEMU_CONSOLE_LOG:-}" && -f "$QEMU_CONSOLE_LOG" ]]; then
+        echo "=== Last 50 lines of VM console ===" >&2
+        tail -50 "$QEMU_CONSOLE_LOG" >&2
+    fi
     return 1
 }
