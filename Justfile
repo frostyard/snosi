@@ -14,27 +14,27 @@ sysexts:
 
 snow:
     sudo PATH="$PATH" {{just}} _snow
-    {{just}} _containerfile-build snow "Snow Linux OS Image"
+    sudo PATH="$PATH" {{just}} _containerfile-build snow "Snow Linux OS Image"
 
 snowloaded:
     sudo PATH="$PATH" {{just}} _snowloaded
-    {{just}} _containerfile-build snowloaded "Snow Loaded Linux OS Image"
+    sudo PATH="$PATH" {{just}} _containerfile-build snowloaded "Snow Loaded Linux OS Image"
 
 snowfield:
     sudo PATH="$PATH" {{just}} _snowfield
-    {{just}} _containerfile-build snowfield "Snowfield Linux OS Image"
+    sudo PATH="$PATH" {{just}} _containerfile-build snowfield "Snowfield Linux OS Image"
 
 snowfieldloaded:
     sudo PATH="$PATH" {{just}} _snowfieldloaded
-    {{just}} _containerfile-build snowfieldloaded "Snow Field Loaded Linux OS Image"
+    sudo PATH="$PATH" {{just}} _containerfile-build snowfieldloaded "Snow Field Loaded Linux OS Image"
 
 cayo:
     sudo PATH="$PATH" {{just}} _cayo
-    {{just}} _containerfile-build cayo "Cayo Linux Server Image"
+    sudo PATH="$PATH" {{just}} _containerfile-build cayo "Cayo Linux Server Image"
 
 cayoloaded:
     sudo PATH="$PATH" {{just}} _cayoloaded
-    {{just}} _containerfile-build cayoloaded "Cayo Loaded Linux Server Image"
+    sudo PATH="$PATH" {{just}} _containerfile-build cayoloaded "Cayo Loaded Linux Server Image"
 
 test-install image="snow":
     sudo PATH="$PATH" {{just}} _test-install {{image}}
