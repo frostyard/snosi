@@ -19,22 +19,26 @@ create_disk() {
     echo "Created disk image: $path ($DISK_SIZE)"
 }
 
+# Find OVMF firmware. Prints "CODE_PATH VARS_PATH" to stdout.
 find_ovmf() {
-    local paths=(
-        /usr/incus/share/qemu/OVMF_CODE.fd
-        /usr/share/OVMF/OVMF_CODE.fd
-        /usr/share/OVMF/OVMF_CODE_4M.fd
-        /usr/share/edk2/ovmf/OVMF_CODE.fd
-        /usr/share/qemu/OVMF_CODE.fd
-        /usr/share/edk2-ovmf/x64/OVMF_CODE.fd
+    # Each entry is "code_path:vars_path"
+    local pairs=(
+        "/usr/incus/share/qemu/OVMF_CODE.4MB.fd:/usr/incus/share/qemu/OVMF_VARS.4MB.fd"
+        "/usr/share/OVMF/OVMF_CODE_4M.fd:/usr/share/OVMF/OVMF_VARS_4M.fd"
+        "/usr/share/OVMF/OVMF_CODE.fd:/usr/share/OVMF/OVMF_VARS.fd"
+        "/usr/share/edk2/ovmf/OVMF_CODE.fd:/usr/share/edk2/ovmf/OVMF_VARS.fd"
+        "/usr/share/qemu/OVMF_CODE.fd:/usr/share/qemu/OVMF_VARS.fd"
+        "/usr/share/edk2-ovmf/x64/OVMF_CODE.fd:/usr/share/edk2-ovmf/x64/OVMF_VARS.fd"
     )
-    for p in "${paths[@]}"; do
-        if [[ -f "$p" ]]; then
-            echo "$p"
+    for pair in "${pairs[@]}"; do
+        local code="${pair%%:*}"
+        local vars="${pair##*:}"
+        if [[ -f "$code" && -f "$vars" ]]; then
+            echo "$code $vars"
             return 0
         fi
     done
-    echo "Error: OVMF firmware not found" >&2
+    echo "Error: OVMF firmware (CODE+VARS) not found" >&2
     return 1
 }
 
@@ -43,13 +47,19 @@ vm_start() {
     [[ -n "$disk" ]] || { echo "Error: No disk image specified" >&2; return 1; }
     [[ -f "$disk" ]] || { echo "Error: Disk image not found: $disk" >&2; return 1; }
 
-    local ovmf_src
-    ovmf_src=$(find_ovmf)
+    local ovmf_pair
+    ovmf_pair=$(find_ovmf)
+    local ovmf_code_src="${ovmf_pair%% *}"
+    local ovmf_vars_src="${ovmf_pair##* }"
 
     # Copy firmware next to the disk image so QEMU can always access it
     # (source may be in a restricted directory like /usr/incus/)
-    local ovmf="${disk%/*}/OVMF_CODE.fd"
-    cp "$ovmf_src" "$ovmf"
+    # VARS must be writable — UEFI stores boot variables there
+    local workdir="${disk%/*}"
+    local ovmf_code="$workdir/OVMF_CODE.fd"
+    local ovmf_vars="$workdir/OVMF_VARS.fd"
+    cp "$ovmf_code_src" "$ovmf_code"
+    cp "$ovmf_vars_src" "$ovmf_vars"
 
     local pidfile="${disk%.raw}.pid"
     local consolelog="${disk%.raw}-console.log"
@@ -57,7 +67,8 @@ vm_start() {
     qemu-system-x86_64 \
         -enable-kvm -cpu host \
         -m "$VM_MEMORY" -smp "$VM_CPUS" \
-        -drive "if=pflash,format=raw,unit=0,file=$ovmf,readonly=on" \
+        -drive "if=pflash,format=raw,unit=0,file=$ovmf_code,readonly=on" \
+        -drive "if=pflash,format=raw,unit=1,file=$ovmf_vars" \
         -drive "file=$disk,format=raw,if=virtio" \
         -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT}-:22" \
         -device virtio-net-pci,netdev=net0 \
