@@ -57,7 +57,7 @@ vm_start() {
         -drive "file=$disk,format=raw,if=virtio" \
         -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT}-:22" \
         -device virtio-net-pci,netdev=net0 \
-        -nographic \
+        -display none \
         -serial "file:$consolelog" \
         -daemonize -pidfile "$pidfile"
 
