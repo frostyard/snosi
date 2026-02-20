@@ -33,12 +33,14 @@ check "NetworkManager is active" \
 check "ssh is active" \
     systemctl is-active ssh
 
+# shellcheck disable=SC2016
 check "nbc-update-download.timer is loaded" \
     bash -c 'test -n "$(systemctl list-timers --all --no-legend nbc-update-download.timer)"'
 
 check "frostyard-updex service exists" \
     systemctl cat frostyard-updex
 
+# shellcheck disable=SC2016
 check "no failed systemd units" \
     bash -c 'test "$(systemctl --failed --no-legend | wc -l)" -eq 0'
 

@@ -30,12 +30,15 @@ check "Network connectivity" \
 check "DNS resolution" \
     getent hosts example.com
 
+# shellcheck disable=SC2016
 check "Package metadata intact (>100 installed packages)" \
     bash -c 'test "$(dpkg -l | grep -c "^ii")" -gt 100'
 
+# shellcheck disable=SC2016
 check "System time is reasonable (year >= 2025)" \
     bash -c 'test "$(date +%Y)" -ge 2025'
 
+# shellcheck disable=SC2016
 check "Hostname is set" \
     bash -c 'test -n "$(hostname)"'
 

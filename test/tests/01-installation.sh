@@ -27,6 +27,7 @@ echo "# Tier 1: Installation validation"
 check "System is running" \
     systemctl is-system-running --wait --timeout=120
 
+# shellcheck disable=SC2016
 check "Root filesystem is read-only" \
     awk '$5 == "/" { exit (/\bro\b/ ? 0 : 1) }' /proc/mounts
 

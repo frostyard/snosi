@@ -40,6 +40,7 @@ usage() {
     exit 1
 }
 
+# shellcheck disable=SC2329
 cleanup() {
     echo ""
     echo "=== Cleanup ==="
