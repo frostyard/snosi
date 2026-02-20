@@ -40,5 +40,8 @@ ${SUDO} patchelf --set-rpath '$ORIGIN' /usr/lib/microsoft-azurevpnclient/lib/lib
 ${SUDO} patchelf --set-rpath '$ORIGIN' /usr/lib/microsoft-azurevpnclient/lib/liburl_launcher_linux_plugin.so
 ${SUDO} patchelf --set-rpath '$ORIGIN' /usr/lib/microsoft-azurevpnclient/lib/libXplatSharedLibrary.so
 
+# Fix executable permissions
+setcap cap_net_admin+eip /usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient
+
 # Remove unneeded Rsyslog config
 rm -f /etc/rsyslog.d/AzureVPNClient.conf
