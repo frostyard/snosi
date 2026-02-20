@@ -1,0 +1,21 @@
+#!/bin/bash
+set -euo pipefail
+
+# this script installs Homebrew in a temporary location and then
+# creates a compressed tarball of the installation at
+# shared/cayo/tree/usr/share/homebrew.tar.zst
+
+source "$SRCDIR/shared/download/verified-download.sh"
+
+# delete previous tarball if it exists
+rm -f "$SRCDIR/shared/cayo/tree/usr/share/homebrew.tar.zst"
+
+verified_download "brew-install" "/tmp/brew-install"
+touch /.dockerenv
+env --ignore-environment "PATH=/usr/bin:/bin:/usr/sbin:/sbin" "HOME=/home/linuxbrew" "NONINTERACTIVE=1" /usr/bin/bash /tmp/brew-install
+mkdir -p /out && \
+tar --zstd -cvf "$SRCDIR/shared/cayo/tree/usr/share/homebrew.tar.zst" "/home/linuxbrew/.linuxbrew"
+
+rm -f /tmp/brew-install
+rm -f /.dockerenv
+rm -rf /home/linuxbrew

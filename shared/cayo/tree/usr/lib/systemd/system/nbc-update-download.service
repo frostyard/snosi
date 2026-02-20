@@ -1,0 +1,8 @@
+[Unit]
+Description=NBC Update Download
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/nbc update --download-only

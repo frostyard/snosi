@@ -10,6 +10,12 @@ clean:
 sysexts: clean
     mkosi build
 
+cayo: clean
+    mkosi --profile cayo build
+
+cayoloaded: clean
+    mkosi --profile cayoloaded build
+
 snow: clean
     mkosi --profile snow  build
 
