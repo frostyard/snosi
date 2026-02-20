@@ -5,7 +5,7 @@ After=basic.target
 ConditionPathExists=!/etc/.linuxbrew
 ConditionPathExists=!/var/home/linuxbrew/.linuxbrew
 ConditionPathExists=/usr/share/homebrew.tar.zst
-ConditionKernelCommandLine=!snow-linux.live=1
+ConditionKernelCommandLine=!cayo-linux.live=1
 
 [Service]
 Type=oneshot

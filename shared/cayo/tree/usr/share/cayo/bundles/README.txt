@@ -3,7 +3,7 @@
 Files in this directory are in `brew bundle` format, and can be installed with the command:
 
 ```bash
-brew bundle --file=/usr/share/snow/xxx.Brewfile
+brew bundle --file=/usr/share/cayo/xxx.Brewfile
 ```
 
 ## Convention
