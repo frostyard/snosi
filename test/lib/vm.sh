@@ -57,7 +57,7 @@ vm_start() {
     qemu-system-x86_64 \
         -enable-kvm -cpu host \
         -m "$VM_MEMORY" -smp "$VM_CPUS" \
-        -bios "$ovmf" \
+        -drive "if=pflash,format=raw,unit=0,file=$ovmf,readonly=on" \
         -drive "file=$disk,format=raw,if=virtio" \
         -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT}-:22" \
         -device virtio-net-pci,netdev=net0 \
