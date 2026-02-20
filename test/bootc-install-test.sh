@@ -132,7 +132,7 @@ podman run --rm --privileged --pid=host \
     -v /var/lib/containers:/var/lib/containers \
     -v /dev:/dev \
     -v "$WORK_DIR:$WORK_DIR" \
-    -v "${SSH_KEY}.pub:${SSH_KEY}.pub:ro" \
+    -v "${SSH_KEY}.pub:/run/ssh-key.pub:ro" \
     --security-opt label=type:unconfined_t \
     "$IMAGE_REF" \
     bootc install to-disk \
@@ -140,7 +140,7 @@ podman run --rm --privileged --pid=host \
         --via-loopback \
         --skip-fetch-check \
         --composefs-backend \
-        --root-ssh-authorized-keys "${SSH_KEY}.pub" \
+        --root-ssh-authorized-keys /run/ssh-key.pub \
         "$DISK_IMAGE"
 
 echo "Installation complete"
