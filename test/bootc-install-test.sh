@@ -131,7 +131,7 @@ echo "=== Step 4: Install image to disk ==="
 podman run --rm --privileged --pid=host \
     -v /var/lib/containers:/var/lib/containers \
     -v /dev:/dev \
-    -v "$WORK_DIR:$WORK_DIR" \
+    -v "$WORK_DIR:/work" \
     -v "${SSH_KEY}.pub:/run/ssh-key.pub:ro" \
     --security-opt label=type:unconfined_t \
     "$IMAGE_REF" \
@@ -141,7 +141,7 @@ podman run --rm --privileged --pid=host \
         --skip-fetch-check \
         --composefs-backend \
         --root-ssh-authorized-keys /run/ssh-key.pub \
-        "$DISK_IMAGE"
+        /work/disk.raw
 
 echo "Installation complete"
 
