@@ -65,6 +65,7 @@ vm_start() {
     local consolelog="${disk%.raw}-console.log"
 
     qemu-system-x86_64 \
+        -machine q35 \
         -enable-kvm -cpu host \
         -m "$VM_MEMORY" -smp "$VM_CPUS" \
         -drive "if=pflash,format=raw,unit=0,file=$ovmf_code,readonly=on" \
@@ -72,10 +73,14 @@ vm_start() {
         -drive "file=$disk,format=raw,if=virtio" \
         -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT}-:22" \
         -device virtio-net-pci,netdev=net0 \
-        -nographic \
-        > "$consolelog" 2>&1 &
+        -display none \
+        -monitor none \
+        -chardev "file,id=serial0,path=$consolelog" \
+        -serial chardev:serial0 \
+        -pidfile "$pidfile" \
+        -daemonize
 
-    QEMU_PID=$!
+    QEMU_PID=$(cat "$pidfile")
     QEMU_CONSOLE_LOG="$consolelog"
     echo "VM started (PID: $QEMU_PID, SSH port: $SSH_PORT)"
     echo "Console log: $consolelog"
