@@ -43,8 +43,13 @@ vm_start() {
     [[ -n "$disk" ]] || { echo "Error: No disk image specified" >&2; return 1; }
     [[ -f "$disk" ]] || { echo "Error: Disk image not found: $disk" >&2; return 1; }
 
-    local ovmf
-    ovmf=$(find_ovmf)
+    local ovmf_src
+    ovmf_src=$(find_ovmf)
+
+    # Copy firmware next to the disk image so QEMU can always access it
+    # (source may be in a restricted directory like /usr/incus/)
+    local ovmf="${disk%/*}/OVMF_CODE.fd"
+    cp "$ovmf_src" "$ovmf"
 
     local pidfile="${disk%.raw}.pid"
     local consolelog="${disk%.raw}-console.log"
