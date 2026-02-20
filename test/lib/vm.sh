@@ -72,11 +72,10 @@ vm_start() {
         -drive "file=$disk,format=raw,if=virtio" \
         -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT}-:22" \
         -device virtio-net-pci,netdev=net0 \
-        -display none \
-        -serial "file:$consolelog" \
-        -daemonize -pidfile "$pidfile"
+        -nographic \
+        > "$consolelog" 2>&1 &
 
-    QEMU_PID=$(cat "$pidfile")
+    QEMU_PID=$!
     QEMU_CONSOLE_LOG="$consolelog"
     echo "VM started (PID: $QEMU_PID, SSH port: $SSH_PORT)"
     echo "Console log: $consolelog"
