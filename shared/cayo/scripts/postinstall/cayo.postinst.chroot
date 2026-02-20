@@ -62,7 +62,7 @@ apt list --installed 2>/dev/null > /usr/share/frostyard/"${IMAGE_ID}".packages.t
 
 # Write build date
 echo "Writing build date..."
-date -u +"%Y-%m-%dT%H:%M:%SZ" > /usr/share/frostyard/cayo_build_date
+date -u +"%Y-%m-%dT%H:%M:%SZ" > /usr/share/frostyard/"${IMAGE_ID}"_build_date
 
 # Clean up machine-id for first boot
 rm -f /etc/machine-id
