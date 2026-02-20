@@ -25,12 +25,15 @@ ${SUDO} mv /opt/microsoft/microsoft-azurevpnclient /usr/lib/microsoft-azurevpncl
 ${SUDO} rm -rf /opt/microsoft
 
 ${SUDO} sed -i \
-    -e 's|/opt/microsoft/microsoft-azurevpnclient|/usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient|' \
-    /usr/share/polkit-1/rules.d/microsoft-azurevpnclient.rules
-${SUDO} sed -i \
     -e 's|Path=/opt/microsoft/microsoft-azurevpnclient/|Path=/usr/lib/microsoft-azurevpnclient/|' \
     -e 's|/opt/microsoft/microsoft-azurevpnclient/microsoft-azurevpnclient|/usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient|' \
     /usr/share/applications/microsoft-azurevpnclient.desktop
+
+# Fix differences in polkit between Ubuntu & Debian
+${SUDO} sed -i \
+    -e 's/\baddAdminRule\b/addRule/' \
+    -e 's/action\.lookup("program") == "[^"]*"/subject.isInGroup("sudo")/' \
+    /usr/share/polkit-1/rules.d/microsoft-azurevpnclient.rules
 
 # Fix library paths after migration from /opt
 ${SUDO} patchelf --set-rpath '$ORIGIN/lib' /usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient
