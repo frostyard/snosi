@@ -1,0 +1,39 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+if [[ "${UID}" == "0" ]]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+
+source "$SRCDIR/shared/download/verified-download.sh"
+mkdir -p debs
+verified_download "azure-vpn-client" "debs/azure-vpn-client.deb"
+
+dpkg -i debs/azure-vpn-client.deb
+rm -rf debs
+
+# Relocate from /opt to /usr/lib
+${SUDO} mv /opt/microsoft/microsoft-azurevpnclient /usr/lib/microsoft-azurevpnclient
+${SUDO} rm -rf /opt/microsoft
+
+# Patch RUNPATH in binaries that hardcode /opt paths
+${SUDO} patchelf --set-rpath '$ORIGIN/lib' /usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient
+${SUDO} patchelf --set-rpath '$ORIGIN' /usr/lib/microsoft-azurevpnclient/lib/libLinuxCore.so
+${SUDO} patchelf --set-rpath '$ORIGIN' /usr/lib/microsoft-azurevpnclient/lib/libXplatSharedLibrary.so
+
+# Create symlink in /usr/bin
+${SUDO} mkdir -p /usr/bin
+${SUDO} ln -sf /usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient /usr/bin/microsoft-azurevpnclient
+
+# Fix .desktop file paths
+${SUDO} sed -i 's|Path=/opt/microsoft/microsoft-azurevpnclient/|Path=/usr/lib/microsoft-azurevpnclient/|g' /usr/share/applications/microsoft-azurevpnclient.desktop
+${SUDO} sed -i 's|TryExec=/opt/microsoft/microsoft-azurevpnclient/microsoft-azurevpnclient|TryExec=/usr/bin/microsoft-azurevpnclient|g' /usr/share/applications/microsoft-azurevpnclient.desktop
+${SUDO} sed -i 's|Exec=/opt/microsoft/microsoft-azurevpnclient/microsoft-azurevpnclient|Exec=/usr/bin/microsoft-azurevpnclient|g' /usr/share/applications/microsoft-azurevpnclient.desktop
+
+# Fix polkit rules to reference new path
+${SUDO} sed -i 's|/opt/microsoft/microsoft-azurevpnclient|/usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient|g' /usr/share/polkit-1/rules.d/microsoft-azurevpnclient.rules
