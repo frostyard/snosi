@@ -84,41 +84,25 @@ echo "Temp directory: $WORK_DIR"
 echo ""
 echo "=== Step 1: Load image ==="
 
-if is_registry_ref "$INPUT"; then
+if podman image exists "$INPUT" 2>/dev/null; then
+    # Local podman image (e.g., "snow" or "localhost/snow:latest")
+    IMAGE_REF="$INPUT"
+    echo "Using local image: $IMAGE_REF"
+elif is_registry_ref "$INPUT"; then
     IMAGE_REF="$INPUT"
     echo "Pulling registry image: $IMAGE_REF"
     podman pull "$IMAGE_REF"
-else
-    # Local OCI directory or archive
-    [[ -e "$INPUT" ]] || { echo "Error: Path does not exist: $INPUT" >&2; exit 1; }
-
-    local_ref="localhost/snosi-test-raw:latest"
-
-    if [[ -d "$INPUT" ]]; then
-        echo "Loading OCI directory: $INPUT"
-        skopeo copy "oci:$INPUT" "containers-storage:$local_ref"
-    elif [[ -f "$INPUT" ]]; then
-        echo "Loading OCI archive: $INPUT"
-        skopeo copy "oci-archive:$INPUT" "containers-storage:$local_ref"
-    else
-        echo "Error: $INPUT is not a file or directory" >&2
-        exit 1
-    fi
-
-    # Flatten and re-layer through podman to produce tar layers compatible
-    # with composefs-rs. mkosi's Python tarfile output contains empty PAX
-    # extension headers that composefs-rs cannot parse.
-    IMAGE_REF="localhost/snosi-test:latest"
+elif [[ -f "$INPUT" ]]; then
+    # OCI archive file
+    local_ref="localhost/snosi-test:latest"
+    echo "Loading OCI archive: $INPUT"
+    skopeo copy "oci-archive:$INPUT" "containers-storage:$local_ref"
+    IMAGE_REF="$local_ref"
     IMAGE_LOADED="$IMAGE_REF"
-    echo "Re-layering image through podman export/import..."
-    cid=$(podman create --pull=never "$local_ref" /bin/true)
-    podman export "$cid" | podman import \
-        --change 'LABEL containers.bootc=1' \
-        - "$IMAGE_REF"
-    podman rm "$cid" >/dev/null
-    podman rmi -f "$local_ref" 2>/dev/null || true
-
     echo "Image loaded as: $IMAGE_REF"
+else
+    echo "Error: $INPUT is not a local image, registry ref, or archive file" >&2
+    exit 1
 fi
 
 # ---------------------------------------------------------------

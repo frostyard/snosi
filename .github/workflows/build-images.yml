@@ -85,40 +85,39 @@ jobs:
       - name: setup-mkosi
         uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf
 
-      - name: Build Image
+      - name: Build rootfs
         run: |
           sudo mkosi --profile ${{ matrix.profile }} \
             --image-version "${{ steps.version.outputs.tag }}" \
-            --oci-labels "org.opencontainers.image.version=${{ steps.version.outputs.tag }}" \
-            --oci-labels "org.opencontainers.image.created=${{ steps.date.outputs.date }}" \
-            --oci-annotations "org.opencontainers.image.created=${{ steps.date.outputs.date }}" \
-            --oci-annotations "org.opencontainers.image.source=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/blob/${{ github.sha }}/mkosi.conf" \
-            --oci-annotations "org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/tree/${{ github.sha }}" \
-            --oci-annotations "org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/${{ github.sha }}/README.md" \
             build
 
-      - name: Login to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        run: skopeo login ghcr.io -u ${{ github.actor }} --password ${{ secrets.GHCR_PAT }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GHCR_PAT }}
+      - name: Build OCI image
+        run: |
+          sudo buildah bud \
+            -f Containerfile \
+            -t ${{ matrix.profile }}:${{ steps.version.outputs.tag }} \
+            --label containers.bootc=1 \
+            --annotation containers.bootc=1 \
+            --annotation org.opencontainers.image.vendor=frostyard \
+            --annotation "org.opencontainers.image.title=${{ matrix.profile }}" \
+            --annotation "org.opencontainers.image.version=${{ steps.version.outputs.tag }}" \
+            --annotation "org.opencontainers.image.created=${{ steps.date.outputs.date }}" \
+            --annotation "org.opencontainers.image.source=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/blob/${{ github.sha }}/mkosi.conf" \
+            --annotation "org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/tree/${{ github.sha }}" \
+            --annotation "org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/${{ github.sha }}/README.md" \
+            output/${{ matrix.profile }}/
+          sudo buildah tag ${{ matrix.profile }}:${{ steps.version.outputs.tag }} ${{ matrix.profile }}:latest
 
       - name: Push image to registry
         if: github.event_name != 'pull_request'
         env:
-          REGISTRY: ghcr.io
-          IMAGE_NAME: ${{ matrix.profile }}
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
         run: |
-          # Push with version tag
-          skopeo copy \
-            --dest-creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
-            oci:output/${{ matrix.profile }} \
+          sudo buildah push --creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
+            ${{ matrix.profile }}:${{ steps.version.outputs.tag }} \
             docker://${IMAGE}:${{ steps.version.outputs.tag }}
-          # Push latest tag
-          skopeo copy \
-            --dest-creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
-            oci:output/${{ matrix.profile }} \
+          sudo buildah push --creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
+            ${{ matrix.profile }}:latest \
             docker://${IMAGE}:latest
       - name: Move manifests
         run: |

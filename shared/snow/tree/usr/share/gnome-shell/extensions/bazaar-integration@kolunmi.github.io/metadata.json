@@ -1,8 +1,0 @@
-{
-  "name": "Bazaar Companion",
-  "description": "Use Bazaar to view app details when right-clicking Flatpak applications",
-  "uuid": "bazaar-integration@kolunmi.github.io",
-  "shell-version": [
-    "49"
-  ]
-}
