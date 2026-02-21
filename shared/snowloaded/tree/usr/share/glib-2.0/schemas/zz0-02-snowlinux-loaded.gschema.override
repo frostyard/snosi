@@ -1,4 +1,4 @@
-[org/gnome/shell/extensions/Logo-menu]
+[org/gnome/shell/extensions/logo-menu]
 menu-button-edge='/usr/bin/microsoft-edge'
 menu-button-vscode='/usr/bin/code'
 menu-button-azurevpn='/usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient'
