@@ -1,8 +1,25 @@
 [org.gnome.shell] 
 enabled-extensions=['logomenu@aryan_k', 'ubuntu-appindicators@ubuntu.com', 'hotedge@jonathan.jdoda.ca', 'bazaar-integration@kolunmi.github.io', 'intuneme@frostyard.org']
+favorite-apps=['microsoft-edge.desktop', 'code.desktop', 'org.gnome.TextEditor.desktop', 'io.github.kolunmi.Bazaar.desktop', 'org.gnome.Ptyxis.desktop', 'org.gnome.Nautilus.desktop']
 
 [org.gnome.desktop.interface]
 enable-hot-corners=false
 
 [org.gnome.desktop.wm.preferences]
 button-layout='appmenu:minimize,maximize,close'
+
+[org/gnome/desktop/app-folders/folders/Microsoft]
+apps=['microsoft-azurevpnclient.desktop']
+name='Microsoft'
+translate=false
+
+[org/gnome/desktop/app-folders/folders/AppStores]
+apps=['bbrew.desktop', 'snap-store_snap-store.desktop']
+name='App Stores'
+translate=false
+
+[org/gnome/desktop/app-folders/folders/Containers]
+apps=['io.github.dvlv.boxbuddyrs.desktop', 'com.ranfdev.DistroShelf.desktop', 'io.podman_desktop.PodmanDesktop.desktop', 'com.github.marhkb.Pods.desktop']
+categories=['Distrobox']
+name='Containers'
+translate=false
