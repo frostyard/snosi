@@ -23,3 +23,9 @@ apps=['io.github.dvlv.boxbuddyrs.desktop', 'com.ranfdev.DistroShelf.desktop', 'i
 categories=['Distrobox']
 name='Containers'
 translate=false
+
+[org/gnome/desktop/app-folders/folders/Utilities]
+apps=['com.mattjakeman.ExtensionManager.desktop', 'io.github.flattool.Warehouse.desktop', 'org.frostyard.Chairlift.desktop', 'remote-viewer.desktop', 'org.gnome.Characters.desktop', 'org.gnome.SimpleScan.desktop', 'io.missioncenter.MissionCenter.desktop', 'bitwarden.desktop']
+categories=['X-GNOME-Utilities']
+name='X-GNOME-Utilities.directory'
+translate=true
