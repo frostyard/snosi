@@ -1,0 +1,20 @@
+[Transfer]
+Features=azurevpn
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/azurevpn/
+MatchPattern=tailscale_@v_@a.raw.zst \
+             tailscale_@v_@a.raw.xz \
+             tailscale_@v_@a.raw.gz \
+             tailscale_@v_@a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=tailscale_@v_@a.raw.zst \
+             tailscale_@v_@a.raw.xz \
+             tailscale_@v_@a.raw.gz \
+             tailscale_@v_@a.raw
+CurrentSymlink=azurevpn.raw
