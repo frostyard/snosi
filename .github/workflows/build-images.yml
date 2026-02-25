@@ -122,7 +122,11 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          MAX_LAYERS: 64
         run: |
+          # Get timestamp of the last commit (in epoch seconds)
+          export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)
+
           sudo ./shared/outformat/image/chunkah-package.sh \
           "$IMAGE:${{ steps.version.outputs.tag }}"
 
