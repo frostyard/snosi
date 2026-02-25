@@ -2,9 +2,10 @@
 set -euo pipefail
 
 IMAGE_REF="$1"
-MAX_LAYERS=64
+MAX_LAYERS="${MAX_LAYERS:-64}"
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-}"
 
-echo "==> Chunkifying $IMAGE_REF..."
+echo "==> Chunkifying $IMAGE_REF (Max Layers: $MAX_LAYERS) - Date: $SOURCE_DATE_EPOCH"
 
 # Get config from existing image
 CONFIG=$(podman inspect "$IMAGE_REF")
@@ -16,6 +17,7 @@ LOADED=$(podman run --rm \
     --security-opt label=type:unconfined_t \
     --mount=type=image,src="$IMAGE_REF",dst=/chunkah \
     -e "CHUNKAH_CONFIG_STR=$CONFIG" \
+    -e "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
     quay.io/jlebon/chunkah:latest build --max-layers $MAX_LAYERS | podman load)
 
 echo "$LOADED"

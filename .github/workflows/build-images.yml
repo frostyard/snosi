@@ -118,9 +118,15 @@ jobs:
             "org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/tree/${{ github.sha }}" \
             "org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/${{ github.sha }}/README.md"
 
+      - name: Compute last commit epoch
+        run: |
+          echo "SOURCE_DATE_EPOCH=$(date -d '${{ github.event.head_commit.timestamp }}' +%s)" >> $GITHUB_ENV
+
       - name: Chunk image
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          MAX_LAYERS: 64
+          SOURCE_DATE_EPOCH: ${{ env.SOURCE_DATE_EPOCH }}
         run: |
           sudo ./shared/outformat/image/chunkah-package.sh \
           "$IMAGE:${{ steps.version.outputs.tag }}"
