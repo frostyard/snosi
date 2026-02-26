@@ -36,3 +36,13 @@ dpkg-query -W -f='${Package}\n' | while read -r pkgname; do
     fi
   done
 done
+
+# Compile GLib schemas
+if command -v glib-compile-schemas >/dev/null 2>&1; then
+    glib-compile-schemas /usr/share/glib-2.0/schemas/
+fi
+
+# Compile dconf databases
+if command -v dconf >/dev/null 2>&1; then
+    dconf update
+fi
