@@ -1,0 +1,26 @@
+#!/bin/bash
+# Post-install script for fw-ipw package
+# Add any customizations here
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+if [[ "${UID}" == "0" ]]; then
+        SUDO=""
+else
+        SUDO="sudo"
+fi
+
+apt-get download firmware-ipw2x00
+mkdir fw-ipw
+${SUDO} mv firmware-ipw2x00_*.deb fw-ipw/firmware-ipw2x00.deb
+
+ar x fw-ipw/firmware-ipw2x00.deb --output=fw-ipw
+mkdir fw-ipw/data
+tar -xf fw-ipw/data.tar.* -C fw-ipw/data
+setfattr -n user.component -v "firmware-ipw2x00" fw-ipw/data/lib/firmware/*
+
+${SUDO} cp -a fw-ipw/data/lib/firmware/. /lib/firmware/
+rm -rf fw-ipw
