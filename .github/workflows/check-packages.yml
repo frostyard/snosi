@@ -20,7 +20,7 @@ jobs:
             -v "$PWD/mkosi.sandbox/etc/apt/sources.list.d:/etc/apt/sources.list.d" \
             -v "$PWD/mkosi.sandbox/etc/apt/keyrings:/etc/apt/keyrings" \
             ghcr.io/frostyard/snow:latest bash -c '
-           X   apt-get update -qq 2>/dev/null
+              apt-get update -qq 2>/dev/null
               for pkg in microsoft-edge-stable code docker-ce 1password-cli; do
                 version=$(apt-cache policy "$pkg" 2>/dev/null | grep "Candidate:" | awk "{print \$2}")
                 echo "${pkg}=${version}"
