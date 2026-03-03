@@ -16,7 +16,7 @@ jobs:
 
       - name: Check latest package versions
         run: |
-          docker run --rm \
+          podman run --rm \
             -v "$PWD/mkosi.sandbox/etc/apt/sources.list.d:/etc/apt/sources.list.d" \
             -v "$PWD/mkosi.sandbox/etc/apt/keyrings:/etc/apt/keyrings" \
             ghcr.io/frostyard/snow:latest bash -c '
