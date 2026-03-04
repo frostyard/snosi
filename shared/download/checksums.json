@@ -20,9 +20,9 @@
     "version": "5fef4f1a1ed2"
   },
   "emdash": {
-    "url": "https://github.com/generalaction/emdash/releases/download/v0.4.23/emdash-amd64.deb",
-    "sha256": "9050d61a082ceb7299a122c05588f2a4e15a8782815a61237ed34210a26f64cf",
-    "version": "0.4.23"
+    "url": "https://github.com/generalaction/emdash/releases/download/v0.4.24/emdash-amd64.deb",
+    "sha256": "ac4a03f38968a67cbb0b7256527793c027532cf25503e2baef0060e694cfd582",
+    "version": "0.4.24"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
