@@ -1,8 +1,8 @@
 {
   "bitwarden": {
-    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.1.1/Bitwarden-2026.1.1-amd64.deb",
-    "sha256": "6f2f5426390181c680e316b1f6ca1fd0e0c5abb21f2b671633d4dcd7210bf407",
-    "version": "2026.1.1"
+    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.2.1/Bitwarden-2026.2.1-amd64.deb",
+    "sha256": "c6bf04c054ac30c88b69cec823634134e51b22f52627ad5a44ac92d634a77167",
+    "version": "2026.2.1"
   },
   "microsoft-azurevpnclient": {
     "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_3.0.0_amd64.deb",
@@ -20,9 +20,9 @@
     "version": "5fef4f1a1ed2"
   },
   "emdash": {
-    "url": "https://github.com/generalaction/emdash/releases/download/v0.4.24/emdash-amd64.deb",
-    "sha256": "ac4a03f38968a67cbb0b7256527793c027532cf25503e2baef0060e694cfd582",
-    "version": "0.4.24"
+    "url": "https://github.com/generalaction/emdash/releases/download/v0.4.25/emdash-amd64.deb",
+    "sha256": "85b2452978402229beab8d2de5fab611cb1db62629fc54475865273cb3be19c9",
+    "version": "0.4.25"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
