@@ -1,4 +1,5 @@
 # snosi
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/frostyard/snosi/badge)](https://scorecard.dev/viewer/?uri=github.com/frostyard/snosi)
 
 A bootable container image build system using [mkosi](https://github.com/systemd/mkosi) for creating Debian-based bootable containers and system extensions (sysexts).
 
