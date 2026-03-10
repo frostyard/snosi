@@ -15,7 +15,7 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Check for dependency updates
         id: check
@@ -124,7 +124,7 @@ jobs:
 
       - name: Create Pull Request
         if: steps.check.outputs.has_updates == 'true'
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: update external dependency checksums"
