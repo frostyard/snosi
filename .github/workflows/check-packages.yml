@@ -5,6 +5,8 @@ on:
     - cron: "0 8 * * *" # Daily at 8am UTC
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   check-packages:
     runs-on: ubuntu-latest
