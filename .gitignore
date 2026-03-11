@@ -16,7 +16,8 @@ shared/snow/tree/usr/share/gnome-shell/extensions/hotedge@jonathan.jdoda.ca
 shared/snow/tree/usr/share/gnome-shell/extensions/logomenu@aryan_k
 shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io
 shared/cayo/tree/usr/share/homebrew.tar.zst
-.claude/
+.claude/*
+!.claude/settings.json
 shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io/stylesheet.css
 shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io/metadata.json
 shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io/extension.js

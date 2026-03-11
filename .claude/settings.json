@@ -1,0 +1,12 @@
+{
+  "extraKnownMarketplaces": {
+    "frostyard-ai": {
+      "source": "github",
+      "repo": "frostyard/frostyard-ai"
+    }
+  },
+  "enabledPlugins": {
+    "frostyard-dev@frostyard-ai": true,
+    "frostyard-os@frostyard-ai": true
+  }
+}
