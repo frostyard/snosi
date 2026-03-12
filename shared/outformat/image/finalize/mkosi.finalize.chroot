@@ -27,16 +27,6 @@ rm -f /etc/machine-id
 # Remove SSH Keys
 rm -f /etc/ssh/ssh_host_*
 
-# Set file attributes for packages for chunkah to handle.
-dpkg-query -W -f='${Package}\n' | while read -r pkgname; do
-  echo "Setting file attributes for package: $pkgname (chunkah)"
-  dpkg -L "$pkgname" | while read -r filepath; do
-    if [[ -f "$filepath" ]]; then
-      setfattr -n user.component -v "$pkgname" "$filepath" || true
-    fi
-  done
-done
-
 # Compile GLib schemas
 if command -v glib-compile-schemas >/dev/null 2>&1; then
     glib-compile-schemas /usr/share/glib-2.0/schemas/
@@ -46,3 +36,13 @@ fi
 if command -v dconf >/dev/null 2>&1; then
     dconf update
 fi
+
+# Set file attributes for packages for chunkah to handle.
+dpkg-query -W -f='${Package}\n' | while read -r pkgname; do
+  echo "Setting file attributes for package: $pkgname (chunkah)"
+  dpkg -L "$pkgname" | while read -r filepath; do
+    if [[ -f "$filepath" ]]; then
+      setfattr -n user.component -v "$pkgname" "$filepath" || true
+    fi
+  done
+done
