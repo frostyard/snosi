@@ -145,6 +145,7 @@ jobs:
 
       - name: Push image
         if: github.event_name != 'pull_request'
+        id: push
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
         run: |
@@ -158,13 +159,47 @@ jobs:
             "$IMAGE:latest"
           sudo buildah push \
             --compression-format=zstd:chunked \
+            --digestfile=/tmp/latest-digest \
             --creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
             "$IMAGE:latest" \
             "docker://$IMAGE:latest"
+
+          DIGEST=$(sudo cat /tmp/latest-digest)
+          if [[ ! "$DIGEST" =~ ^sha256: ]]; then
+            echo "::error::Failed to extract valid digest: $DIGEST"
+            exit 1
+          fi
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+
+      - name: Attest build provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Install Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+        with:
+          cosign-release: "v2.6.1"
+
+      - name: Sign image
+        if: github.event_name != 'pull_request'
+        run: |
+          cosign login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GHCR_PAT }}"
+          cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
+            "$IMAGE@${{ steps.push.outputs.digest }}"
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+
       - name: Move manifests
         if: github.event_name != 'pull_request'
         run: |
           sudo ./manifestmv.sh
+
       - name: Upload manifests to R2
         if: github.event_name != 'pull_request'
         uses: ryand56/r2-upload-action@b801a390acbdeb034c5e684ff5e1361c06639e7c
@@ -175,6 +210,7 @@ jobs:
           r2-bucket: frostyardrepo
           source-dir: output/manifests
           destination-dir: manifests/
+
       - name: cleanup build output
         run: |
           sudo -E mkosi clean
