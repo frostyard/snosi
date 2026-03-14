@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -67,16 +68,18 @@ jobs:
             echo "All packages up to date"
           fi
 
-      - name: Commit and push
+      - name: Create Pull Request
         if: steps.compare.outputs.has_updates == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add shared/download/package-versions.json
-          git commit -m "$(cat <<EOF
-          chore: update package versions
+        uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update package versions"
+          title: "chore: update package versions"
+          body: |
+            Automated update of pinned package versions.
 
-          ${{ steps.compare.outputs.summary }}
-          EOF
-          )"
-          git push
+            ${{ steps.compare.outputs.summary }}
+
+            **Please verify the builds work before merging.**
+          branch: auto-update-packages
+          delete-branch: true
