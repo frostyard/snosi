@@ -20,11 +20,20 @@ jobs:
       - name: Check latest package versions
         run: |
           get_latest_version() {
-            local url="$1" pkg="$2"
-            curl -fsSL "${url}" | gunzip | awk -v pkg="$pkg" '
+            local url="$1" pkg="$2" latest=""
+            while IFS= read -r ver; do
+              if [ -z "$latest" ] || dpkg --compare-versions "$ver" gt "$latest"; then
+                latest="$ver"
+              fi
+            done < <(curl --retry 3 --connect-timeout 10 -fsSL "${url}" | gunzip | awk -v pkg="$pkg" '
               /^Package: / { current = $2 }
               /^Version: / && current == pkg { print $2 }
-            ' | sort -V | tail -1
+            ')
+            if [ -z "$latest" ]; then
+              echo "ERROR: no version found for ${pkg}" >&2
+              return 1
+            fi
+            echo "$latest"
           }
 
           {
