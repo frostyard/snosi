@@ -19,16 +19,28 @@ jobs:
 
       - name: Check latest package versions
         run: |
-          podman run --rm \
-            -v "$PWD/mkosi.sandbox/etc/apt/sources.list.d:/etc/apt/sources.list.d" \
-            -v "$PWD/mkosi.sandbox/etc/apt/keyrings:/etc/apt/keyrings" \
-            ghcr.io/frostyard/snow:latest bash -c '
-              apt-get update -qq
-              for pkg in microsoft-edge-stable code docker-ce 1password-cli; do
-                version=$(apt-cache policy "$pkg" 2>/dev/null | grep "Candidate:" | awk "{print \$2}")
-                echo "${pkg}=${version}"
-              done
-            ' > latest-versions.txt
+          get_latest_version() {
+            local url="$1" pkg="$2"
+            curl -fsSL "${url}" | gunzip | awk -v pkg="$pkg" '
+              /^Package: / { current = $2 }
+              /^Version: / && current == pkg { print $2 }
+            ' | sort -V | tail -1
+          }
+
+          {
+            echo "microsoft-edge-stable=$(get_latest_version \
+              'https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages.gz' \
+              'microsoft-edge-stable')"
+            echo "code=$(get_latest_version \
+              'https://packages.microsoft.com/repos/code/dists/stable/main/binary-amd64/Packages.gz' \
+              'code')"
+            echo "docker-ce=$(get_latest_version \
+              'https://download.docker.com/linux/debian/dists/trixie/stable/binary-amd64/Packages.gz' \
+              'docker-ce')"
+            echo "1password-cli=$(get_latest_version \
+              'https://downloads.1password.com/linux/debian/amd64/dists/stable/main/binary-amd64/Packages.gz' \
+              '1password-cli')"
+          } > latest-versions.txt
           cat latest-versions.txt
 
       - name: Compare and update versions
