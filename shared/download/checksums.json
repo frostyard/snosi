@@ -15,9 +15,9 @@
     "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
   },
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/3a14e8f6f08a/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/221629f27c40/install.sh",
     "sha256": "1c9db64f27d7487ecf74fe3543b96beb1f78039cc92745c3e825a9a7ccefec80",
-    "version": "3a14e8f6f08a"
+    "version": "221629f27c40"
   },
   "emdash": {
     "url": "https://github.com/generalaction/emdash/releases/download/v0.4.35/emdash-amd64.deb",
