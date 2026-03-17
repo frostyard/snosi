@@ -2,5 +2,5 @@
   "microsoft-edge-stable": "146.0.3856.62-1",
   "code": "1.111.0-1772846623",
   "docker-ce": "5:29.3.0-1~debian.13~trixie",
-  "1password-cli": "2.32.1-1"
+  "1password-cli": "2.33.0-1"
 }
