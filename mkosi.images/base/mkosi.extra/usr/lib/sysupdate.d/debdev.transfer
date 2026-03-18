@@ -5,16 +5,16 @@ Verify=false
 [Source]
 Type=url-file
 Path=https://repository.frostyard.org/ext/debdev/
-MatchPattern=debdev_@v_@a.raw.zst \
-             debdev_@v_@a.raw.xz \
-             debdev_@v_@a.raw.gz \
-             debdev_@v_@a.raw
+MatchPattern=debdev-@v-%w-%a.raw.zst \
+             debdev-@v-%w-%a.raw.xz \
+             debdev-@v-%w-%a.raw.gz \
+             debdev-@v-%w-%a.raw
 
 [Target]
 Type=regular-file
 Path=/var/lib/extensions.d/
-MatchPattern=debdev_@v_@a.raw.zst \
-             debdev_@v_@a.raw.xz \
-             debdev_@v_@a.raw.gz \
-             debdev_@v_@a.raw
+MatchPattern=debdev-@v-%w-%a.raw.zst \
+             debdev-@v-%w-%a.raw.xz \
+             debdev-@v-%w-%a.raw.gz \
+             debdev-@v-%w-%a.raw
 CurrentSymlink=debdev.raw

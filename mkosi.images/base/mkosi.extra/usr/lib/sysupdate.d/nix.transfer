@@ -5,16 +5,16 @@ Verify=false
 [Source]
 Type=url-file
 Path=https://repository.frostyard.org/ext/nix/
-MatchPattern=nix_@v_@a.raw.zst \
-             nix_@v_@a.raw.xz \
-             nix_@v_@a.raw.gz \
-             nix_@v_@a.raw
+MatchPattern=nix-@v-%w-%a.raw.zst \
+             nix-@v-%w-%a.raw.xz \
+             nix-@v-%w-%a.raw.gz \
+             nix-@v-%w-%a.raw
 
 [Target]
 Type=regular-file
 Path=/var/lib/extensions.d/
-MatchPattern=nix_@v_@a.raw.zst \
-             nix_@v_@a.raw.xz \
-             nix_@v_@a.raw.gz \
-             nix_@v_@a.raw
+MatchPattern=nix-@v-%w-%a.raw.zst \
+             nix-@v-%w-%a.raw.xz \
+             nix-@v-%w-%a.raw.gz \
+             nix-@v-%w-%a.raw
 CurrentSymlink=nix.raw
