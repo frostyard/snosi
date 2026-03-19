@@ -65,7 +65,7 @@ echo "OS version: $OS_VERSION"
 
 echo "Image ID: $IMAGE_ID"
 
-EXTFILENAME="$OUTPUTDIR/${IMAGE_ID}-${KEYVERSION}-${OS_VERSION}-${ARCH}"
+EXTFILENAME="$OUTPUTDIR/${IMAGE_ID}_${KEYVERSION}_${OS_VERSION}_${ARCH}"
 
 # Find the existing output file (may have various compression extensions)
 EXISTING_OUTPUT_FILE=""

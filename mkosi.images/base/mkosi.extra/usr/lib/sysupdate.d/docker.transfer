@@ -5,16 +5,16 @@ Verify=false
 [Source]
 Type=url-file
 Path=https://repository.frostyard.org/ext/docker/
-MatchPattern=docker-@v-%w-%a.raw.zst \
-             docker-@v-%w-%a.raw.xz \
-             docker-@v-%w-%a.raw.gz \
-             docker-@v-%w-%a.raw
+MatchPattern=docker_@v_%w_%a.raw.zst \
+             docker_@v_%w_%a.raw.xz \
+             docker_@v_%w_%a.raw.gz \
+             docker_@v_%w_%a.raw
 
 [Target]
 Type=regular-file
 Path=/var/lib/extensions.d/
-MatchPattern=docker-@v-%w-%a.raw.zst \
-             docker-@v-%w-%a.raw.xz \
-             docker-@v-%w-%a.raw.gz \
-             docker-@v-%w-%a.raw
+MatchPattern=docker_@v_%w_%a.raw.zst \
+             docker_@v_%w_%a.raw.xz \
+             docker_@v_%w_%a.raw.gz \
+             docker_@v_%w_%a.raw
 CurrentSymlink=docker.raw
