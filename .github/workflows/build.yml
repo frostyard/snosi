@@ -108,7 +108,7 @@ jobs:
           sudo ./manifestmv.sh
       - name: Publish sysexts to frostyard repo
         if: github.event_name != 'pull_request'
-        uses: frostyard/repogen/.github/actions/publish-to-r2@f9e0706f1be976424a8728c19cbe9238c47edf6e
+        uses: frostyard/repogen/.github/actions/publish-to-r2@f762d00a036951587a84dcf6211cfdbdf0881818
         with:
           r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
           r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
