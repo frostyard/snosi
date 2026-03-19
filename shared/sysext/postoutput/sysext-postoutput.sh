@@ -36,6 +36,10 @@ mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
 
 # Extract Debian architecture from manifest and map to systemd arch name
 DEB_ARCH=$(jq -r --arg KEYPACKAGE "$KEYPACKAGE" '.packages[] | select(.name == $KEYPACKAGE) | .architecture' "$MANIFEST_FILE")
+if [[ -z "$DEB_ARCH" || "$DEB_ARCH" == "null" ]]; then
+    echo "Error: Could not determine architecture for package: $KEYPACKAGE"
+    exit 1
+fi
 echo "Debian architecture: $DEB_ARCH"
 case "$DEB_ARCH" in
     amd64) ARCH=x86-64 ;;
