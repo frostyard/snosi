@@ -14,7 +14,7 @@ name='Microsoft'
 translate=false
 
 [org/gnome/desktop/app-folders/folders/AppStores]
-apps=['bbrew.desktop', 'snap-store_snap-store.desktop']
+apps=['bbrew.desktop']
 name='App Stores'
 translate=false
 
