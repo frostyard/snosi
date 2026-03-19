@@ -23,9 +23,14 @@ if [[ -z "$KEYVERSION" || "$KEYVERSION" == "null" ]]; then
     echo "Error: Could not determine version for package: $KEYPACKAGE"
     exit 1
 fi
-# Strip Debian epoch from version (e.g. "5:1.2.3" -> "1.2.3") for cleaner
-# filenames and more meaningful version strings in systemd-sysupdate @v captures.
-KEYVERSION="${KEYVERSION#*:}"
+# Encode Debian epoch separator in version (e.g. "5:1.2.3" -> "5+1.2.3") for cleaner
+# filenames and more meaningful version strings in systemd-sysupdate @v captures,
+# while still preserving epoch semantics for version comparisons.
+if [[ "$KEYVERSION" == *:* ]]; then
+    EPOCH="${KEYVERSION%%:*}"
+    UPSTREAM_VERSION="${KEYVERSION#*:}"
+    KEYVERSION="${EPOCH}+${UPSTREAM_VERSION}"
+fi
 echo "Determined version: $KEYVERSION for package: $KEYPACKAGE"
 
 # Add key package info to manifest
