@@ -23,9 +23,9 @@ if [[ -z "$KEYVERSION" || "$KEYVERSION" == "null" ]]; then
     echo "Error: Could not determine version for package: $KEYPACKAGE"
     exit 1
 fi
-# Encode Debian epoch colon as underscore (e.g. "5:1.2.3" -> "5_1.2.3") so the
-# version is valid in filenames and in systemd-sysupdate MatchPattern @v captures.
-KEYVERSION="${KEYVERSION//:/_}"
+# Strip Debian epoch from version (e.g. "5:1.2.3" -> "1.2.3") for cleaner
+# filenames and more meaningful version strings in systemd-sysupdate @v captures.
+KEYVERSION="${KEYVERSION#*:}"
 echo "Determined version: $KEYVERSION for package: $KEYPACKAGE"
 
 # Add key package info to manifest
