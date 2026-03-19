@@ -5,16 +5,16 @@ Verify=false
 [Source]
 Type=url-file
 Path=https://repository.frostyard.org/ext/emdash/
-MatchPattern=emdash_@v_@a.raw.zst \
-             emdash_@v_@a.raw.xz \
-             emdash_@v_@a.raw.gz \
-             emdash_@v_@a.raw
+MatchPattern=emdash_@v_%w_%a.raw.zst \
+             emdash_@v_%w_%a.raw.xz \
+             emdash_@v_%w_%a.raw.gz \
+             emdash_@v_%w_%a.raw
 
 [Target]
 Type=regular-file
 Path=/var/lib/extensions.d/
-MatchPattern=emdash_@v_@a.raw.zst \
-             emdash_@v_@a.raw.xz \
-             emdash_@v_@a.raw.gz \
-             emdash_@v_@a.raw
+MatchPattern=emdash_@v_%w_%a.raw.zst \
+             emdash_@v_%w_%a.raw.xz \
+             emdash_@v_%w_%a.raw.gz \
+             emdash_@v_%w_%a.raw
 CurrentSymlink=emdash.raw

@@ -5,16 +5,16 @@ Verify=false
 [Source]
 Type=url-file
 Path=https://repository.frostyard.org/ext/podman/
-MatchPattern=podman_@v_@a.raw.zst \
-             podman_@v_@a.raw.xz \
-             podman_@v_@a.raw.gz \
-             podman_@v_@a.raw
+MatchPattern=podman_@v_%w_%a.raw.zst \
+             podman_@v_%w_%a.raw.xz \
+             podman_@v_%w_%a.raw.gz \
+             podman_@v_%w_%a.raw
 
 [Target]
 Type=regular-file
 Path=/var/lib/extensions.d/
-MatchPattern=podman_@v_@a.raw.zst \
-             podman_@v_@a.raw.xz \
-             podman_@v_@a.raw.gz \
-             podman_@v_@a.raw
+MatchPattern=podman_@v_%w_%a.raw.zst \
+             podman_@v_%w_%a.raw.xz \
+             podman_@v_%w_%a.raw.gz \
+             podman_@v_%w_%a.raw
 CurrentSymlink=podman.raw
