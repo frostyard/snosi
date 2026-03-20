@@ -39,25 +39,13 @@ jq --arg KEYPACKAGE "$KEYPACKAGE" --arg KEYVERSION "$KEYVERSION" -c \
     "$MANIFEST_FILE" > "$MANIFEST_FILE.tmp"
 mv "$MANIFEST_FILE.tmp" "$MANIFEST_FILE"
 
-# Extract Debian architecture from manifest and map to systemd arch name
-DEB_ARCH=$(jq -r --arg KEYPACKAGE "$KEYPACKAGE" '.packages[] | select(.name == $KEYPACKAGE) | .architecture' "$MANIFEST_FILE")
-if [[ -z "$DEB_ARCH" || "$DEB_ARCH" == "null" ]]; then
-    echo "Error: Could not determine architecture for package: $KEYPACKAGE"
+# Extract architecture from manifest config (already in systemd/mkosi format, e.g. x86-64)
+ARCH=$(jq -r '.config.architecture' "$MANIFEST_FILE")
+if [[ -z "$ARCH" || "$ARCH" == "null" ]]; then
+    echo "Error: Could not determine architecture from manifest config"
     exit 1
 fi
-echo "Debian architecture: $DEB_ARCH"
-case "$DEB_ARCH" in
-    amd64) ARCH=x86-64 ;;
-    i386) ARCH=x86 ;;
-    arm64) ARCH=arm64 ;;
-    armhf) ARCH=arm ;;
-    armel) ARCH=arm ;;
-    ppc64el) ARCH=ppc64-le ;;
-    s390x) ARCH=s390x ;;
-    riscv64) ARCH=riscv64 ;;
-    *) ARCH="$DEB_ARCH" ;;
-esac
-echo "Systemd architecture: $ARCH"
+echo "Architecture: $ARCH"
 
 # Map the mkosi RELEASE codename to VERSION_ID, matching what %w expands to in
 # systemd-sysupdate MatchPattern on a running system. RELEASE is provided by mkosi
