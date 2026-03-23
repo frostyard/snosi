@@ -15,14 +15,14 @@
     "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
   },
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/221629f27c40/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/c59081d10324/install.sh",
     "sha256": "1c9db64f27d7487ecf74fe3543b96beb1f78039cc92745c3e825a9a7ccefec80",
-    "version": "221629f27c40"
+    "version": "c59081d10324"
   },
   "emdash": {
-    "url": "https://github.com/generalaction/emdash/releases/download/v0.4.37/emdash-amd64.deb",
-    "sha256": "185cde7d0aa2d79fef20329c99d198aca94888e671942f2c5ea363fd4f11961d",
-    "version": "0.4.37"
+    "url": "https://github.com/generalaction/emdash/releases/download/v0.4.39/emdash-amd64.deb",
+    "sha256": "d4315624d486ce09eac2fef15016cc05df22873c915a05072e7cc7088c0fceff",
+    "version": "0.4.39"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
