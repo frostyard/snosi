@@ -32,10 +32,10 @@ Run after all APT packages are installed. Handle relocation, branding, service e
 - `shared/kernel/scripts/postinst/mkosi.postinst.chroot` — Builds initramfs via dracut, detects kernel version, generates `/usr/lib/modules/$VERSION/initramfs.img`, copies vmlinuz
 
 **Desktop postinstall:**
-- `shared/snow/scripts/postinstall/snow.postinst.chroot` — Sets os-release (PRETTY_NAME="Snow Linux"), enables GDM, creates user service symlinks for gnome-remote-desktop, enables mount units, generates package list, cleans machine-id/SSH keys
+- `shared/snow/scripts/postinstall/snow.postinst.chroot` — Sets os-release (PRETTY_NAME="Snow Linux", ID, ID_LIKE, VERSION_ID, SYSEXT_LEVEL, BUILD_ID), enables GDM + mount units (home, root, srv, mnt, media, opt, usr-local), creates user service symlinks for gnome-remote-desktop and gnome-remote-desktop-handover (explicitly removes gnome-remote-desktop-headless due to `Conflicts=` with the non-headless variant), removes bls-garbage-collect service and fish desktop entry, generates package list to `/usr/share/frostyard/`, writes build date, cleans machine-id/SSH keys, creates sysext infrastructure dirs
 
 **Server postinstall:**
-- `shared/cayo/scripts/postinstall/cayo.postinst.chroot` — Sets os-release (PRETTY_NAME="Cayo Linux"), enables mount units, same cleanup pattern
+- `shared/cayo/scripts/postinstall/cayo.postinst.chroot` — Sets os-release (PRETTY_NAME="Cayo Linux", ID, ID_LIKE, VERSION_ID, SYSEXT_LEVEL, BUILD_ID), enables mount units (home, root, srv, mnt, media, opt, usr-local), removes bls-garbage-collect service, generates package list, writes build date, cleans machine-id/SSH keys, creates sysext infrastructure dirs
 
 **Loaded variant postinstall scripts (additional):**
 
