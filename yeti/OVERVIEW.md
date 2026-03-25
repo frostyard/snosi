@@ -11,9 +11,9 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 | Image | Kernel | Extras |
 |-------|--------|--------|
 | **snow** | backports | GNOME desktop, podman, flatpak |
-| **snowloaded** | backports | snow + Edge, VSCode, Bitwarden, Incus, Azure VPN |
+| **snowloaded** | backports | snow + Edge, VSCode, Bitwarden, Incus, Azure VPN, Entra SSO |
 | **snowfield** | linux-surface | GNOME desktop (Surface devices) |
-| **snowfieldloaded** | linux-surface | snowfield + loaded extras |
+| **snowfieldloaded** | linux-surface | snowfield + loaded extras (Edge, VSCode, Bitwarden, Incus, Azure VPN, Entra SSO) |
 
 ### Server Images (OCI, pushed to ghcr.io)
 
@@ -46,7 +46,7 @@ mkosi.profiles/             # Desktop/server profile definitions
 shared/                     # Reusable fragments composed via Include=
   download/                 # Verified download system (checksums.json + helpers)
   kernel/                   # Kernel variant configs (backports, surface, stock)
-  packages/                 # Package set configs with postinstall relocation scripts
+  packages/                 # Package set configs (11 sets) with postinstall relocation scripts
   outformat/image/          # OCI output format, buildah/chunkah packaging
   sysext/postoutput/        # Shared sysext versioning and manifest logic
   manifest/postoutput/      # Image manifest processing
@@ -77,7 +77,7 @@ Profile (e.g., snow/mkosi.conf)
 └── PostOutputScripts: mkosi.postoutput             # Post-output scripts
 ```
 
-The "loaded" variants (snowloaded, snowfieldloaded, cayoloaded) extend their base profile by adding more Include directives, ExtraTrees, and PostInstallationScripts for additional packages like Edge, VSCode, Docker, and Incus.
+The "loaded" variants (snowloaded, snowfieldloaded, cayoloaded) extend their base profile by adding more Include directives, ExtraTrees, and PostInstallationScripts for additional packages like Edge, VSCode, Docker, Incus, and Entra SSO.
 
 ### Script Pipeline
 
