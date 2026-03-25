@@ -131,6 +131,8 @@ mkdir -p /etc/systemd/user/<target>.wants
 ln -sf /usr/lib/systemd/user/<service> /etc/systemd/user/<target>.wants/<service>
 ```
 
+**Caution:** Check `Conflicts=` directives between related services. For example, `gnome-remote-desktop-headless.service` conflicts with `gnome-remote-desktop.service` — enabling both causes failures. When creating symlinks, explicitly remove any conflicting service symlinks.
+
 ### OCI Image Packaging
 
 Images are built as directories, then packaged into OCI via `buildah-package.sh` using `buildah mount` + `cp -a` + `buildah commit`. This avoids `buildah COPY` which drops SUID bits (buildah#4463). Layer optimization is done via `chunkah-package.sh`.
@@ -162,6 +164,7 @@ just cayo               # Build cayo server
 just cayoloaded         # Build cayoloaded variant
 just clean              # Remove build artifacts
 just test-install       # Run bootc install test
+just run-qemu           # Run image in QEMU
 ```
 
 All `just` targets run `mkosi clean` first (clean build every time).
@@ -179,13 +182,15 @@ All `just` targets run `mkosi clean` first (clean build every time).
 
 Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 
+- 1Password — CLI tool
+- Debian Backports — Newer kernel + firmware + mesa
+- Debian Griffo.io (debian.griffo.io) — Additional Debian packages
 - Docker (docker.com) — Docker CE packages
 - Frostyard (repository.frostyard.org) — Custom packages: nbc, chairlift, updex, igloo, intuneme, snow-first-setup
 - Linux Surface (pkg.surfacelinux.com) — Surface kernel + tools
 - Microsoft — Edge, VSCode
-- 1Password — CLI tool
+- NordVPN (repo.nordvpn.com) — NordVPN client
 - Tailscale — VPN client
-- Debian Backports — Newer kernel + firmware + mesa
 
 ## CI/CD
 

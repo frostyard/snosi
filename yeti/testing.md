@@ -8,7 +8,8 @@ The `test/` directory contains a bootc installation test framework that validate
 
 ```
 test/
-├── bootc-install-test.sh      # Orchestrator script
+├── bootc-install-test.sh      # Orchestrator script (headless, for CI)
+├── run-qemu.sh                # Interactive QEMU runner (GTK display)
 ├── lib/
 │   ├── ssh.sh                 # SSH key generation, command execution with retry
 │   └── vm.sh                  # QEMU lifecycle, image loading, bootc installation
@@ -18,6 +19,19 @@ test/
     ├── 03-sysexts.sh          # Tier 3: Sysext validation
     └── 04-smoke.sh            # Tier 4: Smoke tests
 ```
+
+## Interactive QEMU Runner (run-qemu.sh)
+
+**Usage:**
+```bash
+just run-qemu [image="output/snow"]
+# or directly:
+./test/run-qemu.sh <rootfs-directory-or-registry-ref>
+```
+
+Boots an image in a QEMU graphical window (GTK display). Loads the image, installs to a virtual disk via bootc, and launches QEMU. The disk image is preserved between runs — subsequent invocations skip the install step.
+
+**Defaults:** 50G disk (via Justfile), 4G RAM, 2 CPUs. Configurable via `DISK_SIZE`, `VM_MEMORY`, `VM_CPUS` env vars.
 
 ## Orchestrator (bootc-install-test.sh)
 
