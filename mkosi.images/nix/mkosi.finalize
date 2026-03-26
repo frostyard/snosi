@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-set -e
+set -euo pipefail
 
 # Capture /etc/nix in /usr/share/factory/etc for tmpfiles.d to copy at boot.
 # The nix-setup-systemd package installs /etc/nix/nix.conf during the build,
