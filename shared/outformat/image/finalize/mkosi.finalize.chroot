@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ouex pipefail
+set -euo pipefail
 
 echo "::group::Executing finalize"
 trap 'echo "::endgroup::"' EXIT
