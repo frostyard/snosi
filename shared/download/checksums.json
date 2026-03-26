@@ -33,5 +33,10 @@
     "url": "https://codeload.github.com/frostyard/logomenu/tar.gz/ae0ea469beaa7ce0cdc1fb8be26fc50c13d4fcbf",
     "sha256": "d11cc67b6003a295d17249b9ab08ea59d5b6a4e2301d784c51b5344e561f10c0",
     "version": "ae0ea469beaa7ce0cdc1fb8be26fc50c13d4fcbf"
+  },
+  "microsoft-identity-broker": {
+    "url": "https://packages.microsoft.com/ubuntu/24.04/prod/pool/main/m/microsoft-identity-broker/microsoft-identity-broker_2.0.2_amd64.deb",
+    "sha256": "b7cc769b9fbc9e09ce8f92f793e2bf3c3c4f3fa18083adecdf089938be76e1d0",
+    "version": "2.0.2"
   }
 }

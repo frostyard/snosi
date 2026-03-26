@@ -61,6 +61,15 @@ jobs:
             echo "surface_commit=$LATEST_SURF" >> $GITHUB_OUTPUT
           fi
 
+          # Check Microsoft Identity Broker (insiders-fast repo)
+          CURRENT_BROKER=$(jq -r '.["microsoft-identity-broker"].version' "$CHECKSUMS")
+          LATEST_BROKER=$(curl -s https://packages.microsoft.com/ubuntu/24.04/prod/dists/insiders-fast/main/binary-amd64/Packages | grep -A1 '^Package: microsoft-identity-broker$' | awk '/^Version:/{print $2}')
+          if [[ -n "$LATEST_BROKER" && "$LATEST_BROKER" != "$CURRENT_BROKER" ]]; then
+            UPDATES="${UPDATES}microsoft-identity-broker: $CURRENT_BROKER -> $LATEST_BROKER\n"
+            echo "broker_update=true" >> $GITHUB_OUTPUT
+            echo "broker_version=$LATEST_BROKER" >> $GITHUB_OUTPUT
+          fi
+
           if [[ -n "$UPDATES" ]]; then
             echo "has_updates=true" >> $GITHUB_OUTPUT
             echo -e "Updates available:\n$UPDATES"
@@ -118,6 +127,18 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
               '.["surface-cert"].url=$u | .["surface-cert"].sha256=$s | .["surface-cert"].version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "${{ steps.check.outputs.broker_update }}" == "true" ]]; then
+            VER="${{ steps.check.outputs.broker_version }}"
+            URL="https://packages.microsoft.com/ubuntu/24.04/prod/pool/main/m/microsoft-identity-broker/microsoft-identity-broker_${VER}_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.["microsoft-identity-broker"].url=$u | .["microsoft-identity-broker"].sha256=$s | .["microsoft-identity-broker"].version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi

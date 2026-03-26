@@ -1,0 +1,43 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+if [[ "${UID}" == "0" ]]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+
+source "$SRCDIR/shared/download/verified-download.sh"
+mkdir -p debs
+verified_download "microsoft-identity-broker" "debs/microsoft-identity-broker.deb"
+
+# Dependencies like libwebkit2gtk-4.1-0 are provided by the desktop image
+# at runtime but not present in the base build tree. Skip the dpkg dep check.
+dpkg -i --force-depends debs/microsoft-identity-broker.deb
+rm -rf debs
+
+# Move real binaries to a private path; wrappers will take their place at /usr/bin
+${SUDO} mkdir -p /usr/lib/microsoft-identity-broker
+${SUDO} mv /usr/bin/linux_broker /usr/lib/microsoft-identity-broker/linux_broker
+${SUDO} mv /usr/bin/linux_devicebroker /usr/lib/microsoft-identity-broker/linux_devicebroker
+
+# Create bwrap wrapper for the session broker (D-Bus activated as the user)
+${SUDO} tee /usr/bin/linux_broker > /dev/null << 'WRAPPER'
+#!/bin/bash
+exec bwrap --dev-bind / / \
+  --ro-bind /usr/share/microsoft-identity-broker/os-release.ubuntu /etc/os-release \
+  -- /usr/lib/microsoft-identity-broker/linux_broker "$@"
+WRAPPER
+${SUDO} chmod 755 /usr/bin/linux_broker
+
+# Create bwrap wrapper for the device broker (systemd/D-Bus activated as root)
+${SUDO} tee /usr/bin/linux_devicebroker > /dev/null << 'WRAPPER'
+#!/bin/bash
+exec bwrap --dev-bind / / \
+  --ro-bind /usr/share/microsoft-identity-broker/os-release.ubuntu /etc/os-release \
+  -- /usr/lib/microsoft-identity-broker/linux_devicebroker "$@"
+WRAPPER
+${SUDO} chmod 755 /usr/bin/linux_devicebroker

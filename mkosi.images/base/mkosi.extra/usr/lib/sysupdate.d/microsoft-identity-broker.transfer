@@ -1,0 +1,20 @@
+[Transfer]
+Features=microsoft-identity-broker
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/microsoft-identity-broker/
+ MatchPattern=microsoft-identity-broker_@v_%w_%a.raw.zst \
+             microsoft-identity-broker_@v_%w_%a.raw.xz \
+             microsoft-identity-broker_@v_%w_%a.raw.gz \
+             microsoft-identity-broker_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+ MatchPattern=microsoft-identity-broker_@v_%w_%a.raw.zst \
+             microsoft-identity-broker_@v_%w_%a.raw.xz \
+             microsoft-identity-broker_@v_%w_%a.raw.gz \
+             microsoft-identity-broker_@v_%w_%a.raw
+CurrentSymlink=microsoft-identity-broker.raw
