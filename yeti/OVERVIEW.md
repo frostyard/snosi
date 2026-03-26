@@ -77,7 +77,10 @@ Profile (e.g., snow/mkosi.conf)
 └── PostOutputScripts: mkosi.postoutput             # Post-output scripts
 ```
 
-The "loaded" variants (snowloaded, snowfieldloaded, cayoloaded) extend their base profile by adding more Include directives, ExtraTrees, and PostInstallationScripts for additional packages like Edge, VSCode, Docker, Incus, and Entra SSO.
+The "loaded" variants extend their base profile by adding more Include directives, ExtraTrees, and PostInstallationScripts:
+
+- **snowloaded/snowfieldloaded** add Edge, VSCode, Bitwarden, Azure VPN, Incus, and Entra SSO
+- **cayoloaded** adds Docker CE (on-image via `docker-onimage`) and Incus (on-image via `virt-base`)
 
 ### Script Pipeline
 
