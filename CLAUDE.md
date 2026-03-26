@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 snosi is a bootable container image build system using [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). Images are deployed via bootc/systemd-boot with atomic updates.
 
-**Outputs:** 4 OCI desktop images (snow, snowloaded, snowfield, snowfieldloaded) and 8 sysext overlay images (1password-cli, debdev, dev, docker, emdash, incus, podman, tailscale).
+**Outputs:** 4 OCI desktop images (snow, snowloaded, snowfield, snowfieldloaded) and 9 sysext overlay images (1password-cli, debdev, dev, docker, emdash, incus, nix, podman, tailscale).
 
 ## Build Commands
 
