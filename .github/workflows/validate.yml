@@ -41,6 +41,6 @@ jobs:
       - name: Validate mkosi configuration summaries
         run: |
           sudo mkosi summary > /dev/null
-          for profile in snow snowloaded snowfield snowfieldloaded; do
+          for profile in cayo cayoloaded snow snowloaded snowfield snowfieldloaded; do
             sudo mkosi --profile "$profile" summary > /dev/null
           done
