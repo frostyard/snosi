@@ -37,7 +37,7 @@ Run after all APT packages are installed. Handle relocation, branding, service e
 **Server postinstall:**
 - `shared/cayo/scripts/postinstall/cayo.postinst.chroot` — Sets os-release (PRETTY_NAME="Cayo Linux", ID, ID_LIKE, VERSION_ID, SYSEXT_LEVEL, BUILD_ID), enables mount units (home, root, srv, mnt, media, opt, usr-local), removes bls-garbage-collect service, generates package list, writes build date, cleans machine-id/SSH keys, creates sysext infrastructure dirs
 
-**Loaded variant postinstall scripts (additional):**
+**Loaded variant postinstall scripts (desktop loaded — snowloaded/snowfieldloaded):**
 
 | Script | Location | Purpose |
 |--------|----------|---------|
@@ -45,6 +45,8 @@ Run after all APT packages are installed. Handle relocation, branding, service e
 | `azurevpn.chroot` | `shared/packages/azurevpn/mkosi.postinst.d/` | Downloads Azure VPN via `verified_download()`, relocates from `/opt`, uses patchelf to fix RPATH for Flutter .so files |
 | `bitwarden.chroot` | `shared/packages/bitwarden/mkosi.postinst.d/` | Downloads Bitwarden .deb via `verified_download()`, relocates `/opt/Bitwarden` → `/usr/lib/Bitwarden`, sets SUID on chrome-sandbox |
 | `vscode.chroot` | `shared/packages/vscode/mkosi.postinst.d/` | Patches desktop entry to add inode/directory MIME type |
+
+**Server loaded variant (cayoloaded):** No additional postinstall scripts beyond the base cayo postinstall. Docker CE and Incus are baked into the image via `docker-onimage` and `virt-base` package sets with their tree overlays providing systemd presets, sysusers, and tmpfiles.
 
 ### 3. FinalizeScripts (pre-output)
 
@@ -190,3 +192,21 @@ Server configuration overlay:
 ### shared/snowloaded/tree/
 
 Single GLib schema override for "loaded" variant defaults.
+
+### shared/packages/virt-base/tree/
+
+Incus on-image enablement overlay (used by cayoloaded and snowloaded/snowfieldloaded):
+- systemd preset: `40-incus.preset` (enables incus services)
+- sysusers.d: `dnsmasq.conf`, `rdma.conf`
+
+### shared/packages/docker-onimage/tree/
+
+Docker CE on-image enablement overlay (used by cayoloaded):
+- systemd preset: enables docker services
+- sysusers.d: Docker user/group definitions
+- tmpfiles.d: Runtime directory setup
+
+### shared/packages/azurevpn/tree/
+
+Azure VPN capability fixes overlay (used by snowloaded/snowfieldloaded):
+- Polkit rules and capabilities adjustments for Azure VPN client
