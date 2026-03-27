@@ -40,6 +40,9 @@ Checks for updates to resources managed by the verified download system:
 - Homebrew install script
 - Emdash .deb
 - Surface secure boot certificate
+- Hotedge GNOME extension
+- Logomenu GNOME extension
+- Microsoft Azure VPN Client
 
 **Process:**
 1. Downloads each resource from its upstream URL
