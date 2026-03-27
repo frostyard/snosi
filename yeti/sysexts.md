@@ -21,6 +21,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
 | **emdash** | emdash | Emdash terminal (GTK/NSS/libnotify deps) |
+| **himmelblau** | himmelblau | Entra ID authentication (himmelblau, pam-himmelblau, nss-himmelblau) |
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
@@ -66,6 +67,12 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/systemd/system-preset/40-docker.preset` — Enable docker services
 - `usr/lib/sysusers.d/docker-sysext.conf` — Docker user/group definitions
 - `usr/lib/tmpfiles.d/docker-sysext.conf` — Runtime directory setup
+
+### himmelblau
+- `usr/lib/himmelblau/himmelblau-sysext-setup` — Runtime PAM/NSS injection script (idempotent, runs at boot)
+- `usr/lib/systemd/system/himmelblau-sysext-setup.service` — Oneshot service to run setup script
+- `usr/lib/systemd/system-preset/40-himmelblau.preset` — Enable himmelblau services
+- `usr/lib/tmpfiles.d/himmelblau.conf` — Config injection from `/usr/share/factory/etc/`
 
 ### incus
 - `usr/lib/systemd/system/incus.service.d/override.conf` — Service override
@@ -131,6 +138,17 @@ Enabled=false
 ```
 
 All sysexts default to `Enabled=false` — users opt in via systemd-sysupdate configuration.
+
+## Runtime Setup Service Pattern
+
+Some sysexts need to modify files that already exist in the base image (e.g., `/etc/nsswitch.conf`, PAM configs). The tmpfiles `C` (copy-if-absent) directive cannot overwrite existing files, so a runtime setup service is needed instead.
+
+**Pattern** (used by himmelblau and incus):
+1. Create an idempotent setup script at `usr/lib/<name>/<name>-sysext-setup` that patches the target files (e.g., adds NSS modules to nsswitch.conf, configures PAM stacks)
+2. Create a oneshot systemd service (`<name>-sysext-setup.service`) that runs the script at boot
+3. Enable via preset (`40-<name>.preset`)
+
+The setup script must be idempotent — safe to run on every boot without accumulating duplicate entries.
 
 ## Adding a New Sysext
 
