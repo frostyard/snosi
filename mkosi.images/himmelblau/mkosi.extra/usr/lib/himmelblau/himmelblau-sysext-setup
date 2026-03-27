@@ -1,0 +1,44 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# himmelblau-sysext-setup: Idempotent post-merge configuration for himmelblau sysext
+#
+# Handles /etc configurations that cannot be done declaratively via tmpfiles.d:
+# - NSS: add himmelblau to nsswitch.conf passwd/group/shadow
+# - PAM: run pam-auth-update to activate himmelblau PAM configs
+
+set -euo pipefail
+
+setup_nsswitch() {
+    local file="/etc/nsswitch.conf"
+    if [[ ! -f "$file" ]]; then
+        echo "WARNING: $file not found, skipping NSS setup"
+        return 0
+    fi
+
+    for db in passwd group shadow; do
+        if grep "^${db}:" "$file" | grep -q "himmelblau"; then
+            echo "himmelblau already in ${db}, skipping"
+        else
+            echo "Adding himmelblau to ${db} in $file"
+            sed -i "s/^\(${db}:.*\)/\1 himmelblau/" "$file"
+        fi
+    done
+}
+
+setup_pam() {
+    if command -v pam-auth-update &>/dev/null; then
+        echo "Running pam-auth-update to enable himmelblau..."
+        pam-auth-update --enable himmelblau
+    else
+        echo "WARNING: pam-auth-update not found, skipping PAM setup"
+    fi
+}
+
+main() {
+    echo "himmelblau-sysext-setup: Configuring Himmelblau..."
+    setup_nsswitch
+    setup_pam
+    echo "himmelblau-sysext-setup: Configuration complete"
+}
+
+main "$@"

@@ -49,6 +49,9 @@ jobs:
             echo "1password-cli=$(get_latest_version \
               'https://downloads.1password.com/linux/debian/amd64/dists/stable/main/binary-amd64/Packages.gz' \
               '1password-cli')"
+            echo "himmelblau=$(get_latest_version \
+              'https://packages.himmelblau-idm.org/nightly/latest/deb/debian13/Packages.gz' \
+              'himmelblau')"
           } > latest-versions.txt
           cat latest-versions.txt
 

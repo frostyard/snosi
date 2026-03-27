@@ -1,0 +1,20 @@
+[Transfer]
+Features=himmelblau
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/himmelblau/
+MatchPattern=himmelblau_@v_%w_%a.raw.zst \
+             himmelblau_@v_%w_%a.raw.xz \
+             himmelblau_@v_%w_%a.raw.gz \
+             himmelblau_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=himmelblau_@v_%w_%a.raw.zst \
+             himmelblau_@v_%w_%a.raw.xz \
+             himmelblau_@v_%w_%a.raw.gz \
+             himmelblau_@v_%w_%a.raw
+CurrentSymlink=himmelblau.raw

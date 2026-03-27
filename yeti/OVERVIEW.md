@@ -24,7 +24,7 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
-1password-cli, debdev, dev, docker, emdash, incus, nix, podman, tailscale
+1password-cli, debdev, dev, docker, emdash, himmelblau, incus, nix, podman, tailscale
 
 ## Architecture
 
@@ -32,7 +32,7 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 
 ```
 mkosi.conf                  # Root config: distribution, dependencies, build settings
-mkosi.images/               # Image definitions (base + 9 sysexts)
+mkosi.images/               # Image definitions (base + 10 sysexts)
   base/                     # Foundation image: systemd, bootc, firmware, core utils
     mkosi.extra/            # Extra filesystem overlay (dracut, systemd units, tmpfiles, sysusers)
       usr/lib/sysupdate.d/  # .transfer + .feature files for all sysexts
@@ -123,7 +123,7 @@ See [sysexts.md](sysexts.md) for details.
 
 External resources are pinned in `shared/download/checksums.json` with URL + SHA256. Scripts use `verified_download(key, output_path)` from `shared/download/verified-download.sh`. CI workflow `check-dependencies.yml` detects updates weekly and creates PRs.
 
-Package versions for APT-based externals (Edge, VSCode, Docker, 1Password) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
+Package versions for APT-based externals (Edge, VSCode, Docker, Himmelblau, 1Password) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
 
 ### User Service Enablement in Chroot
 
@@ -158,7 +158,7 @@ Images are built as directories, then packaged into OCI via `buildah-package.sh`
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 9 sysexts
+just sysexts            # Build base + all 10 sysexts
 just snow               # Build snow desktop
 just snowloaded         # Build snowloaded variant
 just snowfield          # Build snowfield (Surface)
@@ -189,6 +189,7 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 - Debian Backports — Newer kernel + firmware + mesa
 - Debian Griffo.io (debian.griffo.io) — Additional Debian packages
 - Docker (docker.com) — Docker CE packages
+- Himmelblau (packages.himmelblau-idm.org) — Entra ID authentication (nightly)
 - Frostyard (repository.frostyard.org) — Custom packages: nbc, chairlift, updex, igloo, intuneme, snow-first-setup
 - Linux Surface (pkg.surfacelinux.com) — Surface kernel + tools
 - Microsoft — Edge, VSCode
