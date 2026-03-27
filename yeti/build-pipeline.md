@@ -8,25 +8,33 @@ Each image build runs four phases of scripts sequentially:
 
 Download and install items not available as Debian packages. These run inside the chroot with network access.
 
-**Desktop profiles (snow/snowfield):**
+**All profiles (shared):**
 
 | Script | Location | Purpose |
 |--------|----------|---------|
-| `brew.chroot` | `shared/snow/scripts/build/` | Downloads Homebrew installer via `verified_download()`, runs in non-interactive mode, creates `/usr/share/homebrew.tar.zst` |
-| `hotedge.chroot` | `shared/snow/scripts/build/` | Downloads Hotedge GNOME extension (hot corners) from GitHub, installs to `/usr/share/gnome-shell/extensions/` |
-| `logomenu.chroot` | `shared/snow/scripts/build/` | Downloads Logomenu GNOME extension from GitHub, installs extension + GLib schema |
+| `brew.chroot` | `shared/scripts/build/` | Downloads Homebrew installer via `verified_download()`, runs in non-interactive mode, creates `$BREW_TREE/usr/share/homebrew.tar.zst`, sets `user.component=linuxbrew` xattr for chunkah |
+
+**Desktop profiles (snow/snowfield) only:**
+
+| Script | Location | Purpose |
+|--------|----------|---------|
+| `hotedge.chroot` | `shared/snow/scripts/build/` | Downloads Hotedge GNOME extension (hot corners) from GitHub via `verified_download()`, installs to `/usr/share/gnome-shell/extensions/` |
+| `logomenu.chroot` | `shared/snow/scripts/build/` | Downloads Logomenu GNOME extension from GitHub via `verified_download()`, installs extension + GLib schema |
 | `bazaar.chroot` | `shared/snow/scripts/build/` | Clones Bazaar Companion GNOME extension from GitHub, patches metadata.json for shell version "48" |
-| `surface-cert.chroot` | `shared/snow/scripts/build/` | Downloads Linux Surface secure boot certificate, installs to `/usr/share/linux-surface-secureboot/` |
+| `surface-cert.chroot` | `shared/snow/scripts/build/` | Downloads Linux Surface secure boot certificate via `verified_download()`, installs to `/usr/share/linux-surface-secureboot/` |
 
-**Server profiles (cayo):**
-
-| Script | Location | Purpose |
-|--------|----------|---------|
-| `brew.chroot` | `shared/cayo/scripts/build/` | Same Homebrew installation, also sets xattr `user.component=linuxbrew` for chunkah |
+**Server profiles (cayo/cayoloaded):** Only `brew.chroot` (no desktop build scripts).
 
 ### 2. PostInstallationScripts (after packages)
 
 Run after all APT packages are installed. Handle relocation, branding, service enablement.
+
+**Base image postinstall** (`mkosi.images/base/mkosi.postinst.chroot`):
+
+Runs during the base image build (not during profile builds). Handles:
+- Sets home directory path to `/var/home` in `/etc/default/useradd`
+- Enables systemd mount units (home, root, srv, mnt, media, opt, usr-local)
+- Removes bls-garbage-collect service
 
 **Kernel postinstall (all profiles):**
 - `shared/kernel/scripts/postinst/mkosi.postinst.chroot` — Builds initramfs via dracut, detects kernel version, generates `/usr/lib/modules/$VERSION/initramfs.img`, copies vmlinuz
@@ -35,12 +43,9 @@ Run after all APT packages are installed. Handle relocation, branding, service e
 
 Both snow and cayo postinstall scripts source this shared script after setting `OS_PRETTY_NAME` and `OS_NAME`. It handles:
 - Updates `/usr/lib/os-release` (PRETTY_NAME, NAME, ID, ID_LIKE, VERSION_ID, SYSEXT_LEVEL, BUILD_ID)
-- Sets home directory path to `/var/home` in `/etc/default/useradd`
-- Enables systemd mount units (home, root, srv, mnt, media, opt, usr-local)
-- Removes bls-garbage-collect service
 - Generates package list to `/usr/share/frostyard/`
 - Writes build date
-- Cleans machine-id/SSH keys and apt caches
+- Cleans apt caches
 - Creates sysext infrastructure dirs (`/var/lib/extensions`, `/var/lib/confexts`, `/usr/lib/extension-release.d`)
 
 **Desktop postinstall:**
@@ -60,6 +65,12 @@ Both snow and cayo postinstall scripts source this shared script after setting `
 
 **Server loaded variant (cayoloaded):** No additional postinstall scripts beyond the base cayo postinstall. Docker CE and Incus are baked into the image via `docker-onimage` and `virt-base` package sets with their tree overlays providing systemd presets, sysusers, and tmpfiles.
 
+**Intel WiFi firmware (fw-ipw — snow/snowloaded/snowfield/snowfieldloaded):**
+
+| Script | Location | Purpose |
+|--------|----------|---------|
+| `fw-ipw.chroot` | `shared/packages/fw-ipw/mkosi.postinst.d/` | Downloads firmware-ipw2x00 from APT, extracts with `ar x`/`tar`, copies firmware files to `/lib/firmware/`, sets `user.component` xattr |
+
 ### 3. FinalizeScripts (pre-output)
 
 Prepare the image for output. Run after postinstall, before the image format is written.
@@ -76,6 +87,7 @@ Prepare the image for output. Run after postinstall, before the image format is 
 
 **Sysext finalize** (per-sysext `mkosi.finalize` scripts):
 - Captures `/etc` configs to `/usr/share/factory/etc/` for tmpfiles-based injection at boot
+- Used by: docker, himmelblau, incus, nix, tailscale
 
 ### 4. PostOutputScripts (after image creation)
 
@@ -86,8 +98,9 @@ Run after the image directory/file is created. Handle manifest processing and pa
 
 **Sysext postoutput** (`shared/sysext/postoutput/sysext-postoutput.sh`):
 - Reads `KEYPACKAGE` env var, extracts version from manifest JSON
-- Maps Debian release to VERSION_ID (trixie → 13)
-- Renames sysext to versioned name: `{IMAGE_ID}_{KEYVERSION}_{OS_VERSION}_{ARCH}.raw`
+- Maps Debian release to VERSION_ID (forky → 14, trixie → 13, bookworm → 12, bullseye → 11, buster → 10)
+- Handles Debian epoch notation: `5:1.2.3` → `5+1.2.3`
+- Renames sysext to versioned name: `{IMAGE_ID}_{KEYVERSION}_{OS_VERSION}_{ARCH}.{ext}` (ext may be raw, raw.gz, raw.xz, etc.)
 - Annotates manifest with key_package and key_version
 - Creates symlink for systemd-sysupdate MatchPattern matching
 
@@ -114,8 +127,9 @@ ln -sf /usr/lib/<package>/<binary> /usr/bin/<binary>
 | Package | From | To | Extra Steps |
 |---------|------|----|-------------|
 | Microsoft Edge | `/opt/microsoft/msedge` | `/usr/lib/microsoft-edge` | Icon symlinks, gnome-control-center default-apps patch |
-| Azure VPN | `/opt/microsoft/microsoft-azurevpnclient` | `/usr/lib/microsoft-azurevpnclient` | patchelf RPATH fix for 5 .so files, polkit rules fix |
+| Azure VPN | `/opt/microsoft/microsoft-azurevpnclient` | `/usr/lib/microsoft-azurevpnclient` | patchelf RPATH fix for 5 .so files, polkit rules fix, `cap_net_admin+eip` capability |
 | Bitwarden | `/opt/Bitwarden` | `/usr/lib/Bitwarden` | SUID on chrome-sandbox (4755), desktop entry path update |
+| Emdash | `/opt/Emdash` | `/usr/lib/emdash` | SUID on chrome-sandbox (4755), desktop entry path update (sysext, not profile) |
 
 ## OCI Image Packaging
 
@@ -137,7 +151,7 @@ Optimizes OCI image layers using [chunkah](https://quay.io/jlebon/chunkah).
 
 - Reads the built image via `podman inspect`
 - Mounts into chunkah container
-- Runs `chunkah build --prune /sysroot/ --max-layers $MAX_LAYERS`
+- Runs `chunkah build --prune /sysroot/ --max-layers $MAX_LAYERS` (default 128)
 - Uses `user.component` xattrs (set during finalize) to group files into efficient layers
 - Removes ostree-specific labels from output
 
@@ -184,7 +198,7 @@ Each profile has filesystem overlays (ExtraTrees) that are merged into the image
 
 ### shared/snow/tree/
 
-Desktop configuration overlay (~800+ files):
+Desktop configuration overlay:
 - APT sources for Docker, backports
 - dconf/GLib schema overrides for GNOME defaults
 - GDM configuration
@@ -198,6 +212,7 @@ Desktop configuration overlay (~800+ files):
 
 Server configuration overlay:
 - APT sources for Docker, Incus/Zabbly
+- NetworkManager/IWD networking config
 - systemd mounts and presets (no desktop services)
 - sysusers/tmpfiles for avahi, dnsmasq, docker, incus
 
@@ -221,4 +236,4 @@ Docker CE on-image enablement overlay (used by cayoloaded):
 ### shared/packages/azurevpn/tree/
 
 Azure VPN capability fixes overlay (used by snowloaded/snowfieldloaded):
-- Polkit rules and capabilities adjustments for Azure VPN client
+- systemd preset and workaround service for Azure VPN client capabilities

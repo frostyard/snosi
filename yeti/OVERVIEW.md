@@ -36,10 +36,12 @@ mkosi.images/               # Image definitions (base + 10 sysexts)
   base/                     # Foundation image: systemd, bootc, firmware, core utils
     mkosi.extra/            # Extra filesystem overlay (dracut, systemd units, tmpfiles, sysusers)
       usr/lib/sysupdate.d/  # .transfer + .feature files for all sysexts
+    mkosi.postinst.chroot   # Mount enablement, useradd home dir, bls-garbage-collect removal
+    mkosi.finalize.chroot   # Masks systemd-networkd-wait-online
   docker/                   # Each sysext: mkosi.conf + optional extra/scripts
   tailscale/
   ...
-mkosi.profiles/             # Desktop/server profile definitions
+mkosi.profiles/             # Desktop/server profile definitions (6 profiles)
   snow/                     # Each profile: mkosi.conf + build/postinst/finalize scripts
   cayo/
   ...
@@ -47,13 +49,13 @@ shared/                     # Reusable fragments composed via Include=
   download/                 # Verified download system (checksums.json + helpers)
   kernel/                   # Kernel variant configs (backports, surface, stock)
   packages/                 # Package set configs (11 sets) with postinstall relocation scripts
-  scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles)
+  scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot)
   outformat/image/          # OCI output format, buildah/chunkah packaging
   sysext/postoutput/        # Shared sysext versioning and manifest logic
   manifest/postoutput/      # Image manifest processing
   snow/                     # Snow desktop: build scripts + tree overlay
   snowloaded/               # Snowloaded: additional tree overlay
-  cayo/                     # Cayo server: build scripts + tree overlay
+  cayo/                     # Cayo server: postinstall scripts + tree overlay
 mkosi.sandbox/etc/apt/      # External APT repo configs + GPG keyrings
 .github/workflows/          # CI/CD (build, publish, dependency checks, testing)
 test/                       # Bootc installation test framework
@@ -88,7 +90,7 @@ The "loaded" variants extend their base profile by adding more Include directive
 Scripts execute in order per image build:
 
 1. **BuildScripts** (in chroot) — Download/install items not available as packages: Homebrew, GNOME extensions, Surface secure boot cert
-2. **PostInstallationScripts** (after packages) — Common logic via `shared/scripts/common-postinst.sh` (OS release branding, mount enablement, cleanup, sysext infra), then profile-specific steps (GDM enablement, package relocation /opt → /usr/lib)
+2. **PostInstallationScripts** (after packages) — Common logic via `shared/scripts/common-postinst.sh` (OS release branding, package list generation, cleanup, sysext infra), then profile-specific steps (GDM enablement, package relocation /opt → /usr/lib). Mount enablement and useradd home dir are handled by the base image's own postinst script.
 3. **FinalizeScripts** (pre-output) — Remove ephemeral dirs (/boot, /home), create /sysroot and /nix mountpoints, clear machine-id/SSH keys, compile GLib schemas, set file xattrs for chunkah
 4. **PostOutputScripts** (after image creation) — Manifest processing, sysext versioned renaming
 
@@ -181,6 +183,7 @@ All `just` targets run `mkosi clean` first (clean build every time).
 | `IMAGE_ID` | Profile mkosi.conf | Image identifier (snow, cayo, etc.) |
 | `IMAGE_VERSION` | mkosi.version (timestamp) | Build version (YYYYMMDDHHMMSS) |
 | `BUILD_ID` | CI environment | Injected into os-release |
+| `BREW_TREE` | Profile mkosi.conf | Tree path for Homebrew xattr tagging |
 
 ### External APT Repositories
 

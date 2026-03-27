@@ -20,7 +20,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test) |
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
-| **emdash** | emdash | Emdash terminal (GTK/NSS/libnotify deps) |
+| **emdash** | emdash | Emdash terminal — downloaded via `verified_download()`, relocated from `/opt/Emdash` to `/usr/lib/emdash` |
 | **himmelblau** | himmelblau | Entra ID authentication (himmelblau, pam-himmelblau, nss-himmelblau) |
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
@@ -63,6 +63,9 @@ Key settings:
 
 Some sysexts include extra files via `mkosi.extra/`:
 
+### emdash
+- `mkosi.postinst.chroot` — Downloads emdash .deb via `verified_download()`, relocates `/opt/Emdash` → `/usr/lib/emdash`, creates `/usr/bin/emdash` symlink, sets SUID on chrome-sandbox
+
 ### docker
 - `usr/lib/systemd/system-preset/40-docker.preset` — Enable docker services
 - `usr/lib/sysusers.d/docker-sysext.conf` — Docker user/group definitions
@@ -98,7 +101,7 @@ The shared postoutput script (`shared/sysext/postoutput/sysext-postoutput.sh`) h
 2. Queries the manifest JSON for the key package's version
 3. Handles Debian epoch notation: `5:1.2.3` → `5+1.2.3`
 4. Maps Debian release to VERSION_ID: forky → 14, trixie → 13, bookworm → 12, bullseye → 11, buster → 10
-5. Renames the raw image: `{IMAGE_ID}_{KEYVERSION}_{OS_VERSION}_{ARCH}.raw`
+5. Renames the output image: `{IMAGE_ID}_{KEYVERSION}_{OS_VERSION}_{ARCH}.{ext}` (ext may be `raw`, `raw.gz`, `raw.xz`, etc.)
    - Example: `docker_5+29.3.0_13_x86-64.raw`
 6. Annotates manifest with `.config.key_package` and `.config.key_version`
 7. Creates unversioned symlink for systemd-sysupdate MatchPattern
