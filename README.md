@@ -18,13 +18,15 @@ The project produces:
 | **cayo**            | Headless server with podman + backports kernel                  | OCI archive   |
 | **cayoloaded**      | cayo + Docker + Incus (baked in)                                | OCI archive   |
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
-| **azurevpn**        | Azure VPN Client                                                | sysext        |
 | **debdev**          | Debian development tools (debootstrap, distro-info)             | sysext        |
 | **dev**             | Build essentials, Python, cmake, valgrind, gdb                  | sysext        |
 | **docker**          | Docker CE container runtime                                     | sysext        |
+| **emdash**          | Emdash terminal application                                     | sysext        |
 | **himmelblau**      | Himmelblau Entra ID authentication                              | sysext        |
 | **incus**           | Incus container/VM manager                                      | sysext        |
+| **nix**             | Nix package manager                                             | sysext        |
 | **podman**          | Podman + Distrobox                                              | sysext        |
+| **tailscale**       | Tailscale VPN client                                            | sysext        |
 
 ## Architecture
 
@@ -34,9 +36,9 @@ The project produces:
                 ┌───────────────┴───────────────┐
                 │                               │
              sysexts                         profiles
-    ┌────┬────┬────┬────┬────┬────┐            │
-    │    │    │    │    │    │    │     ┌───────┴───────┐
-  1pass debdev dev docker himmelblau incus podman │               │
+    ┌────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
+    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
+  1pass debdev dev docker emdash himmelblau incus nix podman tailscale │         │
                                      snow            cayo
                                ┌──────┼──────┐        │
                                │      │      │    cayoloaded
@@ -65,9 +67,12 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | **debdev**        | debootstrap, distro-info, archive keyrings    | [mkosi.images/debdev/mkosi.conf](mkosi.images/debdev/mkosi.conf)               |
 | **dev**           | build-essential, cmake, Python, valgrind, gdb | [mkosi.images/dev/mkosi.conf](mkosi.images/dev/mkosi.conf)                     |
 | **docker**        | Docker CE, containerd, buildx, compose        | [mkosi.images/docker/mkosi.conf](mkosi.images/docker/mkosi.conf)               |
+| **emdash**        | Emdash terminal, relocated from /opt          | [mkosi.images/emdash/mkosi.conf](mkosi.images/emdash/mkosi.conf)               |
 | **himmelblau**    | Himmelblau Entra ID auth, PAM/NSS modules     | [mkosi.images/himmelblau/mkosi.conf](mkosi.images/himmelblau/mkosi.conf)       |
 | **incus**         | Incus, QEMU/KVM, OVMF, virt-viewer            | [mkosi.images/incus/mkosi.conf](mkosi.images/incus/mkosi.conf)                 |
+| **nix**           | Nix package manager, systemd integration      | [mkosi.images/nix/mkosi.conf](mkosi.images/nix/mkosi.conf)                     |
 | **podman**        | Podman, Distrobox, buildah, crun              | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf)               |
+| **tailscale**     | Tailscale VPN client                          | [mkosi.images/tailscale/mkosi.conf](mkosi.images/tailscale/mkosi.conf)         |
 
 ## How Profiles Work
 
@@ -97,7 +102,7 @@ shared/
 │   └── scripts/               ← dracut postinst scripts
 ├── outformat/
 │   └── oci/
-│       ├── mkosi.conf         ← Sets Format=oci
+│       ├── mkosi.conf         ← Sets Format=directory
 │       ├── finalize/          ← OCI finalization scripts
 │       └── postoutput/        ← OCI tagging scripts
 ├── packages/
@@ -110,10 +115,11 @@ shared/
 │   ├── docker-onimage/        ← Docker CE for baked-in images
 │   ├── virt-base/mkosi.conf   ← Headless Incus virtualization
 │   └── virt/mkosi.conf        ← Incus virtualization
+├── scripts/
+│   └── build/               ← Shared build-time scripts (brew.chroot)
 ├── cayo/
 │   ├── tree/                  ← Extra files overlaid into cayo image
 │   └── scripts/
-│       ├── build/             ← Build-time scripts (brew)
 │       └── postinstall/       ← Post-installation customizations
 └── snow/
     ├── tree/                  ← Extra files overlaid into image
@@ -137,7 +143,7 @@ ManifestFormat=json
 ExtraTrees=%D/shared/snow/tree
 
 # Build-time scripts
-BuildScripts=%D/shared/snow/scripts/build/brew.chroot
+BuildScripts=%D/shared/scripts/build/brew.chroot
 BuildScripts=%D/shared/snow/scripts/build/hotedge.chroot
 BuildScripts=%D/shared/snow/scripts/build/logomenu.chroot
 BuildScripts=%D/shared/snow/scripts/build/bazaar.chroot
@@ -148,29 +154,28 @@ PostInstallationScripts=%D/shared/kernel/scripts/postinst/mkosi.postinst.chroot
 PostInstallationScripts=%D/shared/snow/scripts/postinstall/snow.postinst.chroot
 
 # Finalization (prepare for boot)
-FinalizeScripts=%D/shared/outformat/oci/finalize/mkosi.finalize.chroot
+FinalizeScripts=%D/shared/outformat/image/finalize/mkosi.finalize.chroot
 
-# Post-output (tag OCI image, process manifest)
-PostOutputScripts=%D/shared/outformat/oci/postoutput/mkosi.postoutput
+# Post-output (process manifest)
 PostOutputScripts=%D/shared/manifest/postoutput/mkosi.postoutput
 
 [Include]
 # Package sets
 Include=%D/shared/packages/snow/mkosi.conf    # GNOME desktop
 Include=%D/shared/kernel/backports/mkosi.conf # Backports kernel
-Include=%D/shared/outformat/oci/mkosi.conf    # OCI output format
+Include=%D/shared/outformat/image/mkosi.conf    # OCI output format
 ```
 
 ### Profile Comparison
 
 | Profile             | Kernel    | Extra Packages                 | Include Path                                                                |
 | ------------------- | --------- | ------------------------------ | --------------------------------------------------------------------------- |
-| **snow**            | backports | —                              | `kernel/backports`, `packages/snow`, `outformat/oci`                        |
-| **snowfield**       | surface   | —                              | `kernel/surface`, `packages/snow`, `outformat/oci`                          |
-| **cayo**            | backports | —                              | `kernel/backports`, `packages/cayo`, `outformat/oci`                        |
+| **snow**            | backports | —                              | `kernel/backports`, `packages/snow`, `outformat/image`                        |
+| **snowfield**       | surface   | —                              | `kernel/surface`, `packages/snow`, `outformat/image`                          |
+| **cayo**            | backports | —                              | `kernel/backports`, `packages/cayo`, `outformat/image`                        |
 | **cayoloaded**      | backports | Docker, Incus                  | + `packages/docker-onimage`, `packages/virt-base`                           |
-| **snowloaded**      | backports | Azure VPN, Edge, VSCode, Bitwarden, Incus | + `packages/edge`, `packages/vscode`, `packages/bitwarden`, `packages/virt` |
-| **snowfieldloaded** | surface   | Azure VPN, Edge, VSCode, Bitwarden, Incus | + `packages/edge`, `packages/vscode`, `packages/bitwarden`, `packages/virt` |
+| **snowloaded**      | backports | Azure VPN, Edge, VSCode, Bitwarden, Incus, Entra SSO | + `packages/edge`, `packages/azurevpn`, `packages/vscode`, `packages/bitwarden`, `packages/virt`, `packages/entra-sso` |
+| **snowfieldloaded** | surface   | Azure VPN, Edge, VSCode, Bitwarden, Incus, Entra SSO | + `packages/edge`, `packages/azurevpn`, `packages/vscode`, `packages/bitwarden`, `packages/virt`, `packages/entra-sso` |
 
 ## Building Images
 
@@ -253,7 +258,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all sysexts (1password-cli, debdev, dev, docker, himmelblau, incus, podman)
+1. Builds the base image and all sysexts (1password-cli, debdev, dev, docker, emdash, himmelblau, incus, nix, podman, tailscale)
 2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Uploads package manifests for version tracking
 
@@ -272,6 +277,9 @@ The Frostyard repository provides custom packages for Snow Linux:
 - **nbc** (Not BootC): CLI tool for installing, updating bootc-compatible container based Operating Systems
 - **chairlift**: System extension manager with GUI integration
 - **updex**: Update executor service for applying staged updates
+- **igloo**: System configuration tool
+- **intuneme**: Intune management agent
+- **snow-first-setup**: First-boot setup wizard
 
 ## Immutable OS Filesystem Layout
 

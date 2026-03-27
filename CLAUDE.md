@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 snosi is a bootable container image build system using [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). Images are deployed via bootc/systemd-boot with atomic updates.
 
-**Outputs:** 4 OCI desktop images (snow, snowloaded, snowfield, snowfieldloaded) and 10 sysext overlay images (1password-cli, debdev, dev, docker, emdash, himmelblau, incus, nix, podman, tailscale).
+**Outputs:** 4 OCI desktop images (snow, snowloaded, snowfield, snowfieldloaded), 2 OCI server images (cayo, cayoloaded), and 10 sysext overlay images (1password-cli, debdev, dev, docker, emdash, himmelblau, incus, nix, podman, tailscale).
 
 ## Build Commands
 
@@ -14,12 +14,16 @@ Requires: mkosi v24+, just, root/sudo access.
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 8 sysexts
+just sysexts            # Build base + all 10 sysexts
 just snow               # Build snow desktop image
 just snowloaded         # Build snowloaded variant
 just snowfield          # Build snowfield (Surface kernel)
 just snowfieldloaded    # Build snowfieldloaded variant
+just cayo               # Build cayo server image
+just cayoloaded         # Build cayoloaded variant
 just clean              # Remove build artifacts
+just test-install       # Run bootc install test
+just run-qemu           # Run image in QEMU
 ```
 
 All `just` targets run `mkosi clean` first (clean build every time).
@@ -32,7 +36,7 @@ mkosi configs use `Include=` directives to compose reusable fragments. The compo
 
 - `mkosi.conf` (root) declares base + sysext dependencies
 - `mkosi.images/` contains base image and sysext definitions
-- `mkosi.profiles/` defines desktop image variants
+- `mkosi.profiles/` defines desktop and server image variants
 - `shared/` contains reusable fragments: kernel configs, package sets, output format, scripts
 
 Each profile composes: package sets + kernel variant + output format + build/postinstall/finalize/postoutput scripts.
@@ -94,5 +98,14 @@ The target (e.g. `gnome-session.target`) comes from the service's `WantedBy=` in
 ## CI/CD
 
 - `build.yml` - Builds base + sysexts, publishes to Frostyard repo (Cloudflare R2)
-- `build-images.yml` - Matrix build of 4 desktop profiles, pushes OCI to ghcr.io
+- `build-images.yml` - Matrix build of 6 profiles (4 desktop + 2 server), pushes OCI to ghcr.io
 - `check-dependencies.yml` - Weekly check for external dependency updates, creates PRs with updated checksums
+- `check-packages.yml` - Daily check for APT package version updates, creates PRs
+- `validate.yml` - shellcheck + mkosi summary validation on PRs
+- `test-install.yml` - Manual bootc installation test in QEMU/KVM
+- `scorecard.yml` - Weekly OpenSSF supply-chain security analysis
+## Documentation
+
+**update documentation** After any change to source code, update relevant documentation in CLAUDE.md, README.md and the yeti/ folder. A task is not complete without reviewing and updating relevant documentation.
+
+**yeti/ directory** The `yeti/` directory contains documentation written for AI consumption and context enhancement, not primarily for humans. Jobs like `doc-maintainer` and `issue-worker` instruct the AI to read `yeti/OVERVIEW.md` and related files for codebase context before performing tasks. Write content in this directory to be maximally useful to an AI agent understanding the codebase — detailed architecture, patterns, and decision rationale rather than user-facing guides.
