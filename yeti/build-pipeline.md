@@ -31,11 +31,23 @@ Run after all APT packages are installed. Handle relocation, branding, service e
 **Kernel postinstall (all profiles):**
 - `shared/kernel/scripts/postinst/mkosi.postinst.chroot` — Builds initramfs via dracut, detects kernel version, generates `/usr/lib/modules/$VERSION/initramfs.img`, copies vmlinuz
 
+**Common postinstall logic** (`shared/scripts/common-postinst.sh`):
+
+Both snow and cayo postinstall scripts source this shared script after setting `OS_PRETTY_NAME` and `OS_NAME`. It handles:
+- Updates `/usr/lib/os-release` (PRETTY_NAME, NAME, ID, ID_LIKE, VERSION_ID, SYSEXT_LEVEL, BUILD_ID)
+- Sets home directory path to `/var/home` in `/etc/default/useradd`
+- Enables systemd mount units (home, root, srv, mnt, media, opt, usr-local)
+- Removes bls-garbage-collect service
+- Generates package list to `/usr/share/frostyard/`
+- Writes build date
+- Cleans machine-id/SSH keys and apt caches
+- Creates sysext infrastructure dirs (`/var/lib/extensions`, `/var/lib/confexts`, `/usr/lib/extension-release.d`)
+
 **Desktop postinstall:**
-- `shared/snow/scripts/postinstall/snow.postinst.chroot` — Sets os-release (PRETTY_NAME="Snow Linux", ID, ID_LIKE, VERSION_ID, SYSEXT_LEVEL, BUILD_ID), enables GDM + mount units (home, root, srv, mnt, media, opt, usr-local), creates user service symlinks for gnome-remote-desktop and gnome-remote-desktop-handover (explicitly removes gnome-remote-desktop-headless due to `Conflicts=` with the non-headless variant), removes bls-garbage-collect service and fish desktop entry, generates package list to `/usr/share/frostyard/`, writes build date, cleans machine-id/SSH keys, creates sysext infrastructure dirs
+- `shared/snow/scripts/postinstall/snow.postinst.chroot` — Sources `common-postinst.sh` with OS_PRETTY_NAME="Snow Linux", enables GDM, creates user service symlinks for gnome-remote-desktop and gnome-remote-desktop-handover (explicitly removes gnome-remote-desktop-headless due to `Conflicts=` with the non-headless variant), removes fish desktop entry
 
 **Server postinstall:**
-- `shared/cayo/scripts/postinstall/cayo.postinst.chroot` — Sets os-release (PRETTY_NAME="Cayo Linux", ID, ID_LIKE, VERSION_ID, SYSEXT_LEVEL, BUILD_ID), enables mount units (home, root, srv, mnt, media, opt, usr-local), removes bls-garbage-collect service, generates package list, writes build date, cleans machine-id/SSH keys, creates sysext infrastructure dirs
+- `shared/cayo/scripts/postinstall/cayo.postinst.chroot` — Sources `common-postinst.sh` with OS_PRETTY_NAME="Cayo Linux" (no additional steps beyond common logic)
 
 **Loaded variant postinstall scripts (desktop loaded — snowloaded/snowfieldloaded):**
 
@@ -54,7 +66,7 @@ Prepare the image for output. Run after postinstall, before the image format is 
 
 **Image finalize** (`shared/outformat/image/finalize/mkosi.finalize.chroot`):
 - Removes `/boot`, `/home`, `/root`, `/srv` (recreates empty)
-- Creates `/nix` mountpoint for nix sysext
+- Creates `/sysroot` and `/nix` mountpoints (nix sysext bind-mount)
 - Removes `/etc/machine-id` and SSH host keys
 - Compiles GLib schemas and dconf databases
 - Sets file xattrs: `user.component=<package_name>` for every installed file — used by chunkah for layer optimization

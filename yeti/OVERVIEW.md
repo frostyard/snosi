@@ -47,6 +47,7 @@ shared/                     # Reusable fragments composed via Include=
   download/                 # Verified download system (checksums.json + helpers)
   kernel/                   # Kernel variant configs (backports, surface, stock)
   packages/                 # Package set configs (11 sets) with postinstall relocation scripts
+  scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles)
   outformat/image/          # OCI output format, buildah/chunkah packaging
   sysext/postoutput/        # Shared sysext versioning and manifest logic
   manifest/postoutput/      # Image manifest processing
@@ -87,8 +88,8 @@ The "loaded" variants extend their base profile by adding more Include directive
 Scripts execute in order per image build:
 
 1. **BuildScripts** (in chroot) — Download/install items not available as packages: Homebrew, GNOME extensions, Surface secure boot cert
-2. **PostInstallationScripts** (after packages) — Package relocation (/opt → /usr/lib), OS release branding, systemd service enablement, cleanup
-3. **FinalizeScripts** (pre-output) — Remove ephemeral dirs (/boot, /home), clear machine-id/SSH keys, compile GLib schemas, set file xattrs for chunkah
+2. **PostInstallationScripts** (after packages) — Common logic via `shared/scripts/common-postinst.sh` (OS release branding, mount enablement, cleanup, sysext infra), then profile-specific steps (GDM enablement, package relocation /opt → /usr/lib)
+3. **FinalizeScripts** (pre-output) — Remove ephemeral dirs (/boot, /home), create /sysroot and /nix mountpoints, clear machine-id/SSH keys, compile GLib schemas, set file xattrs for chunkah
 4. **PostOutputScripts** (after image creation) — Manifest processing, sysext versioned renaming
 
 See [build-pipeline.md](build-pipeline.md) for details.
@@ -193,7 +194,7 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 - Frostyard (repository.frostyard.org) — Custom packages: nbc, chairlift, updex, igloo, intuneme, snow-first-setup
 - Linux Surface (pkg.surfacelinux.com) — Surface kernel + tools
 - Microsoft — Edge, VSCode
-- NordVPN (repo.nordvpn.com) — NordVPN client
+- NordVPN (repo.nordvpn.com) — NordVPN app client
 - Tailscale — VPN client
 
 ## CI/CD
