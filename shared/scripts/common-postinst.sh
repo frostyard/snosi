@@ -39,21 +39,6 @@ if [[ -f /usr/lib/os-release ]]; then
     fi
 fi
 
-# Use proper home directory for new users
-sed -i 's|.*HOME=/home|HOME=/var/home|' "/etc/default/useradd"
-
-# Enable mounts
-systemctl enable home.mount
-systemctl enable root.mount
-systemctl enable srv.mount
-systemctl enable mnt.mount
-systemctl enable media.mount
-systemctl enable opt.mount
-systemctl enable usr-local.mount
-
-# remove bls-garbage-collect from /etc/systemd/system/basic.target.wants
-rm -rf /etc/systemd/system/basic.target.wants/bls-garbage-collect.service
-
 # Generate package list
 echo "Generating package list..."
 mkdir -p /usr/share/frostyard
@@ -62,13 +47,6 @@ apt list --installed 2>/dev/null > /usr/share/frostyard/"${IMAGE_ID}".packages.t
 # Write build date
 echo "Writing build date..."
 date -u +"%Y-%m-%dT%H:%M:%SZ" > /usr/share/frostyard/"${IMAGE_ID}"_build_date
-
-# Clean up machine-id for first boot
-rm -f /etc/machine-id
-touch /etc/machine-id
-
-# Remove SSH host keys
-rm -f /etc/ssh/ssh_host_*
 
 # Clean up apt caches
 rm -rf /var/lib/apt/lists/*
