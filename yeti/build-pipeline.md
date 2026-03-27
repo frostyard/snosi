@@ -157,7 +157,7 @@ Provides `verified_download(key, output_path)`:
 
 ### package-versions.json
 
-Tracks APT-based external package versions (Edge, VSCode, Docker, 1Password) separately from download checksums. Updated daily by `check-packages.yml`.
+Tracks APT-based external package versions (Edge, VSCode, Docker, 1Password, Himmelblau) separately from download checksums. Updated daily by `check-packages.yml`.
 
 ### update-checksums.sh
 

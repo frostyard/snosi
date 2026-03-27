@@ -6,7 +6,7 @@
 
 **Trigger:** Push/PR to main
 
-Builds the base image and all 9 sysexts, publishes to the Frostyard repository on Cloudflare R2.
+Builds the base image and all 10 sysexts, publishes to the Frostyard repository on Cloudflare R2.
 
 **Steps:**
 1. Build base + all sysext images via mkosi
@@ -57,6 +57,7 @@ Checks for version updates to external APT packages:
 - code (VS Code)
 - docker-ce
 - 1password-cli
+- himmelblau
 
 **Process:**
 1. Queries APT repositories for current versions
