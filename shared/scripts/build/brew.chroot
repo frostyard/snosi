@@ -1,0 +1,31 @@
+#!/bin/bash
+set -euo pipefail
+
+# This script installs Homebrew in a temporary location and then
+# creates a compressed tarball of the installation.
+#
+# Requires BREW_TREE env var set to the profile's tree directory
+# (e.g., shared/snow/tree or shared/cayo/tree).
+
+if [[ -z "${BREW_TREE:-}" ]]; then
+    echo "ERROR: BREW_TREE environment variable must be set" >&2
+    exit 1
+fi
+
+BREW_OUTPUT="$SRCDIR/$BREW_TREE/usr/share/homebrew.tar.zst"
+
+source "$SRCDIR/shared/download/verified-download.sh"
+
+# delete previous tarball if it exists
+rm -f "$BREW_OUTPUT"
+
+verified_download "brew-install" "/tmp/brew-install"
+touch /.dockerenv
+env --ignore-environment "PATH=/usr/bin:/bin:/usr/sbin:/sbin" "HOME=/home/linuxbrew" "NONINTERACTIVE=1" /usr/bin/bash /tmp/brew-install
+mkdir -p /out && \
+tar --zstd -cvf "$BREW_OUTPUT" "/home/linuxbrew/.linuxbrew"
+setfattr -n user.component -v "linuxbrew" "$BREW_OUTPUT"
+
+rm -f /tmp/brew-install
+rm -f /.dockerenv
+rm -rf /home/linuxbrew
