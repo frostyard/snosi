@@ -1,0 +1,6 @@
+Types: deb
+URIs: https://packages.himmelblau-idm.org/nightly/latest/deb/debian13
+Suites: ./
+Architectures: amd64
+Enabled: yes
+Signed-By: /etc/apt/keyrings/himmelblau.gpg

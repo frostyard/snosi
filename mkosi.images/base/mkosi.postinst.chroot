@@ -18,5 +18,5 @@ systemctl enable media.mount
 systemctl enable opt.mount
 systemctl enable usr-local.mount
 
-# remove bls-garbage-collect from /etc/systemd/system/basic.garget.wants
+# remove bls-garbage-collect from /etc/systemd/system/basic.target.wants
 rm -rf /etc/systemd/system/basic.target.wants/bls-garbage-collect.service

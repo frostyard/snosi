@@ -61,6 +61,33 @@ jobs:
             echo "surface_commit=$LATEST_SURF" >> $GITHUB_OUTPUT
           fi
 
+          # Check hotedge
+          CURRENT_HE=$(jq -r '.hotedge.version' "$CHECKSUMS")
+          LATEST_HE=$(curl -s https://api.github.com/repos/frostyard/hotedge/commits/HEAD | jq -r '.sha')
+          if [[ "$LATEST_HE" != "$CURRENT_HE" ]]; then
+            UPDATES="${UPDATES}hotedge: ${CURRENT_HE:0:12} -> ${LATEST_HE:0:12}\n"
+            echo "hotedge_update=true" >> $GITHUB_OUTPUT
+            echo "hotedge_commit=$LATEST_HE" >> $GITHUB_OUTPUT
+          fi
+
+          # Check logomenu
+          CURRENT_LM=$(jq -r '.logomenu.version' "$CHECKSUMS")
+          LATEST_LM=$(curl -s https://api.github.com/repos/frostyard/logomenu/commits/HEAD | jq -r '.sha')
+          if [[ "$LATEST_LM" != "$CURRENT_LM" ]]; then
+            UPDATES="${UPDATES}logomenu: ${CURRENT_LM:0:12} -> ${LATEST_LM:0:12}\n"
+            echo "logomenu_update=true" >> $GITHUB_OUTPUT
+            echo "logomenu_commit=$LATEST_LM" >> $GITHUB_OUTPUT
+          fi
+
+          # Check Microsoft Azure VPN Client
+          CURRENT_AZ=$(jq -r '.["microsoft-azurevpnclient"].version' "$CHECKSUMS")
+          LATEST_AZ=$(curl -s https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
+          if [[ -n "$LATEST_AZ" && "$LATEST_AZ" != "$CURRENT_AZ" ]]; then
+            UPDATES="${UPDATES}microsoft-azurevpnclient: $CURRENT_AZ -> $LATEST_AZ\n"
+            echo "azurevpn_update=true" >> $GITHUB_OUTPUT
+            echo "azurevpn_version=$LATEST_AZ" >> $GITHUB_OUTPUT
+          fi
+
           # Check Microsoft Identity Broker (insiders-fast repo)
           CURRENT_BROKER=$(jq -r '.["microsoft-identity-broker"].version' "$CHECKSUMS")
           LATEST_BROKER=$(curl -s https://packages.microsoft.com/ubuntu/24.04/prod/dists/insiders-fast/main/binary-amd64/Packages | grep -A1 '^Package: microsoft-identity-broker$' | awk '/^Version:/{print $2}')
@@ -127,6 +154,42 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
               '.["surface-cert"].url=$u | .["surface-cert"].sha256=$s | .["surface-cert"].version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "${{ steps.check.outputs.hotedge_update }}" == "true" ]]; then
+            COMMIT="${{ steps.check.outputs.hotedge_commit }}"
+            URL="https://codeload.github.com/frostyard/hotedge/tar.gz/${COMMIT}"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
+              '.hotedge.url=$u | .hotedge.sha256=$s | .hotedge.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "${{ steps.check.outputs.logomenu_update }}" == "true" ]]; then
+            COMMIT="${{ steps.check.outputs.logomenu_commit }}"
+            URL="https://codeload.github.com/frostyard/logomenu/tar.gz/${COMMIT}"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
+              '.logomenu.url=$u | .logomenu.sha256=$s | .logomenu.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "${{ steps.check.outputs.azurevpn_update }}" == "true" ]]; then
+            VER="${{ steps.check.outputs.azurevpn_version }}"
+            URL="https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_${VER}_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.["microsoft-azurevpnclient"].url=$u | .["microsoft-azurevpnclient"].sha256=$s | .["microsoft-azurevpnclient"].version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi

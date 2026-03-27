@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# himmelblau-sysext-setup.service: One-shot service to configure /etc after sysext merge
+#
+# This service runs after systemd-sysusers and systemd-tmpfiles-setup to handle
+# configurations that cannot be done declaratively (specifically PAM and NSS).
+
+[Unit]
+Description=Himmelblau Sysext Post-Merge Configuration
+Documentation=https://himmelblau-idm.org
+DefaultDependencies=no
+After=systemd-sysusers.service systemd-tmpfiles-setup.service local-fs.target
+Before=himmelblaud.service display-manager.service ssh.service
+ConditionPathExists=!/run/himmelblau-sysext-setup.done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/himmelblau/himmelblau-sysext-setup
+ExecStartPost=/usr/bin/touch /run/himmelblau-sysext-setup.done
+
+[Install]
+WantedBy=multi-user.target
