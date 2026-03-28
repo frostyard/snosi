@@ -56,11 +56,11 @@ Checks for updates to resources managed by the verified download system:
 
 Checks for version updates to external APT packages:
 
+- himmelblau
 - microsoft-edge-stable
 - code (VS Code)
 - docker-ce
 - 1password-cli
-- himmelblau
 
 **Process:**
 1. Queries APT repositories for current versions

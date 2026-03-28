@@ -11,9 +11,9 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 | Image | Kernel | Extras |
 |-------|--------|--------|
 | **snow** | backports | GNOME desktop, podman, flatpak |
-| **snowloaded** | backports | snow + Edge, VSCode, Bitwarden, Incus, Azure VPN, Entra SSO |
+| **snowloaded** | backports | snow + Edge, VSCode, Bitwarden, Incus, Azure VPN, Entra SSO (linux-entra-sso) |
 | **snowfield** | linux-surface | GNOME desktop (Surface devices) |
-| **snowfieldloaded** | linux-surface | snowfield + loaded extras (Edge, VSCode, Bitwarden, Incus, Azure VPN, Entra SSO) |
+| **snowfieldloaded** | linux-surface | snowfield + loaded extras (Edge, VSCode, Bitwarden, Incus, Azure VPN, Entra SSO (linux-entra-sso)) |
 
 ### Server Images (OCI, pushed to ghcr.io)
 
@@ -49,7 +49,7 @@ shared/                     # Reusable fragments composed via Include=
   download/                 # Verified download system (checksums.json + helpers)
   kernel/                   # Kernel variant configs (backports, surface, stock)
   packages/                 # Package set configs (11 sets) with postinstall relocation scripts
-  scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot)
+  scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot build script)
   outformat/image/          # OCI output format, buildah/chunkah packaging
   sysext/postoutput/        # Shared sysext versioning and manifest logic
   manifest/postoutput/      # Image manifest processing
@@ -74,7 +74,7 @@ Profile (e.g., snow/mkosi.conf)
 ├── Include: shared/outformat/image/mkosi.conf     # Output format (directory)
 ├── Dependencies: base                              # Requires base image
 ├── ExtraTrees: shared/snow/tree                    # Filesystem overlay
-├── BuildScripts: brew.chroot, hotedge.chroot, ... # Build-time scripts
+├── BuildScripts: shared brew.chroot, hotedge.chroot, ... # Build-time scripts
 ├── PostInstallationScripts: snow.postinst.chroot   # Post-package scripts
 ├── FinalizeScripts: mkosi.finalize.chroot          # Pre-output scripts
 └── PostOutputScripts: mkosi.postoutput             # Post-output scripts
@@ -82,7 +82,7 @@ Profile (e.g., snow/mkosi.conf)
 
 The "loaded" variants extend their base profile by adding more Include directives, ExtraTrees, and PostInstallationScripts:
 
-- **snowloaded/snowfieldloaded** add Edge, VSCode, Bitwarden, Azure VPN, Incus, and Entra SSO
+- **snowloaded/snowfieldloaded** add Edge, VSCode, Bitwarden, Azure VPN, Incus, and Entra SSO (linux-entra-sso)
 - **cayoloaded** adds Docker CE (on-image via `docker-onimage`) and Incus (on-image via `virt-base`)
 
 ### Script Pipeline
@@ -126,7 +126,7 @@ See [sysexts.md](sysexts.md) for details.
 
 External resources are pinned in `shared/download/checksums.json` with URL + SHA256. Scripts use `verified_download(key, output_path)` from `shared/download/verified-download.sh`. CI workflow `check-dependencies.yml` detects updates weekly and creates PRs.
 
-Package versions for APT-based externals (Edge, VSCode, Docker, Himmelblau, 1Password) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
+Package versions for APT-based externals (Edge, VSCode, Docker, 1Password, Himmelblau) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
 
 ### User Service Enablement in Chroot
 
@@ -183,7 +183,7 @@ All `just` targets run `mkosi clean` first (clean build every time).
 | `IMAGE_ID` | Profile mkosi.conf | Image identifier (snow, cayo, etc.) |
 | `IMAGE_VERSION` | mkosi.version (timestamp) | Build version (YYYYMMDDHHMMSS) |
 | `BUILD_ID` | CI environment | Injected into os-release |
-| `BREW_TREE` | Profile mkosi.conf | Tree path for Homebrew xattr tagging |
+| `BREW_TREE` | Profile mkosi.conf | Tree path for Homebrew tarball output (e.g., `shared/snow/tree`) |
 
 ### External APT Repositories
 
@@ -196,9 +196,10 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 - Himmelblau (packages.himmelblau-idm.org) — Entra ID authentication (nightly)
 - Frostyard (repository.frostyard.org) — Custom packages: nbc, chairlift, updex, igloo, intuneme, snow-first-setup
 - Linux Surface (pkg.surfacelinux.com) — Surface kernel + tools
-- Microsoft — Edge, VSCode
+- Microsoft Edge (packages.microsoft.com) — Edge browser
+- Microsoft VSCode (packages.microsoft.com) — VS Code editor
 - NordVPN (repo.nordvpn.com) — NordVPN app client
-- Tailscale — VPN client
+- Tailscale (pkgs.tailscale.com) — VPN client
 
 ## CI/CD
 

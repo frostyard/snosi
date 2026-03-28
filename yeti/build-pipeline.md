@@ -12,7 +12,7 @@ Download and install items not available as Debian packages. These run inside th
 
 | Script | Location | Purpose |
 |--------|----------|---------|
-| `brew.chroot` | `shared/scripts/build/` | Downloads Homebrew installer via `verified_download()`, runs in non-interactive mode, creates `$BREW_TREE/usr/share/homebrew.tar.zst`, sets `user.component=linuxbrew` xattr for chunkah |
+| `brew.chroot` | `shared/scripts/build/` | Downloads Homebrew installer via `verified_download()`, runs in non-interactive mode, creates `$BREW_TREE/usr/share/homebrew.tar.zst` (requires `BREW_TREE` env var), sets `user.component=linuxbrew` xattr for chunkah |
 
 **Desktop profiles (snow/snowfield) only:**
 
@@ -78,7 +78,7 @@ Prepare the image for output. Run after postinstall, before the image format is 
 **Image finalize** (`shared/outformat/image/finalize/mkosi.finalize.chroot`):
 - Removes `/boot`, `/home`, `/root`, `/srv` (recreates empty)
 - Creates `/sysroot` and `/nix` mountpoints (nix sysext bind-mount)
-- Removes `/etc/machine-id` and SSH host keys
+- Removes `/etc/machine-id` (recreates empty for first-boot) and SSH host keys
 - Compiles GLib schemas and dconf databases
 - Sets file xattrs: `user.component=<package_name>` for every installed file — used by chunkah for layer optimization
 
@@ -87,7 +87,7 @@ Prepare the image for output. Run after postinstall, before the image format is 
 
 **Sysext finalize** (per-sysext `mkosi.finalize` scripts):
 - Captures `/etc` configs to `/usr/share/factory/etc/` for tmpfiles-based injection at boot
-- Used by: docker, himmelblau, incus, nix, tailscale
+- Used by: docker, himmelblau (full /etc capture), incus, nix, tailscale
 
 ### 4. PostOutputScripts (after image creation)
 
