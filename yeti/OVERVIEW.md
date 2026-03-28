@@ -47,7 +47,7 @@ mkosi.profiles/             # Desktop/server profile definitions (6 profiles)
   ...
 shared/                     # Reusable fragments composed via Include=
   download/                 # Verified download system (checksums.json + helpers)
-  kernel/                   # Kernel variant configs (backports, surface, stock)
+  kernel/                   # Kernel variant configs (backports, surface)
   packages/                 # Package set configs (11 sets) with postinstall relocation scripts
   scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot)
   outformat/image/          # OCI output format, buildah/chunkah packaging
