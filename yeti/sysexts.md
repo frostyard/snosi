@@ -72,9 +72,11 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/tmpfiles.d/docker-sysext.conf` — Runtime directory setup
 
 ### himmelblau
-- `usr/lib/himmelblau/himmelblau-sysext-setup` — Runtime PAM/NSS injection script (idempotent, runs at boot)
-- `usr/lib/systemd/system/himmelblau-sysext-setup.service` — Oneshot service to run setup script
-- `usr/lib/systemd/system-preset/40-himmelblau.preset` — Enable himmelblau services
+- `mkosi.postinst.chroot` — Post-install customization hook (currently minimal)
+- `mkosi.finalize` — Captures `/etc` to `/usr/share/factory/etc/` for tmpfiles injection at boot
+- `usr/lib/himmelblau/himmelblau-sysext-setup` — Runtime PAM/NSS injection script (idempotent, runs at boot): adds `himmelblau` to nsswitch.conf passwd/group/shadow, runs `pam-auth-update --enable himmelblau`
+- `usr/lib/systemd/system/himmelblau-sysext-setup.service` — Oneshot service to run setup script (conditioned on `/run/himmelblau-sysext-setup.done`)
+- `usr/lib/systemd/system-preset/40-himmelblau.preset` — Enable himmelblaud and himmelblau-sysext-setup services
 - `usr/lib/tmpfiles.d/himmelblau.conf` — Config injection from `/usr/share/factory/etc/`
 
 ### incus
