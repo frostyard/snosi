@@ -150,6 +150,10 @@ echo "=== Step 7: Run tests ==="
 declare -a test_names=()
 declare -a test_results=()
 
+# Copy shared test helpers to VM
+vm_ssh "mkdir -p /tmp/test-lib"
+scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" "$SCRIPT_DIR"/lib/helpers.sh root@localhost:/tmp/test-lib/helpers.sh
+
 for test_script in "$SCRIPT_DIR"/tests/*.sh; do
     [[ -f "$test_script" ]] || continue
     test_name="$(basename "$test_script")"
@@ -163,7 +167,7 @@ for test_script in "$SCRIPT_DIR"/tests/*.sh; do
 
     # Execute test script and capture exit code
     set +e
-    vm_ssh "bash /tmp/$test_name"
+    vm_ssh "TEST_LIB_DIR=/tmp/test-lib bash /tmp/$test_name"
     rc=$?
     set -e
 

@@ -11,6 +11,7 @@ test/
 ├── bootc-install-test.sh      # Orchestrator script (headless, for CI)
 ├── run-qemu.sh                # Interactive QEMU runner (GTK display)
 ├── lib/
+│   ├── helpers.sh             # Shared test helpers: check(), counters, summary
 │   ├── ssh.sh                 # SSH key generation, command execution with retry
 │   └── vm.sh                  # QEMU lifecycle, image loading, bootc installation
 └── tests/
@@ -96,6 +97,14 @@ End-to-end functional validation:
 - Hostname and locale are configured
 
 ## Helper Libraries
+
+### helpers.sh
+
+Shared test harness sourced by all four test scripts. Provides:
+
+- `PASS` / `FAIL` counters — initialized to 0
+- `check(description, command...)` — Run a command, print TAP-like output, increment counters
+- `print_summary()` — Print results line and `exit $FAIL`
 
 ### ssh.sh
 

@@ -1,26 +1,13 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Tier 1: Installation validation tests for bootc-deployed snosi images.
-# This script runs INSIDE the booted VM via SSH and is fully self-contained.
+# This script runs INSIDE the booted VM via SSH.
 # Output format: TAP-like (ok / not ok), exit code = number of failures.
 set -euo pipefail
 
-PASS=0
-FAIL=0
-
-# check - Run a test and record the result.
-# Usage: check "description" command [args...]
-check() {
-    local desc="$1"
-    shift
-    if "$@" >/dev/null 2>&1; then
-        echo "ok - $desc"
-        (( PASS++ )) || true
-    else
-        echo "not ok - $desc"
-        (( FAIL++ )) || true
-    fi
-}
+# shellcheck source=../lib/helpers.sh
+HELPERS="${TEST_LIB_DIR:-$(dirname "$0")/../lib}/helpers.sh"
+source "$HELPERS"
 
 echo "# Tier 1: Installation validation"
 
@@ -52,6 +39,4 @@ check "bootc status succeeds" \
 check "bootc has image reference" \
     bash -c 'bootc status --json | jq -e ".status.booted.image"'
 
-echo ""
-echo "# Results: $PASS passed, $FAIL failed, $(( PASS + FAIL )) total"
-exit "$FAIL"
+print_summary
