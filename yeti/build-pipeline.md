@@ -87,7 +87,7 @@ Prepare the image for output. Run after postinstall, before the image format is 
 
 **Sysext finalize** (per-sysext `mkosi.finalize` scripts):
 - Captures `/etc` configs to `/usr/share/factory/etc/` for tmpfiles-based injection at boot
-- Used by: docker, himmelblau (full /etc capture), incus, nix, tailscale
+- Used by: docker, himmelblau (full /etc capture), incus (full /etc capture), nix, tailscale
 
 ### 4. PostOutputScripts (after image creation)
 
