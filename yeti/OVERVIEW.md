@@ -32,6 +32,8 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 
 ```
 mkosi.conf                  # Root config: distribution, dependencies, build settings
+mkosi.version               # Version tag script (date-based, overridden by CI IMAGE_VERSION)
+mkosi.clean                 # Clean script (rm -rf output/*)
 mkosi.images/               # Image definitions (base + 10 sysexts)
   base/                     # Foundation image: systemd, bootc, firmware, core utils
     mkosi.extra/            # Extra filesystem overlay (dracut, systemd units, tmpfiles, sysusers)
@@ -59,7 +61,11 @@ shared/                     # Reusable fragments composed via Include=
 mkosi.sandbox/etc/apt/      # External APT repo configs + GPG keyrings
 .github/workflows/          # CI/CD (build, publish, dependency checks, testing)
 test/                       # Bootc installation test framework
-docs/                       # Design specs and implementation plans
+docs/                       # Design specs, implementation plans, superpowers
+sysextmv.sh                 # Moves sysext output files into output/sysexts/ subdirectory
+manifestmv.sh               # Moves manifest files into output/manifests/ subdirectory
+check-duplicate-packages.sh # Validates no duplicate packages across mkosi configs (CI pre-build check)
+Justfile                    # Build targets (just sysexts, just snow, etc.)
 ```
 
 ### Configuration Composition
@@ -205,7 +211,7 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `build.yml` | Push/PR to main | Build base + sysexts, publish to R2 |
+| `build.yml` | Push/PR/dispatch | Build base + sysexts, publish to R2 |
 | `build-images.yml` | Push/PR/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, sign with cosign |
 | `check-dependencies.yml` | Weekly (Mon 9am UTC) | Check external download updates, create PRs |
 | `check-packages.yml` | Daily (8am UTC) | Check APT package version updates, create PRs |

@@ -104,6 +104,30 @@ Run after the image directory/file is created. Handle manifest processing and pa
 - Annotates manifest with key_package and key_version
 - Creates symlink for systemd-sysupdate MatchPattern matching
 
+## Output Organization
+
+After `mkosi build` completes, the output directory contains all images, sysexts, and manifests flat in `output/`. Two root scripts organize them for publishing:
+
+### sysextmv.sh
+
+Moves sysext files matching `{image_id}_{version}_{os_version}_{arch}.{ext}` into `output/sysexts/`, organized by sysext name (e.g., `output/sysexts/docker/`). This structure is required by the `frostyard/repogen` action for R2 publishing.
+
+### manifestmv.sh
+
+Moves manifest JSON files into `output/manifests/` for separate upload to R2.
+
+### check-duplicate-packages.sh
+
+Pre-build validation script (run in CI before `mkosi build`). Checks for duplicate package entries across mkosi configs to prevent conflicts.
+
+**CI usage in build.yml:**
+```bash
+./check-duplicate-packages.sh    # Validate
+sudo -E mkosi build              # Build
+sudo ./sysextmv.sh               # Organize sysexts
+sudo ./manifestmv.sh             # Organize manifests
+```
+
 ## Package Relocation
 
 Packages that install to `/opt` must be relocated to `/usr/lib/<package>` because `/opt` is a writable bind mount that gets shadowed by sysext overlays on an immutable system.
