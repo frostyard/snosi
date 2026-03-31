@@ -4,15 +4,18 @@
 
 ### build.yml — Sysext Build and Publish
 
-**Trigger:** Push/PR to main
+**Trigger:** Push/PR to main, manual dispatch
 
 Builds the base image and all 10 sysexts, publishes to the Frostyard repository on Cloudflare R2.
 
 **Steps:**
-1. Build base + all sysext images via mkosi
-2. Upload sysext artifacts to Frostyard R2 repository via `frostyard/repogen` action
-3. Upload manifest files to R2
-4. Uses concurrent workflow cancellation (newer pushes cancel in-progress builds)
+1. Aggressive cleanup of runner (removes JDK, .NET, Android SDK, etc. to free disk space)
+2. Run `check-duplicate-packages.sh` to validate no duplicate packages across configs
+3. Build base + all sysext images via mkosi
+4. Run `sysextmv.sh` and `manifestmv.sh` to organize output into `output/sysexts/` and `output/manifests/`
+5. Upload sysext artifacts to Frostyard R2 repository via `frostyard/repogen` action
+6. Upload manifest files to R2
+7. Uses concurrent workflow cancellation (newer pushes cancel in-progress builds)
 
 ### build-images.yml — Desktop/Server Image Build and Publish
 
