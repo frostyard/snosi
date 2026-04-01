@@ -204,7 +204,7 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 - Linux Surface (pkg.surfacelinux.com) — Surface kernel + tools
 - Microsoft Edge (packages.microsoft.com) — Edge browser
 - Microsoft VSCode (packages.microsoft.com) — VS Code editor
-- NordVPN (repo.nordvpn.com) — NordVPN app client
+- NordVPN (repo.nordvpn.com) — NordVPN app client (repo configured but not currently used by any profile or sysext)
 - Tailscale (pkgs.tailscale.com) — VPN client
 
 ## CI/CD
