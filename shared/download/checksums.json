@@ -1,8 +1,8 @@
 {
   "bitwarden": {
-    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.2.1/Bitwarden-2026.2.1-amd64.deb",
-    "sha256": "c6bf04c054ac30c88b69cec823634134e51b22f52627ad5a44ac92d634a77167",
-    "version": "2026.2.1"
+    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.3.1/Bitwarden-2026.3.1-amd64.deb",
+    "sha256": "41df25b79e61381463d3901347c7a2927874d8229a174efdbac5b9115f184e40",
+    "version": "2026.3.1"
   },
   "microsoft-azurevpnclient": {
     "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_3.0.0_amd64.deb",
