@@ -98,7 +98,7 @@ The target (e.g. `gnome-session.target`) comes from the service's `WantedBy=` in
 ## CI/CD
 
 - `build.yml` - Builds base + sysexts, publishes to Frostyard repo (Cloudflare R2)
-- `build-images.yml` - Matrix build of 6 profiles (4 desktop + 2 server), pushes OCI to ghcr.io
+- `build-images.yml` - Matrix build of 6 profiles (4 desktop + 2 server), pushes OCI to ghcr.io, generates SBOMs (Syft), attaches via ORAS, signs with Cosign
 - `check-dependencies.yml` - Weekly check for external dependency updates, creates PRs with updated checksums
 - `check-packages.yml` - Daily check for APT package version updates, creates PRs
 - `validate.yml` - shellcheck + mkosi summary validation on PRs

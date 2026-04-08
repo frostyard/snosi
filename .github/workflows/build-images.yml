@@ -143,6 +143,26 @@ jobs:
             exit 1
           fi
 
+      - name: Setup Syft
+        id: setup-syft
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          syft-version: v1.39.0
+
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        id: generate-sbom
+        env:
+          PROFILE: ${{ matrix.profile }}
+          SYFT_CMD: ${{ steps.setup-syft.outputs.cmd }}
+        run: |
+          SBOM="$(mktemp -d)/sbom.json"
+          export SYFT_PARALLELISM=$(($(nproc)*2))
+          sudo "${SYFT_CMD}" --source-name "${PROFILE}" "output/${PROFILE}" -o "syft-json=${SBOM}"
+          du -sh "${SBOM}"
+          echo "SBOM=${SBOM}" >> "$GITHUB_OUTPUT"
+
       - name: Push image
         if: github.event_name != 'pull_request'
         id: push
@@ -179,19 +199,55 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Attest build provenance
+      - name: Install ORAS
         if: github.event_name != 'pull_request'
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
-        with:
-          subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+
+      - name: Login to GHCR with ORAS
+        if: github.event_name != 'pull_request'
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        run: |
+          echo "${GHCR_PAT}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Install Cosign
         if: github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
         with:
           cosign-release: "v2.6.1"
+
+      - name: Upload SBOM
+        if: github.event_name != 'pull_request'
+        id: upload-sbom
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          SBOM: ${{ steps.generate-sbom.outputs.SBOM }}
+        run: |
+          cd "$(dirname "${SBOM}")"
+          oras attach \
+            --artifact-type application/vnd.syft+json \
+            --annotation "filename=$(basename "${SBOM}")" \
+            "${IMAGE}@${DIGEST}" \
+            "$(basename "${SBOM}")"
+
+          sbom_digest=$(oras discover --format json "${IMAGE}@${DIGEST}" | jq -r '[.referrers[] | select(.artifactType == "application/vnd.syft+json")] | last | .digest')
+          if [[ -z "${sbom_digest}" || "${sbom_digest}" == "null" ]]; then
+            echo "::error::Failed to discover SBOM artifact digest"
+            exit 1
+          fi
+          echo "sbom_digest=${sbom_digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign SBOM
+        if: github.event_name != 'pull_request'
+        env:
+          COSIGN_EXPERIMENTAL: "false"
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          SBOM_DIGEST: ${{ steps.upload-sbom.outputs.sbom_digest }}
+        run: |
+          cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
+            "${IMAGE}@${SBOM_DIGEST}"
 
       - name: Sign image
         if: github.event_name != 'pull_request'
@@ -202,6 +258,14 @@ jobs:
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+
+      - name: Attest build provenance
+        if: github.event_name != 'pull_request'
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
 
       - name: Move manifests
         if: github.event_name != 'pull_request'

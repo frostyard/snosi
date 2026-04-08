@@ -28,10 +28,13 @@ Matrix build of all 6 profiles (snow, snowloaded, snowfield, snowfieldloaded, ca
 2. Package OCI image via `buildah-package.sh` (preserves SUID, xattrs)
 3. Optimize layers via `chunkah-package.sh`
 4. **Smoke test:** Validates SUID bit on `/usr/bin/sudo` (mode 4755) — catches metadata loss
-5. Push to ghcr.io with `latest` tag
-6. Attest build provenance (GitHub Actions attestation)
-7. Sign image with Cosign
-8. Upload manifests to R2
+5. Generate SBOM via Syft (scans mkosi output directory, syft-json format)
+6. Push to ghcr.io with `latest` tag
+7. Attach SBOM to image via ORAS (`application/vnd.syft+json` artifact type)
+8. Sign SBOM artifact with Cosign
+9. Attest build provenance (GitHub Actions attestation)
+10. Sign image with Cosign
+11. Upload manifests to R2
 
 ### check-dependencies.yml — External Download Updates
 
@@ -98,7 +101,8 @@ Runs OpenSSF Scorecard analysis for supply-chain security assessment. Publishes 
 ## Security Practices
 
 - **Action pinning:** Most GitHub Actions pinned to specific commit SHAs (not tags) for supply-chain safety
-- **Image signing:** OCI images signed with Cosign after push
+- **SBOM generation:** Syft generates SBOMs for all OCI images, attached as OCI referrers via ORAS
+- **Image signing:** OCI images and SBOM artifacts signed with Cosign after push
 - **Build attestation:** GitHub Actions provenance attestation on image builds
 - **Checksum verification:** All external downloads verified against pinned SHA256 hashes
 - **Automated updates:** Dependency and package version checks create PRs for review (never auto-merge)
@@ -108,5 +112,5 @@ Runs OpenSSF Scorecard analysis for supply-chain security assessment. Publishes 
 | Artifact | Destination | Mechanism |
 |----------|-------------|-----------|
 | Sysexts (EROFS) | repository.frostyard.org/ext/ | R2 upload via frostyard/repogen |
-| Desktop/server OCI images | ghcr.io/frostyard/ | buildah push + cosign sign |
+| Desktop/server OCI images | ghcr.io/frostyard/ | buildah push + cosign sign + SBOM via ORAS |
 | Manifests | R2 manifests bucket | Direct upload |
