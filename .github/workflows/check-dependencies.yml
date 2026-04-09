@@ -79,15 +79,6 @@ jobs:
             echo "logomenu_commit=$LATEST_LM" >> $GITHUB_OUTPUT
           fi
 
-          # Check bazaar-companion
-          CURRENT_BZ=$(jq -r '.bazaar.version' "$CHECKSUMS")
-          LATEST_BZ=$(curl -s https://api.github.com/repos/AlexanderVanhee/bazaar-companion/commits/HEAD | jq -r '.sha')
-          if [[ "$LATEST_BZ" != "$CURRENT_BZ" ]]; then
-            UPDATES="${UPDATES}bazaar: ${CURRENT_BZ:0:12} -> ${LATEST_BZ:0:12}\n"
-            echo "bazaar_update=true" >> $GITHUB_OUTPUT
-            echo "bazaar_commit=$LATEST_BZ" >> $GITHUB_OUTPUT
-          fi
-
           # Check Microsoft Azure VPN Client
           CURRENT_AZ=$(jq -r '.["microsoft-azurevpnclient"].version' "$CHECKSUMS")
           LATEST_AZ=$(curl -s https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
@@ -178,18 +169,6 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
               '.logomenu.url=$u | .logomenu.sha256=$s | .logomenu.version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-          if [[ "${{ steps.check.outputs.bazaar_update }}" == "true" ]]; then
-            COMMIT="${{ steps.check.outputs.bazaar_commit }}"
-            URL="https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/${COMMIT}"
-            TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
-              '.bazaar.url=$u | .bazaar.sha256=$s | .bazaar.version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi
