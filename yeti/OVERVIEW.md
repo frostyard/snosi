@@ -161,7 +161,7 @@ Images are built as directories, then packaged into OCI via `buildah-package.sh`
 ### Build Requirements
 
 - mkosi v24+, just, root/sudo access
-- For CI: buildah, skopeo, podman, cosign
+- For CI: buildah, skopeo, podman, cosign, syft, oras
 
 ### Build Commands
 
@@ -212,7 +212,7 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `build.yml` | Push/PR/dispatch | Build base + sysexts, publish to R2 |
-| `build-images.yml` | Push/PR/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, sign with cosign |
+| `build-images.yml` | Push/PR/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, generate SBOMs, sign with Cosign |
 | `check-dependencies.yml` | Weekly (Mon 9am UTC) | Check external download updates, create PRs |
 | `check-packages.yml` | Daily (8am UTC) | Check APT package version updates, create PRs |
 | `validate.yml` | PR/push | shellcheck + mkosi summary validation |
