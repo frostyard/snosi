@@ -1,25 +1,32 @@
 #!/bin/bash
 set -euo pipefail
 
-# this script clones the Bazaar Companion repository into the appropriate location
+# this script downloads a pinned bazaar-companion source archive into the appropriate location
 # in the build tree so that it can be included in the final image.
-# Bazaar Compansion is a GNOME Shell extension that adds Bazaar to locations previously occupied by GNOME Software
+# Bazaar Companion is a GNOME Shell extension that adds Bazaar to locations previously occupied by GNOME Software
 
-
-REPOSITORY=https://github.com/AlexanderVanhee/bazaar-companion.git
 DESTINATION="$SRCDIR/shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io"
+source "$SRCDIR/shared/download/verified-download.sh"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+ARCHIVE="$TMP/bazaar.tar.gz"
 
 # remove any existing bazaar-companion directory
 rm -rf "$DESTINATION"
-# clone the bazaar-companion repository
-rm -rf /tmp/bazaar-companion
-git clone --depth 1 "$REPOSITORY" "/tmp/bazaar-companion"
+verified_download "bazaar" "$ARCHIVE"
+tar -xzf "$ARCHIVE" -C "$TMP"
 
-# Move subdirectory into the extension folder
+SOURCE_DIR=$(find "$TMP" -maxdepth 1 -type d -name 'bazaar-companion-*' | head -n 1)
+if [[ -z "$SOURCE_DIR" ]]; then
+    echo "Error: failed to locate extracted bazaar-companion source directory" >&2
+    exit 1
+fi
+
+# Move src subdirectory into the extension folder
 mkdir -p "$DESTINATION"
-mv /tmp/bazaar-companion/src/* "$DESTINATION/"
+cp -a "$SOURCE_DIR/src/." "$DESTINATION/"
 
-# set the permissions: 755 for directories and 644 for files in the hotedge directory
+# set the permissions: 755 for directories and 644 for files
 find "$DESTINATION" -type d -exec chmod 755 {} +
 find "$DESTINATION" -type f -exec chmod 644 {} +
 
