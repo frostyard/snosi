@@ -286,3 +286,86 @@ jobs:
       - name: cleanup build output
         run: |
           sudo -E mkosi clean
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build.result == 'success'
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - name: Install ORAS
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+
+      - name: Login to GHCR with ORAS
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        run: echo "${GHCR_PAT}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Resolve previous and current snowloaded tags
+        id: versions
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/snowloaded
+        run: |
+          set -euo pipefail
+          tags=$(oras repo tags "$IMAGE" | grep -E '^[0-9]{14}$' | sort -r || true)
+          if [[ -z "$tags" ]]; then
+            echo "::warning::No timestamped tags found on $IMAGE; skipping release"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          current=$(echo "$tags" | head -n1)
+          previous=$(echo "$tags" | sed -n '2p')
+          if [[ -z "$previous" ]]; then
+            echo "::warning::Only one timestamped tag on $IMAGE; nothing to diff against; skipping release"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          echo "current=$current"   >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog
+        id: changelog
+        if: steps.versions.outputs.skip != 'true'
+        uses: frostyard/changelog-generator@main
+        with:
+          image: ghcr.io/${{ github.repository_owner }}/snowloaded
+          previous-tag: ${{ steps.versions.outputs.previous }}
+          current-tag: ${{ steps.versions.outputs.current }}
+          output-file: changelog.md
+
+      - name: Compute release tag and title
+        id: release-meta
+        if: steps.versions.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT: ${{ steps.versions.outputs.current }}
+        run: |
+          set -euo pipefail
+          date_part="${CURRENT:0:4}-${CURRENT:4:2}-${CURRENT:6:2}"
+          hh="${CURRENT:8:2}"; mm="${CURRENT:10:2}"; ss="${CURRENT:12:2}"
+
+          # Daily counter: find highest existing N in releases matching "<date>.N"
+          existing=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 200 \
+            --json tagName --jq \
+            "[.[] | .tagName | select(startswith(\"${date_part}.\")) \
+              | sub(\"^${date_part}\\\\.\"; \"\") | select(test(\"^[0-9]+$\")) | tonumber] | max // 0")
+          next=$(( existing + 1 ))
+          tag="${date_part}.${next}"
+          title="Build ${date_part} ${hh}:${mm}:${ss} UTC"
+          echo "tag=$tag"     >> "$GITHUB_OUTPUT"
+          echo "title=$title" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        if: steps.versions.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release-meta.outputs.tag }}
+          TITLE: ${{ steps.release-meta.outputs.title }}
+        run: |
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$TITLE" \
+            --notes-file changelog.md
