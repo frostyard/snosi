@@ -36,6 +36,16 @@ Matrix build of all 6 profiles (snow, snowloaded, snowfield, snowfieldloaded, ca
 10. Sign image with Cosign
 11. Upload manifests to R2
 
+#### release job — Automated GitHub Releases
+
+After the matrix completes, a self-contained `release` job runs on main-branch pushes only and creates a GitHub Release summarising what changed in the build. The job has `continue-on-error: true` at the job level, so any failure produces a warning annotation without turning the workflow red. The `build` job is untouched by this feature.
+
+**Resolution:** The release job installs ORAS, logs into GHCR, then queries `oras repo tags ghcr.io/<owner>/snowloaded` to list all tags. It filters for the `YYYYMMDDhhmmss` timestamp format, sorts descending, and picks the newest tag as `current` (the image this run just pushed) and the second-newest as `previous` (the prior build). It then runs `frostyard/changelog-generator` with those two exact tags to produce the diff. Only `snowloaded` is diffed; the other five profiles build and push unchanged and are not referenced in the release.
+
+**Release tag scheme:** `YYYY-MM-DD.N` (daily counter, e.g. `2026-04-09.1`). The release title is `Build YYYY-MM-DD HH:MM:SS UTC`. The body is a short header line ("Based on the `snowloaded` image."), a `podman pull ghcr.io/<owner>/snowloaded:latest` command in a fenced code block, and then the generated changelog.
+
+**Skip paths:** If the `snowloaded` repository has zero or one timestamped tags (bootstrap edge case, not applicable in practice — the repository already has many historical tags), the resolve step writes `skip=true` and all downstream steps gracefully short-circuit with a `::warning::` annotation.
+
 ### check-dependencies.yml — External Download Updates
 
 **Trigger:** Weekly (Monday 9am UTC), manual dispatch
