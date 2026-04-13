@@ -6,13 +6,34 @@ if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
     set -x
 fi
 
-
 if [[ "${UID}" == "0" ]]; then
         SUDO=""
 else
         SUDO="sudo"
 fi
 
+source "$SRCDIR/shared/download/verified-download.sh"
+mkdir -p debs
+verified_download "microsoft-edge-stable" "debs/microsoft-edge-stable.deb"
+
+# Strip the postinst calls that add Edge's APT repo — they invoke apt-config,
+# which fails inside the mkosi chroot and breaks the build.
+dpkg-deb -R debs/microsoft-edge-stable.deb debs/edge-unpacked
+sed -i -e '/^install_key$/d' -e '/^install_deb822_sources$/d' debs/edge-unpacked/DEBIAN/postinst
+dpkg-deb -b debs/edge-unpacked debs/microsoft-edge-stable-fixed.deb
+
+${SUDO} dpkg -i debs/microsoft-edge-stable-fixed.deb
+rm -rf debs
+
+# Microsoft Edge install adds a redundant .list file; remove it
+if [[ -f /etc/apt/sources.list.d/microsoft-edge.list ]]; then
+  ${SUDO} rm /etc/apt/sources.list.d/microsoft-edge.list
+fi
+
+# Remove repo_reenable_on_distupgrade option that Edge adds
+if [[ -f /etc/default/microsoft-edge ]]; then
+  ${SUDO} sed -i 's/^repo_reenable_on_distupgrade=true$/repo_reenable_on_distupgrade=false/' /etc/default/microsoft-edge
+fi
 
 ${SUDO} mv /opt/microsoft/msedge /usr/lib/microsoft-edge
 ${SUDO} rm -rf /opt/microsoft
