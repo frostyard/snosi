@@ -59,6 +59,7 @@ Checks for updates to resources managed by the verified download system:
 - Hotedge GNOME extension
 - Logomenu GNOME extension
 - Microsoft Azure VPN Client
+- Microsoft Edge Stable .deb
 
 **Process:**
 1. Downloads each resource from its upstream URL
@@ -73,7 +74,6 @@ Checks for updates to resources managed by the verified download system:
 Checks for version updates to external APT packages:
 
 - himmelblau
-- microsoft-edge-stable
 - code (VS Code)
 - docker-ce
 - 1password-cli

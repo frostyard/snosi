@@ -58,7 +58,7 @@ Both snow and cayo postinstall scripts source this shared script after setting `
 
 | Script | Location | Purpose |
 |--------|----------|---------|
-| `edge.chroot` | `shared/packages/edge/mkosi.postinst.d/` | Relocates `/opt/microsoft/msedge` → `/usr/lib/microsoft-edge`, creates symlinks, patches icon paths |
+| `edge.chroot` | `shared/packages/edge/mkosi.postinst.d/` | Downloads Edge .deb via `verified_download()`, strips `install_key`/`install_deb822_sources` from its `DEBIAN/postinst` (those call `apt-config` and break inside the chroot), installs the patched deb, relocates `/opt/microsoft/msedge` → `/usr/lib/microsoft-edge`, creates symlinks, patches icon paths |
 | `azurevpn.chroot` | `shared/packages/azurevpn/mkosi.postinst.d/` | Downloads Azure VPN via `verified_download()`, relocates from `/opt`, uses patchelf to fix RPATH for Flutter .so files |
 | `bitwarden.chroot` | `shared/packages/bitwarden/mkosi.postinst.d/` | Downloads Bitwarden .deb via `verified_download()`, relocates `/opt/Bitwarden` → `/usr/lib/Bitwarden`, sets SUID on chrome-sandbox |
 | `vscode.chroot` | `shared/packages/vscode/mkosi.postinst.d/` | Patches desktop entry to add inode/directory MIME type |

@@ -37,9 +37,6 @@ jobs:
           }
 
           {
-            echo "microsoft-edge-stable=$(get_latest_version \
-              'https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages.gz' \
-              'microsoft-edge-stable')"
             echo "code=$(get_latest_version \
               'https://packages.microsoft.com/repos/code/dists/stable/main/binary-amd64/Packages.gz' \
               'code')"

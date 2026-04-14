@@ -88,6 +88,15 @@ jobs:
             echo "azurevpn_version=$LATEST_AZ" >> $GITHUB_OUTPUT
           fi
 
+          # Check Microsoft Edge Stable
+          CURRENT_EDGE=$(jq -r '.["microsoft-edge-stable"].version' "$CHECKSUMS")
+          LATEST_EDGE=$(curl -s https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
+          if [[ -n "$LATEST_EDGE" && "$LATEST_EDGE" != "$CURRENT_EDGE" ]]; then
+            UPDATES="${UPDATES}microsoft-edge-stable: $CURRENT_EDGE -> $LATEST_EDGE\n"
+            echo "edge_update=true" >> $GITHUB_OUTPUT
+            echo "edge_version=$LATEST_EDGE" >> $GITHUB_OUTPUT
+          fi
+
           if [[ -n "$UPDATES" ]]; then
             echo "has_updates=true" >> $GITHUB_OUTPUT
             echo -e "Updates available:\n$UPDATES"
@@ -181,6 +190,18 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.["microsoft-azurevpnclient"].url=$u | .["microsoft-azurevpnclient"].sha256=$s | .["microsoft-azurevpnclient"].version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "${{ steps.check.outputs.edge_update }}" == "true" ]]; then
+            VER="${{ steps.check.outputs.edge_version }}"
+            URL="https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_${VER}_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.["microsoft-edge-stable"].url=$u | .["microsoft-edge-stable"].sha256=$s | .["microsoft-edge-stable"].version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi
