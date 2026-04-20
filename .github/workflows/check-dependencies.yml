@@ -51,6 +51,15 @@ jobs:
             echo "emdash_version=$LATEST_EM" >> $GITHUB_OUTPUT
           fi
 
+          # Check code-server
+          CURRENT_CS=$(jq -r '.["code-server"].version' "$CHECKSUMS")
+          LATEST_CS=$(curl -s https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_CS" && "$LATEST_CS" != "$CURRENT_CS" ]]; then
+            UPDATES="${UPDATES}code-server: $CURRENT_CS -> $LATEST_CS\n"
+            echo "codeserver_update=true" >> $GITHUB_OUTPUT
+            echo "codeserver_version=$LATEST_CS" >> $GITHUB_OUTPUT
+          fi
+
           # Check Surface cert (less frequent changes)
           CURRENT_SURF=$(jq -r '.["surface-cert"].version' "$CHECKSUMS")
           LATEST_SURF=$(curl -s https://api.github.com/repos/linux-surface/linux-surface/commits?path=pkg/keys/surface.cer | jq -r '.[0].sha' | head -c 12)
@@ -130,6 +139,18 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.emdash.url=$u | .emdash.sha256=$s | .emdash.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "${{ steps.check.outputs.codeserver_update }}" == "true" ]]; then
+            VER="${{ steps.check.outputs.codeserver_version }}"
+            URL="https://github.com/coder/code-server/releases/download/v${VER}/code-server_${VER}_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.["code-server"].url=$u | .["code-server"].sha256=$s | .["code-server"].version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi

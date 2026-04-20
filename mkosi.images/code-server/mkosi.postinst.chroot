@@ -1,0 +1,13 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+source "$SRCDIR/shared/download/verified-download.sh"
+mkdir -p debs
+verified_download "code-server" "debs/code-server.deb"
+
+dpkg -i debs/code-server.deb
+rm -rf debs

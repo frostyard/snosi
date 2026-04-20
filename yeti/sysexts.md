@@ -17,6 +17,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | Sysext | KEYPACKAGE | Description |
 |--------|------------|-------------|
 | **1password-cli** | 1password-cli | 1Password CLI tool |
+| **code-server** | code-server | code-server (VS Code in the browser) — downloaded via `verified_download()` from coder/code-server GitHub releases |
 | **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test) |
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
@@ -62,6 +63,9 @@ Key settings:
 ## Sysext-Specific Extra Files
 
 Some sysexts include extra files via `mkosi.extra/`:
+
+### code-server
+- `mkosi.postinst.chroot` — Downloads code-server .deb via `verified_download()`, installs with `dpkg -i`. Upstream package targets `/usr/lib/code-server` with `/usr/bin/code-server` symlink and systemd units under `/usr/lib/systemd/`, so no relocation is required.
 
 ### emdash
 - `mkosi.postinst.chroot` — Downloads emdash .deb via `verified_download()`, relocates `/opt/Emdash` → `/usr/lib/emdash`, creates `/usr/bin/emdash` symlink, sets SUID on chrome-sandbox
