@@ -1,0 +1,20 @@
+[Transfer]
+Features=code-server
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/code-server/
+MatchPattern=code-server_@v_%w_%a.raw.zst \
+             code-server_@v_%w_%a.raw.xz \
+             code-server_@v_%w_%a.raw.gz \
+             code-server_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=code-server_@v_%w_%a.raw.zst \
+             code-server_@v_%w_%a.raw.xz \
+             code-server_@v_%w_%a.raw.gz \
+             code-server_@v_%w_%a.raw
+CurrentSymlink=code-server.raw

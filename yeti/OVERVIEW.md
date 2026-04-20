@@ -24,7 +24,7 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
-1password-cli, debdev, dev, docker, emdash, himmelblau, incus, nix, podman, tailscale
+1password-cli, code-server, debdev, dev, docker, emdash, himmelblau, incus, nix, podman, tailscale
 
 ## Architecture
 
@@ -34,7 +34,7 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 mkosi.conf                  # Root config: distribution, dependencies, build settings
 mkosi.version               # Version tag script (date-based, overridden by CI IMAGE_VERSION)
 mkosi.clean                 # Clean script (rm -rf output/*)
-mkosi.images/               # Image definitions (base + 10 sysexts)
+mkosi.images/               # Image definitions (base + 11 sysexts)
   base/                     # Foundation image: systemd, bootc, firmware, core utils
     mkosi.extra/            # Extra filesystem overlay (dracut, systemd units, tmpfiles, sysusers)
       usr/lib/sysupdate.d/  # .transfer + .feature files for all sysexts
@@ -167,7 +167,7 @@ Images are built as directories, then packaged into OCI via `buildah-package.sh`
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 10 sysexts
+just sysexts            # Build base + all 11 sysexts
 just snow               # Build snow desktop
 just snowloaded         # Build snowloaded variant
 just snowfield          # Build snowfield (Surface)
