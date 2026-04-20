@@ -10,9 +10,9 @@
     "version": "3.0.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_147.0.3912.60-1_amd64.deb",
-    "sha256": "7dbec190fba23f72a32f0e21ea277232268cb9eb152ec79381b94b9f3e997d35",
-    "version": "147.0.3912.60-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_147.0.3912.72-1_amd64.deb",
+    "sha256": "de51a5b77efdcdb17f0a5fa5b412b840f33de0dab4e5d7eb072cf238f59265fc",
+    "version": "147.0.3912.72-1"
   },
   "surface-cert": {
     "url": "https://github.com/linux-surface/linux-surface/raw/d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a/pkg/keys/surface.cer",
@@ -20,14 +20,14 @@
     "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
   },
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/de0b0bddf1c7/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/63bc55817cae/install.sh",
     "sha256": "dfd5145fe2aa5956a600e35848765273f5798ce6def01bd08ecec088a1268d91",
-    "version": "de0b0bddf1c7"
+    "version": "63bc55817cae"
   },
   "emdash": {
-    "url": "https://github.com/generalaction/emdash/releases/download/v0.4.47/emdash-amd64.deb",
-    "sha256": "a2afe2b4298718c0c88bdc9f49ef6c227846510367bb88ca1ff2bb3ca2871ae6",
-    "version": "0.4.47"
+    "url": "https://github.com/generalaction/emdash/releases/download/v0.4.49/emdash-amd64.deb",
+    "sha256": "2d0475edbde85666e415e4cdcff4c97a1663b22424524124f209e0fd2b9418c3",
+    "version": "0.4.49"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
