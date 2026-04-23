@@ -18,7 +18,7 @@ LOADED=$(podman run --rm \
     --mount=type=image,src="$IMAGE_REF",dst=/chunkah \
     -e "CHUNKAH_CONFIG_STR=$CONFIG" \
     -e "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
-    quay.io/jlebon/chunkah@sha256:9d0cb34737ca390df52be72beff22109e4f97f924e0cc155bfdb7e78410e2fc7 \
+    quay.io/coreos/chunkah@sha256:faa8209f267fd1b384f3f4008a27ac0603333aab0d206bb146faf326282c64b4 \
     build --prune /sysroot/ --max-layers $MAX_LAYERS \
     --label ostree.commit- --label ostree.final-diffid- | podman load)
 
