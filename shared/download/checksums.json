@@ -25,9 +25,9 @@
     "version": "63bc55817cae"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.116.0/code-server_4.116.0_amd64.deb",
-    "sha256": "a79c5c7f45447fe9ebe56ebc87543380633c000993da70c5c393d0fa3d287755",
-    "version": "4.116.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.117.0/code-server_4.117.0_amd64.deb",
+    "sha256": "0791e20168ec68dbb49db7d67369b5ea092ce2a8a262741d750e8d7947d65a3f",
+    "version": "4.117.0"
   },
   "emdash": {
     "url": "https://github.com/generalaction/emdash/releases/download/v0.4.50/emdash-amd64.deb",
