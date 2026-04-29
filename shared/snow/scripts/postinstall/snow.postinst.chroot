@@ -26,6 +26,9 @@ ln -sf /usr/lib/systemd/user/gnome-remote-desktop.service /etc/systemd/user/gnom
 ln -sf /usr/lib/systemd/user/gnome-remote-desktop-handover.service /etc/systemd/user/gnome-session.target.wants/gnome-remote-desktop-handover.service
 rm -f /etc/systemd/user/gnome-session.target.wants/gnome-remote-desktop-headless.service
 
+# Compile dconf databases to avoid "expect degraded performance" warnings in GNOME services
+dconf update
+
 # Remove fish desktop entry
 rm -f /usr/share/applications/fish.desktop
 
