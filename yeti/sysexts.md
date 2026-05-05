@@ -21,7 +21,6 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test) |
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
-| **emdash** | emdash | Emdash terminal — downloaded via `verified_download()`, relocated from `/opt/Emdash` to `/usr/lib/emdash` |
 | **himmelblau** | himmelblau | Entra ID authentication (himmelblau, pam-himmelblau, nss-himmelblau) |
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
@@ -66,9 +65,6 @@ Some sysexts include extra files via `mkosi.extra/`:
 
 ### code-server
 - `mkosi.postinst.chroot` — Downloads code-server .deb via `verified_download()`, installs with `dpkg -i`. Upstream package targets `/usr/lib/code-server` with `/usr/bin/code-server` symlink and systemd units under `/usr/lib/systemd/`, so no relocation is required.
-
-### emdash
-- `mkosi.postinst.chroot` — Downloads emdash .deb via `verified_download()`, relocates `/opt/Emdash` → `/usr/lib/emdash`, creates `/usr/bin/emdash` symlink, sets SUID on chrome-sandbox
 
 ### docker
 - `usr/lib/systemd/system-preset/40-docker.preset` — Enable docker services

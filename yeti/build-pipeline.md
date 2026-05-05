@@ -153,7 +153,6 @@ ln -sf /usr/lib/<package>/<binary> /usr/bin/<binary>
 | Microsoft Edge | `/opt/microsoft/msedge` | `/usr/lib/microsoft-edge` | Icon symlinks, gnome-control-center default-apps patch |
 | Azure VPN | `/opt/microsoft/microsoft-azurevpnclient` | `/usr/lib/microsoft-azurevpnclient` | patchelf RPATH fix for 5 .so files, polkit rules fix, `cap_net_admin+eip` capability |
 | Bitwarden | `/opt/Bitwarden` | `/usr/lib/Bitwarden` | SUID on chrome-sandbox (4755), desktop entry path update |
-| Emdash | `/opt/Emdash` | `/usr/lib/emdash` | SUID on chrome-sandbox (4755), desktop entry path update (sysext, not profile) |
 
 ## OCI Image Packaging
 

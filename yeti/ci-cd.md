@@ -6,7 +6,7 @@
 
 **Trigger:** Push/PR to main, manual dispatch
 
-Builds the base image and all 11 sysexts, publishes to the Frostyard repository on Cloudflare R2.
+Builds the base image and all 10 sysexts, publishes to the Frostyard repository on Cloudflare R2.
 
 **Steps:**
 1. Aggressive cleanup of runner (removes JDK, .NET, Android SDK, etc. to free disk space)
@@ -54,7 +54,6 @@ Checks for updates to resources managed by the verified download system:
 
 - Bitwarden desktop .deb
 - Homebrew install script
-- Emdash .deb
 - Surface secure boot certificate
 - Hotedge GNOME extension
 - Logomenu GNOME extension
