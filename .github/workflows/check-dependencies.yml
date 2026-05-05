@@ -42,15 +42,6 @@ jobs:
             echo "brew_commit=$LATEST_BREW" >> $GITHUB_OUTPUT
           fi
 
-          # Check Emdash
-          CURRENT_EM=$(jq -r '.emdash.version' "$CHECKSUMS")
-          LATEST_EM=$(curl -s https://api.github.com/repos/generalaction/emdash/releases/latest | jq -r '.tag_name' | sed 's/^v//')
-          if [[ "$LATEST_EM" != "$CURRENT_EM" ]]; then
-            UPDATES="${UPDATES}emdash: $CURRENT_EM -> $LATEST_EM\n"
-            echo "emdash_update=true" >> $GITHUB_OUTPUT
-            echo "emdash_version=$LATEST_EM" >> $GITHUB_OUTPUT
-          fi
-
           # Check code-server
           CURRENT_CS=$(jq -r '.["code-server"].version' "$CHECKSUMS")
           LATEST_CS=$(curl -s https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's/^v//')
@@ -127,18 +118,6 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.bitwarden.url=$u | .bitwarden.sha256=$s | .bitwarden.version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-          if [[ "${{ steps.check.outputs.emdash_update }}" == "true" ]]; then
-            VER="${{ steps.check.outputs.emdash_version }}"
-            URL="https://github.com/generalaction/emdash/releases/download/v${VER}/emdash-amd64.deb"
-            TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
-              '.emdash.url=$u | .emdash.sha256=$s | .emdash.version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi
