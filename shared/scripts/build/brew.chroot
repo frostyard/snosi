@@ -25,6 +25,7 @@ env --ignore-environment "PATH=/usr/bin:/bin:/usr/sbin:/sbin" "HOME=/home/linuxb
 mkdir -p /out && \
 tar --zstd -cvf "$BREW_OUTPUT" "/home/linuxbrew/.linuxbrew"
 setfattr -n user.component -v "linuxbrew" "$BREW_OUTPUT"
+setfattr -n user.update-interval -v "biweekly" "$BREW_OUTPUT"
 
 rm -f /tmp/brew-install
 rm -f /.dockerenv
