@@ -170,26 +170,27 @@ jobs:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
         run: |
           sudo buildah push \
+            --compression-format=zstd:chunked \
+            --digestfile=/tmp/image-digest \
             --creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
             "$IMAGE:${{ steps.version.outputs.tag }}" \
             "docker://$IMAGE:${{ steps.version.outputs.tag }}"
+
+          DIGEST=$(sudo cat /tmp/image-digest)
+          if [[ ! "$DIGEST" =~ ^sha256: ]]; then
+            echo "::error::Failed to extract valid digest: $DIGEST"
+            exit 1
+          fi
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
           sudo buildah tag \
             "$IMAGE:${{ steps.version.outputs.tag }}" \
             "$IMAGE:latest"
           sudo buildah push \
             --compression-format=zstd:chunked \
-            --digestfile=/tmp/latest-digest \
             --creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
             "$IMAGE:latest" \
             "docker://$IMAGE:latest"
-
-          DIGEST=$(sudo cat /tmp/latest-digest)
-          if [[ ! "$DIGEST" =~ ^sha256: ]]; then
-            echo "::error::Failed to extract valid digest: $DIGEST"
-            exit 1
-          fi
-          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
       - name: Log in to ghcr.io
         if: github.event_name != 'pull_request'
