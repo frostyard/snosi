@@ -93,6 +93,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 
 ### tailscale
 - `usr/lib/systemd/system-preset/40-tailscale.preset` — Enable tailscaled
+- `usr/lib/systemd/system/multi-user.target.d/10-tailscale.conf` — `Upholds=tailscaled.service` drop-in for reliable boot activation
 - `usr/lib/tmpfiles.d/tailscale-sysext.conf` — Runtime directory setup
 
 ## Version Extraction and Naming
@@ -144,6 +145,27 @@ Enabled=false
 
 All sysexts default to `Enabled=false` — users opt in via systemd-sysupdate configuration.
 
+## Service Activation Pattern (Upholds=)
+
+**Do not rely on `WantedBy=multi-user.target` + preset alone for sysext-provided services.** This combination breaks at boot because:
+
+1. PID 1 scans unit files before the sysext is merged — `tailscaled.service` doesn't exist yet
+2. The `/etc/systemd/system/multi-user.target.wants/` symlink points to a missing file and is silently dropped
+3. After `reload-sysext.service` merges the overlay and runs `daemon-reload`, the previously-dropped `Wants=` is not re-triggered
+
+**Required pattern:** Ship a `multi-user.target.d/10-<name>.conf` drop-in **inside the sysext** with:
+
+```ini
+[Unit]
+Upholds=<name>.service
+```
+
+This drop-in is brand-new to systemd after the post-merge `daemon-reload`, so it is processed cleanly when `multi-user.target` activates. `Upholds=` also provides crash-restart behavior — if the service dies, systemd will restart it.
+
+Example path inside the sysext: `usr/lib/systemd/system/multi-user.target.d/10-tailscale.conf`
+
+The preset (`40-<name>.preset`) is still required to set the enabled state; the drop-in handles the activation timing.
+
 ## Runtime Setup Service Pattern
 
 Some sysexts need to modify files that already exist in the base image (e.g., `/etc/nsswitch.conf`, PAM configs). The tmpfiles `C` (copy-if-absent) directive cannot overwrite existing files, so a runtime setup service is needed instead.
@@ -162,5 +184,6 @@ The setup script must be idempotent — safe to run on every boot without accumu
 3. Add any extra files in `mkosi.images/<name>/mkosi.extra/`
 4. If configs needed in `/etc`: create `mkosi.finalize` to capture to `/usr/share/factory/etc/`, add tmpfiles.d rules
 5. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`
-6. Add the sysext name to root `mkosi.conf` Dependencies list
+6. **If the sysext ships a systemd service:** add `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` with `Upholds=<name>.service` (see [Service Activation Pattern](#service-activation-pattern-upholds) above)
+7. Add the sysext name to root `mkosi.conf` Dependencies list
 7. Add a corresponding update check to `.github/workflows/check-dependencies.yml` if it has external downloads

@@ -495,6 +495,7 @@ When creating a new sysext, verify:
 - [ ] Symlinks/alternatives created manually (no `update-alternatives`)
 - [ ] State directories expected in `/var` (not baked into image)
 - [ ] Use tmpfiles.d, sysusers.d and systemd presets first, as a last resort add a one-shot systemd unit for any preconfiguration that usually would happen in the debian package's postinst scripts
+- [ ] **If the sysext ships a systemd service:** add `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` with `[Unit]\nUpholds=<name>.service` — do NOT rely on `WantedBy=` + preset alone (the sysext isn't merged when PID 1 first scans units)
 
 #### Basic Sysext Template
 
