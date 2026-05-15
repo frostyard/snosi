@@ -18,6 +18,7 @@ Official Tailscale APT repository (`pkgs.tailscale.com/stable/debian`), consiste
 - `/usr/share/factory/etc/default/tailscaled` — factory default config (port + flags)
 - `/usr/lib/tmpfiles.d/tailscale.conf` — restores /etc/default/tailscaled at boot
 - `/usr/lib/systemd/system-preset/40-tailscale.preset` — auto-enables tailscaled.service
+- `/usr/lib/systemd/system/multi-user.target.d/10-tailscale.conf` — `Upholds=tailscaled.service` drop-in for reliable boot activation
 
 ## /etc Configuration Handling
 
@@ -29,6 +30,10 @@ The `tailscaled.service` unit has `EnvironmentFile=/etc/default/tailscaled`. Wit
 ## Service Enablement
 
 System preset enables `tailscaled.service` by default. User authenticates post-boot via `tailscale up`.
+
+The preset alone is insufficient for reliable boot-time activation of sysext-provided services. At PID 1 startup the sysext is not yet merged, so the `/etc/systemd/system/multi-user.target.wants/tailscaled.service` symlink's target is missing; systemd silently drops the dangling `Wants=` reference. After `reload-sysext.service` merges the overlay and runs `daemon-reload`, the previously-evaluated wants list for `multi-user.target` is not re-triggered for the newly-available unit.
+
+The fix is a `multi-user.target.d/10-tailscale.conf` drop-in (shipped inside the sysext) that uses `Upholds=tailscaled.service`. Since this drop-in is brand-new to systemd after the daemon-reload, it is processed cleanly when `multi-user.target` activates — ensuring tailscaled starts on every boot. See [Flatcar sysext docs](https://www.flatcar.org/docs/latest/provisioning/sysext/) for background.
 
 ## Runtime State
 
@@ -58,6 +63,7 @@ mkosi.images/tailscale/
   mkosi.finalize
   mkosi.extra/usr/lib/
     systemd/system-preset/40-tailscale.preset
+    systemd/system/multi-user.target.d/10-tailscale.conf  ← Upholds= drop-in
     tmpfiles.d/tailscale.conf
 
 mkosi.conf  (add tailscale to Dependencies)
