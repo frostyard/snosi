@@ -1,8 +1,8 @@
 {
   "bitwarden": {
-    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.3.1/Bitwarden-2026.3.1-amd64.deb",
-    "sha256": "41df25b79e61381463d3901347c7a2927874d8229a174efdbac5b9115f184e40",
-    "version": "2026.3.1"
+    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.4.0/Bitwarden-2026.4.0-amd64.deb",
+    "sha256": "bdd4d36f978ee0843e7cc87b56e63c3b7f281b4e46cbc58e9fe44316afa96294",
+    "version": "2026.4.0"
   },
   "microsoft-azurevpnclient": {
     "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_3.0.0_amd64.deb",
@@ -20,14 +20,14 @@
     "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
   },
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/084ae9017011/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/d2b324899b92/install.sh",
     "sha256": "f3e91784ffeda32bc397de7acc1154724cc47522a459c9ac656cca176eeba457",
-    "version": "084ae9017011"
+    "version": "d2b324899b92"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.118.0/code-server_4.118.0_amd64.deb",
-    "sha256": "fe2988f313c9047c1e1ccccee10ad8ccf2813b66a02c146e7d4fd2a3f7e2dc81",
-    "version": "4.118.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.121.0/code-server_4.121.0_amd64.deb",
+    "sha256": "148a10e595d09d649f510e435919c75986eebc9d81cefb50569f7133a6a8a891",
+    "version": "4.121.0"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
