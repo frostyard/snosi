@@ -10,9 +10,9 @@
     "version": "3.0.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_148.0.3967.70-1_amd64.deb",
-    "sha256": "af01b7ccfc4c1e30b4d0fe7dd7f0992164481dbe2d778ab745fcf87ef7fcf64d",
-    "version": "148.0.3967.70-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_148.0.3967.83-1_amd64.deb",
+    "sha256": "1052894113b354dd2dd6cac8154882d8d2254e2a2e14692421c44368b4b5ece0",
+    "version": "148.0.3967.83-1"
   },
   "surface-cert": {
     "url": "https://github.com/linux-surface/linux-surface/raw/d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a/pkg/keys/surface.cer",
@@ -20,9 +20,9 @@
     "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
   },
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/d2b324899b92/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/5753984d1eb2/install.sh",
     "sha256": "f3e91784ffeda32bc397de7acc1154724cc47522a459c9ac656cca176eeba457",
-    "version": "d2b324899b92"
+    "version": "5753984d1eb2"
   },
   "code-server": {
     "url": "https://github.com/coder/code-server/releases/download/v4.121.0/code-server_4.121.0_amd64.deb",
