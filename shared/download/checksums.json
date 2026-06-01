@@ -1,8 +1,8 @@
 {
   "bitwarden": {
-    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.4.0/Bitwarden-2026.4.0-amd64.deb",
-    "sha256": "bdd4d36f978ee0843e7cc87b56e63c3b7f281b4e46cbc58e9fe44316afa96294",
-    "version": "2026.4.0"
+    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.5.0/Bitwarden-2026.5.0-amd64.deb",
+    "sha256": "2ea59874bac7f67f5663828d028449168050d4538b5e6adea69e13b199249226",
+    "version": "2026.5.0"
   },
   "microsoft-azurevpnclient": {
     "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_3.0.0_amd64.deb",
@@ -10,9 +10,9 @@
     "version": "3.0.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_148.0.3967.83-1_amd64.deb",
-    "sha256": "1052894113b354dd2dd6cac8154882d8d2254e2a2e14692421c44368b4b5ece0",
-    "version": "148.0.3967.83-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_148.0.3967.96-1_amd64.deb",
+    "sha256": "ff447b27cb72767e033d38c5814709bd3b1eccadb32ac2a45f0fffdea8a5af49",
+    "version": "148.0.3967.96-1"
   },
   "surface-cert": {
     "url": "https://github.com/linux-surface/linux-surface/raw/d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a/pkg/keys/surface.cer",
@@ -20,14 +20,14 @@
     "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
   },
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/5753984d1eb2/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/280cbc9adffc/install.sh",
     "sha256": "f3e91784ffeda32bc397de7acc1154724cc47522a459c9ac656cca176eeba457",
-    "version": "5753984d1eb2"
+    "version": "280cbc9adffc"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.121.0/code-server_4.121.0_amd64.deb",
-    "sha256": "148a10e595d09d649f510e435919c75986eebc9d81cefb50569f7133a6a8a891",
-    "version": "4.121.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.122.0/code-server_4.122.0_amd64.deb",
+    "sha256": "189f729af5ba3269a9879270c367075f14391acfc2108d125a49ce0a71037734",
+    "version": "4.122.0"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
