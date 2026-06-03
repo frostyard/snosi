@@ -25,9 +25,9 @@
     "version": "280cbc9adffc"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.122.0/code-server_4.122.0_amd64.deb",
-    "sha256": "189f729af5ba3269a9879270c367075f14391acfc2108d125a49ce0a71037734",
-    "version": "4.122.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.122.1/code-server_4.122.1_amd64.deb",
+    "sha256": "5fc19a9ffd7437a129a403101632724385fbefc3a1d791deb2a3696623e1b68f",
+    "version": "4.122.1"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
