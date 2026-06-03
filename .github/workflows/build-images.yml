@@ -28,6 +28,9 @@ jobs:
       id-token: write
       attestations: write
     strategy:
+      # Don't let one variant's failure (e.g. disk exhaustion on a "loaded"
+      # image) cancel the other in-flight builds. Each variant is independent.
+      fail-fast: false
       matrix:
         include:
           - profile: cayo
@@ -49,11 +52,26 @@ jobs:
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          # We don't use the runner's preinstalled language toolchains; reclaim
+          # the tool cache (~8-12GB) on / for extra headroom on large builds.
+          tool-cache: true
 
       - name: Mount BTRFS for podman storage
         uses: ublue-os/container-storage-action@main
         with:
           target-dir: /var/lib/containers
+
+      - name: Redirect temp to /mnt
+        # / (/dev/root) has ~45G free after cleanup; /mnt has ~70G free. mkosi's
+        # build workspace and podman/buildah tar staging default to TMPDIR
+        # (/var/tmp on /), which overflows / on the large "loaded" variants and
+        # crashes the runner with "No space left on device". Point TMPDIR at the
+        # roomy /mnt volume for all subsequent steps.
+        run: |
+          sudo mkdir -p /mnt/tmp
+          sudo chmod 1777 /mnt/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
 
       - name: Show disk space (after)
         run: sudo df -h
@@ -79,7 +97,7 @@ jobs:
 
       - name: Build Image
         run: |
-          sudo mkosi --profile ${{ matrix.profile }} \
+          sudo TMPDIR="$TMPDIR" mkosi --profile ${{ matrix.profile }} \
             --image-version "${{ steps.version.outputs.tag }}" \
             build
 
@@ -87,7 +105,7 @@ jobs:
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
         run: |
-          sudo ./shared/outformat/image/buildah-package.sh \
+          sudo TMPDIR="$TMPDIR" ./shared/outformat/image/buildah-package.sh \
             output/${{ matrix.profile }} \
             "$IMAGE:${{ steps.version.outputs.tag }}" \
             "org.opencontainers.image.title=${{ matrix.profile }}" \
@@ -104,7 +122,7 @@ jobs:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
           MAX_LAYERS: 128
         run: |
-          sudo ./shared/outformat/image/chunkah-package.sh \
+          sudo TMPDIR="$TMPDIR" ./shared/outformat/image/chunkah-package.sh \
           "$IMAGE:${{ steps.version.outputs.tag }}" \
           $(date -d '${{ github.event.head_commit.timestamp }}' +%s)
 
@@ -135,7 +153,7 @@ jobs:
         run: |
           SBOM="$(mktemp -d)/sbom.json"
           export SYFT_PARALLELISM=$(($(nproc)*2))
-          sudo "${SYFT_CMD}" --source-name "${PROFILE}" "output/${PROFILE}" -o "syft-json=${SBOM}"
+          sudo TMPDIR="$TMPDIR" "${SYFT_CMD}" --source-name "${PROFILE}" "output/${PROFILE}" -o "syft-json=${SBOM}"
           du -sh "${SBOM}"
           echo "SBOM=${SBOM}" >> "$GITHUB_OUTPUT"
 
@@ -145,7 +163,7 @@ jobs:
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
         run: |
-          sudo buildah push \
+          sudo TMPDIR="$TMPDIR" buildah push \
             --compression-format=zstd:chunked \
             --digestfile=/tmp/image-digest \
             --creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
@@ -162,7 +180,7 @@ jobs:
           sudo buildah tag \
             "$IMAGE:${{ steps.version.outputs.tag }}" \
             "$IMAGE:latest"
-          sudo buildah push \
+          sudo TMPDIR="$TMPDIR" buildah push \
             --compression-format=zstd:chunked \
             --creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
             "$IMAGE:latest" \
