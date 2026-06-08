@@ -10,9 +10,9 @@
     "version": "3.0.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_148.0.3967.96-1_amd64.deb",
-    "sha256": "ff447b27cb72767e033d38c5814709bd3b1eccadb32ac2a45f0fffdea8a5af49",
-    "version": "148.0.3967.96-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_149.0.4022.52-1_amd64.deb",
+    "sha256": "de51617f1912f343f9f5d934d25a41a7ef0820552f4842551864df020871c388",
+    "version": "149.0.4022.52-1"
   },
   "surface-cert": {
     "url": "https://github.com/linux-surface/linux-surface/raw/d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a/pkg/keys/surface.cer",
@@ -25,9 +25,9 @@
     "version": "280cbc9adffc"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.122.1/code-server_4.122.1_amd64.deb",
-    "sha256": "5fc19a9ffd7437a129a403101632724385fbefc3a1d791deb2a3696623e1b68f",
-    "version": "4.122.1"
+    "url": "https://github.com/coder/code-server/releases/download/v4.123.0/code-server_4.123.0_amd64.deb",
+    "sha256": "94348886baac461498809e05e0c78dc9526be832731db3477b2acfba709201f3",
+    "version": "4.123.0"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
