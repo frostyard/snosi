@@ -1,4 +1,4 @@
-code=1.124.0-1781066808
+code=1.124.2-1781225536
 docker-ce=5:29.5.3-1~debian.13~trixie
 1password-cli=2.34.1-1
 himmelblau=4.0.0-debian13~20260611
