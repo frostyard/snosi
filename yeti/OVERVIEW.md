@@ -49,6 +49,7 @@ mkosi.profiles/             # Desktop/server profile definitions (6 profiles)
   ...
 shared/                     # Reusable fragments composed via Include=
   download/                 # Verified download system (checksums.json + helpers)
+  bootc/                    # In-tree source build: build/bootc.chroot compiles ostree+bootc from pinned tarballs
   kernel/                   # Kernel variant configs (backports, surface, stock)
   packages/                 # Package set configs (11 sets) with postinstall relocation scripts
   scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot build script)
@@ -95,7 +96,7 @@ The "loaded" variants extend their base profile by adding more Include directive
 
 Scripts execute in order per image build:
 
-1. **BuildScripts** (in chroot) — Download/install items not available as packages: Homebrew, GNOME extensions, Surface secure boot cert
+1. **BuildScripts** (in chroot) — Download/install items not available as packages: Homebrew, GNOME extensions, Surface secure boot cert. The base image additionally runs `shared/bootc/build/bootc.chroot` (wired via `BuildScripts=`) to compile ostree and bootc from pinned source — build deps come from `BuildPackages=` (overlay-only, not from APT; see [build-pipeline.md](build-pipeline.md) for details).
 2. **PostInstallationScripts** (after packages) — Common logic via `shared/scripts/common-postinst.sh` (OS release branding, package list generation, cleanup, sysext infra), then profile-specific steps (GDM enablement, package relocation /opt → /usr/lib). Mount enablement and useradd home dir are handled by the base image's own postinst script.
 3. **FinalizeScripts** (pre-output) — Remove ephemeral dirs (/boot, /home), create /sysroot and /nix mountpoints, clear machine-id/SSH keys, compile GLib schemas, set file xattrs for chunkah
 4. **PostOutputScripts** (after image creation) — Manifest processing, sysext versioned renaming
@@ -200,7 +201,7 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 - Debian Griffo.io (debian.griffo.io) — Additional Debian packages
 - Docker (docker.com) — Docker CE packages
 - Himmelblau (packages.himmelblau-idm.org) — Entra ID authentication (nightly)
-- Frostyard (repository.frostyard.org) — Custom packages: nbc, chairlift, updex, igloo, intuneme, snow-first-setup
+- Frostyard (repository.frostyard.org) — Custom packages: nbc, chairlift, updex, igloo, intuneme, snow-first-setup. **Note:** bootc and ostree are no longer sourced from this repo (the former `frostyard/bootc-debian` packaging recipe is archived); they are compiled from pinned source in-tree instead.
 - Linux Surface (pkg.surfacelinux.com) — Surface kernel + tools
 - Microsoft Edge (packages.microsoft.com) — Edge browser
 - Microsoft VSCode (packages.microsoft.com) — VS Code editor

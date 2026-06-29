@@ -38,5 +38,20 @@
     "url": "https://codeload.github.com/frostyard/logomenu/tar.gz/ae0ea469beaa7ce0cdc1fb8be26fc50c13d4fcbf",
     "sha256": "d11cc67b6003a295d17249b9ab08ea59d5b6a4e2301d784c51b5344e561f10c0",
     "version": "ae0ea469beaa7ce0cdc1fb8be26fc50c13d4fcbf"
+  },
+  "ostree": {
+    "url": "https://github.com/ostreedev/ostree/releases/download/v2026.1/libostree-2026.1.tar.xz",
+    "sha256": "8e77c285dd6fa5ec5fb063130390977be727fe11107335ed8778a40385069e95",
+    "version": "2026.1"
+  },
+  "bootc": {
+    "url": "https://github.com/bootc-dev/bootc/releases/download/v1.16.2/bootc-1.16.2.tar.zstd",
+    "sha256": "b407aa47a61ecda39256c3e3dbeef25c31585c5644ad6d40f5397522a4d2edc7",
+    "version": "1.16.2"
+  },
+  "bootc-vendor": {
+    "url": "https://github.com/bootc-dev/bootc/releases/download/v1.16.2/bootc-1.16.2-vendor.tar.zstd",
+    "sha256": "53d759ca521144a675af67e68d23c3f5f18dca784e4e900052d0cfdc4467732b",
+    "version": "1.16.2"
   }
 }
