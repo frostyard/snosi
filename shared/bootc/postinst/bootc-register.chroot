@@ -1,0 +1,53 @@
+#!/bin/bash
+# Register the in-tree-built ostree and bootc with dpkg so the OS package
+# database reports them as installed — mirroring the old frostyard .deb install,
+# which downstream tooling (dependency checks, `apt list --installed` manifests,
+# anything querying dpkg) expects.
+#
+# The actual files are installed by the base image BuildScript
+# (shared/bootc/build/bootc.chroot) into the image's /usr. These are
+# METADATA-ONLY packages: dpkg records the package name + version (and the
+# bootc -> libostree-1-1 dependency) but does not own the files. This runs as a
+# PostInstallationScript, after the BuildScript's $DESTDIR has been merged into
+# the image, so the binaries are already present.
+set -euo pipefail
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+CHECKSUMS="$SRCDIR/shared/download/checksums.json"
+OSTREE_VER="$(jq -r '.ostree.version' "$CHECKSUMS")"
+BOOTC_VER="$(jq -r '.bootc.version' "$CHECKSUMS")"
+ARCH="$(dpkg --print-architecture)"
+
+[[ -n "$OSTREE_VER" && "$OSTREE_VER" != "null" ]] || { echo "Error: no ostree version in checksums.json" >&2; exit 1; }
+[[ -n "$BOOTC_VER" && "$BOOTC_VER" != "null" ]] || { echo "Error: no bootc version in checksums.json" >&2; exit 1; }
+
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+# build_stub <name> <version> <extra-control-fields>
+build_stub() {
+    local name="$1" version="$2" extra="$3"
+    local pkgdir="$WORK/$name"
+    mkdir -p "$pkgdir/DEBIAN"
+    {
+        echo "Package: $name"
+        echo "Version: $version"
+        echo "Architecture: $ARCH"
+        echo "Maintainer: Frostyard <packages@frostyard.org>"
+        echo "Section: admin"
+        echo "Priority: optional"
+        [[ -n "$extra" ]] && echo "$extra"
+        echo "Description: $name (compiled from source in snosi)"
+        echo " Files are installed by the snosi base image build script; this"
+        echo " package records the install in dpkg for package-database visibility."
+    } > "$pkgdir/DEBIAN/control"
+    dpkg-deb --build --root-owner-group "$pkgdir" "$WORK/${name}.deb"
+}
+
+build_stub "libostree-1-1" "$OSTREE_VER" ""
+build_stub "bootc" "$BOOTC_VER" "Depends: libostree-1-1"
+
+dpkg -i "$WORK/libostree-1-1.deb" "$WORK/bootc.deb"
+echo "Registered libostree-1-1 ($OSTREE_VER) and bootc ($BOOTC_VER) with dpkg"
