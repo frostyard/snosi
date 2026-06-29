@@ -38,5 +38,10 @@
     "url": "https://codeload.github.com/frostyard/logomenu/tar.gz/ae0ea469beaa7ce0cdc1fb8be26fc50c13d4fcbf",
     "sha256": "d11cc67b6003a295d17249b9ab08ea59d5b6a4e2301d784c51b5344e561f10c0",
     "version": "ae0ea469beaa7ce0cdc1fb8be26fc50c13d4fcbf"
+  },
+  "bazaar": {
+    "url": "https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/3bb9134985343ffd1993520eb37c90e113bfb09b",
+    "sha256": "b779610b06e1ac58af6193f515f637d3846eae67d3fb36f4af71b2e05fb05869",
+    "version": "3bb9134985343ffd1993520eb37c90e113bfb09b"
   }
 }
