@@ -20,7 +20,7 @@ Download and install items not available as Debian packages. These run inside th
 |--------|----------|---------|
 | `hotedge.chroot` | `shared/snow/scripts/build/` | Downloads Hotedge GNOME extension (hot corners) from GitHub via `verified_download()`, installs to `/usr/share/gnome-shell/extensions/` |
 | `logomenu.chroot` | `shared/snow/scripts/build/` | Downloads Logomenu GNOME extension from GitHub via `verified_download()`, installs extension + GLib schema |
-| `bazaar.chroot` | `shared/snow/scripts/build/` | Clones Bazaar Companion GNOME extension from GitHub, patches metadata.json for shell version "48" |
+| `bazaar.chroot` | `shared/snow/scripts/build/` | Downloads pinned Bazaar Companion GNOME extension tarball from GitHub via `verified_download()`, installs its `src/`, patches metadata.json for shell version "48" |
 | `surface-cert.chroot` | `shared/snow/scripts/build/` | Downloads Linux Surface secure boot certificate via `verified_download()`, installs to `/usr/share/linux-surface-secureboot/` |
 
 **Base image BuildScript — in-tree ostree + bootc** (`shared/bootc/build/bootc.chroot`):

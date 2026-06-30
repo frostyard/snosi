@@ -53,5 +53,10 @@
     "url": "https://github.com/bootc-dev/bootc/releases/download/v1.16.2/bootc-1.16.2-vendor.tar.zstd",
     "sha256": "53d759ca521144a675af67e68d23c3f5f18dca784e4e900052d0cfdc4467732b",
     "version": "1.16.2"
+  },
+  "bazaar": {
+    "url": "https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/3bb9134985343ffd1993520eb37c90e113bfb09b",
+    "sha256": "b779610b06e1ac58af6193f515f637d3846eae67d3fb36f4af71b2e05fb05869",
+    "version": "3bb9134985343ffd1993520eb37c90e113bfb09b"
   }
 }
