@@ -23,6 +23,28 @@ Download and install items not available as Debian packages. These run inside th
 | `bazaar.chroot` | `shared/snow/scripts/build/` | Downloads pinned Bazaar Companion GNOME extension tarball from GitHub via `verified_download()`, installs its `src/`, patches metadata.json for shell version "48" |
 | `surface-cert.chroot` | `shared/snow/scripts/build/` | Downloads Linux Surface secure boot certificate via `verified_download()`, installs to `/usr/share/linux-surface-secureboot/` |
 
+**Base image BuildScript — in-tree ostree + bootc** (`shared/bootc/build/bootc.chroot`):
+
+Wired via `BuildScripts=` in `mkosi.images/base/mkosi.conf`. Compiles **ostree** (v2026.1) and **bootc** (v1.16.2) from pinned source tarballs. Neither is installed from APT.
+
+**Rationale:** The former `frostyard/bootc-debian` private packaging recipe is archived. Debian Trixie ships no bootc package and only ostree 2025.2, which is too old for current bootc. Compiling in-tree makes the build fully self-contained. The image rootfs has no `apt` (mkosi manages packages externally), so build deps cannot be apt-installed from inside a postinstall chroot — hence this is a BuildScript.
+
+**Build deps:** Declared in `BuildPackages=` in `mkosi.images/base/mkosi.conf` (build-essential, autoconf, libglib2.0-dev, `rustup`, etc.). mkosi installs them into the build overlay only; the overlay is discarded after the build script completes, so no build tools ever ship in the image. There is no `apt` call and no purge logic in the script.
+
+**Rust toolchain:** Debian Trixie's `rustc` (1.85) is too old to *build* bootc 1.16.2 — its xtask/build dependencies (`cargo_metadata`, `cargo-platform`) require rustc >= 1.91, even though bootc's library crate declares MSRV 1.85. So the script installs a pinned toolchain (`RUST_VERSION`, currently `1.96.0`) via `rustup` (the `rustup` package, from `BuildPackages=`) and runs `make` under `rustup run "$RUST_VERSION"`. Bump `RUST_VERSION` when bumping bootc if a newer toolchain is required.
+
+**Mechanics:**
+
+1. Install the pinned Rust toolchain via `rustup toolchain install "$RUST_VERSION"` (into the discarded overlay).
+2. Download and verify three tarballs via `verified_download()` (keys `ostree`, `bootc`, `bootc-vendor` in `checksums.json`).
+3. Build ostree via autotools (`./configure --prefix=/usr ... && make -j$(nproc)`); install **twice**: `make install DESTDIR="$DESTDIR"` (so libostree/ostree ship in the image — mkosi copies `$DESTDIR` into the rootfs) and `make install DESTDIR=` (explicitly empty, to override the `DESTDIR` mkosi exports into the build env) into the overlay's real `/usr`, so the bootc build finds `ostree-1.pc` via pkg-config and can load libostree when the docgen step runs the bootc binary.
+4. Build bootc via offline vendored cargo: extract vendor tarball into the source tree, copy `.cargo/vendor-config.toml` → `.cargo/config.toml`, then `make bin && make install-all DESTDIR="$DESTDIR"`.
+5. On EXIT (success or failure): remove the temporary work directory only — no apt purge needed.
+
+**Runtime lib pinning:** bootc and ostree's runtime dependencies (e.g., `libglib2.0-0t64`, `libcurl4t64`) are listed in base `Packages=` so they ship in the image and the compiled binaries link against them at runtime. Do not remove them from `Packages=`.
+
+**dpkg registration (PostInstallationScript):** `shared/bootc/postinst/bootc-register.chroot` runs after the BuildScript's `$DESTDIR` is merged into the image. It builds metadata-only stub `.deb`s for `libostree-1-1` (version from `.ostree.version`) and `bootc` (version from `.bootc.version`, `Depends: libostree-1-1`) and `dpkg -i`s them, so the dpkg database reports both as installed for `dpkg -l` / `apt list --installed` / dependency checks. The packages carry no files — the binaries/libs come from the BuildScript — so dpkg records presence but does not own the files. Relies on `dpkg` being Essential and `CleanPackageMetadata=no` keeping the dpkg DB in the image.
+
 **Server profiles (cayo/cayoloaded):** Only `brew.chroot` (no desktop build scripts).
 
 ### 2. PostInstallationScripts (after packages)
@@ -35,6 +57,10 @@ Runs during the base image build (not during profile builds). Handles:
 - Sets home directory path to `/var/home` in `/etc/default/useradd`
 - Enables systemd mount units (home, root, srv, mnt, media, opt, usr-local)
 - Removes bls-garbage-collect service
+
+**Version pins:** `shared/download/checksums.json` keys `ostree`, `bootc`, `bootc-vendor`. Updated weekly by `check-dependencies.yml` via PR.
+
+**Build time impact:** every clean build now compiles ostree + bootc; expect several extra minutes per image build.
 
 **Kernel postinstall (all profiles):**
 - `shared/kernel/scripts/postinst/mkosi.postinst.chroot` — Builds initramfs via dracut, detects kernel version, generates `/usr/lib/modules/$VERSION/initramfs.img`, copies vmlinuz
