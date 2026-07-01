@@ -77,17 +77,20 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/himmelblau/himmelblau-sysext-setup` — Runtime PAM/NSS injection script (idempotent, runs at boot): adds `himmelblau` to nsswitch.conf passwd/group/shadow, runs `pam-auth-update --enable himmelblau`
 - `usr/lib/systemd/system/himmelblau-sysext-setup.service` — Oneshot service to run setup script (conditioned on `/run/himmelblau-sysext-setup.done`)
 - `usr/lib/systemd/system-preset/40-himmelblau.preset` — Enable himmelblaud and himmelblau-sysext-setup services
+- `usr/lib/systemd/system/multi-user.target.d/10-himmelblau.conf` — `Upholds=` drop-in for reliable boot activation (himmelblaud upholds himmelblaud-tasks itself)
 - `usr/lib/tmpfiles.d/himmelblau.conf` — Config injection from `/usr/share/factory/etc/`
 
 ### incus
 - `usr/lib/systemd/system/incus.service.d/override.conf` — Service override
 - `usr/lib/systemd/system-preset/40-incus.preset` — Enable incus services
+- `usr/lib/systemd/system/multi-user.target.d/10-incus.conf` — `Upholds=` drop-in for reliable boot activation (sockets + lxcfs + startup + sysext-setup; incus.service itself is socket-activated)
 - `usr/lib/sysusers.d/incus-sysext.conf` — User/group definitions
 - `usr/lib/tmpfiles.d/incus-sysext.conf` — Runtime directory setup
 - `usr/bin/incus-sysext-setup` — Custom setup script
 
 ### nix
 - `usr/lib/systemd/` — Mount unit and preset for `/nix` bind mount
+- `usr/lib/systemd/system/multi-user.target.d/10-nix.conf` — `Upholds=nix.mount nix-daemon.socket nix-daemon.service` drop-in for reliable boot activation
 - `usr/lib/sysusers.d/nix.conf` — Nix user/group
 - `usr/lib/tmpfiles.d/nix-sysext.conf` — Runtime setup
 
