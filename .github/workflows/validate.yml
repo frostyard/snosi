@@ -41,6 +41,7 @@ jobs:
       - name: Validate mkosi configuration summaries
         run: |
           sudo mkosi summary > /dev/null
+          ./check-profile-dependencies.sh
           for profile in cayo cayoloaded snow snowloaded snowfield snowfieldloaded; do
             sudo mkosi --profile "$profile" summary > /dev/null
           done

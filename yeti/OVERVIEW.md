@@ -73,6 +73,8 @@ Justfile                    # Build targets (just sysexts, just snow, etc.)
 
 mkosi configs compose via `Include=` directives. Each profile pulls in reusable fragments:
 
+Root `mkosi.conf` lists `base` plus all sysexts for the sysext publishing build. Each `mkosi.profiles/*/mkosi.conf` starts with `Dependencies=` and then `Dependencies=base` to reset mkosi's append-only collection semantics; profile image builds must not inherit the sysext list.
+
 ```
 Profile (e.g., snow/mkosi.conf)
 ├── Include: shared/packages/snow/mkosi.conf      # Package set
