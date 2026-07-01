@@ -1,4 +1,4 @@
-mask systemd-boot-update.service
-mask apt-daily-upgrade.timer
-mask apt-daily.timer
-mask dpkg-db-backup.timer
+disable systemd-boot-update.service
+disable apt-daily-upgrade.timer
+disable apt-daily.timer
+disable dpkg-db-backup.timer
