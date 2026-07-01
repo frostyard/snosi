@@ -23,8 +23,10 @@ Builds the base image and all 10 sysexts, publishes to the Frostyard repository 
 
 Matrix build of all 6 profiles (snow, snowloaded, snowfield, snowfieldloaded, cayo, cayoloaded).
 
+Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependency=base`). This prevents the root sysext dependency list from being appended into every profile build. The sysext publishing set is built once by `build.yml`; profile image jobs build only `base` plus the selected main image.
+
 **Steps:**
-1. Build profile image via mkosi (produces directory output)
+1. Build profile image via mkosi with dependencies reset to `base` only (produces directory output)
 2. Package OCI image via `buildah-package.sh` (preserves SUID, xattrs)
 3. Optimize layers via `chunkah-package.sh`
 4. **Smoke test:** Validates SUID bit on `/usr/bin/sudo` (mode 4755) — catches metadata loss
@@ -88,7 +90,7 @@ Checks for version updates to external APT packages:
 
 Two validation checks:
 1. **Shell linting:** Runs shellcheck on all `*.sh` and `*.chroot` files
-2. **mkosi validation:** Runs `mkosi summary` for base image and all profiles to verify configuration
+2. **mkosi validation:** Runs `mkosi summary` for base image and all profiles to verify configuration, plus `check-profile-dependencies.sh` to ensure profile builds do not include sysext images
 
 ### test-install.yml — Bootc Installation Test
 

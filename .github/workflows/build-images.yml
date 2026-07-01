@@ -98,6 +98,8 @@ jobs:
       - name: Build Image
         run: |
           sudo TMPDIR="$TMPDIR" mkosi --profile ${{ matrix.profile }} \
+            --dependency= \
+            --dependency=base \
             --image-version "${{ steps.version.outputs.tag }}" \
             build
 

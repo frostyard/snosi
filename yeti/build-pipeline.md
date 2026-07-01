@@ -134,6 +134,8 @@ Run after the image directory/file is created. Handle manifest processing and pa
 
 After `mkosi build` completes, the output directory contains all images, sysexts, and manifests flat in `output/`. Two root scripts organize them for publishing:
 
+Root `mkosi.conf` intentionally lists `base` plus all sysexts in `Dependencies=` so plain `mkosi build` and `just sysexts` produce the sysext publishing set. Profile configs clear that inherited collection with an empty `Dependencies=` assignment and then add `Dependencies=base`; without the reset, mkosi appends list settings and profile builds would rebuild every sysext. CI enforces this with `check-profile-dependencies.sh`.
+
 ### sysextmv.sh
 
 Moves sysext files matching `{image_id}_{version}_{os_version}_{arch}.{ext}` into `output/sysexts/`, organized by sysext name (e.g., `output/sysexts/docker/`). This structure is required by the `frostyard/repogen` action for R2 publishing.
