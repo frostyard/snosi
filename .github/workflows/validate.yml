@@ -36,7 +36,7 @@ jobs:
           {
             git ls-files '*.sh' '*.chroot'
             git ls-files | xargs awk 'FNR==1 && /^#!\/(usr\/)?bin\/(env )?(ba)?sh/ {print FILENAME} {nextfile}' 2>/dev/null
-          } | grep -v '^saved-unused/' | sort -u | xargs -r shellcheck -S error -s bash -x
+          } | grep -v '^saved-unused/' | sort -u | xargs -r shellcheck -S error -x
 
   mkosi-config-sanity:
     runs-on: ubuntu-latest
