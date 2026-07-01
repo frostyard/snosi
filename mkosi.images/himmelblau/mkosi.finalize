@@ -2,7 +2,15 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 set -euo pipefail
 
-# Capture the entirety of /etc in /usr/share/factory/etc so we can use
-# systemd-tmpfiles to symlink individual directories from it to /etc.
-mkdir -p "$BUILDROOT/usr/share/factory/"
-cp --archive --no-target-directory --update=none "$BUILDROOT/etc" "$BUILDROOT/usr/share/factory/etc"
+# Capture only /etc/himmelblau (referenced by the tmpfiles.d C directive in
+# usr/lib/tmpfiles.d/himmelblau.conf) into /usr/share/factory/etc. Capturing
+# all of /etc would ship the merged base image's /etc — including /etc/shadow
+# and the SSH host keys generated during the base build — in the published
+# sysext (frostyard/snosi#282).
+mkdir -p "$BUILDROOT/usr/share/factory/etc"
+
+if [ -d "$BUILDROOT/etc/himmelblau" ]; then
+    cp --archive --update=none "$BUILDROOT/etc/himmelblau" "$BUILDROOT/usr/share/factory/etc/"
+else
+    echo "himmelblau finalize: /etc/himmelblau not present in buildroot; factory capture skipped" >&2
+fi

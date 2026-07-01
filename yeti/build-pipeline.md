@@ -113,7 +113,8 @@ Prepare the image for output. Run after postinstall, before the image format is 
 
 **Sysext finalize** (per-sysext `mkosi.finalize` scripts):
 - Captures `/etc` configs to `/usr/share/factory/etc/` for tmpfiles-based injection at boot
-- Used by: docker, himmelblau (full /etc capture), incus (full /etc capture), nix, tailscale
+- Used by: docker, himmelblau, incus, nix, tailscale
+- Capture ONLY the specific paths referenced by the sysext's tmpfiles.d `C` directives — never all of `/etc`. With `Overlay=yes` the buildroot `/etc` is the merged base view, so a full capture ships the base image's `/etc/shadow` and SSH host keys in the published sysext (frostyard/snosi#282)
 
 ### 4. PostOutputScripts (after image creation)
 

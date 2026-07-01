@@ -2,8 +2,32 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 set -euo pipefail
 
-# Capture the entirety of /etc in /usr/share/factory/etc so we can use
-# systemd-tmpfiles to symlink individual directories from it to /etc.
-mkdir -p "$BUILDROOT/usr/share/factory/"
-cp --archive --no-target-directory --update=none "$BUILDROOT/etc" "$BUILDROOT/usr/share/factory/etc"
+# Capture only the /etc paths referenced by tmpfiles.d C directives (see
+# usr/lib/tmpfiles.d/incus.conf) into /usr/share/factory/etc. Capturing all
+# of /etc would ship the merged base image's /etc — including /etc/shadow
+# and the SSH host keys generated during the base build — in the published
+# sysext (frostyard/snosi#282).
+FACTORY="$BUILDROOT/usr/share/factory/etc"
+mkdir -p "$FACTORY"
 
+# Paths relative to /etc, matching the C directives in tmpfiles.d/incus.conf
+FACTORY_PATHS=(
+    libnl-3
+    default/incus
+    logrotate.d/incus
+    needrestart/conf.d/incus.conf
+    libvirt
+    profile.d/vte-2.91.sh
+    profile.d/vte.csh
+    qemu-ifdown
+    qemu-ifup
+)
+
+cd "$BUILDROOT/etc"
+for path in "${FACTORY_PATHS[@]}"; do
+    if [ -e "$path" ]; then
+        cp --archive --parents --update=none "$path" "$FACTORY/"
+    else
+        echo "incus finalize: /etc/$path not present in buildroot; factory capture skipped" >&2
+    fi
+done
