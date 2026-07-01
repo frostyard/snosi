@@ -16,17 +16,33 @@ jobs:
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Check for dependency updates
         id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           CHECKSUMS="shared/download/checksums.json"
           UPDATES=""
 
-          # Check Bitwarden
+          # Authenticated, retried GitHub API fetch. On persistent failure the
+          # pipeline yields an empty string, which every branch below guards
+          # against — a failed check skips that dependency instead of
+          # proposing a bogus "null" update.
+gh_api() {
+  curl -fsSL --retry 3 --retry-delay 2 \
+    -H "Accept: application/vnd.github+json" \
+    -H "Authorization: Bearer ${GH_TOKEN}" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "$1" 2>/dev/null || echo '[]'
+}
+
+          # Check Bitwarden (skip drafts/prereleases)
           CURRENT_BW=$(jq -r '.bitwarden.version' "$CHECKSUMS")
-          LATEST_BW=$(curl -s https://api.github.com/repos/bitwarden/clients/releases | jq -r '[.[] | select(.tag_name | startswith("desktop-v"))][0].tag_name' | sed 's/desktop-v//')
-          if [[ "$LATEST_BW" != "$CURRENT_BW" ]]; then
+          LATEST_BW=$(gh_api https://api.github.com/repos/bitwarden/clients/releases | jq -r '[.[] | select(.draft == false and .prerelease == false) | select(.tag_name | startswith("desktop-v"))][0].tag_name' | sed 's/desktop-v//')
+          if [[ -n "$LATEST_BW" && "$LATEST_BW" != "null" && "$LATEST_BW" != "$CURRENT_BW" ]]; then
             UPDATES="${UPDATES}bitwarden: $CURRENT_BW -> $LATEST_BW\n"
             echo "bitwarden_update=true" >> $GITHUB_OUTPUT
             echo "bitwarden_version=$LATEST_BW" >> $GITHUB_OUTPUT
@@ -34,9 +50,9 @@ jobs:
 
           # Check Homebrew install script
           CURRENT_BREW=$(jq -r '.["brew-install"].version' "$CHECKSUMS")
-          LATEST_BREW=$(curl -s https://api.github.com/repos/Homebrew/install/commits/HEAD | jq -r '.sha' | head -c 12)
+          LATEST_BREW=$(gh_api https://api.github.com/repos/Homebrew/install/commits/HEAD | jq -r '.sha' | head -c 12)
           CURRENT_BREW_SHORT=$(echo "$CURRENT_BREW" | head -c 12)
-          if [[ "$LATEST_BREW" != "$CURRENT_BREW_SHORT" ]]; then
+          if [[ -n "$LATEST_BREW" && "$LATEST_BREW" != "null" && "$LATEST_BREW" != "$CURRENT_BREW_SHORT" ]]; then
             UPDATES="${UPDATES}brew-install: $CURRENT_BREW_SHORT -> $LATEST_BREW\n"
             echo "brew_update=true" >> $GITHUB_OUTPUT
             echo "brew_commit=$LATEST_BREW" >> $GITHUB_OUTPUT
@@ -44,8 +60,8 @@ jobs:
 
           # Check code-server
           CURRENT_CS=$(jq -r '.["code-server"].version' "$CHECKSUMS")
-          LATEST_CS=$(curl -s https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's/^v//')
-          if [[ -n "$LATEST_CS" && "$LATEST_CS" != "$CURRENT_CS" ]]; then
+          LATEST_CS=$(gh_api https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_CS" && "$LATEST_CS" != "null" && "$LATEST_CS" != "$CURRENT_CS" ]]; then
             UPDATES="${UPDATES}code-server: $CURRENT_CS -> $LATEST_CS\n"
             echo "codeserver_update=true" >> $GITHUB_OUTPUT
             echo "codeserver_version=$LATEST_CS" >> $GITHUB_OUTPUT
@@ -53,8 +69,8 @@ jobs:
 
           # Check ostree
           CURRENT_OSTREE=$(jq -r '.ostree.version' "$CHECKSUMS")
-          LATEST_OSTREE=$(curl -s https://api.github.com/repos/ostreedev/ostree/releases/latest | jq -r '.tag_name' | sed 's/^v//')
-          if [[ -n "$LATEST_OSTREE" && "$LATEST_OSTREE" != "$CURRENT_OSTREE" ]]; then
+          LATEST_OSTREE=$(gh_api https://api.github.com/repos/ostreedev/ostree/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_OSTREE" && "$LATEST_OSTREE" != "null" && "$LATEST_OSTREE" != "$CURRENT_OSTREE" ]]; then
             UPDATES="${UPDATES}ostree: $CURRENT_OSTREE -> $LATEST_OSTREE\n"
             echo "ostree_update=true" >> $GITHUB_OUTPUT
             echo "ostree_version=$LATEST_OSTREE" >> $GITHUB_OUTPUT
@@ -65,8 +81,8 @@ jobs:
           # shared/bootc/build/bootc.chroot — a new bootc release may raise the
           # rustc version needed to BUILD it (its build deps, not just MSRV).
           CURRENT_BOOTC=$(jq -r '.bootc.version' "$CHECKSUMS")
-          LATEST_BOOTC=$(curl -s https://api.github.com/repos/bootc-dev/bootc/releases/latest | jq -r '.tag_name' | sed 's/^v//')
-          if [[ -n "$LATEST_BOOTC" && "$LATEST_BOOTC" != "$CURRENT_BOOTC" ]]; then
+          LATEST_BOOTC=$(gh_api https://api.github.com/repos/bootc-dev/bootc/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_BOOTC" && "$LATEST_BOOTC" != "null" && "$LATEST_BOOTC" != "$CURRENT_BOOTC" ]]; then
             UPDATES="${UPDATES}bootc: $CURRENT_BOOTC -> $LATEST_BOOTC\n"
             echo "bootc_update=true" >> $GITHUB_OUTPUT
             echo "bootc_version=$LATEST_BOOTC" >> $GITHUB_OUTPUT
@@ -74,9 +90,9 @@ jobs:
 
           # Check Surface cert (less frequent changes)
           CURRENT_SURF=$(jq -r '.["surface-cert"].version' "$CHECKSUMS")
-          LATEST_SURF=$(curl -s https://api.github.com/repos/linux-surface/linux-surface/commits?path=pkg/keys/surface.cer | jq -r '.[0].sha' | head -c 12)
+          LATEST_SURF=$(gh_api "https://api.github.com/repos/linux-surface/linux-surface/commits?path=pkg/keys/surface.cer" | jq -r '.[0].sha' | head -c 12)
           CURRENT_SURF_SHORT=$(echo "$CURRENT_SURF" | head -c 12)
-          if [[ "$LATEST_SURF" != "$CURRENT_SURF_SHORT" ]]; then
+          if [[ -n "$LATEST_SURF" && "$LATEST_SURF" != "null" && "$LATEST_SURF" != "$CURRENT_SURF_SHORT" ]]; then
             UPDATES="${UPDATES}surface-cert: $CURRENT_SURF_SHORT -> $LATEST_SURF\n"
             echo "surface_update=true" >> $GITHUB_OUTPUT
             echo "surface_commit=$LATEST_SURF" >> $GITHUB_OUTPUT
@@ -84,8 +100,8 @@ jobs:
 
           # Check hotedge
           CURRENT_HE=$(jq -r '.hotedge.version' "$CHECKSUMS")
-          LATEST_HE=$(curl -s https://api.github.com/repos/frostyard/hotedge/commits/HEAD | jq -r '.sha')
-          if [[ "$LATEST_HE" != "$CURRENT_HE" ]]; then
+          LATEST_HE=$(gh_api https://api.github.com/repos/frostyard/hotedge/commits/HEAD | jq -r '.sha')
+          if [[ -n "$LATEST_HE" && "$LATEST_HE" != "null" && "$LATEST_HE" != "$CURRENT_HE" ]]; then
             UPDATES="${UPDATES}hotedge: ${CURRENT_HE:0:12} -> ${LATEST_HE:0:12}\n"
             echo "hotedge_update=true" >> $GITHUB_OUTPUT
             echo "hotedge_commit=$LATEST_HE" >> $GITHUB_OUTPUT
@@ -93,8 +109,8 @@ jobs:
 
           # Check logomenu
           CURRENT_LM=$(jq -r '.logomenu.version' "$CHECKSUMS")
-          LATEST_LM=$(curl -s https://api.github.com/repos/frostyard/logomenu/commits/HEAD | jq -r '.sha')
-          if [[ "$LATEST_LM" != "$CURRENT_LM" ]]; then
+          LATEST_LM=$(gh_api https://api.github.com/repos/frostyard/logomenu/commits/HEAD | jq -r '.sha')
+          if [[ -n "$LATEST_LM" && "$LATEST_LM" != "null" && "$LATEST_LM" != "$CURRENT_LM" ]]; then
             UPDATES="${UPDATES}logomenu: ${CURRENT_LM:0:12} -> ${LATEST_LM:0:12}\n"
             echo "logomenu_update=true" >> $GITHUB_OUTPUT
             echo "logomenu_commit=$LATEST_LM" >> $GITHUB_OUTPUT
@@ -102,7 +118,7 @@ jobs:
 
           # Check bazaar (Bazaar Companion GNOME extension)
           CURRENT_BZ=$(jq -r '.bazaar.version' "$CHECKSUMS")
-          LATEST_BZ=$(curl -s https://api.github.com/repos/AlexanderVanhee/bazaar-companion/commits/HEAD | jq -r '.sha')
+          LATEST_BZ=$(gh_api https://api.github.com/repos/AlexanderVanhee/bazaar-companion/commits/HEAD | jq -r '.sha')
           if [[ -n "$LATEST_BZ" && "$LATEST_BZ" != "null" && "$LATEST_BZ" != "$CURRENT_BZ" ]]; then
             UPDATES="${UPDATES}bazaar: ${CURRENT_BZ:0:12} -> ${LATEST_BZ:0:12}\n"
             echo "bazaar_update=true" >> $GITHUB_OUTPUT
@@ -111,7 +127,7 @@ jobs:
 
           # Check Microsoft Azure VPN Client
           CURRENT_AZ=$(jq -r '.["microsoft-azurevpnclient"].version' "$CHECKSUMS")
-          LATEST_AZ=$(curl -s https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
+          LATEST_AZ=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
           if [[ -n "$LATEST_AZ" && "$LATEST_AZ" != "$CURRENT_AZ" ]]; then
             UPDATES="${UPDATES}microsoft-azurevpnclient: $CURRENT_AZ -> $LATEST_AZ\n"
             echo "azurevpn_update=true" >> $GITHUB_OUTPUT
@@ -120,7 +136,7 @@ jobs:
 
           # Check Microsoft Edge Stable
           CURRENT_EDGE=$(jq -r '.["microsoft-edge-stable"].version' "$CHECKSUMS")
-          LATEST_EDGE=$(curl -s https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
+          LATEST_EDGE=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
           if [[ -n "$LATEST_EDGE" && "$LATEST_EDGE" != "$CURRENT_EDGE" ]]; then
             UPDATES="${UPDATES}microsoft-edge-stable: $CURRENT_EDGE -> $LATEST_EDGE\n"
             echo "edge_update=true" >> $GITHUB_OUTPUT
@@ -137,11 +153,37 @@ jobs:
 
       - name: Update checksums
         if: steps.check.outputs.has_updates == 'true'
+        # Step outputs derive from external release/commit data; passing them
+        # through env (rather than inline ${{ }} interpolation in the script)
+        # keeps a malicious upstream tag from injecting shell commands.
+        env:
+          BITWARDEN_UPDATE: ${{ steps.check.outputs.bitwarden_update }}
+          BITWARDEN_VERSION: ${{ steps.check.outputs.bitwarden_version }}
+          CODESERVER_UPDATE: ${{ steps.check.outputs.codeserver_update }}
+          CODESERVER_VERSION: ${{ steps.check.outputs.codeserver_version }}
+          OSTREE_UPDATE: ${{ steps.check.outputs.ostree_update }}
+          OSTREE_VERSION: ${{ steps.check.outputs.ostree_version }}
+          BOOTC_UPDATE: ${{ steps.check.outputs.bootc_update }}
+          BOOTC_VERSION: ${{ steps.check.outputs.bootc_version }}
+          BREW_UPDATE: ${{ steps.check.outputs.brew_update }}
+          BREW_COMMIT: ${{ steps.check.outputs.brew_commit }}
+          SURFACE_UPDATE: ${{ steps.check.outputs.surface_update }}
+          SURFACE_COMMIT: ${{ steps.check.outputs.surface_commit }}
+          HOTEDGE_UPDATE: ${{ steps.check.outputs.hotedge_update }}
+          HOTEDGE_COMMIT: ${{ steps.check.outputs.hotedge_commit }}
+          LOGOMENU_UPDATE: ${{ steps.check.outputs.logomenu_update }}
+          LOGOMENU_COMMIT: ${{ steps.check.outputs.logomenu_commit }}
+          BAZAAR_UPDATE: ${{ steps.check.outputs.bazaar_update }}
+          BAZAAR_COMMIT: ${{ steps.check.outputs.bazaar_commit }}
+          AZUREVPN_UPDATE: ${{ steps.check.outputs.azurevpn_update }}
+          AZUREVPN_VERSION: ${{ steps.check.outputs.azurevpn_version }}
+          EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
+          EDGE_VERSION: ${{ steps.check.outputs.edge_version }}
         run: |
           CHECKSUMS="shared/download/checksums.json"
 
-          if [[ "${{ steps.check.outputs.bitwarden_update }}" == "true" ]]; then
-            VER="${{ steps.check.outputs.bitwarden_version }}"
+          if [[ "$BITWARDEN_UPDATE" == "true" ]]; then
+            VER="$BITWARDEN_VERSION"
             URL="https://github.com/bitwarden/clients/releases/download/desktop-v${VER}/Bitwarden-${VER}-amd64.deb"
             TMP=$(mktemp)
             curl -fsSL -o "$TMP" "$URL"
@@ -152,8 +194,8 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "${{ steps.check.outputs.codeserver_update }}" == "true" ]]; then
-            VER="${{ steps.check.outputs.codeserver_version }}"
+          if [[ "$CODESERVER_UPDATE" == "true" ]]; then
+            VER="$CODESERVER_VERSION"
             URL="https://github.com/coder/code-server/releases/download/v${VER}/code-server_${VER}_amd64.deb"
             TMP=$(mktemp)
             curl -fsSL -o "$TMP" "$URL"
@@ -164,8 +206,8 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "${{ steps.check.outputs.ostree_update }}" == "true" ]]; then
-            VER="${{ steps.check.outputs.ostree_version }}"
+          if [[ "$OSTREE_UPDATE" == "true" ]]; then
+            VER="$OSTREE_VERSION"
             URL="https://github.com/ostreedev/ostree/releases/download/v${VER}/libostree-${VER}.tar.xz"
             TMP=$(mktemp)
             curl -fsSL -o "$TMP" "$URL"
@@ -176,8 +218,8 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "${{ steps.check.outputs.bootc_update }}" == "true" ]]; then
-            VER="${{ steps.check.outputs.bootc_version }}"
+          if [[ "$BOOTC_UPDATE" == "true" ]]; then
+            VER="$BOOTC_VERSION"
             URL="https://github.com/bootc-dev/bootc/releases/download/v${VER}/bootc-${VER}.tar.zstd"
             VURL="https://github.com/bootc-dev/bootc/releases/download/v${VER}/bootc-${VER}-vendor.tar.zstd"
             TMP=$(mktemp); VTMP=$(mktemp)
@@ -193,8 +235,8 @@ jobs:
             rm -f "$TMP" "$VTMP"
           fi
 
-          if [[ "${{ steps.check.outputs.brew_update }}" == "true" ]]; then
-            COMMIT="${{ steps.check.outputs.brew_commit }}"
+          if [[ "$BREW_UPDATE" == "true" ]]; then
+            COMMIT="$BREW_COMMIT"
             URL="https://raw.githubusercontent.com/Homebrew/install/${COMMIT}/install.sh"
             TMP=$(mktemp)
             curl -fsSL -o "$TMP" "$URL"
@@ -205,8 +247,8 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "${{ steps.check.outputs.surface_update }}" == "true" ]]; then
-            COMMIT="${{ steps.check.outputs.surface_commit }}"
+          if [[ "$SURFACE_UPDATE" == "true" ]]; then
+            COMMIT="$SURFACE_COMMIT"
             URL="https://github.com/linux-surface/linux-surface/raw/${COMMIT}/pkg/keys/surface.cer"
             TMP=$(mktemp)
             curl -fsSL -o "$TMP" "$URL"
@@ -217,8 +259,8 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "${{ steps.check.outputs.hotedge_update }}" == "true" ]]; then
-            COMMIT="${{ steps.check.outputs.hotedge_commit }}"
+          if [[ "$HOTEDGE_UPDATE" == "true" ]]; then
+            COMMIT="$HOTEDGE_COMMIT"
             URL="https://codeload.github.com/frostyard/hotedge/tar.gz/${COMMIT}"
             TMP=$(mktemp)
             curl -fsSL -o "$TMP" "$URL"
@@ -229,8 +271,8 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "${{ steps.check.outputs.logomenu_update }}" == "true" ]]; then
-            COMMIT="${{ steps.check.outputs.logomenu_commit }}"
+          if [[ "$LOGOMENU_UPDATE" == "true" ]]; then
+            COMMIT="$LOGOMENU_COMMIT"
             URL="https://codeload.github.com/frostyard/logomenu/tar.gz/${COMMIT}"
             TMP=$(mktemp)
             curl -fsSL -o "$TMP" "$URL"
@@ -241,8 +283,8 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "${{ steps.check.outputs.bazaar_update }}" == "true" ]]; then
-            COMMIT="${{ steps.check.outputs.bazaar_commit }}"
+          if [[ "$BAZAAR_UPDATE" == "true" ]]; then
+            COMMIT="$BAZAAR_COMMIT"
             URL="https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/${COMMIT}"
             TMP=$(mktemp)
             curl -fsSL -o "$TMP" "$URL"
@@ -253,8 +295,8 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "${{ steps.check.outputs.azurevpn_update }}" == "true" ]]; then
-            VER="${{ steps.check.outputs.azurevpn_version }}"
+          if [[ "$AZUREVPN_UPDATE" == "true" ]]; then
+            VER="$AZUREVPN_VERSION"
             URL="https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_${VER}_amd64.deb"
             TMP=$(mktemp)
             curl -fsSL -o "$TMP" "$URL"
@@ -265,8 +307,8 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "${{ steps.check.outputs.edge_update }}" == "true" ]]; then
-            VER="${{ steps.check.outputs.edge_version }}"
+          if [[ "$EDGE_UPDATE" == "true" ]]; then
+            VER="$EDGE_VERSION"
             URL="https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_${VER}_amd64.deb"
             TMP=$(mktemp)
             curl -fsSL -o "$TMP" "$URL"
@@ -281,7 +323,12 @@ jobs:
         if: steps.check.outputs.has_updates == 'true'
         uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN-created PRs do not trigger workflows (validate/build
+          # never run on them). Set the WORKFLOW_PAT repo secret (fine-grained
+          # PAT or GitHub App token with contents+pull-requests write) to give
+          # auto-update PRs real CI; until then this falls back to
+          # GITHUB_TOKEN and PRs must be checked manually.
+          token: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
           commit-message: "chore: update external dependency checksums"
           title: "chore: update external dependency checksums"
           body: |

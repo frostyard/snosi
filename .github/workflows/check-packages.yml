@@ -16,6 +16,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Check latest package versions
         run: |
@@ -93,7 +95,10 @@ jobs:
         if: steps.compare.outputs.has_updates == 'true'
         uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN-created PRs do not trigger workflows; set the
+          # WORKFLOW_PAT repo secret to give auto-update PRs real CI (see
+          # check-dependencies.yml for details).
+          token: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
           commit-message: "chore: update package versions"
           title: "chore: update package versions"
           body: |
