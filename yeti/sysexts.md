@@ -10,6 +10,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 2. **Config injection** — Configs needed in `/etc` must be:
    - Captured to `/usr/share/factory/etc/` during the sysext build (via mkosi.finalize)
    - Injected at boot via systemd-tmpfiles rules in `/usr/lib/tmpfiles.d/`
+   - Capture ONLY the specific paths the tmpfiles rules reference — never all of `/etc`. The buildroot `/etc` is the merged base view, so a full capture leaks `/etc/shadow` and SSH host keys into the published sysext (frostyard/snosi#282)
 3. **Overlay composition** — All sysexts overlay the same base `/usr`, so file conflicts between sysexts must be avoided.
 
 ## Current Sysexts
@@ -73,7 +74,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 
 ### himmelblau
 - `mkosi.postinst.chroot` — Post-install customization hook (currently minimal)
-- `mkosi.finalize` — Captures `/etc` to `/usr/share/factory/etc/` for tmpfiles injection at boot
+- `mkosi.finalize` — Captures `/etc/himmelblau` to `/usr/share/factory/etc/` for tmpfiles injection at boot
 - `usr/lib/himmelblau/himmelblau-sysext-setup` — Runtime PAM/NSS injection script (idempotent, runs at boot): adds `himmelblau` to nsswitch.conf passwd/group/shadow, runs `pam-auth-update --enable himmelblau`
 - `usr/lib/systemd/system/himmelblau-sysext-setup.service` — Oneshot service to run setup script (conditioned on `/run/himmelblau-sysext-setup.done`)
 - `usr/lib/systemd/system-preset/40-himmelblau.preset` — Enable himmelblaud and himmelblau-sysext-setup services
@@ -182,7 +183,7 @@ The setup script must be idempotent — safe to run on every boot without accumu
 1. Create `mkosi.images/<name>/mkosi.conf` following the pattern above
 2. Set `KEYPACKAGE` to the primary package name
 3. Add any extra files in `mkosi.images/<name>/mkosi.extra/`
-4. If configs needed in `/etc`: create `mkosi.finalize` to capture to `/usr/share/factory/etc/`, add tmpfiles.d rules
+4. If configs needed in `/etc`: create `mkosi.finalize` to capture ONLY the needed paths to `/usr/share/factory/etc/` (never all of `/etc` — see Constraints), add tmpfiles.d rules
 5. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`
 6. **If the sysext ships a systemd service:** add `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` with `Upholds=<name>.service` (see [Service Activation Pattern](#service-activation-pattern-upholds) above)
 7. Add the sysext name to root `mkosi.conf` Dependencies list
