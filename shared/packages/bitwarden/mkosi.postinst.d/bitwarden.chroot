@@ -21,7 +21,8 @@ dpkg -i debs/bitwarden.deb
 rm -rf debs
 
 ${SUDO} mv /opt/Bitwarden /usr/lib/Bitwarden
-${SUDO} rm -rf /opt/{Bitwarden,}
+# /opt itself must stay: it is the mountpoint for opt.mount (bind to /var/opt)
+${SUDO} rm -rf /opt/Bitwarden
 ${SUDO} mkdir -p /usr/bin
 ${SUDO} ln -sf /usr/lib/Bitwarden/bitwarden /usr/bin/bitwarden
 ${SUDO} ln -sf /usr/lib/Bitwarden/bitwarden-app /usr/bin/bitwarden-app
