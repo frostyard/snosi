@@ -27,6 +27,10 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+    outputs:
+      # Set only by the snowloaded matrix leg (skipped steps don't overwrite
+      # a value another leg has set); empty when snowloaded didn't push.
+      snowloaded_tag: ${{ steps.snowloaded-tag.outputs.tag }}
     strategy:
       # Don't let one variant's failure (e.g. disk exhaustion on a "loaded"
       # image) cancel the other in-flight builds. Each variant is independent.
@@ -58,7 +62,7 @@ jobs:
           tool-cache: true
 
       - name: Mount BTRFS for podman storage
-        uses: ublue-os/container-storage-action@main
+        uses: ublue-os/container-storage-action@dc1f4c8f17b672069e921f001132f7cf98a423a6 # main 2026-02-11
         with:
           target-dir: /var/lib/containers
 
@@ -164,11 +168,15 @@ jobs:
         id: push
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: |
+          # Login via stdin instead of --creds so the secret never appears in
+          # process arguments (visible in /proc to every process on the runner)
+          echo "$GHCR_PAT" | sudo buildah login -u "${{ github.actor }}" --password-stdin ghcr.io
+
           sudo TMPDIR="$TMPDIR" buildah push \
             --compression-format=zstd:chunked \
             --digestfile=/tmp/image-digest \
-            --creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
             "$IMAGE:${{ steps.version.outputs.tag }}" \
             "docker://$IMAGE:${{ steps.version.outputs.tag }}"
 
@@ -184,9 +192,16 @@ jobs:
             "$IMAGE:latest"
           sudo TMPDIR="$TMPDIR" buildah push \
             --compression-format=zstd:chunked \
-            --creds="${{ github.actor }}:${{ secrets.GHCR_PAT }}" \
             "$IMAGE:latest" \
             "docker://$IMAGE:latest"
+
+      - name: Record snowloaded tag for release job
+        # Runs only after a successful snowloaded push; the release job keys
+        # off this output so a failed sibling profile can't suppress the
+        # release (and a failed snowloaded push correctly does).
+        if: matrix.profile == 'snowloaded' && github.event_name != 'pull_request'
+        id: snowloaded-tag
+        run: echo "tag=${{ steps.version.outputs.tag }}" >> "$GITHUB_OUTPUT"
 
       - name: Log in to ghcr.io
         if: github.event_name != 'pull_request'
@@ -248,8 +263,10 @@ jobs:
 
       - name: Sign image
         if: github.event_name != 'pull_request'
+        # No cosign login needed: the docker/login-action step above already
+        # wrote registry credentials to the docker config cosign reads.
+        # (The removed 'cosign login -p' also leaked the PAT on argv.)
         run: |
-          cosign login ghcr.io -u "${{ github.actor }}" -p "${{ secrets.GHCR_PAT }}"
           cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
             "$IMAGE@${{ steps.push.outputs.digest }}"
         env:
@@ -287,8 +304,12 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.build.result == 'success'
-    continue-on-error: true
+    # !cancelled() + the snowloaded_tag gate: run whenever the snowloaded leg
+    # pushed, even if a sibling profile failed (fail-fast is off). Previously
+    # any failed leg skipped the release and that interval's changes were
+    # never described in any release. continue-on-error was also dropped so
+    # release failures are visible instead of always green.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && needs.build.outputs.snowloaded_tag != ''
     permissions:
       contents: write
     steps:
@@ -304,33 +325,47 @@ jobs:
         id: versions
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/snowloaded
+          CURRENT: ${{ needs.build.outputs.snowloaded_tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          tags=$(oras repo tags "$IMAGE" | grep -E '^[0-9]{14}$' | sort -r || true)
-          if [[ -z "$tags" ]]; then
-            echo "::warning::No timestamped tags found on $IMAGE; skipping release"
+          # Prefer the tag recorded in the most recent GitHub Release: if a
+          # past release run failed, the next one diffs across the gap instead
+          # of silently losing that interval. Fall back to the registry for
+          # first runs / pre-marker releases.
+          previous=$(gh release view --repo "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null | grep -oP '(?<=<!-- snowloaded-tag: )[0-9]{14}(?= -->)' | head -n1 || true)
+          if [[ -z "$previous" ]]; then
+            previous=$(oras repo tags "$IMAGE" | grep -E '^[0-9]{14}$' | grep -vx "$CURRENT" | sort -r | head -n1 || true)
+          fi
+          if [[ -z "$previous" ]]; then
+            echo "::warning::No previous snowloaded tag found; nothing to diff against; skipping release"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          current=$(echo "$tags" | head -n1)
-          previous=$(echo "$tags" | sed -n '2p')
-          if [[ -z "$previous" ]]; then
-            echo "::warning::Only one timestamped tag on $IMAGE; nothing to diff against; skipping release"
+          if [[ "$previous" == "$CURRENT" ]]; then
+            echo "::warning::Previous tag equals current ($CURRENT); skipping release"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "previous=$previous" >> "$GITHUB_OUTPUT"
-          echo "current=$current"   >> "$GITHUB_OUTPUT"
+          echo "current=$CURRENT"   >> "$GITHUB_OUTPUT"
 
       - name: Generate changelog
         id: changelog
         if: steps.versions.outputs.skip != 'true'
-        uses: frostyard/changelog-generator@main
+        uses: frostyard/changelog-generator@7bd6be9ecc9ab8297d73fdc1f1925f727c6bdeb9 # main 2026-04-09
         with:
           image: ghcr.io/${{ github.repository_owner }}/snowloaded
           previous-tag: ${{ steps.versions.outputs.previous }}
           current-tag: ${{ steps.versions.outputs.current }}
           output-file: changelog.md
+
+      - name: Record image tag in release notes
+        if: steps.versions.outputs.skip != 'true'
+        env:
+          CURRENT: ${{ steps.versions.outputs.current }}
+        run: |
+          printf '\n<!-- snowloaded-tag: %s -->\n' "$CURRENT" >> changelog.md
 
       - name: Compute release tag and title
         id: release-meta
