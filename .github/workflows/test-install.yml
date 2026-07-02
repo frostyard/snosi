@@ -59,8 +59,13 @@ jobs:
         env:
           TAG: ${{ inputs.image_tag || 'latest' }}
         run: |
-          cosign verify --key cosign.pub "${IMAGE}:${TAG}"
+          # Resolve the mutable tag to its digest FIRST, then verify that
+          # immutable ref and use it for everything downstream. Verifying the
+          # tag and resolving afterwards leaves a window where the tag moves
+          # to an unverified image.
           DIGEST=$(skopeo inspect --format '{{.Digest}}' "docker://${IMAGE}:${TAG}")
+          echo "Resolved ${IMAGE}:${TAG} -> ${DIGEST}"
+          cosign verify --key cosign.pub "${IMAGE}@${DIGEST}"
           echo "IMAGE_REF=${IMAGE}@${DIGEST}" >> "$GITHUB_ENV"
 
       - name: Pull image
