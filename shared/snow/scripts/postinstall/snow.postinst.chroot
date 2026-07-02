@@ -26,6 +26,15 @@ ln -sf /usr/lib/systemd/user/gnome-remote-desktop.service /etc/systemd/user/gnom
 ln -sf /usr/lib/systemd/user/gnome-remote-desktop-handover.service /etc/systemd/user/gnome-session.target.wants/gnome-remote-desktop-handover.service
 rm -f /etc/systemd/user/gnome-session.target.wants/gnome-remote-desktop-headless.service
 
+# rygel (UPnP/DLNA media server) is deliberately NOT autostarted: an always-on
+# media server is a surprising desktop default. deb-systemd-helper records it
+# as enabled in its tracking dir even though the enablement symlink is never
+# created (the known dsh gap), leaving inconsistent state — remove the
+# tracking and any symlink so "disabled" is recorded consistently.
+rm -f /etc/systemd/user/default.target.wants/rygel.service
+rm -rf /var/lib/systemd/deb-systemd-user-helper-enabled/rygel.service.dsh-also \
+       /var/lib/systemd/deb-systemd-user-helper-enabled/default.target.wants/rygel.service
+
 # Compile dconf databases to avoid "expect degraded performance" warnings in GNOME services
 dconf update
 
