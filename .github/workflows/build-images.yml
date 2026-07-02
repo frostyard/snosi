@@ -22,6 +22,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # A hung mkosi/apt otherwise burns the 6-hour default per matrix leg.
+    timeout-minutes: 180
     permissions:
       contents: read
       packages: write
@@ -124,9 +126,13 @@ jobs:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
           MAX_LAYERS: 128
         run: |
+          # head_commit.timestamp is empty on workflow_dispatch/repository_dispatch
+          # and GNU 'date -d ""' silently yields today-midnight; derive the epoch
+          # from the checked-out commit instead (correct for every trigger).
+          SOURCE_EPOCH=$(git log -1 --format=%ct)
           sudo TMPDIR="$TMPDIR" ./shared/outformat/image/chunkah-package.sh \
           "$IMAGE:${{ steps.version.outputs.tag }}" \
-          $(date -d '${{ github.event.head_commit.timestamp }}' +%s)
+          "$SOURCE_EPOCH"
 
       - name: Smoke test - verify SUID bit on sudo
         env:
