@@ -1,7 +1,0 @@
-Types: deb
-URIs: https://repo.nordvpn.com/deb/nordvpn/debian
-Suites: stable
-Components: main
-Architectures: amd64
-Enabled: yes
-Signed-By: /etc/apt/keyrings/nordvpn_public.gpg

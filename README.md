@@ -243,7 +243,7 @@ External repositories are configured in `mkosi.sandbox/etc/apt/` for packages no
 
 - **Docker**: docker.com official repository
 - **Himmelblau**: Himmelblau Entra ID authentication (nightly)
-- **Incus**: Zabbly repository
+- **Incus**: Debian trixie (no external repo)
 - **linux-surface**: Surface kernel packages
 - **Frostyard**: Custom packages (nbc, chairlift, updex)
 
