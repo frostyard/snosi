@@ -27,17 +27,19 @@ jobs:
           CHECKSUMS="shared/download/checksums.json"
           UPDATES=""
 
-          # Authenticated, retried GitHub API fetch. On persistent failure the
-          # pipeline yields an empty string, which every branch below guards
-          # against — a failed check skips that dependency instead of
-          # proposing a bogus "null" update.
-gh_api() {
-  curl -fsSL --retry 3 --retry-delay 2 \
-    -H "Accept: application/vnd.github+json" \
-    -H "Authorization: Bearer ${GH_TOKEN}" \
-    -H "X-GitHub-Api-Version: 2022-11-28" \
-    "$1" 2>/dev/null || echo '[]'
-}
+          # Authenticated, retried GitHub API fetch. On persistent failure it
+          # yields an empty string (|| true — explicit, so the graceful-skip
+          # behavior doesn't depend on the shell's -e/pipefail settings, and
+          # curl's error stays visible in the log). Every branch below guards
+          # against the empty value: a failed check skips that dependency
+          # instead of proposing a bogus "null" update or aborting the run.
+          gh_api() {
+            curl -fsSL --retry 3 --retry-delay 2 \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$1" || true
+          }
 
           # Check Bitwarden (skip drafts/prereleases)
           CURRENT_BW=$(jq -r '.bitwarden.version' "$CHECKSUMS")
