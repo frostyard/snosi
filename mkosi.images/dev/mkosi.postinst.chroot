@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+
+# Sysexts can only ship /usr, so update-alternatives symlinks created while
+# installing this sysext's packages would dangle at runtime — their
+# /etc/alternatives targets never leave the build (frostyard/snosi#309;
+# observed live: /usr/bin/automake -> /etc/alternatives/automake, missing).
+# Repoint any /usr/bin and /usr/sbin symlink that routes through
+# /etc/alternatives to its fully resolved target instead.
+for dir in /usr/bin /usr/sbin; do
+    [ -d "$dir" ] || continue
+    find "$dir" -maxdepth 1 -type l | while read -r link; do
+        target=$(readlink "$link")
+        case "$target" in
+            /etc/alternatives/*) ;;
+            *) continue ;;
+        esac
+        resolved=$(readlink -f "$link" || true)
+        if [ -n "$resolved" ] && [ -e "$resolved" ]; then
+            ln -sf "$resolved" "$link"
+            echo "repointed $link -> $resolved (was $target)"
+        else
+            echo "WARNING: $link -> $target does not resolve; leaving as-is" >&2
+        fi
+    done
+done
