@@ -28,6 +28,9 @@ fi
 # Move the extension sources (src/) into the extension folder
 mkdir -p "$DESTINATION"
 cp -a "$SOURCE_DIR"/src/. "$DESTINATION"/
+if [[ -f "$SOURCE_DIR/LICENSE" ]]; then
+    cp "$SOURCE_DIR/LICENSE" "$DESTINATION/LICENSE"
+fi
 
 # set the permissions: 755 for directories and 644 for files in the extension directory
 find "$DESTINATION" -type d -exec chmod 755 {} +
