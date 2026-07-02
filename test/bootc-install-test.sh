@@ -44,6 +44,15 @@ cleanup() {
     echo ""
     echo "=== Cleanup ==="
 
+    # Unmount and detach first — before vm_cleanup removes the backing disk
+    # file and before we attempt to rm -rf WORK_DIR through a live mountpoint.
+    if [[ -n "$WORK_DIR" ]] && mountpoint -q "$WORK_DIR/mnt" 2>/dev/null; then
+        umount "$WORK_DIR/mnt" || true
+    fi
+    if [[ -n "${loop:-}" ]]; then
+        losetup -d "$loop" 2>/dev/null || true
+    fi
+
     # Stop VM and remove disk
     vm_cleanup
 
@@ -53,10 +62,16 @@ cleanup() {
         podman rmi -f "$IMAGE_LOADED" 2>/dev/null || true
     fi
 
-    # Remove temp directory
+    # Only remove WORK_DIR once the mountpoint is confirmed gone; if the
+    # umount above failed the directory could still be mounted and an
+    # unconditional rm -rf would delete the installed disk's contents.
     if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then
-        rm -rf "$WORK_DIR"
-        echo "Removed temp directory: $WORK_DIR"
+        if ! mountpoint -q "$WORK_DIR/mnt" 2>/dev/null; then
+            rm -rf "$WORK_DIR"
+            echo "Removed temp directory: $WORK_DIR"
+        else
+            echo "WARNING: $WORK_DIR/mnt is still mounted; skipping removal to avoid data loss" >&2
+        fi
     fi
 }
 
