@@ -79,7 +79,6 @@ Root `mkosi.conf` lists `base` plus all sysexts for the sysext publishing build.
 Profile (e.g., snow/mkosi.conf)
 ├── Include: shared/packages/snow/mkosi.conf      # Package set
 ├── Include: shared/kernel/backports/mkosi.conf    # Kernel variant
-├── Include: shared/packages/fw-ipw/mkosi.conf     # Intel WiFi firmware
 ├── Include: shared/outformat/image/mkosi.conf     # Output format (directory)
 ├── Dependencies: base                              # Requires base image
 ├── ExtraTrees: shared/snow/tree                    # Filesystem overlay
