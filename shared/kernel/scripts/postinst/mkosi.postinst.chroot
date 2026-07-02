@@ -5,8 +5,14 @@ set -euo pipefail
 # It performs final customizations
 
 echo "Running post-installation customizations..."
-# Build Initramfs
-KERNEL_VERSION="$(basename "$(find /usr/lib/modules -maxdepth 1 -type d | grep -v -E "*.img" | tail -n 1)")"
+# Build Initramfs for the newest installed kernel. -mindepth 1 keeps
+# /usr/lib/modules itself out of the list; sort -V picks the highest version
+# deterministically when more than one kernel package is installed.
+KERNEL_VERSION="$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -n 1)"
+if [[ -z "$KERNEL_VERSION" ]]; then
+  echo "ERROR: no kernel found under /usr/lib/modules" >&2
+  exit 1
+fi
 
 dracut --force --no-hostonly --reproducible --zstd --verbose --add etc-overlay \
   --kver "$KERNEL_VERSION" "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
