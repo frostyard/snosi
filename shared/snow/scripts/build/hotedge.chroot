@@ -1,11 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-# this script downloads a pinned hotedge source archive into the appropriate location
-# in the build tree so that it can be included in the final image.
+# this script downloads a pinned hotedge source archive and installs it into
+# the image via $DESTDIR (never into the source checkout — frostyard/snosi#293).
 # hotedge is a GNOME Shell extension that adds a hot corner to the screen.
 
-DESTINATION="$SRCDIR/shared/snow/tree/usr/share/gnome-shell/extensions/hotedge@jonathan.jdoda.ca"
+DESTINATION="$DESTDIR/usr/share/gnome-shell/extensions/hotedge@jonathan.jdoda.ca"
 source "$SRCDIR/shared/download/verified-download.sh"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

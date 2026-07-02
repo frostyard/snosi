@@ -14,11 +14,11 @@ else
 fi
 
 source "$SRCDIR/shared/download/verified-download.sh"
-mkdir -p debs
-verified_download "bitwarden" "debs/bitwarden.deb"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "bitwarden" "$DEBS/bitwarden.deb"
 
-dpkg -i debs/bitwarden.deb
-rm -rf debs
+dpkg -i "$DEBS/bitwarden.deb"
 
 ${SUDO} mv /opt/Bitwarden /usr/lib/Bitwarden
 # /opt itself must stay: it is the mountpoint for opt.mount (bind to /var/opt)
