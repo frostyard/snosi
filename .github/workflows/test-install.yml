@@ -50,14 +50,28 @@ jobs:
       - name: Login to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Pull image
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+        with:
+          cosign-release: "v2.6.1"
+
+      - name: Verify image signature
         env:
           TAG: ${{ inputs.image_tag || 'latest' }}
         run: |
-          podman pull "${IMAGE}:${TAG}"
+          # Resolve the mutable tag to its digest FIRST, then verify that
+          # immutable ref and use it for everything downstream. Verifying the
+          # tag and resolving afterwards leaves a window where the tag moves
+          # to an unverified image.
+          DIGEST=$(skopeo inspect --format '{{.Digest}}' "docker://${IMAGE}:${TAG}")
+          echo "Resolved ${IMAGE}:${TAG} -> ${DIGEST}"
+          cosign verify --key cosign.pub "${IMAGE}@${DIGEST}"
+          echo "IMAGE_REF=${IMAGE}@${DIGEST}" >> "$GITHUB_ENV"
+
+      - name: Pull image
+        run: |
+          podman pull "${IMAGE_REF}"
 
       - name: Run installation tests
-        env:
-          TAG: ${{ inputs.image_tag || 'latest' }}
         run: |
-          ./test/bootc-install-test.sh "${IMAGE}:${TAG}"
+          ./test/bootc-install-test.sh "${IMAGE_REF}"
