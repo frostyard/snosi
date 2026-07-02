@@ -30,13 +30,12 @@ jobs:
         # the repo has many extensionless scripts (mkosi.finalize, mkosi.clean,
         # in-image usr/libexec/* runtime scripts, sysext-setup scripts) that
         # *.sh/*.chroot missed entirely. saved-unused/ is dead code excluded
-        # from builds. TODO(#307): raise -S error to -S warning once the
-        # script-hygiene batch lands.
+        # from builds.
         run: |
           {
             git ls-files '*.sh' '*.chroot'
             git ls-files | xargs awk 'FNR==1 && /^#!\/(usr\/)?bin\/(env )?(ba)?sh/ {print FILENAME} {nextfile}' 2>/dev/null
-          } | grep -v '^saved-unused/' | sort -u | xargs -r shellcheck -S error -x
+          } | grep -v '^saved-unused/' | sort -u | xargs -r shellcheck -S warning -x
 
   mkosi-config-sanity:
     runs-on: ubuntu-latest

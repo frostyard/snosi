@@ -19,16 +19,22 @@ LOADED=$(podman run --rm \
     -e "CHUNKAH_CONFIG_STR=$CONFIG" \
     -e "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
     quay.io/coreos/chunkah@sha256:fdff3175bfb41e111089392ef8a41b46a10766c7b2ec454ba1272a0c39ce3bf3 \
-    build --prune /sysroot/ --max-layers $MAX_LAYERS \
+    build --prune /sysroot/ --max-layers "$MAX_LAYERS" \
     --label ostree.commit- --label ostree.final-diffid- | podman load)
 
 echo "$LOADED"
 
-# Parse the loaded image reference
+# Parse the loaded image reference. The image is already loaded at this
+# point, so a wording change in podman's output must not abort the script —
+# fail loudly instead so the message format can be fixed.
 NEW_REF=$(echo "$LOADED" | grep -oP '(?<=Loaded image: ).*' || \
-          echo "$LOADED" | grep -oP '(?<=Loaded image\(s\): ).*')
+          echo "$LOADED" | grep -oP '(?<=Loaded image\(s\): ).*' || true)
+if [ -z "$NEW_REF" ]; then
+    echo "ERROR: could not parse loaded image ref from podman output above" >&2
+    exit 1
+fi
 
-if [ -n "$NEW_REF" ] && [ "$NEW_REF" != "$IMAGE_REF" ]; then
+if [ "$NEW_REF" != "$IMAGE_REF" ]; then
     echo "==> Retagging chunked image to $IMAGE_REF..."
     podman tag "$NEW_REF" "$IMAGE_REF"
 fi

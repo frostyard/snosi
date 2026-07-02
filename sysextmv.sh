@@ -6,7 +6,7 @@ set -euo pipefail
 shopt -s nullglob
 
 if [ -z "${OUTPUTDIR:-}" ]; then
-    echo "Error: OUTPUTDIR is not set."
+    echo "WARNING: OUTPUTDIR is not set; defaulting to ./output"
     OUTPUTDIR="output"
 fi
 SYSEXT_DIR="$OUTPUTDIR/sysexts"

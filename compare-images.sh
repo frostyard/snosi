@@ -186,6 +186,7 @@ extract_image() {
     local output_dir="$2"
     local oci_dir="$output_dir/oci"
     local rootfs_dir="$output_dir/rootfs"
+    local extract_failures=0
 
     mkdir -p "$oci_dir" "$rootfs_dir"
 
@@ -225,27 +226,31 @@ extract_image() {
 
             case "$file_type" in
                 *gzip*)
-                    tar -xzf "$layer_path" -C "$rootfs_dir" 2>/dev/null || true
+                    tar -xzf "$layer_path" -C "$rootfs_dir" 2>/dev/null || { echo "WARNING: failed to extract layer $layer_path — diff may be incomplete" >&2; ((extract_failures++)) || true; }
                     ;;
                 *zstd*|*Zstandard*)
-                    tar --zstd -xf "$layer_path" -C "$rootfs_dir" 2>/dev/null || true
+                    tar --zstd -xf "$layer_path" -C "$rootfs_dir" 2>/dev/null || { echo "WARNING: failed to extract layer $layer_path — diff may be incomplete" >&2; ((extract_failures++)) || true; }
                     ;;
                 *xz*)
-                    tar -xJf "$layer_path" -C "$rootfs_dir" 2>/dev/null || true
+                    tar -xJf "$layer_path" -C "$rootfs_dir" 2>/dev/null || { echo "WARNING: failed to extract layer $layer_path — diff may be incomplete" >&2; ((extract_failures++)) || true; }
                     ;;
                 *bzip2*)
-                    tar -xjf "$layer_path" -C "$rootfs_dir" 2>/dev/null || true
+                    tar -xjf "$layer_path" -C "$rootfs_dir" 2>/dev/null || { echo "WARNING: failed to extract layer $layer_path — diff may be incomplete" >&2; ((extract_failures++)) || true; }
                     ;;
                 POSIX\ tar*)
-                    tar -xf "$layer_path" -C "$rootfs_dir" 2>/dev/null || true
+                    tar -xf "$layer_path" -C "$rootfs_dir" 2>/dev/null || { echo "WARNING: failed to extract layer $layer_path — diff may be incomplete" >&2; ((extract_failures++)) || true; }
                     ;;
                 *)
                     # Try auto-detection
-                    tar -xf "$layer_path" -C "$rootfs_dir" 2>/dev/null || true
+                    tar -xf "$layer_path" -C "$rootfs_dir" 2>/dev/null || { echo "WARNING: failed to extract layer $layer_path — diff may be incomplete" >&2; ((extract_failures++)) || true; }
                     ;;
             esac
         fi
     done <<< "$layers"
+
+    if (( extract_failures > 0 )); then
+        echo "WARNING: $extract_failures layer(s) failed to extract for $image_ref — the comparison below may be incomplete" >&2
+    fi
 
     # Handle whiteout files (OCI layer deletion markers)
     find "$rootfs_dir" -name ".wh.*" 2>/dev/null | while read -r whiteout; do
@@ -260,7 +265,7 @@ extract_image() {
             rm -f "$whiteout"
         else
             # Regular whiteout - remove the target file
-            rm -rf "${dir}/${name}" 2>/dev/null || true
+            rm -rf "${dir:?}/${name}" 2>/dev/null || true
             rm -f "$whiteout"
         fi
     done

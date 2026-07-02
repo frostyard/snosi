@@ -6,8 +6,6 @@ set -euo pipefail
 
 echo "Running post-installation customizations..."
 
-env
-
 # Common post-installation steps (os-release, mounts, cleanup, sysext infra)
 OS_PRETTY_NAME="Snow Linux"
 OS_NAME="Snow Linux"
