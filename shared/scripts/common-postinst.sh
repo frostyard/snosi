@@ -42,7 +42,10 @@ fi
 # Generate package list
 echo "Generating package list..."
 mkdir -p /usr/share/frostyard
-apt list --installed 2>/dev/null > /usr/share/frostyard/"${IMAGE_ID}".packages.txt || true
+# apt-list format is consumed downstream (packagediff.sh, changelog tooling);
+# no "|| true" — if apt is ever dropped from the image this must fail loudly
+# rather than ship an empty manifest.
+apt list --installed 2>/dev/null > /usr/share/frostyard/"${IMAGE_ID}".packages.txt
 
 # Write build date
 echo "Writing build date..."

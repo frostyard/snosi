@@ -7,8 +7,8 @@
 # Output format: TAP-like (ok / not ok), exit code = number of failures.
 set -euo pipefail
 
-# shellcheck source=../lib/helpers.sh
 HELPERS="${TEST_LIB_DIR:-$(dirname "$0")/../lib}/helpers.sh"
+# shellcheck source=test/lib/helpers.sh
 source "$HELPERS"
 
 echo "# Tier 3: Sysext machinery validation"

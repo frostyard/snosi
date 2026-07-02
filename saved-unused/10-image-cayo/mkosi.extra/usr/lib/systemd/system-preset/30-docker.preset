@@ -1,2 +1,0 @@
-disable docker.service
-disable docker.socket

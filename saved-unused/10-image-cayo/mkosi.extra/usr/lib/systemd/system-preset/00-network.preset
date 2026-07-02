@@ -1,2 +1,0 @@
-enable NetworkManager.service
-disable systemd-networkd-wait-online.service

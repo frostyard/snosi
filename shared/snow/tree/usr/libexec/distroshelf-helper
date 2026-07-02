@@ -1,4 +1,5 @@
 #!/usr/bin/bash
+set -euo pipefail
 
 if ! flatpak list --system --columns=application | grep -q '^com\.ranfdev\.DistroShelf$'; then
     flatpak install --system -y com.ranfdev.DistroShelf

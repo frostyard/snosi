@@ -5,7 +5,9 @@ set -euo pipefail
 echo "::group::Executing finalize"
 trap 'echo "::endgroup::"' EXIT
 
-# Clean folders for bootc
+# Clean folders for bootc — this runs chrooted into the image being built,
+# not on a host; deleting these top-level dirs is the point.
+# shellcheck disable=SC2114
 rm -rf \
   /boot \
   /home \
