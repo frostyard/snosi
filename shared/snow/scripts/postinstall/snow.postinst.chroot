@@ -33,7 +33,14 @@ rm -f /etc/systemd/user/default.target.wants/rygel.service
 rm -rf /var/lib/systemd/deb-systemd-user-helper-enabled/rygel.service.dsh-also \
        /var/lib/systemd/deb-systemd-user-helper-enabled/default.target.wants/rygel.service
 
-# Compile dconf databases to avoid "expect degraded performance" warnings in GNOME services
+# Compile dconf databases to avoid "expect degraded performance" warnings in GNOME services.
+# The shipped profile (shared/snow/tree/etc/dconf/profile/user) references
+# system-db:local and system-db:site; without compiled databases every
+# flatpak/gnome-session/portal start logs "unable to open file
+# '/etc/dconf/db/local'" (24+ warnings per boot). Empty keyfile dirs make
+# dconf update produce valid empty databases, and admins can drop overrides
+# into them later.
+mkdir -p /etc/dconf/db/local.d /etc/dconf/db/site.d
 dconf update
 
 # Remove fish desktop entry

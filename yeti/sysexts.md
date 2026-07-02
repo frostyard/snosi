@@ -68,6 +68,9 @@ Some sysexts include extra files via `mkosi.extra/`:
 ### code-server
 - `mkosi.postinst.chroot` — Downloads code-server .deb via `verified_download()`, installs with `dpkg -i`. Upstream package targets `/usr/lib/code-server` with `/usr/bin/code-server` symlink and systemd units under `/usr/lib/systemd/`, so no relocation is required.
 
+### debdev / dev
+- `mkosi.postinst.chroot` — Repoints `/usr/bin`+`/usr/sbin` symlinks that route through `/etc/alternatives` to their resolved targets. Sysexts cannot ship `/etc`, so alternatives symlinks created while installing these sysexts' packages would dangle at runtime (observed live: `/usr/bin/automake -> /etc/alternatives/automake`, missing).
+
 ### docker
 - `usr/lib/systemd/system-preset/20-docker.preset` — Enable docker.socket + containerd (numbered below 30 so it beats the base image's `30-docker.preset` disable; presets are first-match-wins in lexical order)
 - `usr/lib/systemd/system/multi-user.target.d/10-docker.conf` — `Upholds=docker.socket containerd.service` drop-in for reliable boot activation (the socket, not docker.service — dockerd runs `-H fd://` and fails without socket-passed FDs)
@@ -123,6 +126,11 @@ The shared postoutput script (`shared/sysext/postoutput/sysext-postoutput.sh`) h
 ## Sysupdate Registration
 
 Each sysext needs two files in the base image at `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`:
+
+> Note: `emdash.transfer`/`emdash.feature` are also registered here even though
+> the emdash sysext is built and published from a separate repository — every
+> sysext distributed via repository.frostyard.org needs its sysupdate wiring in
+> the base image regardless of where it is built.
 
 ### Transfer file (`<name>.transfer`)
 
