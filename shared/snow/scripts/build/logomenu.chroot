@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-# this script downloads a pinned logomenu source archive into the appropriate location
-# in the build tree so that it can be included in the final image.
+# this script downloads a pinned logomenu source archive and installs it into
+# the image via $DESTDIR (never into the source checkout — frostyard/snosi#293).
 # logomenu is a GNOME Shell extension that adds a custom logo menu to the screen.
 
-DESTINATION="$SRCDIR/shared/snow/tree/usr/share/gnome-shell/extensions/logomenu@aryan_k"
-SCHEMA="$SRCDIR/shared/snow/tree/usr/share/glib-2.0/schemas"
+DESTINATION="$DESTDIR/usr/share/gnome-shell/extensions/logomenu@aryan_k"
+SCHEMA="$DESTDIR/usr/share/glib-2.0/schemas"
 source "$SRCDIR/shared/download/verified-download.sh"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

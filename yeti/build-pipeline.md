@@ -12,15 +12,15 @@ Download and install items not available as Debian packages. These run inside th
 
 | Script | Location | Purpose |
 |--------|----------|---------|
-| `brew.chroot` | `shared/scripts/build/` | Downloads Homebrew installer via `verified_download()`, runs in non-interactive mode, creates `$BREW_TREE/usr/share/homebrew.tar.zst` (requires `BREW_TREE` env var), sets `user.component=linuxbrew` xattr for chunkah |
+| `brew.chroot` | `shared/scripts/build/` | Downloads Homebrew installer via `verified_download()`, runs in non-interactive mode, creates `$DESTDIR/usr/share/homebrew.tar.zst` (installed into the image by mkosi), sets `user.component=linuxbrew` xattr for chunkah |
 
 **Desktop profiles (snow/snowfield) only:**
 
 | Script | Location | Purpose |
 |--------|----------|---------|
-| `hotedge.chroot` | `shared/snow/scripts/build/` | Downloads Hotedge GNOME extension (hot corners) from GitHub via `verified_download()`, installs to `/usr/share/gnome-shell/extensions/` |
-| `logomenu.chroot` | `shared/snow/scripts/build/` | Downloads Logomenu GNOME extension from GitHub via `verified_download()`, installs extension + GLib schema |
-| `bazaar.chroot` | `shared/snow/scripts/build/` | Downloads pinned Bazaar Companion GNOME extension tarball from GitHub via `verified_download()`, installs its `src/`, patches metadata.json for shell version "48" |
+| `hotedge.chroot` | `shared/snow/scripts/build/` | Downloads Hotedge GNOME extension (hot corners) from GitHub via `verified_download()`, installs to `$DESTDIR/usr/share/gnome-shell/extensions/` |
+| `logomenu.chroot` | `shared/snow/scripts/build/` | Downloads Logomenu GNOME extension from GitHub via `verified_download()`, installs extension + GLib schema into `$DESTDIR` |
+| `bazaar.chroot` | `shared/snow/scripts/build/` | Downloads pinned Bazaar Companion GNOME extension tarball from GitHub via `verified_download()`, installs its `src/` into `$DESTDIR`, patches metadata.json for shell version "48". Build scripts install via `$DESTDIR` only — never into `$SRCDIR`/the tree overlays (#293) |
 | `surface-cert.chroot` | `shared/snow/scripts/build/` | Downloads Linux Surface secure boot certificate via `verified_download()`, installs to `/usr/share/linux-surface-secureboot/` |
 
 **Base image BuildScript — in-tree ostree + bootc** (`shared/bootc/build/bootc.chroot`):

@@ -6,8 +6,8 @@ if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
 fi
 
 source "$SRCDIR/shared/download/verified-download.sh"
-mkdir -p debs
-verified_download "code-server" "debs/code-server.deb"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "code-server" "$DEBS/code-server.deb"
 
-dpkg -i debs/code-server.deb
-rm -rf debs
+dpkg -i "$DEBS/code-server.deb"

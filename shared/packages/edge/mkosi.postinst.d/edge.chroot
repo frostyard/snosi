@@ -13,17 +13,17 @@ else
 fi
 
 source "$SRCDIR/shared/download/verified-download.sh"
-mkdir -p debs
-verified_download "microsoft-edge-stable" "debs/microsoft-edge-stable.deb"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "microsoft-edge-stable" "$DEBS/microsoft-edge-stable.deb"
 
 # Strip the postinst calls that add Edge's APT repo — they invoke apt-config,
 # which fails inside the mkosi chroot and breaks the build.
-dpkg-deb -R debs/microsoft-edge-stable.deb debs/edge-unpacked
-sed -i -e '/^install_key$/d' -e '/^install_deb822_sources$/d' debs/edge-unpacked/DEBIAN/postinst
-dpkg-deb -b debs/edge-unpacked debs/microsoft-edge-stable-fixed.deb
+dpkg-deb -R "$DEBS/microsoft-edge-stable.deb" "$DEBS/edge-unpacked"
+sed -i -e '/^install_key$/d' -e '/^install_deb822_sources$/d' "$DEBS/edge-unpacked/DEBIAN/postinst"
+dpkg-deb -b "$DEBS/edge-unpacked" "$DEBS/microsoft-edge-stable-fixed.deb"
 
-${SUDO} dpkg -i debs/microsoft-edge-stable-fixed.deb
-rm -rf debs
+${SUDO} dpkg -i "$DEBS/microsoft-edge-stable-fixed.deb"
 
 # Microsoft Edge install adds a redundant .list file; remove it
 if [[ -f /etc/apt/sources.list.d/microsoft-edge.list ]]; then

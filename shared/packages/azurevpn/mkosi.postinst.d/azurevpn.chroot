@@ -14,11 +14,11 @@ else
 fi
 
 source "$SRCDIR/shared/download/verified-download.sh"
-mkdir -p debs
-verified_download "microsoft-azurevpnclient" "debs/microsoft-azurevpnclient.deb"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "microsoft-azurevpnclient" "$DEBS/microsoft-azurevpnclient.deb"
 
-dpkg -i debs/microsoft-azurevpnclient.deb
-rm -rf debs
+dpkg -i "$DEBS/microsoft-azurevpnclient.deb"
 
 # Move from /opt
 ${SUDO} mv /opt/microsoft/microsoft-azurevpnclient /usr/lib/microsoft-azurevpnclient

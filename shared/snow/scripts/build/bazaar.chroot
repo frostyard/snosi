@@ -1,13 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 
-# this script downloads a pinned Bazaar Companion source archive into the
-# appropriate location in the build tree so that it can be included in the
-# final image.
+# this script downloads a pinned Bazaar Companion source archive and installs
+# it into the image via $DESTDIR. Build scripts must never write into the
+# source checkout ($SRCDIR) — doing so dirtied the git working tree on every
+# local build (frostyard/snosi#293).
 # Bazaar Companion is a GNOME Shell extension that adds Bazaar to locations
 # previously occupied by GNOME Software.
 
-DESTINATION="$SRCDIR/shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io"
+DESTINATION="$DESTDIR/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io"
 source "$SRCDIR/shared/download/verified-download.sh"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -27,6 +28,9 @@ fi
 # Move the extension sources (src/) into the extension folder
 mkdir -p "$DESTINATION"
 cp -a "$SOURCE_DIR"/src/. "$DESTINATION"/
+if [[ -f "$SOURCE_DIR/LICENSE" ]]; then
+    cp "$SOURCE_DIR/LICENSE" "$DESTINATION/LICENSE"
+fi
 
 # set the permissions: 755 for directories and 644 for files in the extension directory
 find "$DESTINATION" -type d -exec chmod 755 {} +
