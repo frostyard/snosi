@@ -11,12 +11,12 @@ The project produces:
 
 | Image               | Description                                                     | Output Format |
 | ------------------- | --------------------------------------------------------------- | ------------- |
-| **snow**            | GNOME desktop with backports kernel                             | OCI archive   |
-| **snowloaded**      | snow + Edge + VSCode + Bitwarden + Incus + Azure VPN            | OCI archive   |
-| **snowfield**       | snow with linux-surface kernel for Surface devices              | OCI archive   |
-| **snowfieldloaded** | snowfield + Edge + VSCode + Bitwarden + Incus + Azure VPN       | OCI archive   |
-| **cayo**            | Headless server with podman + backports kernel                  | OCI archive   |
-| **cayoloaded**      | cayo + Docker + Incus (baked in)                                | OCI archive   |
+| **snow**            | GNOME desktop with backports kernel                             | directory → OCI (buildah/chunkah) |
+| **snowloaded**      | snow + Edge + VSCode + Bitwarden + Incus + Azure VPN            | directory → OCI (buildah/chunkah) |
+| **snowfield**       | snow with linux-surface kernel for Surface devices              | directory → OCI (buildah/chunkah) |
+| **snowfieldloaded** | snowfield + Edge + VSCode + Bitwarden + Incus + Azure VPN       | directory → OCI (buildah/chunkah) |
+| **cayo**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
+| **cayoloaded**      | cayo + Docker + Incus (baked in)                                | directory → OCI (buildah/chunkah) |
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
 | **code-server**     | code-server (VS Code in the browser)                            | sysext        |
 | **debdev**          | Debian development tools (debootstrap, distro-info)             | sysext        |
@@ -100,32 +100,49 @@ shared/
 │   ├── backports/mkosi.conf   ← Trixie backports kernel + firmware
 │   ├── surface/mkosi.conf     ← linux-surface kernel + iptsd
 │   └── scripts/               ← dracut postinst scripts
+├── bootc/                     ← In-tree source build of bootc + ostree
+│   ├── build/bootc.chroot     ← Base image BuildScript
+│   └── postinst/              ← dpkg stub registration
+├── download/
+│   ├── checksums.json         ← Pinned URLs + SHA256s for all external downloads
+│   └── verified-download.sh   ← verified_download() helper
+├── kernel/
+│   ├── backports/mkosi.conf   ← Trixie backports kernel + firmware
+│   ├── surface/mkosi.conf     ← linux-surface kernel + iptsd
+│   ├── stock/mkosi.conf       ← Stock Trixie kernel
+│   └── scripts/               ← dracut postinst scripts
+├── manifest/postoutput/       ← Manifest annotation postoutput script
 ├── outformat/
-│   └── oci/
+│   └── image/
 │       ├── mkosi.conf         ← Sets Format=directory
-│       ├── finalize/          ← OCI finalization scripts
-│       └── postoutput/        ← OCI tagging scripts
+│       ├── finalize/          ← Image finalization scripts
+│       ├── buildah-package.sh ← Packages rootfs dir into an OCI image
+│       └── chunkah-package.sh ← Re-chunks the OCI image for efficient updates
 ├── packages/
-│   ├── cayo/mkosi.conf        ← Server packages + podman (~155 lines)
-│   ├── snow/mkosi.conf        ← GNOME desktop packages (~490 lines)
+│   ├── cayo/mkosi.conf        ← Server packages + podman
+│   ├── snow/mkosi.conf        ← GNOME desktop packages
 │   ├── edge/mkosi.conf        ← Microsoft Edge browser
 │   ├── azurevpn/mkosi.conf    ← Azure VPN Client
 │   ├── vscode/mkosi.conf      ← Visual Studio Code
 │   ├── bitwarden/mkosi.conf   ← Bitwarden password manager
+│   ├── entra-sso/mkosi.conf   ← linux-entra-sso browser SSO
 │   ├── docker-onimage/        ← Docker CE for baked-in images
 │   ├── virt-base/mkosi.conf   ← Headless Incus virtualization
 │   └── virt/mkosi.conf        ← Incus virtualization
 ├── scripts/
-│   └── build/               ← Shared build-time scripts (brew.chroot)
+│   ├── build/                 ← Shared build-time scripts (brew.chroot)
+│   └── common-postinst.sh     ← Shared postinstall logic (os-release, manifest)
+├── sysext/postoutput/         ← Shared sysext versioning/naming postoutput
 ├── cayo/
 │   ├── tree/                  ← Extra files overlaid into cayo image
 │   └── scripts/
 │       └── postinstall/       ← Post-installation customizations
-└── snow/
-    ├── tree/                  ← Extra files overlaid into image
-    └── scripts/
-        ├── build/             ← Build-time scripts (brew, surface-cert, etc.)
-        └── postinstall/       ← Post-installation customizations
+├── snow/
+│   ├── tree/                  ← Extra files overlaid into image
+│   └── scripts/
+│       ├── build/             ← Build-time scripts (hotedge, logomenu, bazaar, surface-cert)
+│       └── postinstall/       ← Post-installation customizations
+└── snowloaded/                ← Loaded-variant tree overlay
 ```
 
 ### Example: snow Profile
@@ -212,6 +229,12 @@ just cayoloaded
 
 # Clean build artifacts
 just clean
+
+# Run the bootc installation test in QEMU/KVM
+just test-install
+
+# Boot a built image in QEMU
+just run-qemu
 ```
 
 ### Build Process
@@ -288,6 +311,16 @@ gh attestation verify oci://ghcr.io/frostyard/snowloaded:latest --owner frostyar
 ```
 
 The `test-install.yml` workflow verifies the signature before every installation test.
+
+### Other workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `check-dependencies.yml` | Weekly | Checks pinned external downloads (checksums.json) for updates, opens PRs |
+| `check-packages.yml` | Daily | Checks external APT package versions, opens PRs |
+| `validate.yml` | PR/push | shellcheck (all shebang-discovered scripts, `-S warning`) + `mkosi summary` validation for every profile |
+| `test-install.yml` | Manual | Signature-verified bootc installation test in QEMU/KVM |
+| `scorecard.yml` | Weekly | OpenSSF supply-chain security analysis |
 
 ## Frostyard Custom Packages
 
@@ -464,8 +497,8 @@ Sysexts can **only** provide files under `/usr`. They cannot:
 | Script                  | When It Runs               | Purpose                            |
 | ----------------------- | -------------------------- | ---------------------------------- |
 | `mkosi.postinst.chroot` | Build time, in chroot      | Relocate files, fix paths          |
-| `mkosi.finalize`        | Build time, outside chroot | Capture `/etc` to factory defaults |
-| `mkosi.postoutput`      | After image creation       | Rename output, update manifests    |
+| `mkosi.finalize`        | Build time, outside chroot | Capture needed `/etc` paths to factory defaults |
+| shared postoutput (`PostOutputScripts=`) | After image creation | Versioned naming + manifest processing — every sysext points at `shared/sysext/postoutput/sysext-postoutput.sh` and sets `Environment=KEYPACKAGE=`; there is no per-sysext postoutput script |
 
 #### Example: Incus Sysext
 
@@ -474,33 +507,27 @@ The [incus sysext](mkosi.images/incus/) needs special handling because:
 1. **Incus packages install configs to `/etc`** - but sysexts can't modify `/etc` at runtime
 2. **The sysext needs versioned filenames** - for update management
 
-**[mkosi.finalize](mkosi.images/incus/mkosi.finalize):** (captures `/etc` for tmpfiles.d)
+**[mkosi.finalize](mkosi.images/incus/mkosi.finalize):** (captures the needed `/etc` paths for tmpfiles.d)
 
 ```bash
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# Copy /etc to /usr/share/factory/etc so systemd-tmpfiles
-# can symlink configs into /etc at boot time
-mkdir -p "$BUILDROOT/usr/share/factory/"
-cp --archive --no-target-directory --update=none \
-   "$BUILDROOT/etc" "$BUILDROOT/usr/share/factory/etc"
+# Capture ONLY the /etc paths referenced by tmpfiles.d C directives.
+# Never capture all of /etc: the buildroot /etc is the merged base view,
+# so a full capture ships the base image's /etc/shadow and SSH host keys
+# in the published sysext.
+FACTORY="$BUILDROOT/usr/share/factory/etc"
+mkdir -p "$FACTORY"
+cd "$BUILDROOT/etc"
+for path in default/incus logrotate.d/incus libvirt ...; do
+    [ -e "$path" ] && cp --archive --parents --update=none "$path" "$FACTORY/"
+done
 ```
 
 This pattern allows configs to be "injected" into `/etc` via systemd-tmpfiles rules when the sysext is activated.
 
-**[mkosi.postoutput](mkosi.images/incus/mkosi.postoutput):** (versioned naming)
-
-```bash
-#!/bin/bash
-# Extract version from manifest and rename output file
-KEYVERSION=$(jq -r '.packages[] | select(.name == "incus") | .version' "$MANIFEST_FILE")
-ARCH=$(jq -r '.packages[] | select(.name == "incus") | .architecture' "$MANIFEST_FILE")
-
-# Rename: incus.raw → incus_6.20-debian13_amd64.raw
-cp "$OUTPUTDIR/incus.raw" "$OUTPUTDIR/incus_${KEYVERSION}_${ARCH}.raw"
-ln -s "incus_${KEYVERSION}_${ARCH}.raw" "$OUTPUTDIR/incus"
-```
+**Versioned naming** is handled by the shared postoutput script — the sysext's `mkosi.conf` wires `PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh` and sets `Environment=KEYPACKAGE=incus`; the script reads the key package's version from the manifest and renames the output to `incus_<version>_<os>_<arch>.raw`. Do not create per-sysext postoutput scripts.
 
 #### Sysext Checklist
 
@@ -519,16 +546,28 @@ When creating a new sysext, verify:
 
 ```ini
 # mkosi.images/mysysext/mkosi.conf
+[Config]
+Dependencies=base
+
 [Output]
 ImageId=mysysext
+Output=mysysext
 Overlay=yes
+ManifestFormat=json
 Format=sysext
 
 [Content]
 Bootable=no
 BaseTrees=%O/base
+PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh
+
 Packages=mypackage
+
+[Build]
+Environment=KEYPACKAGE=mypackage
 ```
+
+Then register it: add `mysysext` to the root `mkosi.conf` `Dependencies=` list, and create `mysysext.transfer` + `mysysext.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/` (copy an existing pair).
 
 If the package needs relocation, add:
 

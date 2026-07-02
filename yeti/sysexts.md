@@ -33,24 +33,25 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 Every sysext mkosi.conf follows the same structure:
 
 ```ini
-[Distribution]
-Distribution=debian
-Release=trixie
+[Config]
+Dependencies=base
 
 [Output]
-Dependencies=base
+ImageId=<sysext-name>
+Output=<sysext-name>
 Overlay=yes
 ManifestFormat=json
-ImageId=<sysext-name>
 Format=sysext
 
 [Content]
+Bootable=no
 BaseTrees=%O/base
+PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh
+
 Packages=<package-list>
 
-[Output]
+[Build]
 Environment=KEYPACKAGE=<package-name>
-PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh
 ```
 
 Key settings:
@@ -70,8 +71,9 @@ Some sysexts include extra files via `mkosi.extra/`:
 ### docker
 - `usr/lib/systemd/system-preset/20-docker.preset` — Enable docker.socket + containerd (numbered below 30 so it beats the base image's `30-docker.preset` disable; presets are first-match-wins in lexical order)
 - `usr/lib/systemd/system/multi-user.target.d/10-docker.conf` — `Upholds=docker.socket containerd.service` drop-in for reliable boot activation (the socket, not docker.service — dockerd runs `-H fd://` and fails without socket-passed FDs)
-- `usr/lib/sysusers.d/docker-sysext.conf` — Docker user/group definitions
-- `usr/lib/tmpfiles.d/docker-sysext.conf` — Runtime directory setup
+- `mkosi.finalize` — Captures `/etc/default/docker`, `/etc/docker`, `/etc/containerd` to factory defaults
+- `usr/lib/sysusers.d/docker.conf` — Docker user/group definitions
+- `usr/lib/tmpfiles.d/docker.conf` — Factory config injection
 
 ### himmelblau
 - `mkosi.postinst.chroot` — Post-install customization hook (currently minimal)
@@ -83,23 +85,27 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/tmpfiles.d/himmelblau.conf` — Config injection from `/usr/share/factory/etc/`
 
 ### incus
-- `usr/lib/systemd/system/incus.service.d/override.conf` — Service override
+- `mkosi.finalize` — Captures the tmpfiles-referenced `/etc` paths to factory defaults
 - `usr/lib/systemd/system-preset/40-incus.preset` — Enable incus services
 - `usr/lib/systemd/system/multi-user.target.d/10-incus.conf` — `Upholds=` drop-in for reliable boot activation (sockets + lxcfs + startup + sysext-setup; incus.service itself is socket-activated)
-- `usr/lib/sysusers.d/incus-sysext.conf` — User/group definitions
-- `usr/lib/tmpfiles.d/incus-sysext.conf` — Runtime directory setup
-- `usr/bin/incus-sysext-setup` — Custom setup script
+- `usr/lib/systemd/system/incus-sysext-setup.service` — Oneshot post-merge setup (subuid/subgid)
+- `usr/lib/incus/incus-sysext-setup` — The setup script the service runs
+- `usr/lib/sysusers.d/{dnsmasq,rdma}.conf` — User/group definitions
+- `usr/lib/tmpfiles.d/incus.conf` — Factory config injection + runtime dirs + xz alternatives links
 
 ### nix
-- `usr/lib/systemd/` — Mount unit and preset for `/nix` bind mount
+- `mkosi.finalize` — Captures `/etc/nix` to factory defaults
+- `usr/lib/systemd/system/nix.mount` + `nix-daemon.service.d/mount-binding.conf` — `/nix` bind mount wiring
+- `usr/lib/systemd/system-preset/40-nix.preset` — Enable nix.mount + nix-daemon
 - `usr/lib/systemd/system/multi-user.target.d/10-nix.conf` — `Upholds=nix.mount nix-daemon.socket nix-daemon.service` drop-in for reliable boot activation
 - `usr/lib/sysusers.d/nix.conf` — Nix user/group
-- `usr/lib/tmpfiles.d/nix-sysext.conf` — Runtime setup
+- `usr/lib/tmpfiles.d/nix.conf` — `/nix` hierarchy + factory config injection
 
 ### tailscale
+- `mkosi.finalize` — Captures `/etc/default/tailscaled` to factory defaults (tailscaled requires the EnvironmentFile)
 - `usr/lib/systemd/system-preset/40-tailscale.preset` — Enable tailscaled
 - `usr/lib/systemd/system/multi-user.target.d/10-tailscale.conf` — `Upholds=tailscaled.service` drop-in for reliable boot activation
-- `usr/lib/tmpfiles.d/tailscale-sysext.conf` — Runtime directory setup
+- `usr/lib/tmpfiles.d/tailscale.conf` — Factory config injection
 
 ## Version Extraction and Naming
 
@@ -124,17 +130,25 @@ Defines how systemd-sysupdate downloads the sysext:
 
 ```ini
 [Transfer]
-ProtectVersion=%A
+Features=<name>
+Verify=false
 
 [Source]
 Type=url-file
 Path=https://repository.frostyard.org/ext/<name>/
-MatchPattern=<name>_@v_@o_@a.raw
+MatchPattern=<name>_@v_%w_%a.raw.zst \
+             <name>_@v_%w_%a.raw.xz \
+             <name>_@v_%w_%a.raw.gz \
+             <name>_@v_%w_%a.raw
 
 [Target]
 Type=regular-file
 Path=/var/lib/extensions.d/
-MatchPattern=<name>_@v_@o_@a.raw
+MatchPattern=<name>_@v_%w_%a.raw.zst \
+             <name>_@v_%w_%a.raw.xz \
+             <name>_@v_%w_%a.raw.gz \
+             <name>_@v_%w_%a.raw
+CurrentSymlink=<name>.raw
 ```
 
 ### Feature file (`<name>.feature`)
@@ -142,7 +156,7 @@ MatchPattern=<name>_@v_@o_@a.raw
 Provides metadata and defaults:
 
 ```ini
-[SysUpdate]
+[Feature]
 Description=<description>
 Documentation=<url>
 Enabled=false
@@ -191,4 +205,4 @@ The setup script must be idempotent — safe to run on every boot without accumu
 5. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`
 6. **If the sysext ships a systemd service:** add `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` with `Upholds=<name>.service` (see [Service Activation Pattern](#service-activation-pattern-upholds) above)
 7. Add the sysext name to root `mkosi.conf` Dependencies list
-7. Add a corresponding update check to `.github/workflows/check-dependencies.yml` if it has external downloads
+8. Add a corresponding update check to `.github/workflows/check-dependencies.yml` if it has external downloads
