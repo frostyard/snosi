@@ -208,6 +208,13 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 - Microsoft VSCode (packages.microsoft.com) — VS Code editor
 - Tailscale (pkgs.tailscale.com) — VPN client
 
+## Developer Utilities (repo root)
+
+- `compare-images.sh` — diffoscope-style comparison of two OCI images (extracts layers, handles whiteouts, reports file-level differences); dev tool, not used by CI
+- `packagediff.sh` — diffs the build manifest against the running system's package list (`/usr/share/frostyard/<id>.packages.txt`)
+- `check-duplicate-packages.sh` / `check-profile-dependencies.sh` — config sanity checks, run by CI
+- `mkosi.tools` + `mkosi.tools.manifest` — mkosi `ToolsTree=default` support: the build runs its tooling from a separate tools tree so host tool versions don't leak into image builds
+
 ## CI/CD
 
 | Workflow | Trigger | Purpose |

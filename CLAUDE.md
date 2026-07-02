@@ -88,7 +88,7 @@ The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput
 - `shared/bootc/` - In-tree source build of bootc (v1.16.2) and ostree (v2026.1); `build/bootc.chroot` is a base image **BuildScript** (wired via `BuildScripts=`); build deps come from `BuildPackages=` (overlay-only, discarded after build); compiles both tools (autotools for ostree, offline vendored cargo for bootc) and installs into `$DESTDIR`, which mkosi copies into the image
 - `shared/kernel/` - Kernel configs (backports, surface, stock) and dracut scripts
 - `shared/packages/` - Package set definitions, some with postinstall scripts for relocation
-- `shared/outformat/image/` - Image output format config (directory), finalize scripts, and `buildah-package.sh` for OCI packaging
+- `shared/outformat/image/` - Image output format config (directory), finalize scripts, `buildah-package.sh` (OCI packaging), and `chunkah-package.sh` (CI re-chunks the OCI image for efficient delta updates)
 - `shared/sysext/postoutput/` - Shared sysext postoutput logic
 - `mkosi.sandbox/etc/apt/` - External APT repo configs (Docker, Incus, linux-surface, Frostyard)
 
