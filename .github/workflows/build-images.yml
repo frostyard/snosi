@@ -27,10 +27,6 @@ jobs:
       packages: write
       id-token: write
       attestations: write
-    outputs:
-      # Set only by the snowloaded matrix leg (skipped steps don't overwrite
-      # a value another leg has set); empty when snowloaded didn't push.
-      snowloaded_tag: ${{ steps.snowloaded-tag.outputs.tag }}
     strategy:
       # Don't let one variant's failure (e.g. disk exhaustion on a "loaded"
       # image) cancel the other in-flight builds. Each variant is independent.
@@ -196,12 +192,19 @@ jobs:
             "docker://$IMAGE:latest"
 
       - name: Record snowloaded tag for release job
-        # Runs only after a successful snowloaded push; the release job keys
-        # off this output so a failed sibling profile can't suppress the
-        # release (and a failed snowloaded push correctly does).
+        # Runs only after a successful snowloaded push. The tag travels to the
+        # release job as an artifact — matrix job outputs are last-writer-wins
+        # across legs, so they can't gate the release deterministically.
         if: matrix.profile == 'snowloaded' && github.event_name != 'pull_request'
-        id: snowloaded-tag
-        run: echo "tag=${{ steps.version.outputs.tag }}" >> "$GITHUB_OUTPUT"
+        run: echo "${{ steps.version.outputs.tag }}" > snowloaded-tag.txt
+
+      - name: Upload snowloaded tag artifact
+        if: matrix.profile == 'snowloaded' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snowloaded-tag
+          path: snowloaded-tag.txt
+          retention-days: 1
 
       - name: Log in to ghcr.io
         if: github.event_name != 'pull_request'
@@ -304,28 +307,51 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: build
-    # !cancelled() + the snowloaded_tag gate: run whenever the snowloaded leg
-    # pushed, even if a sibling profile failed (fail-fast is off). Previously
-    # any failed leg skipped the release and that interval's changes were
-    # never described in any release. continue-on-error was also dropped so
-    # release failures are visible instead of always green.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled() && needs.build.outputs.snowloaded_tag != ''
+    # !cancelled(): run whenever the matrix finished, even if a sibling
+    # profile failed (fail-fast is off) — previously any failed leg skipped
+    # the release and that interval's changes were never described in any
+    # release. Whether snowloaded actually pushed is decided by the artifact
+    # check below (matrix job outputs are last-writer-wins across legs and
+    # can't gate this deterministically). continue-on-error was also dropped
+    # so release failures are visible instead of always green.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled()
     permissions:
       contents: write
     steps:
+      - name: Download snowloaded tag artifact
+        # Missing artifact = the snowloaded leg didn't push; skip the release.
+        id: tag-artifact
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: snowloaded-tag
+
+      - name: Read snowloaded tag
+        id: current
+        run: |
+          set -euo pipefail
+          if [[ -f snowloaded-tag.txt ]] && [[ "$(cat snowloaded-tag.txt)" =~ ^[0-9]{14}$ ]]; then
+            echo "tag=$(cat snowloaded-tag.txt)" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::snowloaded leg did not push this run; skipping release"
+          fi
+
       - name: Install ORAS
+        if: steps.current.outputs.tag != ''
         uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
 
       - name: Login to GHCR with ORAS
+        if: steps.current.outputs.tag != ''
         env:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: echo "${GHCR_PAT}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Resolve previous and current snowloaded tags
         id: versions
+        if: steps.current.outputs.tag != ''
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/snowloaded
-          CURRENT: ${{ needs.build.outputs.snowloaded_tag }}
+          CURRENT: ${{ steps.current.outputs.tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
@@ -352,7 +378,7 @@ jobs:
 
       - name: Generate changelog
         id: changelog
-        if: steps.versions.outputs.skip != 'true'
+        if: steps.current.outputs.tag != '' && steps.versions.outputs.skip != 'true'
         uses: frostyard/changelog-generator@7bd6be9ecc9ab8297d73fdc1f1925f727c6bdeb9 # main 2026-04-09
         with:
           image: ghcr.io/${{ github.repository_owner }}/snowloaded
@@ -361,7 +387,7 @@ jobs:
           output-file: changelog.md
 
       - name: Record image tag in release notes
-        if: steps.versions.outputs.skip != 'true'
+        if: steps.current.outputs.tag != '' && steps.versions.outputs.skip != 'true'
         env:
           CURRENT: ${{ steps.versions.outputs.current }}
         run: |
@@ -369,7 +395,7 @@ jobs:
 
       - name: Compute release tag and title
         id: release-meta
-        if: steps.versions.outputs.skip != 'true'
+        if: steps.current.outputs.tag != '' && steps.versions.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CURRENT: ${{ steps.versions.outputs.current }}
@@ -390,7 +416,7 @@ jobs:
           echo "title=$title" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        if: steps.versions.outputs.skip != 'true'
+        if: steps.current.outputs.tag != '' && steps.versions.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release-meta.outputs.tag }}
