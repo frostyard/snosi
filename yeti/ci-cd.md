@@ -113,7 +113,7 @@ Runs OpenSSF Scorecard analysis for supply-chain security assessment. Publishes 
 
 - **Action pinning:** Most GitHub Actions pinned to specific commit SHAs (not tags) for supply-chain safety
 - **SBOM generation:** Syft generates SBOMs for all OCI images, attached as OCI referrers via ORAS
-- **Image signing:** OCI images and SBOM artifacts signed with Cosign after push
+- **Image signing:** OCI images and SBOM artifacts signed with Cosign after push. The public key is committed at repo root as `cosign.pub` (same keypair across frostyard repos); `test-install.yml` runs `cosign verify --key cosign.pub` before installation tests. cosign v2.6.x is the tested verifier — v3 currently fails key verification when GitHub provenance attestations are attached
 - **Build attestation:** GitHub Actions provenance attestation on image builds
 - **Checksum verification:** All external downloads verified against pinned SHA256 hashes
 - **Automated updates:** Dependency and package version checks create PRs for review (never auto-merge)
