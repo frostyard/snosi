@@ -519,9 +519,27 @@ set -euo pipefail
 # in the published sysext.
 FACTORY="$BUILDROOT/usr/share/factory/etc"
 mkdir -p "$FACTORY"
+
+# Paths relative to /etc, matching the C directives in usr/lib/tmpfiles.d/incus.conf
+FACTORY_PATHS=(
+    libnl-3
+    default/incus
+    logrotate.d/incus
+    needrestart/conf.d/incus.conf
+    libvirt
+    profile.d/vte-2.91.sh
+    profile.d/vte.csh
+    qemu-ifdown
+    qemu-ifup
+)
+
 cd "$BUILDROOT/etc"
-for path in default/incus logrotate.d/incus libvirt ...; do
-    [ -e "$path" ] && cp --archive --parents --update=none "$path" "$FACTORY/"
+for path in "${FACTORY_PATHS[@]}"; do
+    if [ -e "$path" ]; then
+        cp --archive --parents --update=none "$path" "$FACTORY/"
+    else
+        echo "incus finalize: /etc/$path not present in buildroot; factory capture skipped" >&2
+    fi
 done
 ```
 
