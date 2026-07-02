@@ -53,6 +53,17 @@ cleanup() {
         podman rmi -f "$IMAGE_LOADED" 2>/dev/null || true
     fi
 
+    # If a failure happened between mount and losetup -d in the SSH-key
+    # injection step, unmount and detach before removing WORK_DIR —
+    # otherwise the rm -rf below deletes the installed disk's contents
+    # through the live mountpoint and leaks the loop device.
+    if [[ -n "$WORK_DIR" ]] && mountpoint -q "$WORK_DIR/mnt" 2>/dev/null; then
+        umount "$WORK_DIR/mnt" || true
+    fi
+    if [[ -n "${loop:-}" ]]; then
+        losetup -d "$loop" 2>/dev/null || true
+    fi
+
     # Remove temp directory
     if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then
         rm -rf "$WORK_DIR"
