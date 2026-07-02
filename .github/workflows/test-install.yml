@@ -60,15 +60,13 @@ jobs:
           TAG: ${{ inputs.image_tag || 'latest' }}
         run: |
           cosign verify --key cosign.pub "${IMAGE}:${TAG}"
+          DIGEST=$(skopeo inspect --format '{{.Digest}}' "docker://${IMAGE}:${TAG}")
+          echo "IMAGE_REF=${IMAGE}@${DIGEST}" >> "$GITHUB_ENV"
 
       - name: Pull image
-        env:
-          TAG: ${{ inputs.image_tag || 'latest' }}
         run: |
-          podman pull "${IMAGE}:${TAG}"
+          podman pull "${IMAGE_REF}"
 
       - name: Run installation tests
-        env:
-          TAG: ${{ inputs.image_tag || 'latest' }}
         run: |
-          ./test/bootc-install-test.sh "${IMAGE}:${TAG}"
+          ./test/bootc-install-test.sh "${IMAGE_REF}"
