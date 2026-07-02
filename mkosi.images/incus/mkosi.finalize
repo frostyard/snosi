@@ -12,7 +12,6 @@ mkdir -p "$FACTORY"
 
 # Paths relative to /etc, matching the C directives in tmpfiles.d/incus.conf
 FACTORY_PATHS=(
-    libnl-3
     default/incus
     logrotate.d/incus
     needrestart/conf.d/incus.conf
