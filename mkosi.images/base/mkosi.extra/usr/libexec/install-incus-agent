@@ -19,12 +19,15 @@ fi
 set -euo pipefail
 
 echo "::group::Executing install-incus-agent"
+# Close the log group even if we fail before the full cleanup trap below is
+# installed (e.g. mkdir failing under set -e)
+trap 'echo "::endgroup::"' EXIT
 
 # mount 9p share
 MOUNT_POINT="/mnt/incus-agent-share"
 mkdir -p "$MOUNT_POINT"
 
-# Set up cleanup trap to ensure unmounting happens even on failure
+# Extend the trap with cleanup to ensure unmounting happens even on failure
 trap 'popd 2>/dev/null || true; umount "$MOUNT_POINT" 2>/dev/null || true; rmdir "$MOUNT_POINT" 2>/dev/null || true; echo "::endgroup::"' EXIT
 
 if ! mount -t 9p config "$MOUNT_POINT"; then
