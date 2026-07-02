@@ -263,7 +263,7 @@ Desktop configuration overlay:
 ### shared/cayo/tree/
 
 Server configuration overlay:
-- APT sources for Docker, Incus/Zabbly
+- APT sources for Docker
 - NetworkManager/IWD networking config
 - systemd mounts and presets (no desktop services)
 - sysusers/tmpfiles for avahi, dnsmasq, docker, incus
