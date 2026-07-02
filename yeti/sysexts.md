@@ -68,7 +68,8 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `mkosi.postinst.chroot` — Downloads code-server .deb via `verified_download()`, installs with `dpkg -i`. Upstream package targets `/usr/lib/code-server` with `/usr/bin/code-server` symlink and systemd units under `/usr/lib/systemd/`, so no relocation is required.
 
 ### docker
-- `usr/lib/systemd/system-preset/40-docker.preset` — Enable docker services
+- `usr/lib/systemd/system-preset/20-docker.preset` — Enable docker.socket + containerd (numbered below 30 so it beats the base image's `30-docker.preset` disable; presets are first-match-wins in lexical order)
+- `usr/lib/systemd/system/multi-user.target.d/10-docker.conf` — `Upholds=docker.socket containerd.service` drop-in for reliable boot activation (the socket, not docker.service — dockerd runs `-H fd://` and fails without socket-passed FDs)
 - `usr/lib/sysusers.d/docker-sysext.conf` — Docker user/group definitions
 - `usr/lib/tmpfiles.d/docker-sysext.conf` — Runtime directory setup
 
