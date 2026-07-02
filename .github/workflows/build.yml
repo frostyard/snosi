@@ -24,6 +24,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # A hung mkosi/apt otherwise burns the 6-hour default.
+    timeout-minutes: 120
     permissions:
       contents: read
       packages: write
@@ -69,6 +71,16 @@ jobs:
           docker system prune -af || true
           docker builder prune -af || true
           df -h
+
+      - name: Redirect temp to /mnt
+        # Same disk-exhaustion class as build-images.yml: mkosi's workspace
+        # defaults to TMPDIR on /, which is the tighter volume on hosted
+        # runners; /mnt has the headroom. sudo -E preserves TMPDIR below.
+        run: |
+          sudo mkdir -p /mnt/tmp
+          sudo chmod 1777 /mnt/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
