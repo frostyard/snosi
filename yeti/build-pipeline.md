@@ -91,12 +91,6 @@ Both snow and cayo postinstall scripts source this shared script after setting `
 
 **Server loaded variant (cayoloaded):** No additional postinstall scripts beyond the base cayo postinstall. Docker CE and Incus are baked into the image via `docker-onimage` and `virt-base` package sets with their tree overlays providing systemd presets, sysusers, and tmpfiles.
 
-**Intel WiFi firmware (fw-ipw — snow/snowloaded/snowfield/snowfieldloaded):**
-
-| Script | Location | Purpose |
-|--------|----------|---------|
-| `fw-ipw.chroot` | `shared/packages/fw-ipw/mkosi.postinst.d/` | Downloads firmware-ipw2x00 from APT, extracts with `ar x`/`tar`, copies firmware files to `/lib/firmware/`, sets `user.component` xattr |
-
 ### 3. FinalizeScripts (pre-output)
 
 Prepare the image for output. Run after postinstall, before the image format is written.
