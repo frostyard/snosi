@@ -46,10 +46,13 @@ Boots an image in a QEMU graphical window (GTK display). Loads the image, instal
 2. Generates ephemeral SSH keypair
 3. Creates sparse raw disk image
 4. Runs `bootc install to-disk --via-loopback` to install the image
-5. Boots installed disk in QEMU with KVM acceleration
-6. Waits for SSH availability (retry loop)
-7. Runs all test tiers in order via SSH
-8. Reports results, cleans up
+5. Injects the generated SSH key into the installed composefs state directory
+6. Boots installed disk in QEMU with KVM acceleration
+7. Waits for SSH availability (retry loop)
+8. Runs all test tiers in order via SSH
+9. Reports results, cleans up
+
+The explicit post-install SSH-key injection is intentional: `bootc install --root-ssh-authorized-keys` does not currently place the key where the composefs backend exposes `/root` at runtime. The test mounts partition 3 and writes `state/os/default/var/roothome/.ssh/authorized_keys` directly before booting the VM.
 
 **Configuration:** Supports custom disk size, VM memory, CPU count, and timeouts.
 
@@ -74,8 +77,9 @@ Validates critical system services:
 - systemd-resolved is active (DNS)
 - NetworkManager is active (networking)
 - SSH is active (remote access)
-- Timer and service availability checks
-- Failed units count is within acceptable range
+- `nbc-update-download.timer` is loaded
+- `frostyard-updex` is installed
+- No failed systemd units are present
 
 ### Tier 3 — Sysext Validation (03-sysexts.sh)
 
@@ -115,16 +119,18 @@ Shared test harness sourced by all four test scripts. Provides:
 ### vm.sh
 
 - `load_image(ref)` — Loads OCI image from local dir or registry (uses buildah mount + cp -a + commit pattern for local dirs)
-- `bootc_install(image, disk)` — Runs bootc install to-disk with loopback
-- `start_vm(disk)` — Launches QEMU with KVM, OVMF firmware, port forwarding for SSH
-- `stop_vm()` — Graceful shutdown
+- `install_to_disk(disk)` — Runs `bootc install to-disk` with loopback inside a privileged podman container
+- `vm_start(disk)` — Launches QEMU with KVM, OVMF firmware, port forwarding for SSH
+- `vm_stop()` / `vm_cleanup()` — Graceful shutdown and disk cleanup
+- `find_ovmf()` searches common OVMF locations, including Incus' bundled firmware path (`/usr/incus/share/qemu/`)
 
 ## CI Integration
 
 The `test-install.yml` workflow runs these tests on manual dispatch:
 1. Sets up KVM-enabled runner
 2. Installs QEMU + OVMF + podman + skopeo
-3. Pulls image from ghcr.io
-4. Runs the full test suite
+3. Resolves the selected `ghcr.io/frostyard/snow:<tag>` to a digest and verifies that immutable ref with `cosign.pub`
+4. Pulls the verified image ref
+5. Runs the full test suite
 
 Not run automatically on every PR due to infrastructure requirements (KVM, large disk, long runtime).
