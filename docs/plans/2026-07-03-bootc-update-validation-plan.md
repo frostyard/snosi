@@ -149,7 +149,13 @@ First runs of `test/bootc-update-test.sh` against real published tags:
 3. **Full green run achieved** on the first all-fixes image (`20260703174338`, containing #343/#345/#347/#348): install → SSH with no injection → hop to `20260703151145` via containers-storage → finalize on natural shutdown → staged→booted→rollback digests exact → **13/13 persistence checks pass** (incl. SSH host key + machine-id stability, deleted-file persistence) → `is-system-running=running`.
 4. **Answered:** `/run/ostree-booted` is **absent** on composefs-booted systems — upstream `bootc-fetch-apply-updates.timer` would never fire; the Phase 5 timer must not copy that condition. Also: bootc records the containers-storage digest (not registry manifest digest) for podman-run installs — never compare `bootc status` digests to `skopeo inspect` for that transport; double-finalize is safe (second run fails loudly on the BLS exchange rather than double-swapping).
 
-Still open for Phase 2 completeness: the "both-changed" `/etc` merge case (needs two tags whose `/etc` genuinely differs) and the ascending multi-hop chain (needs ≥2 post-fix tags; downgrade-direction hop is validated).
+Later the same day (post-fix tags `20260703174338` → `20260703184744`):
+
+5. **Ascending hop green** (13/13, digests exact) — Phases 1–2 validated in both directions on production images.
+6. **Phase 4 (rollback) green** via the harness's `ROLLBACK=1` phase: previous deployment boots, booted/rollback slots swap exactly, `/var` written on the rolled-back-from deployment persists, persistence matrix passes post-rollback. Two facts for update tooling: **after `bootc rollback`, `spec.image` reverts to the rolled-back-to deployment's ref**, and **bootc refuses to `switch` to an image whose fs-verity digest equals the current rollback deployment** ("Target image has the same fs-verity digest…") — auto-updaters must treat that as a no-op, never flip-flopping back to a version the admin rolled away from.
+7. **Phase 5 implemented** (separate PR): `bootc-update-stage.timer/.service` + `/usr/libexec/bootc-update-stage` in base `mkosi.extra` — hourly, stage-only, applies at next natural reboot; podman transfer per finding 1; gated on `ConditionKernelCommandLine=composefs`; no-op guards (non-bootc system, already running/staged, rollback flip-flop) live-tested in a VM and on an nbc host. `bootc-fetch-apply-updates.timer` preset-disabled (force-reboots on update; `systemctl preset-all` had been enabling it despite its dead `/run/ostree-booted` gate).
+
+Still open for Phase 2 completeness: the "both-changed" `/etc` merge case (needs two tags whose `/etc` genuinely differs).
 
 ## Open questions
 
