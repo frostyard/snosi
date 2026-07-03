@@ -106,8 +106,8 @@ Tests full bootc installation and boot cycle:
 1. Frees disk space on runner (removes large toolchains)
 2. Enables KVM on GitHub Actions runner
 3. Installs QEMU, OVMF, podman, skopeo
-4. Resolves the requested mutable tag to a digest, verifies that immutable ref with `cosign verify --key cosign.pub`, then pulls the verified ref
-5. Runs `test/bootc-install-test.sh` — installs to virtual disk, boots in QEMU, runs test suite via SSH
+4. Resolves the requested mutable tag to a digest, verifies that immutable ref with `cosign verify --key cosign.pub`, then pulls the verified ref (into root's podman storage)
+5. Runs `sudo test/bootc-install-test.sh` — installs to virtual disk, boots in QEMU, runs test suite via SSH. Root is required: `bootc install` refuses to run under rootless podman (`/proc/1 is owned by 65534`); this was why every run of this workflow failed before 2026-07
 
 ### scorecard.yml — Supply-Chain Security
 
