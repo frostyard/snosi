@@ -18,6 +18,7 @@ What has **never** been tested: any update. Everything below exists to close tha
 ## Facts that shape the tests
 
 1. **Real published versions are available for hops.** ghcr.io keeps timestamp tags (e.g. `20260702011235` … `20260703151145`, several per day). Update sequences can use real, signed, published images — no synthetic image building needed.
+   **Eligibility floor:** every image in a hop chain — especially the install tag A — must be built from a commit containing `8e5da3af9c1e6a4a935b0538777883d53bd318f4` ("compile bootc + ostree from source in the base image", merged 2026-06-29). Older images have no working/current in-image bootc, so neither installing them nor hopping from them is meaningful. To check a tag: read its source commit from the `org.opencontainers.image.url` label (`skopeo inspect --format '{{index .Labels "org.opencontainers.image.url"}}'`) and confirm `git merge-base --is-ancestor 8e5da3a <commit>`. As of 2026-07-03 every retained timestamp tag qualifies (oldest: `20260702011235`, source `f014f96e`), but the harness should assert this per tag rather than assume registry retention keeps it true.
 2. **`bootc upgrade` follows the installed tag.** Timestamp tags never move, so the harness drives hops with `bootc switch <next-tag>` (identical staging/finalize/reboot machinery). The production flow (`:latest` + `bootc upgrade`) is exercised separately in Phase 3.
 3. **bootc ships update automation, but its gate is suspect.** The image contains `bootc-fetch-apply-updates.timer/.service` (fetch + apply + **immediate reboot**) gated on `ConditionPathExists=/run/ostree-booted`. Whether the composefs backend creates `/run/ostree-booted` is unverified (`bootc status` reports `ostree: null`). nbc's semantics are download-only + apply at next natural reboot — a custom timer is probably needed for parity (Phase 5).
 4. **nbc-installed hosts cannot adopt bootc in place.** On an nbc-installed snowloaded machine, `bootc status` reports `spec.image: null` — nbc's A/B partition layout is not a bootc deployment. Fleet migration means fresh `bootc install` per machine (Phase 7 runbook).
@@ -40,7 +41,7 @@ Runs locally (any KVM host — the workstation used for the install verification
 
 ## Phase 1 — Single-hop update
 
-Install oldest retained timestamp tag A, then `bootc switch` to tag B:
+Install the oldest **eligible** timestamp tag A (post-`8e5da3a`; see eligibility floor above), then `bootc switch` to tag B:
 
 - After switch, `bootc status`: `status.staged.image.imageDigest` matches B's digest (resolve via `skopeo inspect` on the host for an independent value).
 - After reboot: `status.booted` == B, `status.rollback` == A.
@@ -78,7 +79,7 @@ Marker scripts `test/tests/90-persistence-write.sh` (run once on the freshly ins
 
 ## Phase 3 — Multi-hop sequence and tag-following
 
-- Chain A → B → C (real tags, oldest→newest), full Phase 2 verify at each hop.
+- Chain A → B → C (real eligible tags, oldest→newest), full Phase 2 verify at each hop.
 - Deployment lifecycle: confirm old deployments are pruned/bounded (watch `state/deploy/` count, composefs object store size, ESP usage across hops — an unbounded ESP or object store is a NO-GO finding).
 - Production flow: `bootc switch ghcr.io/frostyard/snow:latest`, then after the next real image publish, `bootc upgrade --check` followed by `bootc upgrade` — verifies the mutable-tag flow users will actually run.
 
