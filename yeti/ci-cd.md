@@ -10,43 +10,45 @@ Builds the base image and all 10 sysexts, publishes to the Frostyard repository 
 
 **Steps:**
 1. Aggressive cleanup of runner (removes JDK, .NET, Android SDK, etc. to free disk space)
-2. Run `check-duplicate-packages.sh` to validate no duplicate packages across configs
-3. Build base + all sysext images via mkosi
-4. Run `sysextmv.sh` and `manifestmv.sh` to organize output into `output/sysexts/` and `output/manifests/`
-5. Upload sysext artifacts to Frostyard R2 repository via `frostyard/repogen` action
-6. Upload manifest files to R2
-7. Uses concurrent workflow cancellation (newer pushes cancel in-progress builds)
+2. Redirect `TMPDIR` to `/mnt/tmp`; mkosi workspaces can otherwise overflow the hosted runner root volume
+3. Run `check-duplicate-packages.sh` to validate no duplicate packages across configs
+4. Build base + all sysext images via mkosi
+5. Run `sysextmv.sh` and `manifestmv.sh` to organize output into `output/sysexts/` and `output/manifests/`
+6. Upload sysext artifacts to Frostyard R2 repository via `frostyard/repogen` action
+7. Upload manifest files to R2
+8. Uses concurrent workflow cancellation (newer pushes cancel in-progress builds)
 
 ### build-images.yml — Desktop/Server Image Build and Publish
 
-**Trigger:** Push/PR to main, manual dispatch
+**Trigger:** repository_dispatch type `build`, push/PR to main, manual dispatch
 
 Matrix build of all 6 profiles (snow, snowloaded, snowfield, snowfieldloaded, cayo, cayoloaded).
 
 Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependency=base`). This prevents the root sysext dependency list from being appended into every profile build. The sysext publishing set is built once by `build.yml`; profile image jobs build only `base` plus the selected main image.
 
 **Steps:**
-1. Build profile image via mkosi with dependencies reset to `base` only (produces directory output)
-2. Package OCI image via `buildah-package.sh` (preserves SUID, xattrs)
-3. Optimize layers via `chunkah-package.sh`
-4. **Smoke test:** Validates SUID bit on `/usr/bin/sudo` (mode 4755) — catches metadata loss
-5. Generate SBOM via Syft (scans mkosi output directory, syft-json format)
-6. Push to ghcr.io with `latest` tag
-7. Attach SBOM to image via ORAS (`application/vnd.syft+json` artifact type)
-8. Sign SBOM artifact with Cosign
-9. Attest build provenance (GitHub Actions attestation)
-10. Sign image with Cosign
-11. Upload manifests to R2
+1. Free runner disk, mount BTRFS for container storage, and redirect `TMPDIR` to `/mnt/tmp`
+2. Build profile image via mkosi with dependencies reset to `base` only (produces directory output)
+3. Package OCI image via `buildah-package.sh` (preserves SUID, xattrs)
+4. Optimize layers via `chunkah-package.sh`
+5. **Smoke test:** Validates SUID bit on `/usr/bin/sudo` (mode 4755) — catches metadata loss
+6. Generate SBOM via Syft (scans mkosi output directory, syft-json format)
+7. Push to ghcr.io with `latest` tag
+8. Attach SBOM to image via ORAS (`application/vnd.syft+json` artifact type)
+9. Sign SBOM artifact with Cosign
+10. Attest build provenance (GitHub Actions attestation)
+11. Sign image with Cosign
+12. Upload manifests to R2
 
 #### release job — Automated GitHub Releases
 
-After the matrix completes, a self-contained `release` job runs on main-branch pushes only and creates a GitHub Release summarising what changed in the build. The job has `continue-on-error: true` at the job level, so any failure produces a warning annotation without turning the workflow red. The `build` job is untouched by this feature.
+After the matrix completes, a self-contained `release` job runs on main-branch pushes only and creates a GitHub Release summarising what changed in the build. It uses `!cancelled()` so it can still run after a matrix leg fails, but only proceeds when the `snowloaded` leg uploaded its tag artifact. Release failures are visible; the job is not `continue-on-error`.
 
-**Resolution:** The release job installs ORAS, logs into GHCR, then queries `oras repo tags ghcr.io/<owner>/snowloaded` to list all tags. It filters for the `YYYYMMDDhhmmss` timestamp format, sorts descending, and picks the newest tag as `current` (the image this run just pushed) and the second-newest as `previous` (the prior build). It then runs `frostyard/changelog-generator` with those two exact tags to produce the diff. Only `snowloaded` is diffed; the other five profiles build and push unchanged and are not referenced in the release.
+**Resolution:** The `snowloaded` matrix leg writes the just-pushed timestamp tag to a short-lived artifact. The release job reads that as `current`, then prefers the previous tag recorded in the latest GitHub Release body (`<!-- snowloaded-tag: ... -->`). If no release marker exists, it falls back to `oras repo tags ghcr.io/<owner>/snowloaded` and selects the newest other timestamp tag. It then runs `frostyard/changelog-generator` with those two exact tags to produce the diff. Only `snowloaded` is diffed; the other five profiles build and push unchanged and are not referenced in the release.
 
-**Release tag scheme:** `YYYY-MM-DD.N` (daily counter, e.g. `2026-04-09.1`). The release title is `Build YYYY-MM-DD HH:MM:SS UTC`. The body is a short header line ("Based on the `snowloaded` image."), a `podman pull ghcr.io/<owner>/snowloaded:latest` command in a fenced code block, and then the generated changelog.
+**Release tag scheme:** `YYYY-MM-DD.N` (daily counter, e.g. `2026-04-09.1`). The release title is `Build YYYY-MM-DD HH:MM:SS UTC`. The body comes from the generated changelog plus the hidden `snowloaded-tag` marker used by future releases.
 
-**Skip paths:** If the `snowloaded` repository has zero or one timestamped tags (bootstrap edge case, not applicable in practice — the repository already has many historical tags), the resolve step writes `skip=true` and all downstream steps gracefully short-circuit with a `::warning::` annotation.
+**Skip paths:** Missing/invalid snowloaded artifact, no previous tag, or `previous == current` all emit warnings and skip release creation.
 
 ### check-dependencies.yml — External Download Updates
 
@@ -93,8 +95,8 @@ Checks for version updates to external APT packages:
 **Trigger:** PR/push to main
 
 Two validation checks:
-1. **Shell linting:** Runs shellcheck on all `*.sh` and `*.chroot` files
-2. **mkosi validation:** Runs `mkosi summary` for base image and all profiles to verify configuration, plus `check-profile-dependencies.sh` to ensure profile builds do not include sysext images
+1. **Shell linting:** Runs shellcheck on tracked `*.sh`/`*.chroot` files and extensionless tracked shell scripts discovered by shebang, excluding `saved-unused/`
+2. **mkosi validation:** Runs `mkosi summary` for root config and all profiles to verify configuration, plus `check-profile-dependencies.sh` to ensure profile builds do not include sysext images
 
 ### test-install.yml — Bootc Installation Test
 
@@ -104,7 +106,7 @@ Tests full bootc installation and boot cycle:
 1. Frees disk space on runner (removes large toolchains)
 2. Enables KVM on GitHub Actions runner
 3. Installs QEMU, OVMF, podman, skopeo
-4. Pulls specified OCI image from ghcr.io
+4. Resolves the requested mutable tag to a digest, verifies that immutable ref with `cosign verify --key cosign.pub`, then pulls the verified ref
 5. Runs `test/bootc-install-test.sh` — installs to virtual disk, boots in QEMU, runs test suite via SSH
 
 ### scorecard.yml — Supply-Chain Security
