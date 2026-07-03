@@ -121,6 +121,13 @@ HOP_REFS=("$@")
 
 [[ $EUID -eq 0 ]] || { echo "Error: must run as root (bootc install needs the root user namespace)" >&2; exit 1; }
 
+# Fail fast if the SSH forward port is taken (e.g. a leftover KEEP_VM guest);
+# otherwise QEMU errors only after a full image pull + install.
+if ss -tln 2>/dev/null | awk '{print $4}' | grep -q ":${SSH_PORT}$"; then
+    echo "Error: port ${SSH_PORT} is already in use (stale VM? set SSH_PORT to override)" >&2
+    exit 1
+fi
+
 trap cleanup EXIT
 
 # Real disk, not tmpfs: hop images are pulled into the guest's /var.

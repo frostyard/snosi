@@ -140,9 +140,19 @@ Then the removal PR: drop `frostyard-nbc` from base `Packages=` (`mkosi.images/b
 - Phase 5 timer units (new PR) and, at GO, the nbc-removal PR
 - Migration runbook for nbc-installed machines
 
+## Findings log (2026-07-03, Phases 1–2 executed)
+
+First runs of `test/bootc-update-test.sh` against real published tags:
+
+1. **Registry-transport pull broken (bootc 1.16.2 AND 1.16.3):** `bootc switch docker://<ref>` fails deterministically on published snosi images with `Failed to pull config … unexpected EOF reading tar entry`. The blob is intact (host fetch OK), `podman pull` of the same tag inside the same guest succeeds, and `bootc switch --transport containers-storage` works. Known upstream issue; NOT fixed by the composefs bump in 1.16.3. **Until fixed upstream, the production update path must be `podman pull` + `bootc switch --transport containers-storage` — the Phase 5 timer must use this mechanism** (harness: `HOP_TRANSPORT=containers-storage`).
+2. **`/etc` merge finalize bug (fixed for snosi, reported upstream):** any path removed from live `/etc` that exists as an escaping symlink in the new deployment's `/etc` aborts finalize with "a path led outside of the filesystem" (`metadata_optional` follows symlinks; [bootc#2278](https://github.com/bootc-dev/bootc/issues/2278)). snosi's trigger — `snow-linux-live-setup.service` self-disabling at runtime — removed in PR #347; CLAUDE.md now forbids runtime `systemctl disable/enable` in units.
+3. **Full green run achieved** on the first all-fixes image (`20260703174338`, containing #343/#345/#347/#348): install → SSH with no injection → hop to `20260703151145` via containers-storage → finalize on natural shutdown → staged→booted→rollback digests exact → **13/13 persistence checks pass** (incl. SSH host key + machine-id stability, deleted-file persistence) → `is-system-running=running`.
+4. **Answered:** `/run/ostree-booted` is **absent** on composefs-booted systems — upstream `bootc-fetch-apply-updates.timer` would never fire; the Phase 5 timer must not copy that condition. Also: bootc records the containers-storage digest (not registry manifest digest) for podman-run installs — never compare `bootc status` digests to `skopeo inspect` for that transport; double-finalize is safe (second run fails loudly on the BLS exchange rather than double-swapping).
+
+Still open for Phase 2 completeness: the "both-changed" `/etc` merge case (needs two tags whose `/etc` genuinely differs) and the ascending multi-hop chain (needs ≥2 post-fix tags; downgrade-direction hop is validated).
+
 ## Open questions
 
 - `/etc` both-changed merge semantics under the composefs backend (Phase 2 answers empirically).
-- `/run/ostree-booted` presence on composefs-booted systems (Phase 5; possible upstream issue/drop-in).
 - Old-deployment GC policy and knobs for the composefs backend (Phase 3).
-- Signature enforcement on update pulls: installs currently use `--skip-fetch-check`; decide a containers-policy.json / sigstore policy so `bootc upgrade` verifies the same cosign signatures CI produces, and add a Phase 5 test that an unsigned/tampered image is rejected.
+- Signature enforcement on update pulls: installs currently use `--skip-fetch-check`; decide a containers-policy.json / sigstore policy so update pulls verify the same cosign signatures CI produces, and add a Phase 5 test that an unsigned/tampered image is rejected. (With the containers-storage interim path, podman enforces `containers-policy.json` at pull time — configure it there.)
