@@ -21,6 +21,11 @@
 #                      Workaround for images published before the
 #                      sshd-keygen fix (#343); harmless but unnecessary after.
 #   KEEP_VM=1          Skip cleanup (leave VM running for inspection).
+#   HOP_TRANSPORT=containers-storage
+#                      Pull hop images via podman in the guest and switch
+#                      from local storage. Workaround for the bootc 1.16.2
+#                      registry-transport pull failure ("unexpected EOF
+#                      reading tar entry"); default is registry.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,6 +36,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${DISK_SIZE:=20G}"
 : "${INJECT_HOSTKEYS:=0}"
 : "${KEEP_VM:=0}"
+: "${HOP_TRANSPORT:=registry}"
 
 # shellcheck source=test/lib/ssh.sh
 source "$SCRIPT_DIR/lib/ssh.sh"
@@ -190,7 +196,16 @@ for ref in "${HOP_REFS[@]}"; do
     registry_digest=$(digest_of "$ref")
     echo "Registry manifest digest: $registry_digest"
 
-    vm_ssh "bootc switch --quiet $ref"
+    if [[ "$HOP_TRANSPORT" == "containers-storage" ]]; then
+        # Workaround for the bootc 1.16.2 registry-transport pull failure
+        # ("unexpected EOF reading tar entry"): pull via podman in the guest,
+        # then switch from local storage. Same staging/finalize machinery;
+        # only the transfer path differs.
+        vm_ssh "podman pull --quiet $ref >/dev/null"
+        vm_ssh "bootc switch --quiet --transport containers-storage $ref"
+    else
+        vm_ssh "bootc switch --quiet $ref"
+    fi
 
     staged=$(guest_status_digest staged)
     staged_name=$(vm_ssh "bootc status --format json" | jq -r '.status.staged.image.image.image // "null"')
