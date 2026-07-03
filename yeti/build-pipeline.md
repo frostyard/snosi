@@ -25,13 +25,13 @@ Download and install items not available as Debian packages. These run inside th
 
 **Base image BuildScript — in-tree ostree + bootc** (`shared/bootc/build/bootc.chroot`):
 
-Wired via `BuildScripts=` in `mkosi.images/base/mkosi.conf`. Compiles **ostree** (v2026.1) and **bootc** (v1.16.2) from pinned source tarballs. Neither is installed from APT.
+Wired via `BuildScripts=` in `mkosi.images/base/mkosi.conf`. Compiles **ostree** (v2026.1) and **bootc** (v1.16.3) from pinned source tarballs. Neither is installed from APT.
 
 **Rationale:** The former `frostyard/bootc-debian` private packaging recipe is archived. Debian Trixie ships no bootc package and only ostree 2025.2, which is too old for current bootc. Compiling in-tree makes the build fully self-contained. The image rootfs has no `apt` (mkosi manages packages externally), so build deps cannot be apt-installed from inside a postinstall chroot — hence this is a BuildScript.
 
 **Build deps:** Declared in `BuildPackages=` in `mkosi.images/base/mkosi.conf` (build-essential, autoconf, libglib2.0-dev, `rustup`, etc.). mkosi installs them into the build overlay only; the overlay is discarded after the build script completes, so no build tools ever ship in the image. There is no `apt` call and no purge logic in the script.
 
-**Rust toolchain:** Debian Trixie's `rustc` (1.85) is too old to *build* bootc 1.16.2 — its xtask/build dependencies (`cargo_metadata`, `cargo-platform`) require rustc >= 1.91, even though bootc's library crate declares MSRV 1.85. So the script installs a pinned toolchain (`RUST_VERSION`, currently `1.96.0`) via `rustup` (the `rustup` package, from `BuildPackages=`) and runs `make` under `rustup run "$RUST_VERSION"`. Bump `RUST_VERSION` when bumping bootc if a newer toolchain is required.
+**Rust toolchain:** Debian Trixie's `rustc` (1.85) is too old to *build* bootc 1.16.x — its xtask/build dependencies (`cargo_metadata`, `cargo-platform`) require rustc >= 1.91, even though bootc's library crate declares MSRV 1.85. So the script installs a pinned toolchain (`RUST_VERSION`, currently `1.96.0`) via `rustup` (the `rustup` package, from `BuildPackages=`) and runs `make` under `rustup run "$RUST_VERSION"`. Bump `RUST_VERSION` when bumping bootc if a newer toolchain is required.
 
 **Mechanics:**
 
