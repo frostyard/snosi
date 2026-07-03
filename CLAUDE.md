@@ -60,6 +60,10 @@ Scripts execute in order: **BuildScripts** (in chroot) -> **PostInstallationScri
 
 **First-boot semantics:** the image ships `/etc/machine-id` as an empty file, which systemd treats as "initialize a machine ID, but not first boot" — `ConditionFirstBoot=yes` never fires on installed systems (only a missing machine-id or one containing `uninitialized` triggers it). Any unit that must run once on a fresh install needs a different condition (e.g. `ConditionPathExists=!<marker>`); see the `sshd-keygen.service.d` drop-in in base `mkosi.extra`, which regenerates SSH host keys whenever they are missing. When writing such a drop-in, remember an empty `Condition*=` assignment resets ALL conditions on the unit, so restate the stock unit's other conditions.
 
+### OS Update Staging (bootc)
+
+On bootc-installed systems, updates are staged by `bootc-update-stage.timer` (hourly; base `mkosi.extra`): `/usr/libexec/bootc-update-stage` pulls the followed image via **podman** and stages it with `bootc switch --transport containers-storage`; the update applies at the next natural reboot via `bootc-finalize-staged.service`. podman does the transfer because bootc's registry-transport composefs pull currently fails on snosi images (known upstream bug) — and podman enforces `containers-policy.json` at pull time. The script no-ops when: not a bootc-managed system (nbc installs — `spec.image` is null), already running or already staged the pulled digest, or the pulled digest equals the **rollback** deployment (never auto-flip-flop back to a version the admin rolled away from; bootc refuses that switch anyway). Upstream's `bootc-fetch-apply-updates.timer` is preset-disabled: it force-reboots on update and is gated on `/run/ostree-booted`, which does not exist on composefs deployments. During the transition, `nbc-update-download.timer` still ships for nbc-installed hosts; each mechanism no-ops on the other's install type.
+
 ### Base Image: In-Tree bootc + ostree Build
 
 bootc and ostree are **not** installed from APT; they are compiled from pinned source during the base image build.

@@ -1,0 +1,57 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Stage a bootc update: pull the followed image via podman, then stage it
+# with `bootc switch --transport containers-storage`. The staged deployment
+# applies at the next natural reboot (bootc-finalize-staged.service), which
+# mirrors nbc's download-only semantics — no forced reboot.
+#
+# podman does the transfer because bootc's registry-transport composefs pull
+# currently fails on snosi images (known upstream bug; see the findings log
+# in docs/plans/2026-07-03-bootc-update-validation-plan.md). podman also
+# enforces containers-policy.json at pull time.
+set -euo pipefail
+
+status=$(bootc status --format json)
+
+image=$(jq -r '.spec.image.image // empty' <<<"$status")
+if [[ -z "$image" ]]; then
+    # Not a bootc-managed system (e.g. an nbc A/B install): nothing to do.
+    echo "No bootc image spec; not a bootc-managed system. Nothing to do."
+    exit 0
+fi
+
+booted=$(jq -r '.status.booted.image.imageDigest // empty' <<<"$status")
+staged=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$status")
+rollback=$(jq -r '.status.rollback.image.imageDigest // empty' <<<"$status")
+
+podman pull --quiet "$image" >/dev/null
+pulled=$(podman image inspect --format '{{.Id}}' "$image")
+pulled="sha256:${pulled#sha256:}"
+
+# For containers-storage deployments, bootc's imageDigest is the storage
+# image ID (config digest), which is exactly what podman reports as .Id.
+if [[ "$pulled" == "$booted" ]]; then
+    echo "Already running $image ($pulled); nothing to stage."
+    exit 0
+fi
+if [[ "$pulled" == "$staged" ]]; then
+    echo "$image ($pulled) is already staged; will apply at next reboot."
+    exit 0
+fi
+if [[ -n "$rollback" && "$pulled" == "$rollback" ]]; then
+    # The published image is the deployment the admin rolled back FROM.
+    # Do not flip-flop back to it automatically (bootc would refuse anyway:
+    # "Target image has the same fs-verity digest as the existing rollback
+    # deployment"). Use `bootc rollback` deliberately if that is intended.
+    echo "$image ($pulled) equals the rollback deployment; not re-staging automatically."
+    exit 0
+fi
+
+echo "Staging update: $image ($pulled)"
+bootc switch --quiet --transport containers-storage "$image"
+
+# The image content is copied into the composefs repository at switch time;
+# prune dangling transfer images to keep podman storage bounded.
+podman image prune -f >/dev/null || true
+
+echo "Update staged; it will apply at the next reboot."
