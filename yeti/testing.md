@@ -38,8 +38,10 @@ Boots an image in a QEMU graphical window (GTK display). Loads the image, instal
 
 **Usage:**
 ```bash
-./test/bootc-install-test.sh [image-ref]
+sudo ./test/bootc-install-test.sh [image-ref]
 ```
+
+Must run as root: `bootc install` requires the root user namespace (it aborts under rootless podman with "/proc/1 is owned by 65534"), and the script also uses losetup/mount. When passing a registry ref, the image is pulled into root's podman storage.
 
 **Flow:**
 1. Loads OCI image (from local directory or registry reference via skopeo/podman)
