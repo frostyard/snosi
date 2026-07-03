@@ -56,6 +56,8 @@ Scripts execute in order: **BuildScripts** (in chroot) -> **PostInstallationScri
 
 **Critical pattern:** Packages installing to `/opt` must be relocated to `/usr/lib/<package>` at build time with symlinks in `/usr/bin`. This applies to both desktop images and sysexts.
 
+**Runtime service enablement changes are forbidden:** units must never run `systemctl disable`/`enable` at runtime (e.g. via `ExecStartPost`) — it deletes/creates `.wants`/`.requires` symlinks in `/etc`, and any path removed from the live `/etc` relative to the booted image makes bootc's `/etc` merge fail at update finalize with "a path led outside of the filesystem" (bootc ≤ 1.16.3 follows the corresponding symlink in the new deployment's `/etc` out of its sandbox). For run-once behavior, gate on a `/var` marker file instead (see `snow-linux-live-setup.service`).
+
 **First-boot semantics:** the image ships `/etc/machine-id` as an empty file, which systemd treats as "initialize a machine ID, but not first boot" — `ConditionFirstBoot=yes` never fires on installed systems (only a missing machine-id or one containing `uninitialized` triggers it). Any unit that must run once on a fresh install needs a different condition (e.g. `ConditionPathExists=!<marker>`); see the `sshd-keygen.service.d` drop-in in base `mkosi.extra`, which regenerates SSH host keys whenever they are missing. When writing such a drop-in, remember an empty `Condition*=` assignment resets ALL conditions on the unit, so restate the stock unit's other conditions.
 
 ### Base Image: In-Tree bootc + ostree Build
