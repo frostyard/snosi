@@ -20,7 +20,9 @@ fi
 # require rustc >= 1.91, even though bootc's library crate declares MSRV 1.85.
 # We install this exact toolchain via rustup (the `rustup` package comes from
 # BuildPackages=); rustup verifies the toolchain's signatures on download.
-# Bump this when bumping bootc if a newer toolchain is needed.
+# A weekly dependency check proposes newer stable toolchains automatically, but
+# still verify this when bumping bootc in case that release needs a specific
+# build toolchain.
 RUST_VERSION="1.96.0"
 
 WORK="$(mktemp -d)"

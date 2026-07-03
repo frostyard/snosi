@@ -316,7 +316,7 @@ The `test-install.yml` workflow verifies the signature before every installation
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `check-dependencies.yml` | Weekly | Checks pinned external downloads (checksums.json) for updates, opens PRs |
+| `check-dependencies.yml` | Weekly | Checks pinned external downloads and inline CI/tool pins for updates, opens PRs |
 | `check-packages.yml` | Daily | Checks external APT package versions, opens PRs |
 | `validate.yml` | PR/push | shellcheck (all shebang-discovered scripts, `-S warning`) + `mkosi summary` validation for every profile |
 | `test-install.yml` | Manual | Signature-verified bootc installation test in QEMU/KVM |
@@ -700,8 +700,9 @@ The `.github/workflows/check-dependencies.yml` workflow runs weekly to check for
 
 1. Compares pinned versions against latest releases/commits
 2. If updates are found, downloads new files and computes checksums
-3. Creates a PR with updated `checksums.json`
-4. **Requires manual review** before merging - verify builds work with new versions
+3. Updates `checksums.json` for verified downloads and directly edits validated inline pins for Rust, chunkah, Syft, and Cosign
+4. Creates a PR with the updates
+5. **Requires manual review** before merging - verify builds work with new versions
 
 To check manually or trigger an update PR, use the "Run workflow" button in GitHub Actions.
 

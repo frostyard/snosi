@@ -46,8 +46,8 @@ jobs:
           LATEST_BW=$(gh_api https://api.github.com/repos/bitwarden/clients/releases | jq -r '[.[] | select(.draft == false and .prerelease == false) | select(.tag_name | startswith("desktop-v"))][0].tag_name' | sed 's/desktop-v//')
           if [[ -n "$LATEST_BW" && "$LATEST_BW" != "null" && "$LATEST_BW" != "$CURRENT_BW" ]]; then
             UPDATES="${UPDATES}bitwarden: $CURRENT_BW -> $LATEST_BW\n"
-            echo "bitwarden_update=true" >> $GITHUB_OUTPUT
-            echo "bitwarden_version=$LATEST_BW" >> $GITHUB_OUTPUT
+            echo "bitwarden_update=true" >> "$GITHUB_OUTPUT"
+            echo "bitwarden_version=$LATEST_BW" >> "$GITHUB_OUTPUT"
           fi
 
           # Check Homebrew install script
@@ -56,8 +56,8 @@ jobs:
           CURRENT_BREW_SHORT=$(echo "$CURRENT_BREW" | head -c 12)
           if [[ -n "$LATEST_BREW" && "$LATEST_BREW" != "null" && "$LATEST_BREW" != "$CURRENT_BREW_SHORT" ]]; then
             UPDATES="${UPDATES}brew-install: $CURRENT_BREW_SHORT -> $LATEST_BREW\n"
-            echo "brew_update=true" >> $GITHUB_OUTPUT
-            echo "brew_commit=$LATEST_BREW" >> $GITHUB_OUTPUT
+            echo "brew_update=true" >> "$GITHUB_OUTPUT"
+            echo "brew_commit=$LATEST_BREW" >> "$GITHUB_OUTPUT"
           fi
 
           # Check code-server
@@ -65,8 +65,8 @@ jobs:
           LATEST_CS=$(gh_api https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's/^v//')
           if [[ -n "$LATEST_CS" && "$LATEST_CS" != "null" && "$LATEST_CS" != "$CURRENT_CS" ]]; then
             UPDATES="${UPDATES}code-server: $CURRENT_CS -> $LATEST_CS\n"
-            echo "codeserver_update=true" >> $GITHUB_OUTPUT
-            echo "codeserver_version=$LATEST_CS" >> $GITHUB_OUTPUT
+            echo "codeserver_update=true" >> "$GITHUB_OUTPUT"
+            echo "codeserver_version=$LATEST_CS" >> "$GITHUB_OUTPUT"
           fi
 
           # Check ostree
@@ -74,20 +74,20 @@ jobs:
           LATEST_OSTREE=$(gh_api https://api.github.com/repos/ostreedev/ostree/releases/latest | jq -r '.tag_name' | sed 's/^v//')
           if [[ -n "$LATEST_OSTREE" && "$LATEST_OSTREE" != "null" && "$LATEST_OSTREE" != "$CURRENT_OSTREE" ]]; then
             UPDATES="${UPDATES}ostree: $CURRENT_OSTREE -> $LATEST_OSTREE\n"
-            echo "ostree_update=true" >> $GITHUB_OUTPUT
-            echo "ostree_version=$LATEST_OSTREE" >> $GITHUB_OUTPUT
+            echo "ostree_update=true" >> "$GITHUB_OUTPUT"
+            echo "ostree_version=$LATEST_OSTREE" >> "$GITHUB_OUTPUT"
           fi
 
           # Check bootc (bootc + bootc-vendor version together)
-          # NOTE: on a bootc bump, also re-check RUST_VERSION in
-          # shared/bootc/build/bootc.chroot — a new bootc release may raise the
-          # rustc version needed to BUILD it (its build deps, not just MSRV).
+          # NOTE: RUST_VERSION has its own latest-stable check below, but a
+          # bootc bump may still require a specific newer build toolchain that
+          # latest-stable tracking alone cannot infer.
           CURRENT_BOOTC=$(jq -r '.bootc.version' "$CHECKSUMS")
           LATEST_BOOTC=$(gh_api https://api.github.com/repos/bootc-dev/bootc/releases/latest | jq -r '.tag_name' | sed 's/^v//')
           if [[ -n "$LATEST_BOOTC" && "$LATEST_BOOTC" != "null" && "$LATEST_BOOTC" != "$CURRENT_BOOTC" ]]; then
             UPDATES="${UPDATES}bootc: $CURRENT_BOOTC -> $LATEST_BOOTC\n"
-            echo "bootc_update=true" >> $GITHUB_OUTPUT
-            echo "bootc_version=$LATEST_BOOTC" >> $GITHUB_OUTPUT
+            echo "bootc_update=true" >> "$GITHUB_OUTPUT"
+            echo "bootc_version=$LATEST_BOOTC" >> "$GITHUB_OUTPUT"
           fi
 
           # Check Surface cert (less frequent changes)
@@ -96,8 +96,8 @@ jobs:
           CURRENT_SURF_SHORT=$(echo "$CURRENT_SURF" | head -c 12)
           if [[ -n "$LATEST_SURF" && "$LATEST_SURF" != "null" && "$LATEST_SURF" != "$CURRENT_SURF_SHORT" ]]; then
             UPDATES="${UPDATES}surface-cert: $CURRENT_SURF_SHORT -> $LATEST_SURF\n"
-            echo "surface_update=true" >> $GITHUB_OUTPUT
-            echo "surface_commit=$LATEST_SURF" >> $GITHUB_OUTPUT
+            echo "surface_update=true" >> "$GITHUB_OUTPUT"
+            echo "surface_commit=$LATEST_SURF" >> "$GITHUB_OUTPUT"
           fi
 
           # Check hotedge
@@ -105,8 +105,8 @@ jobs:
           LATEST_HE=$(gh_api https://api.github.com/repos/frostyard/hotedge/commits/HEAD | jq -r '.sha')
           if [[ -n "$LATEST_HE" && "$LATEST_HE" != "null" && "$LATEST_HE" != "$CURRENT_HE" ]]; then
             UPDATES="${UPDATES}hotedge: ${CURRENT_HE:0:12} -> ${LATEST_HE:0:12}\n"
-            echo "hotedge_update=true" >> $GITHUB_OUTPUT
-            echo "hotedge_commit=$LATEST_HE" >> $GITHUB_OUTPUT
+            echo "hotedge_update=true" >> "$GITHUB_OUTPUT"
+            echo "hotedge_commit=$LATEST_HE" >> "$GITHUB_OUTPUT"
           fi
 
           # Check logomenu
@@ -114,8 +114,8 @@ jobs:
           LATEST_LM=$(gh_api https://api.github.com/repos/frostyard/logomenu/commits/HEAD | jq -r '.sha')
           if [[ -n "$LATEST_LM" && "$LATEST_LM" != "null" && "$LATEST_LM" != "$CURRENT_LM" ]]; then
             UPDATES="${UPDATES}logomenu: ${CURRENT_LM:0:12} -> ${LATEST_LM:0:12}\n"
-            echo "logomenu_update=true" >> $GITHUB_OUTPUT
-            echo "logomenu_commit=$LATEST_LM" >> $GITHUB_OUTPUT
+            echo "logomenu_update=true" >> "$GITHUB_OUTPUT"
+            echo "logomenu_commit=$LATEST_LM" >> "$GITHUB_OUTPUT"
           fi
 
           # Check bazaar (Bazaar Companion GNOME extension)
@@ -123,8 +123,8 @@ jobs:
           LATEST_BZ=$(gh_api https://api.github.com/repos/AlexanderVanhee/bazaar-companion/commits/HEAD | jq -r '.sha')
           if [[ -n "$LATEST_BZ" && "$LATEST_BZ" != "null" && "$LATEST_BZ" != "$CURRENT_BZ" ]]; then
             UPDATES="${UPDATES}bazaar: ${CURRENT_BZ:0:12} -> ${LATEST_BZ:0:12}\n"
-            echo "bazaar_update=true" >> $GITHUB_OUTPUT
-            echo "bazaar_commit=$LATEST_BZ" >> $GITHUB_OUTPUT
+            echo "bazaar_update=true" >> "$GITHUB_OUTPUT"
+            echo "bazaar_commit=$LATEST_BZ" >> "$GITHUB_OUTPUT"
           fi
 
           # Check Microsoft Azure VPN Client
@@ -132,8 +132,8 @@ jobs:
           LATEST_AZ=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
           if [[ -n "$LATEST_AZ" && "$LATEST_AZ" != "$CURRENT_AZ" ]]; then
             UPDATES="${UPDATES}microsoft-azurevpnclient: $CURRENT_AZ -> $LATEST_AZ\n"
-            echo "azurevpn_update=true" >> $GITHUB_OUTPUT
-            echo "azurevpn_version=$LATEST_AZ" >> $GITHUB_OUTPUT
+            echo "azurevpn_update=true" >> "$GITHUB_OUTPUT"
+            echo "azurevpn_version=$LATEST_AZ" >> "$GITHUB_OUTPUT"
           fi
 
           # Check Microsoft Edge Stable
@@ -141,15 +141,51 @@ jobs:
           LATEST_EDGE=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
           if [[ -n "$LATEST_EDGE" && "$LATEST_EDGE" != "$CURRENT_EDGE" ]]; then
             UPDATES="${UPDATES}microsoft-edge-stable: $CURRENT_EDGE -> $LATEST_EDGE\n"
-            echo "edge_update=true" >> $GITHUB_OUTPUT
-            echo "edge_version=$LATEST_EDGE" >> $GITHUB_OUTPUT
+            echo "edge_update=true" >> "$GITHUB_OUTPUT"
+            echo "edge_version=$LATEST_EDGE" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check Rust toolchain used to build bootc
+          CURRENT_RUST=$(grep -oP '^RUST_VERSION="\K[^"]+' shared/bootc/build/bootc.chroot || true)
+          LATEST_RUST=$(gh_api https://api.github.com/repos/rust-lang/rust/releases/latest | jq -r '.tag_name')
+          if [[ -n "$CURRENT_RUST" && -n "$LATEST_RUST" && "$LATEST_RUST" != "null" && "$LATEST_RUST" != "$CURRENT_RUST" ]]; then
+            UPDATES="${UPDATES}rust-toolchain: $CURRENT_RUST -> $LATEST_RUST\n"
+            echo "rust_update=true" >> "$GITHUB_OUTPUT"
+            echo "rust_version=$LATEST_RUST" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check Syft CLI version used for SBOM generation
+          CURRENT_SYFT=$(grep -oP 'syft-version:\s*\K\S+' .github/workflows/build-images.yml || true)
+          LATEST_SYFT=$(gh_api https://api.github.com/repos/anchore/syft/releases/latest | jq -r '.tag_name')
+          if [[ -n "$CURRENT_SYFT" && -n "$LATEST_SYFT" && "$LATEST_SYFT" != "null" && "$LATEST_SYFT" != "$CURRENT_SYFT" ]]; then
+            UPDATES="${UPDATES}syft: $CURRENT_SYFT -> $LATEST_SYFT\n"
+            echo "syft_update=true" >> "$GITHUB_OUTPUT"
+            echo "syft_version=$LATEST_SYFT" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check Cosign CLI version used for image and SBOM signing
+          CURRENT_COSIGN=$(grep -oP 'cosign-release:\s*"\K[^"]+' .github/workflows/build-images.yml || true)
+          LATEST_COSIGN=$(gh_api https://api.github.com/repos/sigstore/cosign/releases/latest | jq -r '.tag_name')
+          if [[ -n "$CURRENT_COSIGN" && -n "$LATEST_COSIGN" && "$LATEST_COSIGN" != "null" && "$LATEST_COSIGN" != "$CURRENT_COSIGN" ]]; then
+            UPDATES="${UPDATES}cosign: $CURRENT_COSIGN -> $LATEST_COSIGN\n"
+            echo "cosign_update=true" >> "$GITHUB_OUTPUT"
+            echo "cosign_version=$LATEST_COSIGN" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check chunkah image digest for the latest tag
+          CURRENT_CHUNKAH=$(grep -oP 'quay\.io/coreos/chunkah@\Ksha256:[a-f0-9]+' shared/outformat/image/chunkah-package.sh || true)
+          LATEST_CHUNKAH=$(curl -fsSL --retry 3 --retry-delay 2 "https://quay.io/api/v1/repository/coreos/chunkah/tag/?onlyActiveTags=true" | jq -r '.tags[] | select(.name=="latest") | .manifest_digest' || true)
+          if [[ -n "$CURRENT_CHUNKAH" && -n "$LATEST_CHUNKAH" && "$LATEST_CHUNKAH" != "null" && "$LATEST_CHUNKAH" != "$CURRENT_CHUNKAH" ]]; then
+            UPDATES="${UPDATES}chunkah: $CURRENT_CHUNKAH -> $LATEST_CHUNKAH\n"
+            echo "chunkah_update=true" >> "$GITHUB_OUTPUT"
+            echo "chunkah_digest=$LATEST_CHUNKAH" >> "$GITHUB_OUTPUT"
           fi
 
           if [[ -n "$UPDATES" ]]; then
-            echo "has_updates=true" >> $GITHUB_OUTPUT
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
             echo -e "Updates available:\n$UPDATES"
           else
-            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "has_updates=false" >> "$GITHUB_OUTPUT"
             echo "All dependencies up to date"
           fi
 
@@ -181,8 +217,27 @@ jobs:
           AZUREVPN_VERSION: ${{ steps.check.outputs.azurevpn_version }}
           EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
           EDGE_VERSION: ${{ steps.check.outputs.edge_version }}
+          RUST_UPDATE: ${{ steps.check.outputs.rust_update }}
+          RUST_VERSION: ${{ steps.check.outputs.rust_version }}
+          SYFT_UPDATE: ${{ steps.check.outputs.syft_update }}
+          SYFT_VERSION: ${{ steps.check.outputs.syft_version }}
+          COSIGN_UPDATE: ${{ steps.check.outputs.cosign_update }}
+          COSIGN_VERSION: ${{ steps.check.outputs.cosign_version }}
+          CHUNKAH_UPDATE: ${{ steps.check.outputs.chunkah_update }}
+          CHUNKAH_DIGEST: ${{ steps.check.outputs.chunkah_digest }}
         run: |
           CHECKSUMS="shared/download/checksums.json"
+
+          validate_update_value() {
+            local name="$1"
+            local value="$2"
+            local pattern="$3"
+
+            if [[ ! "$value" =~ $pattern ]]; then
+              echo "::error::Refusing to update ${name}; unexpected value: ${value}"
+              exit 1
+            fi
+          }
 
           if [[ "$BITWARDEN_UPDATE" == "true" ]]; then
             VER="$BITWARDEN_VERSION"
@@ -321,6 +376,26 @@ jobs:
             rm -f "$TMP"
           fi
 
+          if [[ "$RUST_UPDATE" == "true" ]]; then
+            validate_update_value "RUST_VERSION" "$RUST_VERSION" '^[0-9]+\.[0-9]+\.[0-9]+$'
+            sed -i "s|^RUST_VERSION=\"[^\"]*\"|RUST_VERSION=\"${RUST_VERSION}\"|" shared/bootc/build/bootc.chroot
+          fi
+
+          if [[ "$SYFT_UPDATE" == "true" ]]; then
+            validate_update_value "syft-version" "$SYFT_VERSION" '^v[0-9]+\.[0-9]+\.[0-9]+$'
+            sed -i "s|syft-version: .*|syft-version: ${SYFT_VERSION}|" .github/workflows/build-images.yml
+          fi
+
+          if [[ "$COSIGN_UPDATE" == "true" ]]; then
+            validate_update_value "cosign-release" "$COSIGN_VERSION" '^v[0-9]+\.[0-9]+\.[0-9]+$'
+            sed -i "s|cosign-release: \".*\"|cosign-release: \"${COSIGN_VERSION}\"|" .github/workflows/build-images.yml
+          fi
+
+          if [[ "$CHUNKAH_UPDATE" == "true" ]]; then
+            validate_update_value "chunkah digest" "$CHUNKAH_DIGEST" '^sha256:[a-f0-9]{64}$'
+            sed -i "s|quay.io/coreos/chunkah@sha256:[a-f0-9]*|quay.io/coreos/chunkah@${CHUNKAH_DIGEST}|" shared/outformat/image/chunkah-package.sh
+          fi
+
       - name: Create Pull Request
         if: steps.check.outputs.has_updates == 'true'
         uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
@@ -335,6 +410,9 @@ jobs:
           title: "chore: update external dependency checksums"
           body: |
             Automated update of pinned external dependencies.
+
+            This may include checksum-managed downloads and inline CI/tool pins
+            such as the Rust toolchain, chunkah digest, Syft, and Cosign.
 
             **Please verify the builds work before merging.**
           branch: auto-update-checksums
