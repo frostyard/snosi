@@ -26,6 +26,9 @@
 #                      from local storage. Workaround for the bootc 1.16.2
 #                      registry-transport pull failure ("unexpected EOF
 #                      reading tar entry"); default is registry.
+#   ROLLBACK=1         After the final hop, run the rollback phase: bootc
+#                      rollback, reboot, verify slots swapped and /var+/etc
+#                      persistence held.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,6 +40,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${INJECT_HOSTKEYS:=0}"
 : "${KEEP_VM:=0}"
 : "${HOP_TRANSPORT:=registry}"
+: "${ROLLBACK:=0}"
 
 # shellcheck source=test/lib/ssh.sh
 source "$SCRIPT_DIR/lib/ssh.sh"
@@ -260,6 +264,66 @@ for ref in "${HOP_REFS[@]}"; do
     [[ $hop_rc -eq 0 ]] || overall=1
     prev_booted="$booted"
 done
+
+# ---------------------------------------------------------------
+# Rollback phase (plan Phase 4): roll back from the final hop, verify the
+# previous deployment boots, that the slots swapped, that /var data written
+# on the rolled-back-from deployment persists, and the persistence matrix.
+if [[ "$ROLLBACK" == "1" ]]; then
+    echo ""
+    echo "=== Rollback phase ==="
+    vm_ssh "echo rollback-marker > /var/persist-test/written-on-final.txt"
+
+    pre_rb_booted=$(guest_status_digest booted)
+    pre_rb_rollback=$(guest_status_digest rollback)
+    echo "Rolling back from $pre_rb_booted to $pre_rb_rollback"
+
+    vm_ssh "bootc rollback"
+    reboot_guest
+
+    booted=$(guest_status_digest booted)
+    rollback=$(guest_status_digest rollback)
+    echo "Booted digest:   $booted (expected $pre_rb_rollback)"
+    echo "Rollback digest: $rollback (expected $pre_rb_booted)"
+
+    rb_rc=0
+    if [[ "$booted" == "$pre_rb_rollback" ]]; then
+        echo "ok - rollback booted the previous deployment"
+    else
+        echo "not ok - rollback booted the previous deployment"
+        rb_rc=$((rb_rc + 1))
+    fi
+    if [[ "$rollback" == "$pre_rb_booted" ]]; then
+        echo "ok - rollback slot holds the rolled-back-from deployment"
+    else
+        echo "not ok - rollback slot holds the rolled-back-from deployment"
+        rb_rc=$((rb_rc + 1))
+    fi
+    if vm_ssh "grep -qx rollback-marker /var/persist-test/written-on-final.txt"; then
+        echo "ok - /var data written on rolled-back-from deployment persists"
+    else
+        echo "not ok - /var data written on rolled-back-from deployment persists"
+        rb_rc=$((rb_rc + 1))
+    fi
+
+    echo ""
+    echo "--- Persistence verification after rollback ---"
+    set +e
+    run_guest_script "$SCRIPT_DIR/update-tests/persistence-verify.sh"
+    verify_rc=$?
+    vm_ssh "systemctl is-system-running --wait"
+    health_rc=$?
+    set -e
+    rb_rc=$((rb_rc + verify_rc))
+    if [[ $health_rc -ne 0 ]]; then
+        echo "not ok - system is not in 'running' state after rollback"
+        rb_rc=$((rb_rc + 1))
+    fi
+
+    hop_names+=("rollback -> $pre_rb_rollback")
+    hop_results+=("$rb_rc")
+    [[ $rb_rc -eq 0 ]] || overall=1
+fi
 
 # ---------------------------------------------------------------
 echo ""
