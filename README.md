@@ -198,9 +198,15 @@ Include=%D/shared/outformat/image/mkosi.conf    # OCI output format
 
 ### Prerequisites
 
-- [mkosi](https://github.com/systemd/mkosi) (v24+)
 - [just](https://github.com/casey/just) task runner
+- git and python3
 - Root/sudo access (mkosi requires privileges for chroot operations)
+
+[mkosi](https://github.com/systemd/mkosi) does not need to be installed: the
+Justfile automatically fetches it into a repo-local `.mkosi/` checkout at the
+same commit pinned in the CI workflows, so local builds always match CI.
+Delete `.mkosi/` to remove it, or run `just mkosi=/usr/bin/mkosi <target>` to
+use a system-installed mkosi instead.
 
 ### Build Commands
 

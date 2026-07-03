@@ -25,13 +25,13 @@ Download and install items not available as Debian packages. These run inside th
 
 **Base image BuildScript — in-tree ostree + bootc** (`shared/bootc/build/bootc.chroot`):
 
-Wired via `BuildScripts=` in `mkosi.images/base/mkosi.conf`. Compiles **ostree** (v2026.1) and **bootc** (v1.16.2) from pinned source tarballs. Neither is installed from APT.
+Wired via `BuildScripts=` in `mkosi.images/base/mkosi.conf`. Compiles **ostree** (v2026.1) and **bootc** (v1.16.3) from pinned source tarballs. Neither is installed from APT.
 
 **Rationale:** The former `frostyard/bootc-debian` private packaging recipe is archived. Debian Trixie ships no bootc package and only ostree 2025.2, which is too old for current bootc. Compiling in-tree makes the build fully self-contained. The image rootfs has no `apt` (mkosi manages packages externally), so build deps cannot be apt-installed from inside a postinstall chroot — hence this is a BuildScript.
 
 **Build deps:** Declared in `BuildPackages=` in `mkosi.images/base/mkosi.conf` (build-essential, autoconf, libglib2.0-dev, `rustup`, etc.). mkosi installs them into the build overlay only; the overlay is discarded after the build script completes, so no build tools ever ship in the image. There is no `apt` call and no purge logic in the script.
 
-**Rust toolchain:** Debian Trixie's `rustc` (1.85) is too old to *build* bootc 1.16.2 — its xtask/build dependencies (`cargo_metadata`, `cargo-platform`) require rustc >= 1.91, even though bootc's library crate declares MSRV 1.85. So the script installs a pinned toolchain (`RUST_VERSION`, currently `1.96.0`) via `rustup` (the `rustup` package, from `BuildPackages=`) and runs `make` under `rustup run "$RUST_VERSION"`. Bump `RUST_VERSION` when bumping bootc if a newer toolchain is required.
+**Rust toolchain:** Debian Trixie's `rustc` (1.85) is too old to *build* bootc 1.16.x — its xtask/build dependencies (`cargo_metadata`, `cargo-platform`) require rustc >= 1.91, even though bootc's library crate declares MSRV 1.85. So the script installs a pinned toolchain (`RUST_VERSION`, currently `1.96.0`) via `rustup` (the `rustup` package, from `BuildPackages=`) and runs `make` under `rustup run "$RUST_VERSION"`. Bump `RUST_VERSION` when bumping bootc if a newer toolchain is required.
 
 **Mechanics:**
 
@@ -98,7 +98,7 @@ Prepare the image for output. Run after postinstall, before the image format is 
 **Image finalize** (`shared/outformat/image/finalize/mkosi.finalize.chroot`):
 - Removes `/boot`, `/home`, `/root`, `/srv` (recreates empty)
 - Creates `/sysroot` and `/nix` mountpoints (nix sysext bind-mount)
-- Removes `/etc/machine-id` (recreates empty for first-boot) and SSH host keys
+- Removes `/etc/machine-id` (recreates empty) and SSH host keys. **Note:** an empty machine-id file means systemd initializes a machine ID at boot but does NOT treat it as first boot (`ConditionFirstBoot=` stays false; only a missing file or one containing `uninitialized` triggers first-boot semantics). Units gated on `ConditionFirstBoot` never run on installed systems — SSH host key generation relies on a `sshd-keygen.service.d` drop-in in base `mkosi.extra` that keys on missing host keys instead.
 - Compiles GLib schemas and dconf databases
 - Sets file xattrs: `user.component=<package_name>` for every installed file — used by chunkah for layer optimization
 

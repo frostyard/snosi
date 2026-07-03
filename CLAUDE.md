@@ -10,7 +10,7 @@ snosi is a bootable container image build system using [mkosi](https://github.co
 
 ## Build Commands
 
-Requires: mkosi v24+, just, root/sudo access.
+Requires: just, git, python3, root/sudo access. mkosi itself is auto-bootstrapped: the Justfile fetches systemd/mkosi into a repo-local, gitignored `.mkosi/` checkout at the exact commit pinned by the `systemd/mkosi@<sha>` action in `.github/workflows/build.yml` (read at runtime — no drift between local and CI), and runs `.mkosi/bin/mkosi` from there. Delete `.mkosi/` to discard it; override with `just mkosi=/usr/bin/mkosi <target>` to use a system install.
 
 ```bash
 just                    # List targets
@@ -56,6 +56,10 @@ Scripts execute in order: **BuildScripts** (in chroot) -> **PostInstallationScri
 
 **Critical pattern:** Packages installing to `/opt` must be relocated to `/usr/lib/<package>` at build time with symlinks in `/usr/bin`. This applies to both desktop images and sysexts.
 
+**Runtime service enablement changes are forbidden:** units must never run `systemctl disable`/`enable` at runtime (e.g. via `ExecStartPost`) — it deletes/creates `.wants`/`.requires` symlinks in `/etc`, and any path removed from the live `/etc` relative to the booted image makes bootc's `/etc` merge fail at update finalize with "a path led outside of the filesystem" (bootc ≤ 1.16.3 follows the corresponding symlink in the new deployment's `/etc` out of its sandbox). For run-once behavior, gate on a `/var` marker file instead (see `snow-linux-live-setup.service`).
+
+**First-boot semantics:** the image ships `/etc/machine-id` as an empty file, which systemd treats as "initialize a machine ID, but not first boot" — `ConditionFirstBoot=yes` never fires on installed systems (only a missing machine-id or one containing `uninitialized` triggers it). Any unit that must run once on a fresh install needs a different condition (e.g. `ConditionPathExists=!<marker>`); see the `sshd-keygen.service.d` drop-in in base `mkosi.extra`, which regenerates SSH host keys whenever they are missing. When writing such a drop-in, remember an empty `Condition*=` assignment resets ALL conditions on the unit, so restate the stock unit's other conditions.
+
 ### Base Image: In-Tree bootc + ostree Build
 
 bootc and ostree are **not** installed from APT; they are compiled from pinned source during the base image build.
@@ -64,7 +68,7 @@ bootc and ostree are **not** installed from APT; they are compiled from pinned s
 - **Where:** `shared/bootc/build/bootc.chroot` runs as a mkosi `BuildScript` (wired via `BuildScripts=` in `mkosi.images/base/mkosi.conf`). (The image rootfs has no `apt` — mkosi manages packages externally — so build deps cannot be apt-installed from inside a postinstall chroot; a BuildScript with `BuildPackages=` is required.)
 - **Versions:** Pinned in `shared/download/checksums.json` (keys `ostree`, `bootc`, `bootc-vendor`); tracked weekly by `check-dependencies.yml`.
 - **Build deps:** declared in `BuildPackages=` in `mkosi.images/base/mkosi.conf`. mkosi installs them into the build overlay only; the overlay (and every build dep) is discarded after the build script, so they never ship in the image. There is no `apt` call and no purge logic in the script.
-- **Rust toolchain:** Debian's `rustc` (1.85) is too old to *build* bootc 1.16.2 (its xtask/build deps need rustc ≥ 1.91). The script installs a pinned toolchain (`RUST_VERSION`) via `rustup` (from `BuildPackages=`) and runs `make` under `rustup run`. `check-dependencies.yml` tracks the latest stable Rust release and edits this inline pin directly.
+- **Rust toolchain:** Debian's `rustc` (1.85) is too old to *build* bootc 1.16.3 (its xtask/build deps need rustc ≥ 1.91). The script installs a pinned toolchain (`RUST_VERSION`) via `rustup` (from `BuildPackages=`) and runs `make` under `rustup run`. `check-dependencies.yml` tracks the latest stable Rust release and edits this inline pin directly.
 - **ostree double-install:** the BuildScript runs `make install DESTDIR="$DESTDIR"` (ships in image) AND `make install DESTDIR=` (explicit empty — mkosi exports `DESTDIR` into the build env, so the empty value is needed to install into the overlay's real `/usr` so the bootc build finds `ostree-1.pc` and can run the bootc binary for docgen).
 - **dpkg registration:** `shared/bootc/postinst/bootc-register.chroot` (a `PostInstallationScript`) builds metadata-only stub `.deb`s (versions from `checksums.json`) and `dpkg -i`s them, so `dpkg -l`/`apt list --installed` and dependency checks see `bootc` + `libostree-1-1` as installed. The files come from the BuildScript; dpkg does not own them.
 - **Runtime libs:** bootc/ostree runtime dependencies (e.g. `libglib2.0-0t64`, `libcurl4t64`) are listed in base `Packages=` so they ship in the image and the compiled binaries link against them at runtime.
@@ -85,7 +89,7 @@ The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput
 ## Key Directories
 
 - `shared/download/` - Verified download system: `checksums.json` pins URLs+SHA256s, `verified-download.sh` provides the `verified_download()` helper
-- `shared/bootc/` - In-tree source build of bootc (v1.16.2) and ostree (v2026.1); `build/bootc.chroot` is a base image **BuildScript** (wired via `BuildScripts=`); build deps come from `BuildPackages=` (overlay-only, discarded after build); compiles both tools (autotools for ostree, offline vendored cargo for bootc) and installs into `$DESTDIR`, which mkosi copies into the image
+- `shared/bootc/` - In-tree source build of bootc (v1.16.3) and ostree (v2026.1); `build/bootc.chroot` is a base image **BuildScript** (wired via `BuildScripts=`); build deps come from `BuildPackages=` (overlay-only, discarded after build); compiles both tools (autotools for ostree, offline vendored cargo for bootc) and installs into `$DESTDIR`, which mkosi copies into the image
 - `shared/kernel/` - Kernel configs (backports, surface, stock) and dracut scripts
 - `shared/packages/` - Package set definitions, some with postinstall scripts for relocation
 - `shared/outformat/image/` - Image output format config (directory), finalize scripts, `buildah-package.sh` (OCI packaging), and `chunkah-package.sh` (CI re-chunks the OCI image for efficient delta updates)

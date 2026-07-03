@@ -16,7 +16,7 @@ if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
 fi
 
 # Pinned Rust toolchain. Debian Trixie's rustc (1.85) is too OLD to *build*
-# bootc 1.16.2: its xtask/build dependencies (cargo_metadata, cargo-platform)
+# bootc 1.16.x: its xtask/build dependencies (cargo_metadata, cargo-platform)
 # require rustc >= 1.91, even though bootc's library crate declares MSRV 1.85.
 # We install this exact toolchain via rustup (the `rustup` package comes from
 # BuildPackages=); rustup verifies the toolchain's signatures on download.

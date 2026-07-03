@@ -134,7 +134,9 @@ See [sysexts.md](sysexts.md) for details.
 
 External resources are pinned in `shared/download/checksums.json` with URL + SHA256. Scripts use `verified_download(key, output_path)` from `shared/download/verified-download.sh`. CI workflow `check-dependencies.yml` detects updates weekly and creates PRs. The same workflow also tracks a small set of inline CI/build pins that cannot live in `checksums.json`: `RUST_VERSION`, the chunkah image digest, and the Syft/Cosign workflow version inputs.
 
-Package versions for APT-based externals (Edge, VSCode, Docker, 1Password, Himmelblau) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
+Package versions for selected APT-based externals (VSCode, Docker, 1Password, Himmelblau) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
+
+Current checksum-managed downloads are Bitwarden, Homebrew install script, code-server, ostree, bootc, bootc-vendor, Surface secure boot certificate, Hotedge, Logomenu, Bazaar Companion, Azure VPN, and Microsoft Edge. Current APT version tracking covers `code`, `docker-ce`, `1password-cli`, and `himmelblau`; Edge is checksum-managed because the build installs a patched downloaded `.deb`.
 
 ### User Service Enablement in Chroot
 
@@ -151,6 +153,8 @@ ln -sf /usr/lib/systemd/user/<service> /etc/systemd/user/<target>.wants/<service
 
 Images are built as directories, then packaged into OCI via `buildah-package.sh` using `buildah mount` + `cp -a` + `buildah commit`. This avoids `buildah COPY` which drops SUID bits (buildah#4463). Layer optimization is done via `chunkah-package.sh`.
 
+CI sets `TMPDIR=/mnt/tmp` before mkosi/buildah/chunkah work because hosted runners have more free space on `/mnt` than on `/`; large loaded variants can exhaust `/var/tmp` if this is omitted.
+
 ### Shell Script Conventions
 
 - `set -euo pipefail` at the top of all scripts
@@ -162,7 +166,8 @@ Images are built as directories, then packaged into OCI via `buildah-package.sh`
 
 ### Build Requirements
 
-- mkosi v24+, just, root/sudo access
+- just, git, python3, root/sudo access
+- mkosi is auto-bootstrapped by the Justfile into a gitignored `.mkosi/` checkout at the commit pinned by the `systemd/mkosi@<sha>` action in `.github/workflows/build.yml` (parsed at runtime, so local always matches CI); override with `just mkosi=/usr/bin/mkosi <target>`
 - For CI: buildah, skopeo, podman, cosign, syft, oras
 
 ### Build Commands
@@ -213,14 +218,13 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 - `compare-images.sh` — diffoscope-style comparison of two OCI images (extracts layers, handles whiteouts, reports file-level differences); dev tool, not used by CI
 - `packagediff.sh` — diffs the build manifest against the running system's package list (`/usr/share/frostyard/<id>.packages.txt`)
 - `check-duplicate-packages.sh` / `check-profile-dependencies.sh` — config sanity checks, run by CI
-- `mkosi.tools` + `mkosi.tools.manifest` — mkosi `ToolsTree=default` support: the build runs its tooling from a separate tools tree so host tool versions don't leak into image builds
 
 ## CI/CD
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `build.yml` | Push/PR/dispatch | Build base + sysexts, publish to R2 |
-| `build-images.yml` | Push/PR/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, generate SBOMs, sign with Cosign |
+| `build-images.yml` | Push/PR/repository_dispatch/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, generate SBOMs, sign with Cosign |
 | `check-dependencies.yml` | Weekly (Mon 9am UTC) | Check external download updates, create PRs |
 | `check-packages.yml` | Daily (8am UTC) | Check APT package version updates, create PRs |
 | `validate.yml` | PR/push | shellcheck + mkosi summary validation |

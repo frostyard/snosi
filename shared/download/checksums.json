@@ -45,14 +45,14 @@
     "version": "2026.1"
   },
   "bootc": {
-    "url": "https://github.com/bootc-dev/bootc/releases/download/v1.16.2/bootc-1.16.2.tar.zstd",
-    "sha256": "b407aa47a61ecda39256c3e3dbeef25c31585c5644ad6d40f5397522a4d2edc7",
-    "version": "1.16.2"
+    "url": "https://github.com/bootc-dev/bootc/releases/download/v1.16.3/bootc-1.16.3.tar.zstd",
+    "sha256": "4a46b90ff7bffd3be600af257887ab8dd2d5ca0173a30f5b99380eeeef7235f2",
+    "version": "1.16.3"
   },
   "bootc-vendor": {
-    "url": "https://github.com/bootc-dev/bootc/releases/download/v1.16.2/bootc-1.16.2-vendor.tar.zstd",
-    "sha256": "53d759ca521144a675af67e68d23c3f5f18dca784e4e900052d0cfdc4467732b",
-    "version": "1.16.2"
+    "url": "https://github.com/bootc-dev/bootc/releases/download/v1.16.3/bootc-1.16.3-vendor.tar.zstd",
+    "sha256": "8d115b1ae507182b3daee191664aeae31f6d4afe56592e543a67c473f606bafc",
+    "version": "1.16.3"
   },
   "bazaar": {
     "url": "https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/3bb9134985343ffd1993520eb37c90e113bfb09b",
