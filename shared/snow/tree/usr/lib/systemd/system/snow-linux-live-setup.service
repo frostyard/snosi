@@ -7,10 +7,18 @@ Requires=systemd-logind.service
 Before=display-manager.service
 After=systemd-logind.service systemd-homed.service
 ConditionPathExists=/usr/bin/_snow-linux-live-setup
+# Run-once via marker file instead of `systemctl disable`: the disable
+# removed this unit's .wants/.requires symlinks from /etc at runtime, and
+# any path deleted from the live /etc makes bootc's /etc merge fail at
+# update finalize (bootc <= 1.16.3 follows the corresponding symlink in the
+# new deployment's /etc and aborts: "a path led outside of the filesystem").
+# Live sessions are unaffected: their state is ephemeral, so the marker
+# resets every live boot exactly like the old runtime disable did.
+ConditionPathExists=!/var/lib/snow-linux-live-setup.done
 
 [Service]
 ExecStart=/usr/bin/_snow-linux-live-setup
-ExecStartPost=/usr/bin/systemctl disable %n
+ExecStartPost=/usr/bin/touch /var/lib/snow-linux-live-setup.done
 
 [Install]
 WantedBy=multi-user.target
