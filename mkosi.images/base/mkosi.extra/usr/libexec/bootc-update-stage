@@ -24,6 +24,13 @@ booted=$(jq -r '.status.booted.image.imageDigest // empty' <<<"$status")
 staged=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$status")
 rollback=$(jq -r '.status.rollback.image.imageDigest // empty' <<<"$status")
 
+# Prune BEFORE pulling, not only after a successful switch: a previous run's
+# cached image (or a tag that :latest moved away from) otherwise sits in
+# /var/lib/containers and the pull needs image-size headroom on top of it —
+# observed as ENOSPC on a 20G soak VM. The transfer cache is fully
+# re-pullable; only the current tag's image is worth keeping between runs.
+podman image prune -f >/dev/null || true
+
 podman pull --quiet "$image" >/dev/null
 pulled=$(podman image inspect --format '{{.Id}}' "$image")
 pulled="sha256:${pulled#sha256:}"
