@@ -100,6 +100,10 @@ The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput
 - Pin external URLs to specific versions/commits, never `latest` or branch names
 - When adding a new verified download, also add a corresponding update check to `.github/workflows/check-dependencies.yml`
 
+## Initrd User Entries
+
+`shared/kernel/scripts/postinst/mkosi.postinst.chroot` runs `systemd-sysusers` before invoking dracut because mkosi's normal sysusers pass happens after postinstall scripts. Keep that ordering: the base `tss-user` dracut module copies the resolved `tss` passwd/group entries into initrd so tpm2-tss tmpfiles and udev rules do not log unresolved-user errors during early boot.
+
 ## User Service Enablement in Chroot
 
 `systemctl --user enable` does not work inside a mkosi chroot (no user session/D-Bus). System services are enabled via `systemctl enable` in `snow.postinst.chroot`, but user services require manually creating symlinks:

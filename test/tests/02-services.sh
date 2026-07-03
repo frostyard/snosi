@@ -31,4 +31,8 @@ check "frostyard-updex is installed" \
 check "no failed systemd units" \
     bash -c 'test "$(systemctl --failed --no-legend | wc -l)" -eq 0'
 
+# shellcheck disable=SC2016
+check "no unresolved 'tss' user in journal (issue #309 L23)" \
+    bash -c '! journalctl -b --no-pager | grep -q "Failed to resolve user .tss."'
+
 print_summary

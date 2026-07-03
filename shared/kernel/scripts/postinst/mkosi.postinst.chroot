@@ -18,6 +18,10 @@ if [[ -z "$KERNEL_VERSION" ]]; then
   exit 1
 fi
 
+# Materialize sysusers now so dracut can embed the tss user/group in initrd.
+# mkosi runs systemd-sysusers later too; this pass is idempotent.
+systemd-sysusers
+
 dracut --force --no-hostonly --reproducible --zstd --verbose --add etc-overlay \
   --kver "$KERNEL_VERSION" "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
 

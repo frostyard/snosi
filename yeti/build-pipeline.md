@@ -63,7 +63,7 @@ Runs during the base image build (not during profile builds). Handles:
 **Build time impact:** every clean build now compiles ostree + bootc; expect several extra minutes per image build.
 
 **Kernel postinstall (all profiles):**
-- `shared/kernel/scripts/postinst/mkosi.postinst.chroot` — Builds initramfs via dracut, detects kernel version, generates `/usr/lib/modules/$VERSION/initramfs.img`, copies vmlinuz
+- `shared/kernel/scripts/postinst/mkosi.postinst.chroot` — Builds initramfs via dracut, detects kernel version, generates `/usr/lib/modules/$VERSION/initramfs.img`, copies vmlinuz. It runs `systemd-sysusers` before dracut because mkosi's normal sysusers pass is later than postinstall scripts; the early idempotent pass lets the `tss-user` dracut module embed the `tss` passwd/group entries required by tpm2-tss tmpfiles and udev rules in initrd.
 
 **Common postinstall logic** (`shared/scripts/common-postinst.sh`):
 
@@ -250,7 +250,7 @@ Desktop configuration overlay:
 - GDM configuration
 - Flatpak remote (Flathub)
 - systemd units: mount units (home, root, srv, opt, usr-local), service overrides, presets
-- dracut configs: TPM, bootc, systemd
+- dracut configs: TPM, bootc, systemd, plus `tss-user` initrd passwd/group injection for tpm2-tss boot-time rules
 - tmpfiles.d and sysusers.d definitions
 - Flatpak sandbox overrides
 
