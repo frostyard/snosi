@@ -98,7 +98,7 @@ Prepare the image for output. Run after postinstall, before the image format is 
 **Image finalize** (`shared/outformat/image/finalize/mkosi.finalize.chroot`):
 - Removes `/boot`, `/home`, `/root`, `/srv` (recreates empty)
 - Creates `/sysroot` and `/nix` mountpoints (nix sysext bind-mount)
-- Removes `/etc/machine-id` (recreates empty for first-boot) and SSH host keys
+- Removes `/etc/machine-id` (recreates empty) and SSH host keys. **Note:** an empty machine-id file means systemd initializes a machine ID at boot but does NOT treat it as first boot (`ConditionFirstBoot=` stays false; only a missing file or one containing `uninitialized` triggers first-boot semantics). Units gated on `ConditionFirstBoot` never run on installed systems — SSH host key generation relies on a `sshd-keygen.service.d` drop-in in base `mkosi.extra` that keys on missing host keys instead.
 - Compiles GLib schemas and dconf databases
 - Sets file xattrs: `user.component=<package_name>` for every installed file — used by chunkah for layer optimization
 
