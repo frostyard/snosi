@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Stage-only update timer: downloads + stages, applies at next natural reboot.
+enable bootc-update-stage.timer
+# Upstream bootc timer does fetch + apply + IMMEDIATE REBOOT. It is currently
+# inert on composefs deployments (gated on /run/ostree-booted, which does not
+# exist there), but systemctl preset-all enables it by default — disable it
+# explicitly so a future upstream fix cannot start force-rebooting desktops.
+disable bootc-fetch-apply-updates.timer

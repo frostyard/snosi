@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+[Unit]
+Description=Stage bootc update (download only; applies at next reboot)
+Documentation=man:bootc(8)
+After=network-online.target
+Wants=network-online.target
+# Cheap gate: composefs deployments boot with a composefs= kernel argument.
+# Do NOT use ConditionPathExists=/run/ostree-booted here — that path does not
+# exist on composefs-booted systems (it is why the upstream
+# bootc-fetch-apply-updates.timer never fires). The script additionally exits
+# cleanly when the system is not bootc-managed (e.g. nbc A/B installs).
+ConditionKernelCommandLine=composefs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/bootc-update-stage
