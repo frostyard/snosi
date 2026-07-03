@@ -166,7 +166,8 @@ CI sets `TMPDIR=/mnt/tmp` before mkosi/buildah/chunkah work because hosted runne
 
 ### Build Requirements
 
-- mkosi v24+, just, root/sudo access
+- just, git, python3, root/sudo access
+- mkosi is auto-bootstrapped by the Justfile into a gitignored `.mkosi/` checkout at the commit pinned by the `systemd/mkosi@<sha>` action in `.github/workflows/build.yml` (parsed at runtime, so local always matches CI); override with `just mkosi=/usr/bin/mkosi <target>`
 - For CI: buildah, skopeo, podman, cosign, syft, oras
 
 ### Build Commands

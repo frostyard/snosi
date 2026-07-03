@@ -10,7 +10,7 @@ snosi is a bootable container image build system using [mkosi](https://github.co
 
 ## Build Commands
 
-Requires: mkosi v24+, just, root/sudo access.
+Requires: just, git, python3, root/sudo access. mkosi itself is auto-bootstrapped: the Justfile fetches systemd/mkosi into a repo-local, gitignored `.mkosi/` checkout at the exact commit pinned by the `systemd/mkosi@<sha>` action in `.github/workflows/build.yml` (read at runtime — no drift between local and CI), and runs `.mkosi/bin/mkosi` from there. Delete `.mkosi/` to discard it; override with `just mkosi=/usr/bin/mkosi <target>` to use a system install.
 
 ```bash
 just                    # List targets
