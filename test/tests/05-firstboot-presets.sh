@@ -39,6 +39,12 @@ check "first-boot-complete.target was reached" \
 check "preset-global.service succeeded" \
     test "$(systemctl show -P Result preset-global.service)" = "success"
 
+# The enablement-model marker exists (gates preset-migration.service off),
+# and the migration unit itself was correctly skipped on a fresh install.
+check "preset-enablement marker written" test -f /var/lib/preset-enablement.done
+check "preset-migration.service did not run" \
+    test "$(systemctl show -P ActiveState preset-migration.service)" = "inactive"
+
 # systemd-firstboot must never prompt; it is preset-disabled.
 check "systemd-firstboot.service is disabled" \
     test "$(systemctl is-enabled systemd-firstboot.service 2>/dev/null)" = "disabled"

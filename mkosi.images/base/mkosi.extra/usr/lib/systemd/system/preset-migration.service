@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# One-shot migration to preset-owned enablement for EXISTING installs.
+#
+# Images ship no unit enablement symlinks in /etc (presets recreate them at
+# first boot — see preset-global.service and the outformat finalize script).
+# But an install created from a pre-2026-07 image already had its first
+# boot, and bootc's 3-way /etc merge drops the old image's enablement
+# symlinks on the first update across the model boundary (unchanged in the
+# live /etc + absent from the new image /etc = removed). Without this unit
+# the system would come up with every preset-enabled service inactive.
+#
+# Activation is a STATIC wants symlink in /usr (sysinit.target.wants), not
+# an /etc enablement — after the boundary update there are no /etc
+# enablement symlinks left to activate anything, and /usr wants dirs are
+# always scanned. The conditions keep it inert everywhere else:
+#   - fresh installs:  first boot handles presets (ConditionFirstBoot=no)
+#   - migrated system: marker exists after the one run
+#   - healthy system:  multi-user.target.wants is never empty
+# preset-global.service also creates the marker on first boot, so fresh
+# installs are double-gated.
+#
+# After applying presets it reboots once: the boot transaction was computed
+# before the enablement symlinks existed, so the created state only takes
+# effect on the next boot. Marker is written first — no reboot loop.
+[Unit]
+Description=Re-apply unit presets after migration to preset-owned enablement
+DefaultDependencies=no
+ConditionFirstBoot=no
+ConditionPathExists=!/var/lib/preset-enablement.done
+ConditionDirectoryNotEmpty=!/etc/systemd/system/multi-user.target.wants
+ConditionPathIsReadWrite=/etc
+Before=sysinit.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# etc-guard-allow: one-shot at the enablement-model boundary; /etc holds no enablement symlinks at this point, so preset-all only creates paths
+ExecStart=systemctl preset-all
+# etc-guard-allow: same justification, user scope
+ExecStart=systemctl preset-all --global
+ExecStart=/usr/bin/touch /var/lib/preset-enablement.done
+ExecStart=systemctl --no-block reboot

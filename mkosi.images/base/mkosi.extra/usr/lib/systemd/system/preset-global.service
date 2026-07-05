@@ -22,6 +22,10 @@ Type=oneshot
 RemainAfterExit=yes
 # etc-guard-allow: first-boot only; image /etc ships no enablement symlinks, so this only creates paths
 ExecStart=systemctl preset-all --global
+# Marks the enablement model as initialized so preset-migration.service
+# (which handles pre-2026-07 installs crossing the model boundary) stays
+# inert on systems that had a real first boot.
+ExecStart=/usr/bin/touch /var/lib/preset-enablement.done
 
 [Install]
 WantedBy=basic.target
