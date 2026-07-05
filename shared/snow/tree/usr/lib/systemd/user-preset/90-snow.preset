@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# User-scope preset policy for snow desktops. Applied at image build by
+# mkosi (`systemctl --global preset-all`) and again on first boot by
+# preset-global.service. Units not listed here fall through to systemd's
+# default-enable, which covers gnome-remote-desktop, pipewire, podman, etc.
+#
+# These replace the manual symlink surgery that used to live in
+# snow.postinst.chroot: mkosi runs --global preset-all AFTER postinst
+# scripts, so a postinst `rm` of an enablement symlink was silently undone
+# by the later default-enable (observed shipped: BOTH gnome-remote-desktop
+# variants enabled despite their mutual Conflicts=).
+
+# The headless variant declares Conflicts=gnome-remote-desktop.service;
+# only the non-headless variant may be enabled on a desktop image.
+disable gnome-remote-desktop-headless.service
+
+# rygel (UPnP/DLNA media server) is deliberately not autostarted: an
+# always-on media server is a surprising desktop default.
+disable rygel.service
