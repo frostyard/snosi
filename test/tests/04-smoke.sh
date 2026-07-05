@@ -32,4 +32,7 @@ check "Hostname is set" \
 check "Locale is configured" \
     locale
 
+check "Default system locale is set" \
+    grep -q '^LANG=' /etc/locale.conf
+
 print_summary
