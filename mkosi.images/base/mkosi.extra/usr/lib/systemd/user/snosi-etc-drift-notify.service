@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Per-user desktop notification for the /etc drift report. Hash-gated:
+# notifies once per report change, not per login.
+[Unit]
+Description=Notify about /etc drift against the booted image
+After=graphical-session.target
+ConditionPathExists=/var/lib/snosi/etc-drift.report
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/snosi-etc-drift-notify
+
+[Install]
+WantedBy=graphical-session.target
