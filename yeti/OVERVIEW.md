@@ -36,7 +36,7 @@ mkosi.version               # Version tag script (date-based, overridden by CI I
 mkosi.clean                 # Clean script (rm -rf output/*)
 mkosi.images/               # Image definitions (base + 10 sysexts)
   base/                     # Foundation image: systemd, in-tree bootc/ostree, firmware, core utils
-    mkosi.extra/            # Base filesystem overlay (dracut, systemd units, sysupdate, tmpfiles, sysusers)
+    mkosi.extra/            # Base filesystem overlay (dracut, systemd units/timers, sysupdate, tmpfiles, sysusers)
       usr/lib/sysupdate.d/  # .transfer + .feature files for all sysexts
     mkosi.postinst.chroot   # Mount enablement, useradd home dir, bls-garbage-collect removal
     mkosi.finalize.chroot   # Masks systemd-networkd-wait-online
@@ -115,6 +115,10 @@ See [build-pipeline.md](build-pipeline.md) for details.
 ```
 
 **Critical pattern:** Packages installing to `/opt` must be relocated to `/usr/lib/<package>` at build time with symlinks from `/usr/bin`. See [build-pipeline.md](build-pipeline.md#package-relocation).
+
+### bootc Update Staging
+
+The base image disables upstream `bootc-fetch-apply-updates.timer` and enables `bootc-update-stage.timer` instead. The custom `/usr/libexec/bootc-update-stage` script pulls the followed image with `podman`, stages it with `bootc switch --transport containers-storage`, and leaves the deployment to apply on the next normal reboot. This preserves download-only update semantics and avoids the current registry-transport composefs pull failure documented in the update validation plan.
 
 ### Sysext Architecture
 
@@ -199,6 +203,7 @@ All `just` targets run `mkosi clean` first (clean build every time).
 | `IMAGE_VERSION` | mkosi.version (timestamp) | Build version (YYYYMMDDHHMMSS) |
 | `BUILD_ID` | CI environment | Injected into os-release |
 | `BREW_TREE` | Profile mkosi.conf | Tree path for Homebrew tarball output (e.g., `shared/snow/tree`) |
+| `TMPDIR` | CI workflows / local env | mkosi, buildah, and chunkah workspace location; CI points it at `/mnt/tmp` for disk headroom |
 
 ### External APT Repositories
 
@@ -229,7 +234,7 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 | `build-images.yml` | Push/PR/repository_dispatch/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, generate SBOMs, sign with Cosign |
 | `check-dependencies.yml` | Weekly (Mon 9am UTC) | Check external download updates, create PRs |
 | `check-packages.yml` | Daily (8am UTC) | Check APT package version updates, create PRs |
-| `validate.yml` | PR/push | shellcheck + mkosi summary validation |
+| `validate.yml` | PR/push/dispatch | shellcheck + mkosi summary validation + profile dependency guard |
 | `test-install.yml` | Manual dispatch | Bootc install test in QEMU/KVM |
 | `scorecard.yml` | Weekly | OpenSSF supply-chain security analysis |
 

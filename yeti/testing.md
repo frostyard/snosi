@@ -76,12 +76,14 @@ Installs the starting registry reference to a virtual disk, boots it in QEMU, wr
 **Important defaults and knobs:**
 - Must run as root for the same root namespace, loopback, and mount reasons as `bootc-install-test.sh`.
 - `DISK_SIZE` defaults to `20G` because update hops pull whole images into the guest's `/var`.
-- `HOP_TRANSPORT=containers-storage` pulls hop images with guest `podman` and switches from local storage. Use it as a workaround when bootc's registry transport fails while pulling.
+- `HOP_TRANSPORT=containers-storage` pulls hop images with guest `podman` and switches from local storage. Use it as a workaround when bootc's registry transport fails while pulling composefs images.
 - `ROLLBACK=1` adds a rollback phase after the final hop and verifies that slots swap correctly while `/var` and `/etc` persistence still holds.
 - `INJECT_HOSTKEYS=1` pre-generates host keys on the installed disk for testing images published before the sshd-keygen fix.
 - `KEEP_VM=1` leaves the VM and working directory in place for inspection.
 
 The baseline install uses local containers-storage, so its booted digest can differ from the registry manifest digest. The update test therefore asserts continuity across the guest-reported staged, booted, and rollback digests for each hop rather than requiring the installed baseline digest to equal the registry digest.
+
+The production base image uses the same containers-storage staging strategy in `/usr/libexec/bootc-update-stage`: it pulls the followed image with `podman`, stages with `bootc switch --transport containers-storage`, and waits for the next normal reboot instead of forcing one.
 
 ### Persistence Matrix
 

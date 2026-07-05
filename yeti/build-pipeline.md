@@ -58,6 +58,17 @@ Runs during the base image build (not during profile builds). Handles:
 - Enables systemd mount units (home, root, srv, mnt, media, opt, usr-local)
 - Removes bls-garbage-collect service
 
+**Base update services** (`mkosi.images/base/mkosi.extra/usr/lib/systemd/`):
+
+The base overlay ships `bootc-update-stage.service` and `bootc-update-stage.timer`, enabled by `system-preset/04-bootc-update.preset`. That preset also disables upstream `bootc-fetch-apply-updates.timer`: upstream's timer is currently inert on composefs deployments because it is gated on `/run/ostree-booted`, and its intended behavior includes applying updates with an immediate reboot. The custom service runs `/usr/libexec/bootc-update-stage`, which:
+- exits cleanly when the system is not bootc-managed,
+- prunes stale transfer images before pulling to avoid `/var` exhaustion,
+- pulls the followed image with `podman` so containers policy is enforced,
+- stages it with `bootc switch --transport containers-storage`, and
+- prunes dangling transfer images after the switch.
+
+This mirrors the previous nbc-style download-only semantics: the staged deployment applies at the next normal reboot. The podman transfer path is also the current workaround for bootc registry-transport composefs pull failures noted in `docs/plans/2026-07-03-bootc-update-validation-plan.md`.
+
 **Version pins:** `shared/download/checksums.json` keys `ostree`, `bootc`, `bootc-vendor`. Updated weekly by `check-dependencies.yml` via PR.
 
 **Build time impact:** every clean build now compiles ostree + bootc; expect several extra minutes per image build.
