@@ -35,6 +35,8 @@ source "$SCRIPT_DIR/lib/vm.sh"
 
 WORK_DIR=""
 NEW_REF_LOCAL="localhost/snosi-migration:new"
+REGISTRY_PORT="${REGISTRY_PORT:-5001}"
+REGISTRY_STARTED=""
 loop=""
 
 usage() {
@@ -57,6 +59,9 @@ cleanup() {
         losetup -d "$loop" 2>/dev/null || true
     fi
     vm_cleanup
+    if [[ -n "$REGISTRY_STARTED" ]]; then
+        podman rm -f snosi-migration-registry 2>/dev/null || true
+    fi
     podman rmi -f "$NEW_REF_LOCAL" 2>/dev/null || true
     if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]] && ! mountpoint -q "$WORK_DIR/mnt" 2>/dev/null; then
         rm -rf "$WORK_DIR"
@@ -131,9 +136,24 @@ if is_registry_ref "$NEW_INPUT"; then
 else
     "$PROJECT_ROOT/shared/outformat/image/buildah-package.sh" \
         "$NEW_INPUT" "$NEW_REF_LOCAL"
-    NEW_REF="$NEW_REF_LOCAL"
-    echo "Streaming $NEW_REF into guest podman storage (several GB, be patient)..."
-    podman save "$NEW_REF" | vm_ssh "podman load >/dev/null"
+    # bootc 1.16.3's containers-storage composefs pull only accepts
+    # zstd:chunked layers — a plain buildah image fails `bootc switch` with
+    # "Invalid splitstream content type". Re-chunk exactly like CI does.
+    # The transfer must be a registry pull: podman save|load strips the
+    # chunked framing, so serve a throwaway registry on the host and pull
+    # from the guest via QEMU user-net's host address (10.0.2.2).
+    "$PROJECT_ROOT/shared/outformat/image/chunkah-package.sh" \
+        "$NEW_REF_LOCAL" "$(date +%s)"
+    podman rm -f snosi-migration-registry 2>/dev/null || true
+    podman run -d --rm --name snosi-migration-registry \
+        -p "$REGISTRY_PORT:5000" docker.io/library/registry:2 >/dev/null
+    REGISTRY_STARTED=1
+    podman push --tls-verify=false --force-compression \
+        --compression-format zstd:chunked \
+        "$NEW_REF_LOCAL" "localhost:$REGISTRY_PORT/snosi-migration:new"
+    NEW_REF="10.0.2.2:$REGISTRY_PORT/snosi-migration:new"
+    echo "Pulling $NEW_REF in guest (several GB, be patient)..."
+    vm_ssh "podman pull --quiet --tls-verify=false $NEW_REF >/dev/null"
 fi
 
 echo ""
