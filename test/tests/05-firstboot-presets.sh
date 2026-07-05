@@ -39,9 +39,11 @@ check "first-boot-complete.target was reached" \
 check "preset-global.service succeeded" \
     test "$(systemctl show -P Result preset-global.service)" = "success"
 
-# The enablement-model marker exists (gates preset-migration.service off),
-# and the migration unit itself was correctly skipped on a fresh install.
-check "preset-enablement marker written" test -f /var/lib/preset-enablement.done
+# The enablement-model marker exists (gates preset-migration.service off)
+# and records the first-boot path — "migration" here would mean the
+# migration unit ran on a fresh install.
+check "preset-enablement marker written by first boot" \
+    test "$(cat /var/lib/preset-enablement.done 2>/dev/null)" = "first-boot"
 check "preset-migration.service did not run" \
     test "$(systemctl show -P ActiveState preset-migration.service)" = "inactive"
 

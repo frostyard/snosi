@@ -209,9 +209,13 @@ new_machine_id=$(vm_ssh "cat /etc/machine-id")
 verdict "machine-id preserved across migration ($old_machine_id)" \
     test "$new_machine_id" = "$old_machine_id"
 
-# The migration boot itself must have run preset-migration successfully.
-mig_ran=$(vm_ssh "journalctl -b -1 -u preset-migration.service --no-pager 2>/dev/null | grep -c 'Finished\|Deactivated successfully'" || echo 0)
-verdict "preset-migration.service ran on the migration boot" test "$mig_ran" -ge 1
+# The migration boot itself must have run preset-migration. Its journal
+# never persists (the unit reboots before systemd-journal-flush), so the
+# durable evidence is the marker CONTENT: "migration" = the migration path
+# wrote it; "first-boot" would mean a spurious first boot ran instead.
+marker_content=$(vm_ssh "cat /var/lib/preset-enablement.done 2>/dev/null" || echo missing)
+verdict "preset-migration.service ran on the migration boot (marker: $marker_content)" \
+    test "$marker_content" = "migration"
 
 # Manifest parity: every enablement symlink the new image expects exists.
 missing=$(vm_ssh '

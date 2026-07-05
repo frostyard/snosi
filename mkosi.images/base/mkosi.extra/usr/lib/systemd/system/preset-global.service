@@ -24,8 +24,11 @@ RemainAfterExit=yes
 ExecStart=systemctl preset-all --global
 # Marks the enablement model as initialized so preset-migration.service
 # (which handles pre-2026-07 installs crossing the model boundary) stays
-# inert on systems that had a real first boot.
-ExecStart=/usr/bin/touch /var/lib/preset-enablement.done
+# inert on systems that had a real first boot. The content records WHICH
+# path initialized the model — the migration boot reboots seconds after
+# starting, before systemd-journal-flush persists its journal, so this
+# marker is the only durable evidence of what ran (tests assert on it).
+ExecStart=/bin/sh -c 'echo first-boot > /var/lib/preset-enablement.done'
 
 [Install]
 WantedBy=basic.target

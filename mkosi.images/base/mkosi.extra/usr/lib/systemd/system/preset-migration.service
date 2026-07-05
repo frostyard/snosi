@@ -47,5 +47,7 @@ RemainAfterExit=yes
 ExecStart=systemctl preset-all
 # etc-guard-allow: same justification, user scope
 ExecStart=systemctl preset-all --global
-ExecStart=/usr/bin/touch /var/lib/preset-enablement.done
+# Marker content = durable evidence this path ran: the reboot below happens
+# before systemd-journal-flush, so this boot's journal never reaches disk.
+ExecStart=/bin/sh -c 'echo migration > /var/lib/preset-enablement.done'
 ExecStart=systemctl --no-block reboot
