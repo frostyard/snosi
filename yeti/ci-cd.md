@@ -28,17 +28,18 @@ Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependen
 
 **Steps:**
 1. Free runner disk, mount BTRFS for container storage, and redirect `TMPDIR` to `/mnt/tmp`
-2. Build profile image via mkosi with dependencies reset to `base` only (produces directory output)
-3. Package OCI image via `buildah-package.sh` (preserves SUID, xattrs)
-4. Optimize layers via `chunkah-package.sh`
-5. **Smoke test:** Validates SUID bit on `/usr/bin/sudo` (mode 4755) — catches metadata loss
-6. Generate SBOM via Syft (scans mkosi output directory, syft-json format)
-7. Push to ghcr.io with `latest` tag
-8. Attach SBOM to image via ORAS (`application/vnd.syft+json` artifact type)
-9. Sign SBOM artifact with Cosign
-10. Attest build provenance (GitHub Actions attestation)
-11. Sign image with Cosign
-12. Upload manifests to R2
+2. Run `check-duplicate-packages.sh`
+3. Build profile image via mkosi with dependencies reset to `base` only (produces directory output)
+4. Package OCI image via `buildah-package.sh` (preserves SUID, xattrs)
+5. Optimize layers via `chunkah-package.sh` (skipped on pull_request)
+6. **Smoke test:** Validates SUID bit on `/usr/bin/sudo` (mode 4755) — catches metadata loss
+7. Generate SBOM via Syft (scans mkosi output directory, syft-json format; skipped on pull_request)
+8. Push timestamp and `latest` tags to ghcr.io (skipped on pull_request)
+9. Attach SBOM to image via ORAS (`application/vnd.syft+json` artifact type)
+10. Sign SBOM artifact with Cosign
+11. Attest build provenance (GitHub Actions attestation)
+12. Sign image with Cosign
+13. Upload manifests to R2
 
 #### release job — Automated GitHub Releases
 
@@ -92,7 +93,7 @@ Checks for version updates to external APT packages:
 
 ### validate.yml — Code Validation
 
-**Trigger:** PR/push to main
+**Trigger:** PR/push to main, manual dispatch
 
 Two validation checks:
 1. **Shell linting:** Runs shellcheck on tracked `*.sh`/`*.chroot` files and extensionless tracked shell scripts discovered by shebang, excluding `saved-unused/`
