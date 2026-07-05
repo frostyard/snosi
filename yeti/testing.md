@@ -135,6 +135,7 @@ End-to-end functional validation:
 - Package metadata integrity (`dpkg -l` reports > 100 packages)
 - System time is plausible (year ≥ 2025)
 - Hostname and locale are configured
+- Default system locale is set (`LANG=` present in `/etc/locale.conf` — shipped as `en_US.UTF-8` by base `mkosi.extra`; on trixie `/etc/default/locale` is a symlink to it, so PAM and systemd read the same file)
 
 ## Helper Libraries
 
