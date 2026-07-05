@@ -13,11 +13,14 @@
 # an /etc enablement — after the boundary update there are no /etc
 # enablement symlinks left to activate anything, and /usr wants dirs are
 # always scanned. The conditions keep it inert everywhere else:
-#   - fresh installs:  first boot handles presets (ConditionFirstBoot=no)
+#   - fresh installs:  first boot handles presets (ConditionFirstBoot=no),
+#     and preset-global.service writes the marker on first boot
 #   - migrated system: marker exists after the one run
-#   - healthy system:  multi-user.target.wants is never empty
-# preset-global.service also creates the marker on first boot, so fresh
-# installs are double-gated.
+# Do NOT gate on multi-user.target.wants being empty: runtime-created or
+# locally-modified enablement symlinks legitimately survive the /etc merge
+# (observed: ipp-usb.service), so the dir is not reliably empty at the
+# boundary. Deleting /var/lib/preset-enablement.done re-runs the presets
+# and costs one reboot — don't.
 #
 # After applying presets it reboots once: the boot transaction was computed
 # before the enablement symlinks existed, so the created state only takes
@@ -27,8 +30,12 @@ Description=Re-apply unit presets after migration to preset-owned enablement
 DefaultDependencies=no
 ConditionFirstBoot=no
 ConditionPathExists=!/var/lib/preset-enablement.done
-ConditionDirectoryNotEmpty=!/etc/systemd/system/multi-user.target.wants
 ConditionPathIsReadWrite=/etc
+# DefaultDependencies=no opts out of the implicit ordering after local-fs;
+# the marker below lives in /var, so wait for it explicitly or the touch
+# races the /var mount and the unit fails before its reboot step.
+RequiresMountsFor=/var/lib
+After=local-fs.target
 Before=sysinit.target
 Conflicts=shutdown.target
 Before=shutdown.target
