@@ -99,7 +99,7 @@ Scripts execute in order per image build:
 
 1. **BuildScripts** (in chroot) — Download/install items not available as packages: Homebrew, GNOME extensions, Surface secure boot cert. The base image additionally runs `shared/bootc/build/bootc.chroot` (wired via `BuildScripts=`) to compile ostree and bootc from pinned source — build deps come from `BuildPackages=` (overlay-only, not from APT; see [build-pipeline.md](build-pipeline.md) for details).
 2. **PostInstallationScripts** (after packages) — Common logic via `shared/scripts/common-postinst.sh` (OS release branding, package list generation, cleanup, sysext infra), then profile-specific steps (GDM enablement, package relocation /opt → /usr/lib). Mount enablement and useradd home dir are handled by the base image's own postinst script.
-3. **FinalizeScripts** (pre-output) — Remove ephemeral dirs (/boot, /home), create /sysroot and /nix mountpoints, clear machine-id/SSH keys, compile GLib schemas, set file xattrs for chunkah
+3. **FinalizeScripts** (pre-output) — Remove ephemeral dirs (/boot, /home), create /sysroot and /nix mountpoints, set machine-id to `uninitialized` (real first-boot semantics: presets re-apply at first boot), strip unit enablement symlinks from /etc (recreated at first boot as runtime state; manifest in /usr/share/snosi/), clear SSH keys, compile GLib schemas, set file xattrs for chunkah
 4. **PostOutputScripts** (after image creation) — Manifest processing, sysext versioned renaming
 
 See [build-pipeline.md](build-pipeline.md) for details.
