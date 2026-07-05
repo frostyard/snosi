@@ -61,6 +61,8 @@ Key settings:
 - `Format=sysext` — Outputs an EROFS sysext image
 - `KEYPACKAGE` — The package whose version determines the sysext version
 
+`code-server` is the current exception to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database.
+
 ## Sysext-Specific Extra Files
 
 Some sysexts include extra files via `mkosi.extra/`:
@@ -125,7 +127,7 @@ The shared postoutput script (`shared/sysext/postoutput/sysext-postoutput.sh`) h
 
 ## Sysupdate Registration
 
-Each sysext needs two files in the base image at `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`:
+Each sysext distributed to users needs two files in the base image at `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`:
 
 > Note: `emdash.transfer`/`emdash.feature` are also registered here even though
 > the emdash sysext is built and published from a separate repository — every
@@ -170,7 +172,7 @@ Documentation=<url>
 Enabled=false
 ```
 
-All sysexts default to `Enabled=false` — users opt in via systemd-sysupdate configuration.
+All sysexts default to `Enabled=false` — users opt in via systemd-sysupdate configuration. The base also registers `emdash.transfer` and `emdash.feature` for a sysext built in another repository, so do not infer the root `mkosi.conf` dependency list from the sysupdate directory alone.
 
 ## Service Activation Pattern (Upholds=)
 
