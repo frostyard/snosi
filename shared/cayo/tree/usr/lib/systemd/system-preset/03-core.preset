@@ -3,7 +3,6 @@ disable cni-dhcp.service
 disable iwd.service
 disable rsync.service
 disable wpa_supplicant.service
-# Never prompt on the console at first boot (real first-boot semantics are
-# active since machine-id ships as "uninitialized"). Locale/hostname/user
-# setup is owned by the installer and first-setup, not systemd-firstboot.
-disable systemd-firstboot.service
+# systemd-firstboot is STATIC (no [Install]) and cannot be preset-disabled;
+# it is neutered by the ConditionPathExists drop-in in
+# usr/lib/systemd/system/systemd-firstboot.service.d/ (base mkosi.extra).

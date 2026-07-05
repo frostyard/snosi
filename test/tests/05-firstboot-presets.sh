@@ -45,9 +45,11 @@ check "preset-enablement marker written" test -f /var/lib/preset-enablement.done
 check "preset-migration.service did not run" \
     test "$(systemctl show -P ActiveState preset-migration.service)" = "inactive"
 
-# systemd-firstboot must never prompt; it is preset-disabled.
-check "systemd-firstboot.service is disabled" \
-    test "$(systemctl is-enabled systemd-firstboot.service 2>/dev/null)" = "disabled"
+# systemd-firstboot must never run (it can prompt on console). It is a
+# static unit, so it is neutered via a ConditionPathExists drop-in rather
+# than a preset; assert it stayed inactive on this (first) boot.
+check "systemd-firstboot.service did not run" \
+    test "$(systemctl show -P ActiveState systemd-firstboot.service)" = "inactive"
 
 # Parity: every enablement symlink stripped from the image /etc must have
 # been recreated by the preset pass at first boot.
@@ -77,7 +79,7 @@ extra=$(
         find /etc/systemd/$scope -mindepth 1 -maxdepth 1 -type l \
              \( -lname '/usr/lib/systemd/*' -o -lname '/lib/systemd/*' \) \
              -printf "$scope %P\n"
-    done | sort | comm -23 - "$MANIFEST"
+    done | LC_ALL=C sort | LC_ALL=C comm -23 - "$MANIFEST"
 )
 if [[ -n "$extra" ]]; then
     echo "# extra runtime enablement symlinks not in manifest:"

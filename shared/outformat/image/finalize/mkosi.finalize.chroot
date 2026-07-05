@@ -47,9 +47,16 @@ echo "uninitialized" > /etc/machine-id
 #
 # A manifest of the stripped enablement symlinks ships in /usr so the
 # first-boot parity test (test/tests/05-firstboot-presets.sh) can verify
-# preset-all recreated every one of them. ctrl-alt-del.target is stripped
-# but excluded from the manifest: it is not preset-managed and /usr ships
-# the same alias, so behavior is preserved without recreation.
+# preset-all recreated every one of them. Excluded from the manifest
+# (stripped, but presets will not — and need not — recreate them):
+#   - ctrl-alt-del.target: not preset-managed; /usr ships the same alias
+#   - display-manager.service: Debian display managers carry no Alias= in
+#     [Install] (dpkg postinst creates this from
+#     /etc/X11/default-display-manager), so presets cannot recreate it;
+#     desktop trees ship it as a static /usr alias symlink instead
+#   - wants/requires entries whose target unit is MASKED in the image
+#     (preset-all skips masked units; a dangling wants for a masked unit
+#     is inert anyway)
 mkdir -p /usr/share/snosi
 manifest=/usr/share/snosi/enablement-manifest.txt
 : > "$manifest"
@@ -66,8 +73,17 @@ for scope in system user; do
          \( -lname '/usr/lib/systemd/*' -o -lname '/lib/systemd/*' \) \
          -printf "$scope %P\n" >> "$manifest"
 done
-sed -i '/^system ctrl-alt-del.target$/d' "$manifest"
-sort -o "$manifest" "$manifest"
+sed -i -e '/^system ctrl-alt-del.target$/d' \
+       -e '/^system display-manager.service$/d' "$manifest"
+# Drop entries pointing at units masked in the image /etc.
+for scope in system user; do
+    find /etc/systemd/$scope -maxdepth 1 -type l -lname /dev/null \
+         -printf '%f\n' 2>/dev/null | while read -r masked; do
+        sed -i "\#^$scope .*/$masked\$#d" "$manifest"
+    done
+done
+# C collation: the parity test comm(1)s against this file inside the guest.
+LC_ALL=C sort -o "$manifest" "$manifest"
 
 for scope in system user; do
     dir=/etc/systemd/$scope
