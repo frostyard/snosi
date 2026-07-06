@@ -1,5 +1,8 @@
 [Unit]
 Description=NBC Update Download Timer
+# Same gate as the service (frostyard/nbc#139): don't wake hourly on
+# bootc/composefs installs only to condition-skip the service.
+ConditionKernelCommandLine=!composefs
 
 [Timer]
 Unit=nbc-update-download.service

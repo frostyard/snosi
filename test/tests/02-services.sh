@@ -24,6 +24,18 @@ check "ssh is active" \
 check "nbc-update-download.timer is loaded" \
     bash -c 'test -n "$(systemctl list-timers --all --no-legend nbc-update-download.timer)"'
 
+# On bootc/composefs installs (this test VM is one), the nbc units must be
+# condition-gated OFF: nbc update errors rather than no-ops there
+# (frostyard/nbc#139), which would leave a permanently failed unit.
+if grep -q ' composefs=' /proc/cmdline; then
+    # shellcheck disable=SC2016
+    check "nbc-update-download.timer is gated off on composefs install" \
+        bash -c 'test "$(systemctl is-active nbc-update-download.timer)" != "active"'
+    # shellcheck disable=SC2016
+    check "nbc-update-download.service has not failed" \
+        bash -c 'test "$(systemctl show -P Result nbc-update-download.service)" = "success"'
+fi
+
 check "frostyard-updex is installed" \
     dpkg -s frostyard-updex
 
