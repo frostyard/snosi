@@ -1,0 +1,5 @@
+# nix sysext: nix-bin payload (dependency of nix-setup-systemd) and activation
+/usr/bin/nix
+/usr/lib/systemd/system/nix-daemon.service
+/usr/lib/systemd/system/nix.mount
+/usr/lib/systemd/system/multi-user.target.d/10-nix.conf

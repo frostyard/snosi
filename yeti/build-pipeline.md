@@ -23,27 +23,14 @@ Download and install items not available as Debian packages. These run inside th
 | `bazaar.chroot` | `shared/snow/scripts/build/` | Downloads pinned Bazaar Companion GNOME extension tarball from GitHub via `verified_download()`, installs its `src/` into `$DESTDIR`, patches metadata.json for shell version "48". Build scripts install via `$DESTDIR` only — never into `$SRCDIR`/the tree overlays (#293) |
 | `surface-cert.chroot` | `shared/snow/scripts/build/` | Downloads Linux Surface secure boot certificate via `verified_download()`, installs to `/usr/share/linux-surface-secureboot/` |
 
-**Base image BuildScript — in-tree ostree + bootc** (`shared/bootc/build/bootc.chroot`):
+**ostree + bootc — Frostyard debs (no longer built in-tree):**
 
-Wired via `BuildScripts=` in `mkosi.images/base/mkosi.conf`. Compiles **ostree** (v2026.1) and **bootc** (v1.16.3) from pinned source tarballs. Neither is installed from APT.
+bootc and ostree install as regular APT packages from the Frostyard repository (`frostyard.sources` in `mkosi.sandbox/etc/apt/`): `bootc` and `libostree-1-1` (which ships the library AND the ostree CLI, and `Provides: ostree, libostree-dev`). They are built and published by [frostyard/bootc-debian](https://github.com/frostyard/bootc-debian), whose `build.sh` mirrors the former in-tree mkosi BuildScript exactly — same pinned upstream tarballs (sha256-verified in that repo's `download/checksums.json`), same pinned Rust toolchain (Debian Trixie's rustc 1.85 is too old to build bootc 1.16.x), same configure/make invocations. Debian Trixie ships no bootc package and only ostree 2025.2 (too old for current bootc), hence the external packaging.
 
-**Rationale:** The former `frostyard/bootc-debian` private packaging recipe is archived. Debian Trixie ships no bootc package and only ostree 2025.2, which is too old for current bootc. Compiling in-tree makes the build fully self-contained. The image rootfs has no `apt` (mkosi manages packages externally), so build deps cannot be apt-installed from inside a postinstall chroot — hence this is a BuildScript.
-
-**Build deps:** Declared in `BuildPackages=` in `mkosi.images/base/mkosi.conf` (build-essential, autoconf, libglib2.0-dev, `rustup`, etc.). mkosi installs them into the build overlay only; the overlay is discarded after the build script completes, so no build tools ever ship in the image. There is no `apt` call and no purge logic in the script.
-
-**Rust toolchain:** Debian Trixie's `rustc` (1.85) is too old to *build* bootc 1.16.x — its xtask/build dependencies (`cargo_metadata`, `cargo-platform`) require rustc >= 1.91, even though bootc's library crate declares MSRV 1.85. So the script installs a pinned toolchain (`RUST_VERSION`, currently `1.96.0`) via `rustup` (the `rustup` package, from `BuildPackages=`) and runs `make` under `rustup run "$RUST_VERSION"`. Bump `RUST_VERSION` when bumping bootc if a newer toolchain is required.
-
-**Mechanics:**
-
-1. Install the pinned Rust toolchain via `rustup toolchain install "$RUST_VERSION"` (into the discarded overlay).
-2. Download and verify three tarballs via `verified_download()` (keys `ostree`, `bootc`, `bootc-vendor` in `checksums.json`).
-3. Build ostree via autotools (`./configure --prefix=/usr ... && make -j$(nproc)`); install **twice**: `make install DESTDIR="$DESTDIR"` (so libostree/ostree ship in the image — mkosi copies `$DESTDIR` into the rootfs) and `make install DESTDIR=` (explicitly empty, to override the `DESTDIR` mkosi exports into the build env) into the overlay's real `/usr`, so the bootc build finds `ostree-1.pc` via pkg-config and can load libostree when the docgen step runs the bootc binary.
-4. Build bootc via offline vendored cargo: extract vendor tarball into the source tree, copy `.cargo/vendor-config.toml` → `.cargo/config.toml`, then `make bin && make install-all DESTDIR="$DESTDIR"`.
-5. On EXIT (success or failure): remove the temporary work directory only — no apt purge needed.
-
-**Runtime lib pinning:** bootc and ostree's runtime dependencies (e.g., `libglib2.0-0t64`, `libcurl4t64`) are listed in base `Packages=` so they ship in the image and the compiled binaries link against them at runtime. Do not remove them from `Packages=`.
-
-**dpkg registration (PostInstallationScript):** `shared/bootc/postinst/bootc-register.chroot` runs after the BuildScript's `$DESTDIR` is merged into the image. It builds metadata-only stub `.deb`s for `libostree-1-1` (version from `.ostree.version`) and `bootc` (version from `.bootc.version`, `Depends: libostree-1-1`) and `dpkg -i`s them, so the dpkg database reports both as installed for `dpkg -l` / `apt list --installed` / dependency checks. The packages carry no files — the binaries/libs come from the BuildScript — so dpkg records presence but does not own the files. Relies on `dpkg` being Essential and `CleanPackageMetadata=no` keeping the dpkg DB in the image.
+- **Versions:** deb versions carry a `-frostyard<timestamp>` suffix so rebuilds of the same upstream version sort newer in apt. Upstream releases are tracked weekly by bootc-debian's own `check-dependencies.yml`; snosi's dependency check does not cover ostree/bootc.
+- **Publish → rebuild:** bootc-debian's Build workflow publishes the debs and then dispatches a snosi image build, so new bootc/ostree versions roll into images automatically.
+- **Runtime lib pinning:** the debs declare only a partial `Depends` list; base `Packages=` keeps the full set of runtime link deps explicit (`libfuse3-4`, `libsoup-3.0-0`, `liblzma5`, `libzstd1`, `libmount1`, `libselinux1`, `libcom-err2`, `libext2fs2t64`, plus the declared ones). Do not remove them from `Packages=` just because apt does not demand them.
+- **History (until 2026-07):** both were compiled from source during the base image build via `shared/bootc/build/bootc.chroot` (BuildScript + `BuildPackages=` overlay deps + rustup toolchain + ostree double-install + stub-deb dpkg registration in `shared/bootc/postinst/bootc-register.chroot`). All of that machinery was removed when the deb path landed; see git history if the in-tree build ever needs resurrecting.
 
 **Server profiles (cayo/cayoloaded):** Only `brew.chroot` (no desktop build scripts).
 
@@ -58,9 +45,18 @@ Runs during the base image build (not during profile builds). Handles:
 - Enables systemd mount units (home, root, srv, mnt, media, opt, usr-local)
 - Removes bls-garbage-collect service
 
-**Version pins:** `shared/download/checksums.json` keys `ostree`, `bootc`, `bootc-vendor`. Updated weekly by `check-dependencies.yml` via PR.
+**Base update services** (`mkosi.images/base/mkosi.extra/usr/lib/systemd/`):
 
-**Build time impact:** every clean build now compiles ostree + bootc; expect several extra minutes per image build.
+The base overlay ships `bootc-update-stage.service` and `bootc-update-stage.timer`, enabled by `system-preset/04-bootc-update.preset`. That preset also disables upstream `bootc-fetch-apply-updates.timer`: upstream's timer is currently inert on composefs deployments because it is gated on `/run/ostree-booted`, and its intended behavior includes applying updates with an immediate reboot. The custom service runs `/usr/libexec/bootc-update-stage`, which:
+- exits cleanly when the system is not bootc-managed,
+- prunes stale transfer images before pulling to avoid `/var` exhaustion,
+- pulls the followed image with `podman` so containers policy is enforced,
+- stages it with `bootc switch --transport containers-storage`, and
+- prunes dangling transfer images after the switch.
+
+This mirrors the previous nbc-style download-only semantics: the staged deployment applies at the next normal reboot. The podman transfer path is also the current workaround for bootc registry-transport composefs pull failures noted in `docs/plans/2026-07-03-bootc-update-validation-plan.md`.
+
+Runtime units shipped in `mkosi.extra/` must not self-disable, call `systemctl preset`, or otherwise delete shipped `/etc` state. For run-once behavior, use a persistent `/var` marker (`ConditionPathExists=!/var/lib/<unit>.done` and a final `touch`) so bootc can merge `/etc` cleanly when the next staged deployment finalizes.
 
 **Kernel postinstall (all profiles):**
 - `shared/kernel/scripts/postinst/mkosi.postinst.chroot` — Builds initramfs via dracut, detects kernel version, generates `/usr/lib/modules/$VERSION/initramfs.img`, copies vmlinuz
@@ -98,7 +94,8 @@ Prepare the image for output. Run after postinstall, before the image format is 
 **Image finalize** (`shared/outformat/image/finalize/mkosi.finalize.chroot`):
 - Removes `/boot`, `/home`, `/root`, `/srv` (recreates empty)
 - Creates `/sysroot` and `/nix` mountpoints (nix sysext bind-mount)
-- Removes `/etc/machine-id` (recreates empty) and SSH host keys. **Note:** an empty machine-id file means systemd initializes a machine ID at boot but does NOT treat it as first boot (`ConditionFirstBoot=` stays false; only a missing file or one containing `uninitialized` triggers first-boot semantics). Units gated on `ConditionFirstBoot` never run on installed systems — SSH host key generation relies on a `sshd-keygen.service.d` drop-in in base `mkosi.extra` that keys on missing host keys instead.
+- Writes `/etc/machine-id` as the literal `uninitialized` (machine-id(5) golden-image value) and removes SSH host keys. **First boot is real:** every install's first boot satisfies `ConditionFirstBoot=`, PID 1 applies system presets, and `preset-global.service` (base `mkosi.extra`, from ParticleOS) applies user-scope presets. `systemd-firstboot.service` is preset-disabled so nothing prompts on console. (Until 2026-07 the file shipped *empty*, which only means "generate an ID" and suppressed first-boot semantics entirely.) The `sshd-keygen.service.d` drop-in that keys on missing host keys is kept — it also covers key deletion on installed systems.
+- Strips ALL unit enablement symlinks (`.wants`/`.requires` entries + `[Install]` aliases, system and user scope) from `/etc` — mkosi ran `preset-all`/`--global preset-all` just before finalize; first boot recreates the same symlinks from the same preset policy as **runtime-created** state, so a later admin `systemctl disable` deletes runtime paths instead of image-shipped ones (which would break bootc's `/etc` merge at update finalize — the crash needs a *symlink* counterpart in the new deployment; deletions of shipped regular files merge fine, as `persistence-write.sh`'s `/etc/issue.net` check proves). Masks (`/dev/null`) and linked units (dracut) are kept. Stripped links are recorded in `/usr/share/snosi/enablement-manifest.txt`; `test/tests/05-firstboot-presets.sh` verifies first-boot parity against it.
 - Compiles GLib schemas and dconf databases
 - Sets file xattrs: `user.component=<package_name>` for every installed file — used by chunkah for layer optimization
 
@@ -142,6 +139,14 @@ Moves manifest JSON files into `output/manifests/` for separate upload to R2.
 ### check-duplicate-packages.sh
 
 Pre-build validation script (run in CI before `mkosi build`). Checks for duplicate package entries across mkosi configs to prevent conflicts.
+
+### check-profile-dependencies.sh
+
+Config sanity check used by `validate.yml`. It runs `mkosi -f --profile <profile> summary` for every profile and fails if any profile summary includes one of the sysext image dependencies from root `mkosi.conf`. This protects the required `Dependencies=` reset pattern in profile configs.
+
+### check-runtime-etc-guard.sh
+
+Runtime payload guard used by `validate.yml`. It scans tracked files in `mkosi.extra/` and `shared/**/tree/` for guest-side service enablement mutations (`systemctl enable/disable/revert/unmask/preset`, `deb-systemd-helper`) and deletion/rename patterns targeting `/etc`. Build-time scripts are intentionally outside the scan because build-time enablement is the correct way to define image service state.
 
 **CI usage in build.yml:**
 ```bash

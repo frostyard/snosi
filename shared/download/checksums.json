@@ -10,9 +10,9 @@
     "version": "3.0.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_149.0.4022.98-1_amd64.deb",
-    "sha256": "b4ce51b1eb017770b2682ae45daff09f9385d399373a5470cca1b383697136d2",
-    "version": "149.0.4022.98-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_150.0.4078.48-1_amd64.deb",
+    "sha256": "6c091da6c061b83b4ab0e3a9946127dc91ae8f3a0632c4e1c0b6d5e31775f4b5",
+    "version": "150.0.4078.48-1"
   },
   "surface-cert": {
     "url": "https://github.com/linux-surface/linux-surface/raw/d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a/pkg/keys/surface.cer",
@@ -20,14 +20,14 @@
     "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
   },
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/db5debe9b6da/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/16be749c0089/install.sh",
     "sha256": "99287f194a8b3c9e6b0203a11a5fa54518be57209343e6bb954dec4635796d9d",
-    "version": "db5debe9b6da"
+    "version": "16be749c0089"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.126.0/code-server_4.126.0_amd64.deb",
-    "sha256": "2dd4c57443931123282e829ed4b514c50dcabb097704be22e600d1a591664da8",
-    "version": "4.126.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.127.0/code-server_4.127.0_amd64.deb",
+    "sha256": "a1cb96f64d5c68736764726cd3b0c9b6e500bdc30cfefebc05f59259149380e2",
+    "version": "4.127.0"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
@@ -38,21 +38,6 @@
     "url": "https://codeload.github.com/frostyard/logomenu/tar.gz/ae0ea469beaa7ce0cdc1fb8be26fc50c13d4fcbf",
     "sha256": "d11cc67b6003a295d17249b9ab08ea59d5b6a4e2301d784c51b5344e561f10c0",
     "version": "ae0ea469beaa7ce0cdc1fb8be26fc50c13d4fcbf"
-  },
-  "ostree": {
-    "url": "https://github.com/ostreedev/ostree/releases/download/v2026.1/libostree-2026.1.tar.xz",
-    "sha256": "8e77c285dd6fa5ec5fb063130390977be727fe11107335ed8778a40385069e95",
-    "version": "2026.1"
-  },
-  "bootc": {
-    "url": "https://github.com/bootc-dev/bootc/releases/download/v1.16.3/bootc-1.16.3.tar.zstd",
-    "sha256": "4a46b90ff7bffd3be600af257887ab8dd2d5ca0173a30f5b99380eeeef7235f2",
-    "version": "1.16.3"
-  },
-  "bootc-vendor": {
-    "url": "https://github.com/bootc-dev/bootc/releases/download/v1.16.3/bootc-1.16.3-vendor.tar.zstd",
-    "sha256": "8d115b1ae507182b3daee191664aeae31f6d4afe56592e543a67c473f606bafc",
-    "version": "1.16.3"
   },
   "bazaar": {
     "url": "https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/3bb9134985343ffd1993520eb37c90e113bfb09b",

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-snosi is a bootable container image build system that uses [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). It outputs OCI desktop/server images deployed via bootc/systemd-boot with atomic updates, and EROFS sysext overlays distributed via systemd-sysupdate.
+snosi is a bootable container image build system that uses [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). It outputs OCI desktop/server images deployed via bootc/systemd-boot with atomic updates, plus EROFS sysext overlays distributed through systemd-sysupdate.
 
 ## Outputs
 
@@ -35,8 +35,8 @@ mkosi.conf                  # Root config: distribution, dependencies, build set
 mkosi.version               # Version tag script (date-based, overridden by CI IMAGE_VERSION)
 mkosi.clean                 # Clean script (rm -rf output/*)
 mkosi.images/               # Image definitions (base + 10 sysexts)
-  base/                     # Foundation image: systemd, bootc, firmware, core utils
-    mkosi.extra/            # Extra filesystem overlay (dracut, systemd units, tmpfiles, sysusers)
+  base/                     # Foundation image: systemd, bootc/ostree (frostyard debs), firmware, core utils
+    mkosi.extra/            # Base filesystem overlay (dracut, systemd units/timers, sysupdate, tmpfiles, sysusers)
       usr/lib/sysupdate.d/  # .transfer + .feature files for all sysexts
     mkosi.postinst.chroot   # Mount enablement, useradd home dir, bls-garbage-collect removal
     mkosi.finalize.chroot   # Masks systemd-networkd-wait-online
@@ -48,10 +48,9 @@ mkosi.profiles/             # Desktop/server profile definitions (6 profiles)
   cayo/
   ...
 shared/                     # Reusable fragments composed via Include=
-  download/                 # Verified download system (checksums.json + helpers)
-  bootc/                    # In-tree source build: build/bootc.chroot compiles ostree+bootc from pinned tarballs
+  download/                 # Verified download system (checksums.json, package-versions.json + helpers)
   kernel/                   # Kernel variant configs (backports, surface, stock)
-  packages/                 # Package set configs (11 sets) with postinstall relocation scripts
+  packages/                 # Package set configs (desktop/server bases plus loaded-image extras)
   scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot build script)
   outformat/image/          # OCI output format, buildah/chunkah packaging
   sysext/postoutput/        # Shared sysext versioning and manifest logic
@@ -61,7 +60,7 @@ shared/                     # Reusable fragments composed via Include=
   cayo/                     # Cayo server: postinstall scripts + tree overlay
 mkosi.sandbox/etc/apt/      # External APT repo configs + GPG keyrings
 .github/workflows/          # CI/CD (build, publish, dependency checks, testing)
-test/                       # Bootc installation test framework
+test/                       # Bootc install, update, rollback, and VM smoke test framework
 docs/                       # Design specs, implementation plans, superpowers
 sysextmv.sh                 # Moves sysext output files into output/sysexts/ subdirectory
 manifestmv.sh               # Moves manifest files into output/manifests/ subdirectory
@@ -73,11 +72,11 @@ Justfile                    # Build targets (just sysexts, just snow, etc.)
 
 mkosi configs compose via `Include=` directives. Each profile pulls in reusable fragments:
 
-Root `mkosi.conf` lists `base` plus all sysexts for the sysext publishing build. Each `mkosi.profiles/*/mkosi.conf` starts with `Dependencies=` and then `Dependencies=base` to reset mkosi's append-only collection semantics; profile image builds must not inherit the sysext list.
+Root `mkosi.conf` lists `base` plus all in-repo sysexts for the sysext publishing build. Each `mkosi.profiles/*/mkosi.conf` starts with `Dependencies=` and then `Dependencies=base` to reset mkosi's append-only collection semantics; profile image builds must not inherit the sysext list. The base image also carries sysupdate registration for the external `emdash` sysext even though that sysext is published from a separate repository.
 
 ```
 Profile (e.g., snow/mkosi.conf)
-├── Include: shared/packages/snow/mkosi.conf      # Package set
+├── Include: shared/packages/snow/mkosi.conf       # Package set
 ├── Include: shared/kernel/backports/mkosi.conf    # Kernel variant
 ├── Include: shared/outformat/image/mkosi.conf     # Output format (directory)
 ├── Dependencies: base                              # Requires base image
@@ -90,16 +89,16 @@ Profile (e.g., snow/mkosi.conf)
 
 The "loaded" variants extend their base profile by adding more Include directives, ExtraTrees, and PostInstallationScripts:
 
-- **snowloaded/snowfieldloaded** add Edge, VSCode, Bitwarden, Azure VPN, Incus, and Entra SSO (linux-entra-sso)
-- **cayoloaded** adds Docker CE (on-image via `docker-onimage`) and Incus (on-image via `virt-base`)
+- **snowloaded/snowfieldloaded** add Edge, VS Code, Bitwarden, Azure VPN, Incus, and Entra SSO (`linux-entra-sso`). Incus is on-image here through `shared/packages/virt`, not the separate Incus sysext.
+- **cayoloaded** adds Docker CE on-image via `docker-onimage` and Incus on-image via `virt-base`.
 
 ### Script Pipeline
 
 Scripts execute in order per image build:
 
-1. **BuildScripts** (in chroot) — Download/install items not available as packages: Homebrew, GNOME extensions, Surface secure boot cert. The base image additionally runs `shared/bootc/build/bootc.chroot` (wired via `BuildScripts=`) to compile ostree and bootc from pinned source — build deps come from `BuildPackages=` (overlay-only, not from APT; see [build-pipeline.md](build-pipeline.md) for details).
+1. **BuildScripts** (in chroot) — Download/install items not available as packages: Homebrew, GNOME extensions, Surface secure boot cert. (bootc and ostree are NOT built here — they install as debs from the Frostyard APT repo, built by frostyard/bootc-debian; see [build-pipeline.md](build-pipeline.md).)
 2. **PostInstallationScripts** (after packages) — Common logic via `shared/scripts/common-postinst.sh` (OS release branding, package list generation, cleanup, sysext infra), then profile-specific steps (GDM enablement, package relocation /opt → /usr/lib). Mount enablement and useradd home dir are handled by the base image's own postinst script.
-3. **FinalizeScripts** (pre-output) — Remove ephemeral dirs (/boot, /home), create /sysroot and /nix mountpoints, clear machine-id/SSH keys, compile GLib schemas, set file xattrs for chunkah
+3. **FinalizeScripts** (pre-output) — Remove ephemeral dirs (/boot, /home), create /sysroot and /nix mountpoints, set machine-id to `uninitialized` (real first-boot semantics: presets re-apply at first boot), strip unit enablement symlinks from /etc (recreated at first boot as runtime state; manifest in /usr/share/snosi/), clear SSH keys, compile GLib schemas, set file xattrs for chunkah
 4. **PostOutputScripts** (after image creation) — Manifest processing, sysext versioned renaming
 
 See [build-pipeline.md](build-pipeline.md) for details.
@@ -116,15 +115,21 @@ See [build-pipeline.md](build-pipeline.md) for details.
 
 **Critical pattern:** Packages installing to `/opt` must be relocated to `/usr/lib/<package>` at build time with symlinks from `/usr/bin`. See [build-pipeline.md](build-pipeline.md#package-relocation).
 
+### bootc Update Staging
+
+The base image disables upstream `bootc-fetch-apply-updates.timer` and enables `bootc-update-stage.timer` instead. The custom `/usr/libexec/bootc-update-stage` script pulls the followed image with `podman`, stages it with `bootc switch --transport containers-storage`, and leaves the deployment to apply on the next normal reboot. This preserves download-only update semantics and avoids the current registry-transport composefs pull failure documented in the update validation plan.
+
 ### Sysext Architecture
 
-Sysexts overlay `/usr` at runtime. They cannot modify `/etc` or `/var` directly. Each sysext:
+Sysexts overlay `/usr` at runtime. They cannot modify `/etc` or `/var` directly. Each in-repo sysext:
 
 - Has `Overlay=yes`, `Format=sysext`, `Dependencies=base`, `BaseTrees=%O/base`
 - Sets `KEYPACKAGE` env var for version extraction from manifest
 - Uses shared postoutput script for versioned naming
 - Needs matching `.transfer` + `.feature` files in base image's `usr/lib/sysupdate.d/`
 - Configs needed in `/etc` go through `/usr/share/factory/etc` + systemd-tmpfiles
+
+The base image also registers `emdash.transfer` and `emdash.feature`; keep those files even though `mkosi.conf` does not build an `emdash` image in this repository.
 
 See [sysexts.md](sysexts.md) for details.
 
@@ -136,7 +141,7 @@ External resources are pinned in `shared/download/checksums.json` with URL + SHA
 
 Package versions for selected APT-based externals (VSCode, Docker, 1Password, Himmelblau) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
 
-Current checksum-managed downloads are Bitwarden, Homebrew install script, code-server, ostree, bootc, bootc-vendor, Surface secure boot certificate, Hotedge, Logomenu, Bazaar Companion, Azure VPN, and Microsoft Edge. Current APT version tracking covers `code`, `docker-ce`, `1password-cli`, and `himmelblau`; Edge is checksum-managed because the build installs a patched downloaded `.deb`.
+Current checksum-managed downloads are Bitwarden, Homebrew install script, code-server, Surface secure boot certificate, Hotedge, Logomenu, Bazaar Companion, Azure VPN, and Microsoft Edge. Current APT version tracking covers `code`, `docker-ce`, `1password-cli`, and `himmelblau`; Edge is checksum-managed because the build installs a patched downloaded `.deb`. `code-server` is a sysext exception: it is installed by `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` + `dpkg -i`, while `KEYPACKAGE=code-server` still drives version extraction from the merged dpkg database.
 
 ### User Service Enablement in Chroot
 
@@ -161,6 +166,12 @@ CI sets `TMPDIR=/mnt/tmp` before mkosi/buildah/chunkah work because hosted runne
 - `.chroot` extension for scripts running inside chroot
 - External downloads via `verified_download()` only
 - Pin external URLs to specific versions, never `latest`
+
+### Runtime `/etc` Mutations Are Forbidden
+
+Files that ship in runtime payload directories (`mkosi.extra/` and `shared/**/tree/`) must not delete or rewrite enablement state under `/etc` at runtime. On bootc/composefs installs, deleting shipped `/etc` paths can make the live `/etc` merge fail during `bootc-finalize-staged`, causing staged updates to be discarded while update logs still look successful.
+
+Use build-time enablement/presets for desired service state. For run-once runtime units, gate with a `/var` marker such as `ConditionPathExists=!/var/lib/<unit>.done` plus an `ExecStartPost=touch ...` marker instead of `systemctl disable`/`enable`/`preset` from inside the guest. CI enforces this with `check-runtime-etc-guard.sh`; a flagged line needs a trailing `# etc-guard-allow: <reason>` only when the mutation is provably outside shipped `/etc` state.
 
 ## Configuration
 
@@ -197,6 +208,7 @@ All `just` targets run `mkosi clean` first (clean build every time).
 | `IMAGE_VERSION` | mkosi.version (timestamp) | Build version (YYYYMMDDHHMMSS) |
 | `BUILD_ID` | CI environment | Injected into os-release |
 | `BREW_TREE` | Profile mkosi.conf | Tree path for Homebrew tarball output (e.g., `shared/snow/tree`) |
+| `TMPDIR` | CI workflows / local env | mkosi, buildah, and chunkah workspace location; CI points it at `/mnt/tmp` for disk headroom |
 
 ### External APT Repositories
 
@@ -207,7 +219,7 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 - Debian Griffo.io (debian.griffo.io) — Additional Debian packages
 - Docker (docker.com) — Docker CE packages
 - Himmelblau (packages.himmelblau-idm.org) — Entra ID authentication (nightly)
-- Frostyard (repository.frostyard.org) — Custom packages: nbc, chairlift, updex, igloo, intuneme, snow-first-setup. **Note:** bootc and ostree are no longer sourced from this repo (the former `frostyard/bootc-debian` packaging recipe is archived); they are compiled from pinned source in-tree instead.
+- Frostyard (repository.frostyard.org) — Custom packages: bootc, libostree-1-1 (built by frostyard/bootc-debian), nbc, chairlift, updex, igloo, intuneme, snow-first-setup.
 - Linux Surface (pkg.surfacelinux.com) — Surface kernel + tools
 - Microsoft Edge (packages.microsoft.com) — Edge browser
 - Microsoft VSCode (packages.microsoft.com) — VS Code editor
@@ -227,7 +239,7 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 | `build-images.yml` | Push/PR/repository_dispatch/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, generate SBOMs, sign with Cosign |
 | `check-dependencies.yml` | Weekly (Mon 9am UTC) | Check external download updates, create PRs |
 | `check-packages.yml` | Daily (8am UTC) | Check APT package version updates, create PRs |
-| `validate.yml` | PR/push | shellcheck + mkosi summary validation |
+| `validate.yml` | PR/push/dispatch | shellcheck + mkosi summary validation + profile dependency guard |
 | `test-install.yml` | Manual dispatch | Bootc install test in QEMU/KVM |
 | `scorecard.yml` | Weekly | OpenSSF supply-chain security analysis |
 
@@ -235,10 +247,11 @@ See [ci-cd.md](ci-cd.md) for details.
 
 ## Testing
 
-The `test/` directory contains a bootc installation test framework:
+The `test/` directory contains bootc installation and update test frameworks:
 
 - `bootc-install-test.sh` — Orchestrator: loads OCI image, runs bootc install to-disk, boots in QEMU, runs tests via SSH
 - 4-tier test suite: installation validation → service health → sysext validation → smoke tests
+- `bootc-update-test.sh` — Orchestrator for update hops and optional rollback: installs a starting image, runs `bootc switch` to one or more target refs, reboots between hops, and verifies deployment slot continuity plus `/var` and `/etc` persistence markers
 
 See [testing.md](testing.md) for details.
 

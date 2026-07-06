@@ -18,6 +18,14 @@ Builds the base image and all 10 sysexts, publishes to the Frostyard repository 
 7. Upload manifest files to R2
 8. Uses concurrent workflow cancellation (newer pushes cancel in-progress builds)
 
+The publish step uses `skip-duplicates: true`: a sysext raw whose versioned
+filename already exists in R2 is not re-uploaded. Since the filename version
+comes from the KEYPACKAGE deb version, sysext tree fixes do NOT republish on
+their own — set `SYSEXT_REVISION` in the sysext's mkosi.conf to append `+rN`
+and force a new filename (see yeti/sysexts.md). Each sysext build also runs
+`shared/sysext/finalize/sysext-required-paths.sh`, failing the build if any
+path in the image's `required-paths.txt` is missing from the buildroot.
+
 ### build-images.yml — Desktop/Server Image Build and Publish
 
 **Trigger:** repository_dispatch type `build`, push/PR to main, manual dispatch
@@ -28,17 +36,18 @@ Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependen
 
 **Steps:**
 1. Free runner disk, mount BTRFS for container storage, and redirect `TMPDIR` to `/mnt/tmp`
-2. Build profile image via mkosi with dependencies reset to `base` only (produces directory output)
-3. Package OCI image via `buildah-package.sh` (preserves SUID, xattrs)
-4. Optimize layers via `chunkah-package.sh`
-5. **Smoke test:** Validates SUID bit on `/usr/bin/sudo` (mode 4755) — catches metadata loss
-6. Generate SBOM via Syft (scans mkosi output directory, syft-json format)
-7. Push to ghcr.io with `latest` tag
-8. Attach SBOM to image via ORAS (`application/vnd.syft+json` artifact type)
-9. Sign SBOM artifact with Cosign
-10. Attest build provenance (GitHub Actions attestation)
-11. Sign image with Cosign
-12. Upload manifests to R2
+2. Run `check-duplicate-packages.sh`
+3. Build profile image via mkosi with dependencies reset to `base` only (produces directory output)
+4. Package OCI image via `buildah-package.sh` (preserves SUID, xattrs)
+5. Optimize layers via `chunkah-package.sh` (skipped on pull_request)
+6. **Smoke test:** Validates SUID bit on `/usr/bin/sudo` (mode 4755) — catches metadata loss
+7. Generate SBOM via Syft (scans mkosi output directory, syft-json format; skipped on pull_request)
+8. Push timestamp and `latest` tags to ghcr.io (skipped on pull_request)
+9. Attach SBOM to image via ORAS (`application/vnd.syft+json` artifact type)
+10. Sign SBOM artifact with Cosign
+11. Attest build provenance (GitHub Actions attestation)
+12. Sign image with Cosign
+13. Upload manifests to R2
 
 #### release job — Automated GitHub Releases
 
@@ -59,8 +68,6 @@ Checks for updates to resources managed by the verified download system:
 - Bitwarden desktop .deb
 - Homebrew install script
 - code-server .deb
-- ostree source tarball
-- bootc + bootc-vendor source tarballs (bumped together)
 - Surface secure boot certificate
 - Hotedge GNOME extension
 - Logomenu GNOME extension
@@ -70,7 +77,6 @@ Checks for updates to resources managed by the verified download system:
 
 Also checks inline CI/build tool pins that are not stored in `checksums.json`:
 
-- `RUST_VERSION` in `shared/bootc/build/bootc.chroot`
 - chunkah image digest in `shared/outformat/image/chunkah-package.sh`
 - Syft `syft-version` input in `build-images.yml`
 - Cosign `cosign-release` input in `build-images.yml`
@@ -100,11 +106,12 @@ Checks for version updates to external APT packages:
 
 ### validate.yml — Code Validation
 
-**Trigger:** PR/push to main
+**Trigger:** PR/push to main, manual dispatch
 
-Two validation checks:
+Three validation checks:
 1. **Shell linting:** Runs shellcheck on tracked `*.sh`/`*.chroot` files and extensionless tracked shell scripts discovered by shebang, excluding `saved-unused/`
-2. **mkosi validation:** Runs `mkosi summary` for root config and all profiles to verify configuration, plus `check-profile-dependencies.sh` to ensure profile builds do not include sysext images
+2. **Runtime /etc guard:** Runs `check-runtime-etc-guard.sh` — scans every tracked file in image payload dirs (`mkosi.extra/`, `shared/*/tree/`) for patterns that delete paths from `/etc` at runtime: `systemctl disable/enable/revert/unmask/preset` (and `deb-systemd-helper`) in units/scripts, `rm`/`mv`/`find -delete` targeting `/etc/`, and tmpfiles.d removal types (`r`/`R`/`D`) on `/etc`. Any such deletion on a bootc/composefs install breaks the `/etc` merge in `bootc-finalize-staged` at shutdown ("a path led outside of the filesystem", bootc ≤ 1.16.3) and the staged update is silently discarded — the host keeps booting the old image while the updater logs success (root-caused 2026-07-05 on `enable-incus-agent.service`, which self-disabled via `ExecStartPost`). Run-once units must gate on a `/var` marker instead (`ConditionPathExists=!/var/lib/<unit>.done` + `ExecStartPost=touch`). Escape hatch for provably safe lines: `# etc-guard-allow: <reason>` comment on the same line or the line directly above (unit files have no trailing comments). Build-time scripts (`*.chroot`, `mkosi.postinst`, etc.) are outside payload dirs and intentionally unscanned — build-time `systemctl enable` is correct
+3. **mkosi validation:** Runs `mkosi summary` for root config and all profiles to verify configuration, plus `check-profile-dependencies.sh` to ensure profile builds do not include sysext images
 
 ### test-install.yml — Bootc Installation Test
 

@@ -1,0 +1,6 @@
+# docker sysext: engine + CLI (docker-ce, docker-ce-cli) and boot activation
+/usr/bin/dockerd
+/usr/bin/docker
+/usr/bin/containerd
+/usr/lib/systemd/system/docker.service
+/usr/lib/systemd/system/multi-user.target.d/10-docker.conf

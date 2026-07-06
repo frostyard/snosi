@@ -3,3 +3,6 @@ disable cni-dhcp.service
 disable rsync.service
 disable wpa_supplicant.service
 enable reload-sysext.service
+# systemd-firstboot is STATIC (no [Install]) and cannot be preset-disabled;
+# it is neutered by the ConditionPathExists drop-in in
+# usr/lib/systemd/system/systemd-firstboot.service.d/ instead.

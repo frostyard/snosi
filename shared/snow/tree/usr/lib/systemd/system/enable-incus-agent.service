@@ -1,12 +1,20 @@
 [Unit]
 Description=Install Incus Agent
 ConditionPathExists=/dev/virtio-ports/org.linuxcontainers.incus
+# Run-once via marker file instead of `systemctl disable`: the disable
+# removed this unit's .wants symlink from /etc at runtime, and any path
+# deleted from the live /etc makes bootc's /etc merge fail at update
+# finalize (bootc <= 1.16.3 follows the corresponding symlink in the new
+# deployment's /etc and aborts: "a path led outside of the filesystem"),
+# silently discarding the staged update. See snow-linux-live-setup.service
+# for the same pattern.
+ConditionPathExists=!/var/lib/enable-incus-agent.done
 After=local-fs.target
 
 [Service]
 Type=oneshot
 ExecStart=/usr/libexec/install-incus-agent
-ExecStartPost=/usr/bin/systemctl disable enable-incus-agent.service
+ExecStartPost=/usr/bin/touch /var/lib/enable-incus-agent.done
 RemainAfterExit=yes
 
 [Install]

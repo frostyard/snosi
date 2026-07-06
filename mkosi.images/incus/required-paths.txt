@@ -1,0 +1,10 @@
+# incus sysext: daemon (incus-base), CLI (incus-client), units, boot activation.
+# The 2026-07-01 202607011055 build shipped without any incus-base/incus-client
+# payload; these entries make that failure mode a build error.
+/usr/bin/incus
+/usr/incus/bin/incusd
+/usr/incus/bin/incus
+/usr/lib/systemd/system/incus.service
+/usr/lib/systemd/system/incus.socket
+/usr/lib/systemd/system/incus-startup.service
+/usr/lib/systemd/system/multi-user.target.d/10-incus.conf

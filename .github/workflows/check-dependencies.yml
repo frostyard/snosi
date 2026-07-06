@@ -69,26 +69,9 @@ jobs:
             echo "codeserver_version=$LATEST_CS" >> "$GITHUB_OUTPUT"
           fi
 
-          # Check ostree
-          CURRENT_OSTREE=$(jq -r '.ostree.version' "$CHECKSUMS")
-          LATEST_OSTREE=$(gh_api https://api.github.com/repos/ostreedev/ostree/releases/latest | jq -r '.tag_name' | sed 's/^v//')
-          if [[ -n "$LATEST_OSTREE" && "$LATEST_OSTREE" != "null" && "$LATEST_OSTREE" != "$CURRENT_OSTREE" ]]; then
-            UPDATES="${UPDATES}ostree: $CURRENT_OSTREE -> $LATEST_OSTREE\n"
-            echo "ostree_update=true" >> "$GITHUB_OUTPUT"
-            echo "ostree_version=$LATEST_OSTREE" >> "$GITHUB_OUTPUT"
-          fi
-
-          # Check bootc (bootc + bootc-vendor version together)
-          # NOTE: RUST_VERSION has its own latest-stable check below, but a
-          # bootc bump may still require a specific newer build toolchain that
-          # latest-stable tracking alone cannot infer.
-          CURRENT_BOOTC=$(jq -r '.bootc.version' "$CHECKSUMS")
-          LATEST_BOOTC=$(gh_api https://api.github.com/repos/bootc-dev/bootc/releases/latest | jq -r '.tag_name' | sed 's/^v//')
-          if [[ -n "$LATEST_BOOTC" && "$LATEST_BOOTC" != "null" && "$LATEST_BOOTC" != "$CURRENT_BOOTC" ]]; then
-            UPDATES="${UPDATES}bootc: $CURRENT_BOOTC -> $LATEST_BOOTC\n"
-            echo "bootc_update=true" >> "$GITHUB_OUTPUT"
-            echo "bootc_version=$LATEST_BOOTC" >> "$GITHUB_OUTPUT"
-          fi
+          # ostree + bootc are NOT checked here: they are consumed as debs
+          # from the frostyard APT repo, built by frostyard/bootc-debian,
+          # which has its own weekly upstream-version check.
 
           # Check Surface cert (less frequent changes)
           CURRENT_SURF=$(jq -r '.["surface-cert"].version' "$CHECKSUMS")
@@ -145,15 +128,6 @@ jobs:
             echo "edge_version=$LATEST_EDGE" >> "$GITHUB_OUTPUT"
           fi
 
-          # Check Rust toolchain used to build bootc
-          CURRENT_RUST=$(grep -oP '^RUST_VERSION="\K[^"]+' shared/bootc/build/bootc.chroot || true)
-          LATEST_RUST=$(gh_api https://api.github.com/repos/rust-lang/rust/releases/latest | jq -r '.tag_name')
-          if [[ -n "$CURRENT_RUST" && -n "$LATEST_RUST" && "$LATEST_RUST" != "null" && "$LATEST_RUST" != "$CURRENT_RUST" ]]; then
-            UPDATES="${UPDATES}rust-toolchain: $CURRENT_RUST -> $LATEST_RUST\n"
-            echo "rust_update=true" >> "$GITHUB_OUTPUT"
-            echo "rust_version=$LATEST_RUST" >> "$GITHUB_OUTPUT"
-          fi
-
           # Check Syft CLI version used for SBOM generation
           CURRENT_SYFT=$(grep -oP 'syft-version:\s*\K\S+' .github/workflows/build-images.yml || true)
           LATEST_SYFT=$(gh_api https://api.github.com/repos/anchore/syft/releases/latest | jq -r '.tag_name')
@@ -199,10 +173,6 @@ jobs:
           BITWARDEN_VERSION: ${{ steps.check.outputs.bitwarden_version }}
           CODESERVER_UPDATE: ${{ steps.check.outputs.codeserver_update }}
           CODESERVER_VERSION: ${{ steps.check.outputs.codeserver_version }}
-          OSTREE_UPDATE: ${{ steps.check.outputs.ostree_update }}
-          OSTREE_VERSION: ${{ steps.check.outputs.ostree_version }}
-          BOOTC_UPDATE: ${{ steps.check.outputs.bootc_update }}
-          BOOTC_VERSION: ${{ steps.check.outputs.bootc_version }}
           BREW_UPDATE: ${{ steps.check.outputs.brew_update }}
           BREW_COMMIT: ${{ steps.check.outputs.brew_commit }}
           SURFACE_UPDATE: ${{ steps.check.outputs.surface_update }}
@@ -217,8 +187,6 @@ jobs:
           AZUREVPN_VERSION: ${{ steps.check.outputs.azurevpn_version }}
           EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
           EDGE_VERSION: ${{ steps.check.outputs.edge_version }}
-          RUST_UPDATE: ${{ steps.check.outputs.rust_update }}
-          RUST_VERSION: ${{ steps.check.outputs.rust_version }}
           SYFT_UPDATE: ${{ steps.check.outputs.syft_update }}
           SYFT_VERSION: ${{ steps.check.outputs.syft_version }}
           COSIGN_UPDATE: ${{ steps.check.outputs.cosign_update }}
@@ -261,35 +229,6 @@ jobs:
               '.["code-server"].url=$u | .["code-server"].sha256=$s | .["code-server"].version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
-          fi
-
-          if [[ "$OSTREE_UPDATE" == "true" ]]; then
-            VER="$OSTREE_VERSION"
-            URL="https://github.com/ostreedev/ostree/releases/download/v${VER}/libostree-${VER}.tar.xz"
-            TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
-              '.ostree.url=$u | .ostree.sha256=$s | .ostree.version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-          if [[ "$BOOTC_UPDATE" == "true" ]]; then
-            VER="$BOOTC_VERSION"
-            URL="https://github.com/bootc-dev/bootc/releases/download/v${VER}/bootc-${VER}.tar.zstd"
-            VURL="https://github.com/bootc-dev/bootc/releases/download/v${VER}/bootc-${VER}-vendor.tar.zstd"
-            TMP=$(mktemp); VTMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
-            curl -fsSL -o "$VTMP" "$VURL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            VSHA=$(sha256sum "$VTMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
-               --arg vu "$VURL" --arg vs "$VSHA" \
-              '.bootc.url=$u | .bootc.sha256=$s | .bootc.version=$v
-               | .["bootc-vendor"].url=$vu | .["bootc-vendor"].sha256=$vs | .["bootc-vendor"].version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP" "$VTMP"
           fi
 
           if [[ "$BREW_UPDATE" == "true" ]]; then
@@ -376,11 +315,6 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "$RUST_UPDATE" == "true" ]]; then
-            validate_update_value "RUST_VERSION" "$RUST_VERSION" '^[0-9]+\.[0-9]+\.[0-9]+$'
-            sed -i "s|^RUST_VERSION=\"[^\"]*\"|RUST_VERSION=\"${RUST_VERSION}\"|" shared/bootc/build/bootc.chroot
-          fi
-
           if [[ "$SYFT_UPDATE" == "true" ]]; then
             validate_update_value "syft-version" "$SYFT_VERSION" '^v[0-9]+\.[0-9]+\.[0-9]+$'
             sed -i "s|syft-version: .*|syft-version: ${SYFT_VERSION}|" .github/workflows/build-images.yml
@@ -412,7 +346,7 @@ jobs:
             Automated update of pinned external dependencies.
 
             This may include checksum-managed downloads and inline CI/tool pins
-            such as the Rust toolchain, chunkah digest, Syft, and Cosign.
+            such as the chunkah digest, Syft, and Cosign.
 
             **Please verify the builds work before merging.**
           branch: auto-update-checksums
