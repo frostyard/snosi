@@ -100,9 +100,6 @@ shared/
 │   ├── backports/mkosi.conf   ← Trixie backports kernel + firmware
 │   ├── surface/mkosi.conf     ← linux-surface kernel + iptsd
 │   └── scripts/               ← dracut postinst scripts
-├── bootc/                     ← In-tree source build of bootc + ostree
-│   ├── build/bootc.chroot     ← Base image BuildScript
-│   └── postinst/              ← dpkg stub registration
 ├── download/
 │   ├── checksums.json         ← Pinned URLs + SHA256s for all external downloads
 │   └── verified-download.sh   ← verified_download() helper

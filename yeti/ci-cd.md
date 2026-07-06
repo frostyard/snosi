@@ -68,8 +68,6 @@ Checks for updates to resources managed by the verified download system:
 - Bitwarden desktop .deb
 - Homebrew install script
 - code-server .deb
-- ostree source tarball
-- bootc + bootc-vendor source tarballs (bumped together; re-check RUST_VERSION on bootc bumps)
 - Surface secure boot certificate
 - Hotedge GNOME extension
 - Logomenu GNOME extension

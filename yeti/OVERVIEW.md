@@ -35,7 +35,7 @@ mkosi.conf                  # Root config: distribution, dependencies, build set
 mkosi.version               # Version tag script (date-based, overridden by CI IMAGE_VERSION)
 mkosi.clean                 # Clean script (rm -rf output/*)
 mkosi.images/               # Image definitions (base + 10 sysexts)
-  base/                     # Foundation image: systemd, in-tree bootc/ostree, firmware, core utils
+  base/                     # Foundation image: systemd, bootc/ostree (frostyard debs), firmware, core utils
     mkosi.extra/            # Base filesystem overlay (dracut, systemd units/timers, sysupdate, tmpfiles, sysusers)
       usr/lib/sysupdate.d/  # .transfer + .feature files for all sysexts
     mkosi.postinst.chroot   # Mount enablement, useradd home dir, bls-garbage-collect removal
@@ -49,7 +49,6 @@ mkosi.profiles/             # Desktop/server profile definitions (6 profiles)
   ...
 shared/                     # Reusable fragments composed via Include=
   download/                 # Verified download system (checksums.json, package-versions.json + helpers)
-  bootc/                    # In-tree source build: build/bootc.chroot compiles ostree+bootc from pinned tarballs
   kernel/                   # Kernel variant configs (backports, surface, stock)
   packages/                 # Package set configs (desktop/server bases plus loaded-image extras)
   scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot build script)
@@ -97,7 +96,7 @@ The "loaded" variants extend their base profile by adding more Include directive
 
 Scripts execute in order per image build:
 
-1. **BuildScripts** (in chroot) — Download/install items not available as packages: Homebrew, GNOME extensions, Surface secure boot cert. The base image additionally runs `shared/bootc/build/bootc.chroot` (wired via `BuildScripts=`) to compile ostree and bootc from pinned source — build deps come from `BuildPackages=` (overlay-only, not from APT; see [build-pipeline.md](build-pipeline.md) for details).
+1. **BuildScripts** (in chroot) — Download/install items not available as packages: Homebrew, GNOME extensions, Surface secure boot cert. (bootc and ostree are NOT built here — they install as debs from the Frostyard APT repo, built by frostyard/bootc-debian; see [build-pipeline.md](build-pipeline.md).)
 2. **PostInstallationScripts** (after packages) — Common logic via `shared/scripts/common-postinst.sh` (OS release branding, package list generation, cleanup, sysext infra), then profile-specific steps (GDM enablement, package relocation /opt → /usr/lib). Mount enablement and useradd home dir are handled by the base image's own postinst script.
 3. **FinalizeScripts** (pre-output) — Remove ephemeral dirs (/boot, /home), create /sysroot and /nix mountpoints, set machine-id to `uninitialized` (real first-boot semantics: presets re-apply at first boot), strip unit enablement symlinks from /etc (recreated at first boot as runtime state; manifest in /usr/share/snosi/), clear SSH keys, compile GLib schemas, set file xattrs for chunkah
 4. **PostOutputScripts** (after image creation) — Manifest processing, sysext versioned renaming
@@ -142,7 +141,7 @@ External resources are pinned in `shared/download/checksums.json` with URL + SHA
 
 Package versions for selected APT-based externals (VSCode, Docker, 1Password, Himmelblau) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
 
-Current checksum-managed downloads are Bitwarden, Homebrew install script, code-server, ostree, bootc, bootc-vendor, Surface secure boot certificate, Hotedge, Logomenu, Bazaar Companion, Azure VPN, and Microsoft Edge. Current APT version tracking covers `code`, `docker-ce`, `1password-cli`, and `himmelblau`; Edge is checksum-managed because the build installs a patched downloaded `.deb`. `code-server` is a sysext exception: it is installed by `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` + `dpkg -i`, while `KEYPACKAGE=code-server` still drives version extraction from the merged dpkg database.
+Current checksum-managed downloads are Bitwarden, Homebrew install script, code-server, Surface secure boot certificate, Hotedge, Logomenu, Bazaar Companion, Azure VPN, and Microsoft Edge. Current APT version tracking covers `code`, `docker-ce`, `1password-cli`, and `himmelblau`; Edge is checksum-managed because the build installs a patched downloaded `.deb`. `code-server` is a sysext exception: it is installed by `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` + `dpkg -i`, while `KEYPACKAGE=code-server` still drives version extraction from the merged dpkg database.
 
 ### User Service Enablement in Chroot
 
@@ -220,7 +219,7 @@ Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
 - Debian Griffo.io (debian.griffo.io) — Additional Debian packages
 - Docker (docker.com) — Docker CE packages
 - Himmelblau (packages.himmelblau-idm.org) — Entra ID authentication (nightly)
-- Frostyard (repository.frostyard.org) — Custom packages: nbc, chairlift, updex, igloo, intuneme, snow-first-setup. **Note:** bootc and ostree are no longer sourced from this repo (the former `frostyard/bootc-debian` packaging recipe is archived); they are compiled from pinned source in-tree instead.
+- Frostyard (repository.frostyard.org) — Custom packages: bootc, libostree-1-1 (built by frostyard/bootc-debian), nbc, chairlift, updex, igloo, intuneme, snow-first-setup.
 - Linux Surface (pkg.surfacelinux.com) — Surface kernel + tools
 - Microsoft Edge (packages.microsoft.com) — Edge browser
 - Microsoft VSCode (packages.microsoft.com) — VS Code editor

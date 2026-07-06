@@ -66,18 +66,14 @@ Scripts execute in order: **BuildScripts** (in chroot) -> **PostInstallationScri
 
 On bootc-installed systems, updates are staged by `bootc-update-stage.timer` (hourly; base `mkosi.extra`): `/usr/libexec/bootc-update-stage` pulls the followed image via **podman** and stages it with `bootc switch --transport containers-storage`; the update applies at the next natural reboot via `bootc-finalize-staged.service`. podman does the transfer because bootc's registry-transport composefs pull currently fails on snosi images (known upstream bug) — and podman enforces `containers-policy.json` at pull time. The script no-ops when: not a bootc-managed system (nbc installs — `spec.image` is null), already running or already staged the pulled digest, or the pulled digest equals the **rollback** deployment (never auto-flip-flop back to a version the admin rolled away from; bootc refuses that switch anyway). Upstream's `bootc-fetch-apply-updates.timer` is preset-disabled: it force-reboots on update and is gated on `/run/ostree-booted`, which does not exist on composefs deployments. During the transition, `nbc-update-download.timer` still ships for nbc-installed hosts; each mechanism no-ops on the other's install type.
 
-### Base Image: In-Tree bootc + ostree Build
+### Base Image: bootc + ostree from Frostyard debs
 
-bootc and ostree are **not** installed from APT; they are compiled from pinned source during the base image build.
+bootc and ostree install as regular APT packages (`bootc`, `libostree-1-1` — the latter ships the library AND the ostree CLI) from the Frostyard repository, built and published by [frostyard/bootc-debian](https://github.com/frostyard/bootc-debian). Debian Trixie ships no bootc package and only ostree 2025.2 (too old for current bootc), hence the external packaging.
 
-- **Why:** `frostyard/bootc-debian` (the former private packaging repo) is archived. Debian Trixie ships no bootc package and only ostree 2025.2 (too old for current bootc).
-- **Where:** `shared/bootc/build/bootc.chroot` runs as a mkosi `BuildScript` (wired via `BuildScripts=` in `mkosi.images/base/mkosi.conf`). (The image rootfs has no `apt` — mkosi manages packages externally — so build deps cannot be apt-installed from inside a postinstall chroot; a BuildScript with `BuildPackages=` is required.)
-- **Versions:** Pinned in `shared/download/checksums.json` (keys `ostree`, `bootc`, `bootc-vendor`); tracked weekly by `check-dependencies.yml`.
-- **Build deps:** declared in `BuildPackages=` in `mkosi.images/base/mkosi.conf`. mkosi installs them into the build overlay only; the overlay (and every build dep) is discarded after the build script, so they never ship in the image. There is no `apt` call and no purge logic in the script.
-- **Rust toolchain:** Debian's `rustc` (1.85) is too old to *build* bootc 1.16.3 (its xtask/build deps need rustc ≥ 1.91). The script installs a pinned toolchain (`RUST_VERSION`) via `rustup` (from `BuildPackages=`) and runs `make` under `rustup run`.
-- **ostree double-install:** the BuildScript runs `make install DESTDIR="$DESTDIR"` (ships in image) AND `make install DESTDIR=` (explicit empty — mkosi exports `DESTDIR` into the build env, so the empty value is needed to install into the overlay's real `/usr` so the bootc build finds `ostree-1.pc` and can run the bootc binary for docgen).
-- **dpkg registration:** `shared/bootc/postinst/bootc-register.chroot` (a `PostInstallationScript`) builds metadata-only stub `.deb`s (versions from `checksums.json`) and `dpkg -i`s them, so `dpkg -l`/`apt list --installed` and dependency checks see `bootc` + `libostree-1-1` as installed. The files come from the BuildScript; dpkg does not own them.
-- **Runtime libs:** bootc/ostree runtime dependencies (e.g. `libglib2.0-0t64`, `libcurl4t64`) are listed in base `Packages=` so they ship in the image and the compiled binaries link against them at runtime.
+- **Versions:** pinned in bootc-debian's `download/checksums.json`, tracked weekly by that repo's own `check-dependencies.yml` — snosi's dependency check does NOT cover them. Deb versions carry a `-frostyard<timestamp>` suffix so rebuilds of the same upstream version still sort newer in apt.
+- **Build parity:** bootc-debian's `build.sh` mirrors the former in-tree mkosi BuildScript (same pinned tarballs, same checksums, same pinned Rust toolchain — Debian's rustc 1.85 is too old to build bootc 1.16.x). Its Build workflow publishes the debs and then dispatches a snosi image build.
+- **Runtime libs:** the debs declare only a partial `Depends` list; base `Packages=` keeps the full set of runtime link deps explicit (`libfuse3-4`, `libsoup-3.0-0`, `liblzma5`, etc.) — do not remove them just because apt doesn't demand them.
+- **History:** until 2026-07 these were compiled from source during the base image build (`shared/bootc/build/bootc.chroot` + stub-deb dpkg registration); that machinery is gone.
 
 ### Sysext Constraints
 
@@ -95,7 +91,6 @@ The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput
 ## Key Directories
 
 - `shared/download/` - Verified download system: `checksums.json` pins URLs+SHA256s, `verified-download.sh` provides the `verified_download()` helper
-- `shared/bootc/` - In-tree source build of bootc (v1.16.3) and ostree (v2026.1); `build/bootc.chroot` is a base image **BuildScript** (wired via `BuildScripts=`); build deps come from `BuildPackages=` (overlay-only, discarded after build); compiles both tools (autotools for ostree, offline vendored cargo for bootc) and installs into `$DESTDIR`, which mkosi copies into the image
 - `shared/kernel/` - Kernel configs (backports, surface, stock) and dracut scripts
 - `shared/packages/` - Package set definitions, some with postinstall scripts for relocation
 - `shared/outformat/image/` - Image output format config (directory), finalize scripts, `buildah-package.sh` (OCI packaging), and `chunkah-package.sh` (CI re-chunks the OCI image for efficient delta updates)
