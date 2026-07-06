@@ -1,0 +1,3 @@
+# code-server sysext: installed via verified_download + dpkg -i in postinst
+/usr/bin/code-server
+/usr/lib/code-server

@@ -1,0 +1,4 @@
+# podman sysext: engine + distrobox
+/usr/bin/podman
+/usr/bin/buildah
+/usr/bin/distrobox

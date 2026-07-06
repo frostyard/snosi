@@ -1,0 +1,2 @@
+# 1password-cli sysext: CLI binary
+/usr/bin/op

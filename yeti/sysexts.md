@@ -47,6 +47,7 @@ Format=sysext
 Bootable=no
 BaseTrees=%O/base
 PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh
+FinalizeScripts=%D/shared/sysext/finalize/sysext-required-paths.sh
 
 Packages=<package-list>
 
@@ -60,6 +61,27 @@ Key settings:
 - `BaseTrees=%O/base` — Uses the base image output as the filesystem base
 - `Format=sysext` — Outputs an EROFS sysext image
 - `KEYPACKAGE` — The package whose version determines the sysext version
+
+Every sysext must also have a `mkosi.images/<name>/required-paths.txt`: one
+absolute path per line (comments with `#`) that must exist in the finished
+buildroot. The shared finalize script
+(`shared/sysext/finalize/sysext-required-paths.sh`) fails the build if any is
+missing. This guards against publishing structurally broken images: the
+2026-07-01 incus sysext (`1+7.2-debian13-202607011055`) shipped without any
+`incus-base`/`incus-client` payload (no `incusd`, no CLI, no units) and
+nothing in the pipeline noticed. List the KEYPACKAGE's main binaries, the
+payload of load-bearing dependency packages, the primary unit files, and the
+`multi-user.target.d/10-<name>.conf` activation drop-in. mkosi runs the shared
+check in addition to (after) the image's own `mkosi.finalize` — file-detected
+default scripts compose with explicit `FinalizeScripts=` entries.
+
+**Delta semantics:** for `Overlay=yes` images the finalize `$BUILDROOT` is the
+sysext DELTA (the overlay upper layer — exactly what ships), not the merged
+base view. Only list paths the sysext itself provides. A package that is also
+in the base image (e.g. `wget`, `gcc`, `make`, `automake`) is "already
+installed" at build time, contributes nothing to the delta, and its paths will
+always fail the check even though they exist at runtime — caught live when
+`wget` in debdev's list failed CI on the first run.
 
 `code-server` is the current exception to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database.
 
@@ -119,11 +141,30 @@ The shared postoutput script (`shared/sysext/postoutput/sysext-postoutput.sh`) h
 1. Reads `KEYPACKAGE` from environment
 2. Queries the manifest JSON for the key package's version
 3. Handles Debian epoch notation: `5:1.2.3` → `5+1.2.3`
-4. Maps Debian release to VERSION_ID: forky → 14, trixie → 13, bookworm → 12, bullseye → 11, buster → 10
-5. Renames the output image: `{IMAGE_ID}_{KEYVERSION}_{OS_VERSION}_{ARCH}.{ext}` (ext may be `raw`, `raw.gz`, `raw.xz`, etc.)
+4. Appends `+r{SYSEXT_REVISION}` when `SYSEXT_REVISION` is set in the image's
+   `[Build] Environment` (see below)
+5. Maps Debian release to VERSION_ID: forky → 14, trixie → 13, bookworm → 12, bullseye → 11, buster → 10
+6. Renames the output image: `{IMAGE_ID}_{KEYVERSION}_{OS_VERSION}_{ARCH}.{ext}` (ext may be `raw`, `raw.gz`, `raw.xz`, etc.)
    - Example: `docker_5+29.3.0_13_x86-64.raw`
-6. Annotates manifest with `.config.key_package` and `.config.key_version`
-7. Creates unversioned symlink for systemd-sysupdate MatchPattern
+7. Annotates manifest with `.config.key_package` and `.config.key_version`
+8. Creates unversioned symlink for systemd-sysupdate MatchPattern
+
+### SYSEXT_REVISION: republishing content fixes
+
+Publishing (`build.yml` → repogen publish-to-r2) uses `skip-duplicates: true`
+keyed on the versioned filename, so a sysext whose KEYPACKAGE version has not
+changed is never re-uploaded — tree fixes (presets, drop-ins, tmpfiles,
+factory captures) silently do not reach users until the upstream package
+version bumps. Concrete case: the `multi-user.target.d` Upholds drop-ins
+(52b2bfb, 2026-07-01) landed after the last incus publish, and the nix sysext
+had not republished since 2026-03 because `nix-setup-systemd` never bumps.
+
+To force a republish, set `Environment=SYSEXT_REVISION=N` in the sysext's
+`[Build]` section. The postoutput script appends `+rN` to the version, which
+systemd-sysupdate and dpkg both order strictly newer than the bare version,
+while a later KEYPACKAGE version still dominates. Bump `N` for further fixes
+at the same package version; remove the setting once the package version
+moves on its own.
 
 ## Sysupdate Registration
 
@@ -210,11 +251,12 @@ The setup script must be idempotent — safe to run on every boot without accumu
 
 1. Create `mkosi.images/<name>/mkosi.conf` following the pattern above
 2. Set `KEYPACKAGE` to the primary package name
-3. Add any extra files in `mkosi.images/<name>/mkosi.extra/`
-4. If configs needed in `/etc`: create `mkosi.finalize` to capture ONLY the needed paths to `/usr/share/factory/etc/` (never all of `/etc` — see Constraints), add tmpfiles.d rules
-5. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`
-6. **If the sysext ships a systemd service:** add `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` with `Upholds=<name>.service` (see [Service Activation Pattern](#service-activation-pattern-upholds) above)
-7. Add the sysext name to root `mkosi.conf` Dependencies list
-8. Add a corresponding update check to `.github/workflows/check-dependencies.yml` if it has external downloads
+3. Create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in); the shared finalize check fails the build without it
+4. Add any extra files in `mkosi.images/<name>/mkosi.extra/`
+5. If configs needed in `/etc`: create `mkosi.finalize` to capture ONLY the needed paths to `/usr/share/factory/etc/` (never all of `/etc` — see Constraints), add tmpfiles.d rules
+6. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`
+7. **If the sysext ships a systemd service:** add `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` with `Upholds=<name>.service` (see [Service Activation Pattern](#service-activation-pattern-upholds) above)
+8. Add the sysext name to root `mkosi.conf` Dependencies list
+9. Add a corresponding update check to `.github/workflows/check-dependencies.yml` if it has external downloads
 
 For runtime setup scripts and units shipped inside `mkosi.extra/`, do not call `systemctl enable`, `systemctl disable`, `systemctl preset`, or remove shipped paths under `/etc` from the running guest. These mutate the live `/etc` overlay and can break bootc's `/etc` merge when a staged deployment finalizes. Express service state through presets/drop-ins at build time, and use `/var` marker files for run-once behavior.
