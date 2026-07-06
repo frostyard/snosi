@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Writes /var/lib/snosi/etc-drift.report at every boot: local /etc drift
+# vs the booted image (M/D classes) plus preset-policy removals recorded
+# by preset-reconcile.service. Read-only towards /etc; the desktop
+# notification and motd hook consume the report.
+[Unit]
+Description=Report /etc drift against the booted image
+After=local-fs.target preset-reconcile.service
+ConditionPathExists=/usr/bin/snosi-etc-diff
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/snosi-etc-drift-report
+
+[Install]
+WantedBy=multi-user.target

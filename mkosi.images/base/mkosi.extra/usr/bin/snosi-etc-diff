@@ -1,0 +1,111 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# snosi-etc-diff — show how the live /etc differs from the booted image's
+# pristine /etc.
+#
+# On composefs there is no /usr/etc copy (unlike ostree): the pristine
+# image /etc sits under the read-only composefs root, shadowed by the
+# writable /etc bind mount. A bind mount of / WITHOUT submounts exposes it.
+#
+# Classes:
+#   M path   modified locally (content, permissions, or symlink target)
+#   D path   deleted locally (exists in the image, not in live /etc)
+#   A path   added locally (runtime-created; suppressed unless --added)
+#
+# Usage: snosi-etc-diff [--machine] [--added]
+#   --machine   stable "X<TAB>path" lines for scripts, no headers
+#   --added     include A entries (noisy: enablement symlinks, machine-id
+#               commit, NM connections and other expected runtime state)
+#
+# Ignore globs (one per line, relative to /etc, # comments) are read from
+# /usr/lib/snosi/etc-diff.ignore and, if present, /etc/snosi/etc-diff.ignore.
+set -euo pipefail
+
+MACHINE=0
+SHOW_ADDED=0
+for arg in "$@"; do
+    case "$arg" in
+        --machine) MACHINE=1 ;;
+        --added) SHOW_ADDED=1 ;;
+        *) echo "Usage: snosi-etc-diff [--machine] [--added]" >&2; exit 2 ;;
+    esac
+done
+
+[[ $EUID -eq 0 ]] || { echo "snosi-etc-diff: must run as root (bind-mounts /)" >&2; exit 1; }
+
+IGNORE_PATTERNS=()
+for f in /usr/lib/snosi/etc-diff.ignore /etc/snosi/etc-diff.ignore; do
+    [[ -f "$f" ]] || continue
+    while IFS= read -r line; do
+        line="${line%%#*}"
+        line="${line%"${line##*[![:space:]]}"}"
+        [[ -n "$line" ]] && IGNORE_PATTERNS+=("$line")
+    done < "$f"
+done
+
+ignored() { # relative path
+    local p="$1" pat
+    for pat in "${IGNORE_PATTERNS[@]}"; do
+        # shellcheck disable=SC2254
+        case "$p" in $pat) return 0 ;; esac
+    done
+    return 1
+}
+
+MNT=$(mktemp -d /run/snosi-etc-diff.XXXXXX)
+cleanup() { umount "$MNT" 2>/dev/null || true; rmdir "$MNT" 2>/dev/null || true; }
+trap cleanup EXIT
+mount --bind -o ro / "$MNT" 2>/dev/null || mount --bind / "$MNT"
+PRISTINE="$MNT/etc"
+
+list_paths() { (cd "$1" && find . -mindepth 1 | LC_ALL=C sort | sed 's|^\./||'); }
+pristine_list=$(list_paths "$PRISTINE")
+live_list=$(list_paths /etc)
+
+emit() { # class path
+    if [[ $MACHINE -eq 1 ]]; then
+        printf '%s\t%s\n' "$1" "$2"
+    else
+        printf '%s /etc/%s\n' "$1" "$2"
+    fi
+}
+
+found=0
+
+# Deleted: in pristine, not in live.
+while IFS= read -r p; do
+    [[ -n "$p" ]] || continue
+    ignored "$p" && continue
+    emit D "$p"; found=1
+done < <(LC_ALL=C comm -23 <(echo "$pristine_list") <(echo "$live_list"))
+
+# Added: in live, not in pristine.
+if [[ $SHOW_ADDED -eq 1 ]]; then
+    while IFS= read -r p; do
+        [[ -n "$p" ]] || continue
+        ignored "$p" && continue
+        emit A "$p"; found=1
+    done < <(LC_ALL=C comm -13 <(echo "$pristine_list") <(echo "$live_list"))
+fi
+
+# Modified: present in both, but different.
+while IFS= read -r p; do
+    [[ -n "$p" ]] || continue
+    ignored "$p" && continue
+    a="$PRISTINE/$p" b="/etc/$p"
+    if [[ -L "$a" || -L "$b" ]]; then
+        [[ "$(readlink "$a" 2>/dev/null)" == "$(readlink "$b" 2>/dev/null)" ]] && continue
+    elif [[ -f "$a" && -f "$b" ]]; then
+        pa=$(stat -c '%a:%u:%g' "$a") pb=$(stat -c '%a:%u:%g' "$b")
+        if [[ "$pa" == "$pb" ]] && cmp -s "$a" "$b"; then continue; fi
+    else
+        # Directories (or matching special types): permissions only.
+        pa=$(stat -c '%F:%a:%u:%g' "$a") pb=$(stat -c '%F:%a:%u:%g' "$b")
+        [[ "$pa" == "$pb" ]] && continue
+    fi
+    emit M "$p"; found=1
+done < <(LC_ALL=C comm -12 <(echo "$pristine_list") <(echo "$live_list"))
+
+if [[ $MACHINE -eq 0 && $found -eq 0 ]]; then
+    echo "live /etc matches the booted image (after ignores)"
+fi

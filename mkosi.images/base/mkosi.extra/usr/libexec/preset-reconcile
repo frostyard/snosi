@@ -1,0 +1,88 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Incrementally apply NEW enablement policy after image updates.
+#
+# The preset-owned enablement model applies presets exactly once (first
+# boot or the migration boundary) — a unit newly enabled by a LATER
+# image's preset policy would otherwise never be enabled on existing
+# installs, because bootc's /etc merge carries the runtime-created
+# symlinks forward and no first boot re-runs preset-all.
+#
+# This closes that gap safely:
+#   - /usr/share/snosi/enablement-manifest.txt is the image's current
+#     enablement policy (recorded at build by the outformat finalize).
+#   - /var/lib/snosi/enablement-manifest.applied is the last policy this
+#     install applied.
+#   - Entries ADDED to the manifest since then are new image policy by
+#     construction — the admin cannot have disabled a unit that did not
+#     exist in the previous policy — so preset exactly those units.
+#     Masked units are skipped by systemctl preset, so an admin mask
+#     always wins. This only CREATES /etc symlinks; deletions never
+#     happen here (see CLAUDE.md "Runtime service enablement changes are
+#     forbidden" for why deletions are the dangerous class).
+#   - Entries REMOVED from the manifest are ambiguous (policy flip vs.
+#     something else): recorded for the drift report, never auto-disabled.
+#
+# Newly enabled services take effect at the NEXT boot: this runs after
+# the boot transaction is computed, deliberately — mutating the running
+# transaction is not worth the complexity for a rare event.
+set -euo pipefail
+
+MANIFEST=/usr/share/snosi/enablement-manifest.txt
+STATE_DIR=/var/lib/snosi
+STORED="$STATE_DIR/enablement-manifest.applied"
+REMOVALS="$STATE_DIR/preset-removals"
+MARKER=/var/lib/preset-enablement.done
+
+[[ -f "$MANIFEST" ]] || exit 0
+# The model must have been initialized (first boot or migration) first;
+# those paths apply the FULL policy, after which we only track deltas.
+[[ -f "$MARKER" ]] || exit 0
+
+mkdir -p "$STATE_DIR"
+
+if [[ ! -f "$STORED" ]]; then
+    cp "$MANIFEST" "$STORED"
+    echo "initialized applied-policy snapshot ($(wc -l < "$STORED") entries)"
+    exit 0
+fi
+
+added=$(LC_ALL=C comm -13 "$STORED" "$MANIFEST")
+removed=$(LC_ALL=C comm -23 "$STORED" "$MANIFEST")
+
+if [[ -z "$added" && -z "$removed" ]]; then
+    exit 0
+fi
+
+rc=0
+if [[ -n "$added" ]]; then
+    # Manifest lines are "<scope> <relative-path>"; reduce to unique unit
+    # names per scope. Alias entries (top-level, no directory) resolve to
+    # the same unit as their wants entry; preset of an alias name can fail
+    # harmlessly, so tolerate individual failures but report them.
+    for scope in system user; do
+        units=$(awk -v s="$scope" '$1 == s {n=$2; sub(".*/", "", n); print n}' <<<"$added" | LC_ALL=C sort -u)
+        [[ -n "$units" ]] || continue
+        scope_flag=""
+        [[ "$scope" == "user" ]] && scope_flag="--global"
+        while IFS= read -r unit; do
+            [[ -n "$unit" ]] || continue
+            echo "applying new enablement policy: $scope $unit"
+            # etc-guard-allow: creates enablement for units newly added to the image's preset policy; masked units are skipped, deletions never happen here
+            if ! systemctl $scope_flag preset "$unit"; then
+                echo "warning: preset failed for $scope $unit (alias entry?)" >&2
+                rc=0  # non-fatal: the wants entry's real unit covers aliases
+            fi
+        done <<<"$units"
+    done
+fi
+
+if [[ -n "$removed" ]]; then
+    printf '%s\n' "$removed" > "$REMOVALS"
+    echo "recorded $(wc -l < "$REMOVALS") policy removals for the drift report (not auto-disabled)"
+else
+    rm -f "$REMOVALS"
+fi
+
+cp "$MANIFEST" "$STORED"
+exit "$rc"

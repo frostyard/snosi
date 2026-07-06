@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Applies enablement policy ADDED by image updates (see
+# /usr/libexec/preset-reconcile). Runs after the model is initialized
+# (first boot / migration write /var/lib/preset-enablement.done) and
+# before the drift report so recorded policy removals land in it.
+[Unit]
+Description=Apply new preset policy from image updates
+After=local-fs.target
+Before=snosi-etc-drift-report.service
+ConditionPathExists=/usr/share/snosi/enablement-manifest.txt
+ConditionPathExists=/var/lib/preset-enablement.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/preset-reconcile
+
+[Install]
+WantedBy=multi-user.target

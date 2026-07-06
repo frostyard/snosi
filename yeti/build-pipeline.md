@@ -295,3 +295,13 @@ Docker CE on-image enablement overlay (used by cayoloaded):
 
 Azure VPN capability fixes overlay (used by snowloaded/snowfieldloaded):
 - systemd preset and workaround service for Azure VPN client capabilities
+
+## /etc Drift Tooling and Preset Reconciliation (base mkosi.extra)
+
+- `usr/bin/snosi-etc-diff` — root CLI; bind-mounts `/` (submount-free) to reach the pristine composefs image `/etc` under the writable `/etc` bind mount, then reports `M`(odified)/`D`(eleted) — and `A`(dded) with `--added` — relative to it. `--machine` emits tab-separated lines. Ignore globs: `usr/lib/snosi/etc-diff.ignore` (image defaults, tuned against a live install) plus optional `/etc/snosi/etc-diff.ignore`.
+- `preset-reconcile.service` → `usr/libexec/preset-reconcile` — closes the "new image preset policy never reaches existing installs" gap: diffs the image's enablement manifest against `/var/lib/snosi/enablement-manifest.applied`; entries ADDED to policy are preset (creates-only; masked units skipped, so admin masks win; admin disables of pre-existing policy are never re-applied), entries REMOVED are written to `/var/lib/snosi/preset-removals` for the drift report (never auto-disabled), then the applied snapshot is updated. Gated on the enablement marker so first boot/migration initialize the model first. Newly enabled units take effect at the next boot (runs after the boot transaction on purpose).
+- `snosi-etc-drift-report.service` → `usr/libexec/snosi-etc-drift-report` — per boot, writes `M`/`D` diff entries plus `P`(olicy removal) lines to `/var/lib/snosi/etc-drift.report` with a sha256 in `etc-drift.hash`; removes both when clean.
+- `snosi-etc-drift-notify.service` (user scope, `graphical-session.target`) → one `notify-send` per report *change*, gated by comparing the report hash against `$XDG_STATE_HOME/snosi/etc-drift.ack`.
+- `etc/update-motd.d/85-snosi-etc-drift` — headless equivalent: one summary line at login when the report is non-empty.
+
+All verified functionally on a live spike-image install (2026-07-05): diff correctly isolated one real drift entry (`gdm3/daemon.conf`) after ignore tuning; reconciler initialize/add/remove/steady paths all exercised (preset recreated a removed enablement symlink; removals recorded, never disabled).
