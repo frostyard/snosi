@@ -1,7 +1,8 @@
-# dev sysext: build toolchain. gcc/make/automake/libtool/pkg-config are in
-# the BASE image, so they never land in this sysext's delta — list only
-# delta-shipped payload.
-/usr/bin/g++
+# dev sysext: build toolchain. Entries verified against the CI build log's
+# "Unpacking ..." lines — gcc, g++, and make are satisfied by the BASE image
+# layer and never land in this sysext's delta; cmake/gdb/ninja/automake do.
+# automake also exercises the postinst alternatives-symlink repoint.
 /usr/bin/cmake
 /usr/bin/gdb
 /usr/bin/ninja
+/usr/bin/automake
