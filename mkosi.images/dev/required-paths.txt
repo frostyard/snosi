@@ -1,4 +1,7 @@
-# dev sysext: compiler and build toolchain
-/usr/bin/gcc
-/usr/bin/make
+# dev sysext: build toolchain. gcc/make/automake/libtool/pkg-config are in
+# the BASE image, so they never land in this sysext's delta — list only
+# delta-shipped payload.
+/usr/bin/g++
 /usr/bin/cmake
+/usr/bin/gdb
+/usr/bin/ninja

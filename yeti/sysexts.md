@@ -75,6 +75,14 @@ payload of load-bearing dependency packages, the primary unit files, and the
 check in addition to (after) the image's own `mkosi.finalize` — file-detected
 default scripts compose with explicit `FinalizeScripts=` entries.
 
+**Delta semantics:** for `Overlay=yes` images the finalize `$BUILDROOT` is the
+sysext DELTA (the overlay upper layer — exactly what ships), not the merged
+base view. Only list paths the sysext itself provides. A package that is also
+in the base image (e.g. `wget`, `gcc`, `make`, `automake`) is "already
+installed" at build time, contributes nothing to the delta, and its paths will
+always fail the check even though they exist at runtime — caught live when
+`wget` in debdev's list failed CI on the first run.
+
 `code-server` is the current exception to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database.
 
 ## Sysext-Specific Extra Files

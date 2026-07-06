@@ -1,3 +1,6 @@
-# debdev sysext: debootstrap toolchain
+# debdev sysext: debootstrap toolchain.
+# Only list paths the sysext DELTA ships: the finalize BUILDROOT for
+# Overlay=yes images is the upper layer, so base-provided packages
+# (e.g. wget) never appear here even though they are runtime deps.
 /usr/sbin/debootstrap
-/usr/bin/wget
+/usr/bin/arch-test
