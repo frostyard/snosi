@@ -19,11 +19,11 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 |--------|------------|-------------|
 | **1password-cli** | 1password-cli | 1Password CLI tool |
 | **code-server** | code-server | code-server (VS Code in the browser) — downloaded via `verified_download()` from coder/code-server GitHub releases |
-| **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test) |
+| **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test, archive keyrings) |
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
 | **himmelblau** | himmelblau | Entra ID authentication (himmelblau, pam-himmelblau, nss-himmelblau) |
-| **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF |
+| **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF, virt-viewer |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
 | **tailscale** | tailscale | Tailscale VPN client |
@@ -216,3 +216,5 @@ The setup script must be idempotent — safe to run on every boot without accumu
 6. **If the sysext ships a systemd service:** add `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` with `Upholds=<name>.service` (see [Service Activation Pattern](#service-activation-pattern-upholds) above)
 7. Add the sysext name to root `mkosi.conf` Dependencies list
 8. Add a corresponding update check to `.github/workflows/check-dependencies.yml` if it has external downloads
+
+For runtime setup scripts and units shipped inside `mkosi.extra/`, do not call `systemctl enable`, `systemctl disable`, `systemctl preset`, or remove shipped paths under `/etc` from the running guest. These mutate the live `/etc` overlay and can break bootc's `/etc` merge when a staged deployment finalizes. Express service state through presets/drop-ins at build time, and use `/var` marker files for run-once behavior.
