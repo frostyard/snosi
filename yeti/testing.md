@@ -22,7 +22,8 @@ test/
     ├── 01-installation.sh     # Tier 1: Installation validation
     ├── 02-services.sh         # Tier 2: Service health
     ├── 03-sysexts.sh          # Tier 3: Sysext validation
-    └── 04-smoke.sh            # Tier 4: Smoke tests
+    ├── 04-smoke.sh            # Tier 4: Smoke tests
+    └── 05-firstboot-presets.sh # Tier 5: First-boot preset parity
 ```
 
 ## Interactive QEMU Runner (run-qemu.sh)
@@ -136,6 +137,22 @@ End-to-end functional validation:
 - System time is plausible (year ≥ 2025)
 - Hostname and locale are configured
 - Default system locale is set (`LANG=` present in `/etc/locale.conf` — shipped as `en_US.UTF-8` by base `mkosi.extra`; on trixie `/etc/default/locale` is a symlink to it, so PAM and systemd read the same file)
+
+### Tier 5 — First-Boot Preset Parity (05-firstboot-presets.sh)
+
+Verifies the hermetic-`/etc` first-boot model (image ships machine-id as
+`uninitialized` and no unit enablement symlinks in `/etc`):
+
+- machine-id was committed on first boot (32-hex, not `uninitialized`)
+- `first-boot-complete.target` was reached (the boot really was a systemd first boot)
+- `preset-global.service` succeeded (user-scope presets applied)
+- `systemd-firstboot.service` is disabled (no console prompts)
+- **Manifest parity:** every enablement symlink listed in
+  `/usr/share/snosi/enablement-manifest.txt` (recorded by the outformat
+  finalize when it stripped the image `/etc`) was recreated by the preset
+  pass; extra runtime symlinks not in the manifest are reported informationally
+- Exactly one gnome-remote-desktop variant is enabled (they declare mutual `Conflicts=`)
+- SSH host keys were generated
 
 ## Helper Libraries
 

@@ -23,9 +23,79 @@ mkdir /sysroot
 # Create /nix as an empty mountpoint for the nix sysext bind-mount
 mkdir -p /nix
 
-# Ensure image first-boot works
+# Golden-image machine-id: the literal "uninitialized" (machine-id(5)) makes
+# the first boot of every install a TRUE systemd first boot — PID 1 applies
+# unit presets, ConditionFirstBoot= fires, then a unique ID is generated and
+# committed. The empty file shipped until 2026-07 only meant "generate an ID"
+# and silently suppressed all first-boot semantics (mkosi's own default for a
+# missing machine-id is "uninitialized" too; the old `touch` overrode it).
 rm -f /etc/machine-id
-touch /etc/machine-id
+echo "uninitialized" > /etc/machine-id
+
+# Ship no unit enablement symlinks in /etc. mkosi ran `systemctl preset-all`
+# (and `--global preset-all`) just before this script; PID 1 re-applies the
+# same preset policy at first boot (real first boot, see machine-id above)
+# and preset-global.service does the same for user units, recreating these
+# symlinks in the live /etc as RUNTIME state. An admin's later `systemctl
+# disable` then deletes a runtime-created path — harmless — instead of a
+# path shipped in the image /etc, which breaks bootc's /etc merge at update
+# finalize (see CLAUDE.md "Runtime service enablement changes are
+# forbidden"). Kept in /etc: masks (-> /dev/null; presets never recreate
+# masks) and linked units (targets outside the systemd unit dirs, e.g. the
+# dracut-*.service links into /usr/lib/dracut — presets cannot recreate
+# those either).
+#
+# A manifest of the stripped enablement symlinks ships in /usr so the
+# first-boot parity test (test/tests/05-firstboot-presets.sh) can verify
+# preset-all recreated every one of them. Excluded from the manifest
+# (stripped, but presets will not — and need not — recreate them):
+#   - ctrl-alt-del.target: not preset-managed; /usr ships the same alias
+#   - display-manager.service: Debian display managers carry no Alias= in
+#     [Install] (dpkg postinst creates this from
+#     /etc/X11/default-display-manager), so presets cannot recreate it;
+#     desktop trees ship it as a static /usr alias symlink instead
+#   - wants/requires entries whose target unit is MASKED in the image
+#     (preset-all skips masked units; a dangling wants for a masked unit
+#     is inert anyway)
+mkdir -p /usr/share/snosi
+manifest=/usr/share/snosi/enablement-manifest.txt
+: > "$manifest"
+for scope in system user; do
+    dir=/etc/systemd/$scope
+    [[ -d $dir ]] || continue
+    # Enablement symlinks inside .wants/.requires directories.
+    find "$dir" -mindepth 2 -maxdepth 2 \
+         \( -path '*.wants/*' -o -path '*.requires/*' \) -type l \
+         -printf "$scope %P\n" >> "$manifest"
+    # Top-level alias symlinks (targets inside the systemd unit dirs).
+    # Masks (/dev/null) and linked units (targets elsewhere) are kept.
+    find "$dir" -mindepth 1 -maxdepth 1 -type l \
+         \( -lname '/usr/lib/systemd/*' -o -lname '/lib/systemd/*' \) \
+         -printf "$scope %P\n" >> "$manifest"
+done
+sed -i -e '/^system ctrl-alt-del.target$/d' \
+       -e '/^system display-manager.service$/d' "$manifest"
+# Drop entries pointing at units masked in the image /etc.
+for scope in system user; do
+    find /etc/systemd/$scope -maxdepth 1 -type l -lname /dev/null \
+         -printf '%f\n' 2>/dev/null | while read -r masked; do
+        sed -i "\#^$scope .*/$masked\$#d" "$manifest"
+    done
+done
+# C collation: the parity test comm(1)s against this file inside the guest.
+LC_ALL=C sort -o "$manifest" "$manifest"
+
+for scope in system user; do
+    dir=/etc/systemd/$scope
+    [[ -d $dir ]] || continue
+    find "$dir" -mindepth 2 -maxdepth 2 \
+         \( -path '*.wants/*' -o -path '*.requires/*' \) -type l -delete
+    find "$dir" -mindepth 1 -maxdepth 1 -type l \
+         \( -lname '/usr/lib/systemd/*' -o -lname '/lib/systemd/*' \) -delete
+    find "$dir" -mindepth 1 -maxdepth 1 -type d \
+         \( -name '*.wants' -o -name '*.requires' \) -empty -delete
+done
+echo "Stripped $(wc -l < "$manifest") enablement symlinks from /etc (recreated by presets at first boot)"
 
 # Remove SSH Keys
 rm -f /etc/ssh/ssh_host_*

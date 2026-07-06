@@ -55,12 +55,19 @@ while IFS= read -r -d '' f; do
     [ -f "$f" ] || continue
 
     n=0
+    allow_next=0
     while IFS= read -r line; do
         n=$((n + 1))
         # Skip comments (shell scripts and unit files) and explicit opt-outs.
+        # A marker on a comment line also exempts the NEXT line, because unit
+        # files do not support trailing comments on directive lines.
         case "$line" in
-            *etc-guard-allow*) continue ;;
+            *etc-guard-allow*) allow_next=1; continue ;;
         esac
+        if [ "$allow_next" -eq 1 ]; then
+            allow_next=0
+            continue
+        fi
         stripped="${line#"${line%%[![:space:]]*}"}"
         case "$stripped" in
             '#'*|';'*) continue ;;
@@ -85,7 +92,7 @@ while IFS= read -r -d '' f; do
                 ;;
         esac
     done < "$f"
-done < <(git ls-files -z)
+done < <(git ls-files -z --cached --others --exclude-standard)
 
 if [ "$fail" -ne 0 ]; then
     echo

@@ -14,22 +14,19 @@ source "$SRCDIR"/shared/scripts/common-postinst.sh
 # Enable GDM
 systemctl enable gdm.service
 
-# Enable gnome-remote-desktop user services
-# (systemctl --user enable doesn't work in chroot, create symlinks directly)
-# this doesn't turn on remote desktop by default, just ensures the services are enabled when the user enables them in settings
-# NOTE: gnome-remote-desktop-headless.service declares Conflicts=gnome-remote-desktop.service,
-# so we must NOT enable both — the headless variant is for sessions without a physical display.
-mkdir -p /etc/systemd/user/gnome-session.target.wants
-ln -sf /usr/lib/systemd/user/gnome-remote-desktop.service /etc/systemd/user/gnome-session.target.wants/gnome-remote-desktop.service
-ln -sf /usr/lib/systemd/user/gnome-remote-desktop-handover.service /etc/systemd/user/gnome-session.target.wants/gnome-remote-desktop-handover.service
-rm -f /etc/systemd/user/gnome-session.target.wants/gnome-remote-desktop-headless.service
+# User-scope enablement policy (gnome-remote-desktop on, its headless
+# variant and rygel off) lives in
+# shared/snow/tree/usr/lib/systemd/user-preset/90-snow.preset, applied by
+# mkosi's `--global preset-all` at build and by preset-global.service at
+# first boot. Do NOT create or remove /etc/systemd/user symlinks here:
+# mkosi runs --global preset-all AFTER postinst scripts, so manual symlink
+# surgery done here is silently overridden by the later preset pass
+# (observed shipped: both gnome-remote-desktop variants enabled despite
+# their mutual Conflicts=, because the rm below predated the preset pass).
 
-# rygel (UPnP/DLNA media server) is deliberately NOT autostarted: an always-on
-# media server is a surprising desktop default. deb-systemd-helper records it
-# as enabled in its tracking dir even though the enablement symlink is never
-# created (the known dsh gap), leaving inconsistent state — remove the
-# tracking and any symlink so "disabled" is recorded consistently.
-rm -f /etc/systemd/user/default.target.wants/rygel.service
+# rygel: deb-systemd-helper records it as enabled in its tracking dir even
+# though the preset policy disables it (the known dsh gap) — remove the
+# tracking so "disabled" is recorded consistently.
 rm -rf /var/lib/systemd/deb-systemd-user-helper-enabled/rygel.service.dsh-also \
        /var/lib/systemd/deb-systemd-user-helper-enabled/default.target.wants/rygel.service
 

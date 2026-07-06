@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Apply user-scope unit presets on first boot, mirroring what PID 1 does for
+# system units. The image ships NO enablement symlinks in /etc (see the
+# outformat finalize script); this recreates the user-scope ones from
+# /usr/lib/systemd/user-preset policy as runtime-created /etc state.
+# Adapted from ParticleOS. Safe for the bootc /etc merge: it runs only on
+# first boot, when /etc/systemd/user contains no enablement symlinks, so
+# preset-all can only CREATE paths, never delete shipped ones.
+[Unit]
+Description=Apply user unit presets on first boot
+ConditionFirstBoot=yes
+ConditionPathIsReadWrite=/etc
+
+DefaultDependencies=no
+
+Before=basic.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# etc-guard-allow: first-boot only; image /etc ships no enablement symlinks, so this only creates paths
+ExecStart=systemctl preset-all --global
+# Marks the enablement model as initialized so preset-migration.service
+# (which handles pre-2026-07 installs crossing the model boundary) stays
+# inert on systems that had a real first boot. The content records WHICH
+# path initialized the model — the migration boot reboots seconds after
+# starting, before systemd-journal-flush persists its journal, so this
+# marker is the only durable evidence of what ran (tests assert on it).
+ExecStart=/bin/sh -c 'echo first-boot > /var/lib/preset-enablement.done'
+
+[Install]
+WantedBy=basic.target
