@@ -18,6 +18,14 @@ Builds the base image and all 10 sysexts, publishes to the Frostyard repository 
 7. Upload manifest files to R2
 8. Uses concurrent workflow cancellation (newer pushes cancel in-progress builds)
 
+The publish step uses `skip-duplicates: true`: a sysext raw whose versioned
+filename already exists in R2 is not re-uploaded. Since the filename version
+comes from the KEYPACKAGE deb version, sysext tree fixes do NOT republish on
+their own — set `SYSEXT_REVISION` in the sysext's mkosi.conf to append `+rN`
+and force a new filename (see yeti/sysexts.md). Each sysext build also runs
+`shared/sysext/finalize/sysext-required-paths.sh`, failing the build if any
+path in the image's `required-paths.txt` is missing from the buildroot.
+
 ### build-images.yml — Desktop/Server Image Build and Publish
 
 **Trigger:** repository_dispatch type `build`, push/PR to main, manual dispatch

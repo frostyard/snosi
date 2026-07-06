@@ -1,0 +1,4 @@
+# tailscale sysext: daemon + CLI
+/usr/bin/tailscale
+/usr/sbin/tailscaled
+/usr/lib/systemd/system/tailscaled.service

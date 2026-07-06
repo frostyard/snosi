@@ -1,0 +1,3 @@
+# debdev sysext: debootstrap toolchain
+/usr/sbin/debootstrap
+/usr/bin/wget

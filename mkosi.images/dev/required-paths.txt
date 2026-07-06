@@ -1,0 +1,4 @@
+# dev sysext: compiler and build toolchain
+/usr/bin/gcc
+/usr/bin/make
+/usr/bin/cmake

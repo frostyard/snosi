@@ -31,6 +31,17 @@ if [[ "$KEYVERSION" == *:* ]]; then
     UPSTREAM_VERSION="${KEYVERSION#*:}"
     KEYVERSION="${EPOCH}+${UPSTREAM_VERSION}"
 fi
+
+# Optional snosi-side revision (SYSEXT_REVISION= in the image's [Build]
+# Environment). Publishing uses skip-duplicates keyed on the versioned
+# filename, so sysext tree/content fixes are never republished while the
+# KEYPACKAGE version stays the same. Bumping the revision appends "+rN",
+# which systemd-sysupdate and dpkg both order strictly newer than the bare
+# version (and a later KEYPACKAGE version still dominates). Reset (remove)
+# the revision when the KEYPACKAGE version moves on its own.
+if [[ -n "${SYSEXT_REVISION:-}" ]]; then
+    KEYVERSION="${KEYVERSION}+r${SYSEXT_REVISION}"
+fi
 echo "Determined version: $KEYVERSION for package: $KEYPACKAGE"
 
 # Add key package info to manifest
