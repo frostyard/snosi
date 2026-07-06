@@ -114,7 +114,7 @@ Validates critical system services:
 - systemd-resolved is active (DNS)
 - NetworkManager is active (networking)
 - SSH is active (remote access)
-- `nbc-update-download.timer` is loaded
+- `nbc-update-download.timer` is loaded, and on composefs installs is condition-gated off (not active, service never failed — see frostyard/nbc#139)
 - `frostyard-updex` is installed
 - No failed systemd units are present
 
