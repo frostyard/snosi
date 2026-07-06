@@ -69,6 +69,8 @@ The base overlay ships `bootc-update-stage.service` and `bootc-update-stage.time
 
 This mirrors the previous nbc-style download-only semantics: the staged deployment applies at the next normal reboot. The podman transfer path is also the current workaround for bootc registry-transport composefs pull failures noted in `docs/plans/2026-07-03-bootc-update-validation-plan.md`.
 
+Runtime units shipped in `mkosi.extra/` must not self-disable, call `systemctl preset`, or otherwise delete shipped `/etc` state. For run-once behavior, use a persistent `/var` marker (`ConditionPathExists=!/var/lib/<unit>.done` and a final `touch`) so bootc can merge `/etc` cleanly when the next staged deployment finalizes.
+
 **Version pins:** `shared/download/checksums.json` keys `ostree`, `bootc`, `bootc-vendor`. Updated weekly by `check-dependencies.yml` via PR.
 
 **Build time impact:** every clean build now compiles ostree + bootc; expect several extra minutes per image build.
@@ -153,6 +155,14 @@ Moves manifest JSON files into `output/manifests/` for separate upload to R2.
 ### check-duplicate-packages.sh
 
 Pre-build validation script (run in CI before `mkosi build`). Checks for duplicate package entries across mkosi configs to prevent conflicts.
+
+### check-profile-dependencies.sh
+
+Config sanity check used by `validate.yml`. It runs `mkosi -f --profile <profile> summary` for every profile and fails if any profile summary includes one of the sysext image dependencies from root `mkosi.conf`. This protects the required `Dependencies=` reset pattern in profile configs.
+
+### check-runtime-etc-guard.sh
+
+Runtime payload guard used by `validate.yml`. It scans tracked files in `mkosi.extra/` and `shared/**/tree/` for guest-side service enablement mutations (`systemctl enable/disable/revert/unmask/preset`, `deb-systemd-helper`) and deletion/rename patterns targeting `/etc`. Build-time scripts are intentionally outside the scan because build-time enablement is the correct way to define image service state.
 
 **CI usage in build.yml:**
 ```bash

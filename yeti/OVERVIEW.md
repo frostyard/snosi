@@ -51,7 +51,7 @@ shared/                     # Reusable fragments composed via Include=
   download/                 # Verified download system (checksums.json, package-versions.json + helpers)
   bootc/                    # In-tree source build: build/bootc.chroot compiles ostree+bootc from pinned tarballs
   kernel/                   # Kernel variant configs (backports, surface, stock)
-  packages/                 # Package set configs (11 sets) with postinstall relocation scripts
+  packages/                 # Package set configs (desktop/server bases plus loaded-image extras)
   scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot build script)
   outformat/image/          # OCI output format, buildah/chunkah packaging
   sysext/postoutput/        # Shared sysext versioning and manifest logic
@@ -167,6 +167,12 @@ CI sets `TMPDIR=/mnt/tmp` before mkosi/buildah/chunkah work because hosted runne
 - `.chroot` extension for scripts running inside chroot
 - External downloads via `verified_download()` only
 - Pin external URLs to specific versions, never `latest`
+
+### Runtime `/etc` Mutations Are Forbidden
+
+Files that ship in runtime payload directories (`mkosi.extra/` and `shared/**/tree/`) must not delete or rewrite enablement state under `/etc` at runtime. On bootc/composefs installs, deleting shipped `/etc` paths can make the live `/etc` merge fail during `bootc-finalize-staged`, causing staged updates to be discarded while update logs still look successful.
+
+Use build-time enablement/presets for desired service state. For run-once runtime units, gate with a `/var` marker such as `ConditionPathExists=!/var/lib/<unit>.done` plus an `ExecStartPost=touch ...` marker instead of `systemctl disable`/`enable`/`preset` from inside the guest. CI enforces this with `check-runtime-etc-guard.sh`; a flagged line needs a trailing `# etc-guard-allow: <reason>` only when the mutation is provably outside shipped `/etc` state.
 
 ## Configuration
 
