@@ -93,13 +93,13 @@ always fail the check even though they exist at runtime — caught live when
 Some sysexts include extra files via `mkosi.extra/`:
 
 ### azurevpn
-- No `mkosi.extra/` — reuses `shared/packages/azurevpn/` (fragment + postinst) verbatim from the loaded profiles
+- No `mkosi.extra/` — the fragment + postinst live in `shared/packages/azurevpn/`
 - Ships `cap_net_admin` as a real file capability: erofs preserves `security.capability`, so the sysext deliberately does NOT carry the loaded profiles' `microsoft-azurevpn-workaround.service` (that service exists only because the OCI image packaging path drops caps)
 - Desktop entry uses an absolute-path `Icon=` — no icon theme/cache involvement
 - The postinst purges `patchelf` after the rpath fixes so the build tool ships nowhere
 
 ### bitwarden
-- No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/bitwarden/`), reused verbatim from the loaded profiles
+- No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/bitwarden/`)
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
 - Ships hicolor icons — depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below)
 
@@ -117,8 +117,9 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/tmpfiles.d/docker.conf` — Factory config injection
 
 ### edge
-- No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/edge/`), reused verbatim from the loaded profiles
+- No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/edge/`)
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
+- The postinst repoints the update-alternatives symlinks (`/usr/bin/microsoft-edge`, `x-www-browser`, `gnome-www-browser`) at the real binary: their `/etc/alternatives` targets ship in profile images but are stripped from sysexts, so they would dangle on target systems
 - Its icons are hicolor symlinks created by the relocation script — visibility depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below), so on images that still ship `icon-theme.cache` the Edge icon renders generic
 
 ### incus
@@ -146,7 +147,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 
 ### vscode
 - No `mkosi.extra/` — the Microsoft `code` deb installs natively under `/usr` (`/usr/share/code` + `/usr/bin/code` symlink), so no relocation is needed
-- Reuses `shared/packages/vscode/mkosi.postinst.d/vscode.chroot` (the same script the loaded profiles run) to add `inode/directory` to code.desktop's MimeType
+- Reuses `shared/packages/vscode/mkosi.postinst.d/vscode.chroot` to add `inode/directory` to code.desktop's MimeType
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in; the deliverables are the `.desktop` entry and icon (see Desktop Applications in Sysexts below)
 
 ## Version Extraction and Naming
@@ -308,6 +309,13 @@ succeeds the moment the cache is stale or absent.
   fallback path — always scanned, never covered by any cache, so it works even
   on images that predate the fix. Not a reason to prefer it: single size, last
   in lookup order.
+- **gsettings/gschema overrides cannot ride sysexts**: defaults only take effect
+  via recompiled `gschemas.compiled`, which is a shadow-the-singleton cache
+  (same failure shape as the icon cache). App-pointing defaults (logo-menu
+  buttons, dock favorites) ship in the snow base tree instead
+  (`zz0-01-snowlinux-desktop` / `zz0-02-snowlinux-apps` overrides) — GNOME
+  degrades gracefully when the referenced app is not merged: missing
+  favorites are skipped, logo-menu buttons spawn nothing.
 - A running GNOME Shell may not notice icons from a sysext merged mid-session
   (theme rescan is gated on directory mtimes); icons are reliably present from
   the next session start. The `.desktop` entry itself appears without a cache

@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-profiles=(cayo cayoloaded snow snowloaded snowfield snowfieldloaded)
+profiles=(cayo snow snowfield)
 sysexts=(
     1password-cli
     code-server

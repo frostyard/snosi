@@ -30,23 +30,17 @@ jobs:
       id-token: write
       attestations: write
     strategy:
-      # Don't let one variant's failure (e.g. disk exhaustion on a "loaded"
-      # image) cancel the other in-flight builds. Each variant is independent.
+      # Don't let one variant's failure (e.g. runner disk exhaustion) cancel
+      # the other in-flight builds. Each variant is independent.
       fail-fast: false
       matrix:
         include:
           - profile: cayo
             description: "Cayo Linux Server Image"
-          - profile: cayoloaded
-            description: "Cayo Loaded Linux Server Image"
           - profile: snow
             description: "Snow Linux OS Image"
-          - profile: snowloaded
-            description: "Snow Loaded Linux OS Image"
           - profile: snowfield
             description: "Snowfield Linux OS Image"
-          - profile: snowfieldloaded
-            description: "Snow Field Loaded Linux OS Image"
 
     steps:
       - name: Show disk space (before)
@@ -67,7 +61,7 @@ jobs:
       - name: Redirect temp to /mnt
         # / (/dev/root) has ~45G free after cleanup; /mnt has ~70G free. mkosi's
         # build workspace and podman/buildah tar staging default to TMPDIR
-        # (/var/tmp on /), which overflows / on the large "loaded" variants and
+        # (/var/tmp on /), which overflows / on the larger variants and
         # crashes the runner with "No space left on device". Point TMPDIR at the
         # roomy /mnt volume for all subsequent steps.
         run: |
@@ -197,19 +191,19 @@ jobs:
             "$IMAGE:latest" \
             "docker://$IMAGE:latest"
 
-      - name: Record snowloaded tag for release job
-        # Runs only after a successful snowloaded push. The tag travels to the
+      - name: Record snow tag for release job
+        # Runs only after a successful snow push. The tag travels to the
         # release job as an artifact — matrix job outputs are last-writer-wins
         # across legs, so they can't gate the release deterministically.
-        if: matrix.profile == 'snowloaded' && github.event_name != 'pull_request'
-        run: echo "${{ steps.version.outputs.tag }}" > snowloaded-tag.txt
+        if: matrix.profile == 'snow' && github.event_name != 'pull_request'
+        run: echo "${{ steps.version.outputs.tag }}" > snow-tag.txt
 
-      - name: Upload snowloaded tag artifact
-        if: matrix.profile == 'snowloaded' && github.event_name != 'pull_request'
+      - name: Upload snow tag artifact
+        if: matrix.profile == 'snow' && github.event_name != 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: snowloaded-tag
-          path: snowloaded-tag.txt
+          name: snow-tag
+          path: snow-tag.txt
           retention-days: 1
 
       - name: Log in to ghcr.io
@@ -316,7 +310,7 @@ jobs:
     # !cancelled(): run whenever the matrix finished, even if a sibling
     # profile failed (fail-fast is off) — previously any failed leg skipped
     # the release and that interval's changes were never described in any
-    # release. Whether snowloaded actually pushed is decided by the artifact
+    # release. Whether snow actually pushed is decided by the artifact
     # check below (matrix job outputs are last-writer-wins across legs and
     # can't gate this deterministically). continue-on-error was also dropped
     # so release failures are visible instead of always green.
@@ -324,22 +318,22 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download snowloaded tag artifact
-        # Missing artifact = the snowloaded leg didn't push; skip the release.
+      - name: Download snow tag artifact
+        # Missing artifact = the snow leg didn't push; skip the release.
         id: tag-artifact
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: snowloaded-tag
+          name: snow-tag
 
-      - name: Read snowloaded tag
+      - name: Read snow tag
         id: current
         run: |
           set -euo pipefail
-          if [[ -f snowloaded-tag.txt ]] && [[ "$(cat snowloaded-tag.txt)" =~ ^[0-9]{14}$ ]]; then
-            echo "tag=$(cat snowloaded-tag.txt)" >> "$GITHUB_OUTPUT"
+          if [[ -f snow-tag.txt ]] && [[ "$(cat snow-tag.txt)" =~ ^[0-9]{14}$ ]]; then
+            echo "tag=$(cat snow-tag.txt)" >> "$GITHUB_OUTPUT"
           else
-            echo "::warning::snowloaded leg did not push this run; skipping release"
+            echo "::warning::snow leg did not push this run; skipping release"
           fi
 
       - name: Install ORAS
@@ -352,11 +346,11 @@ jobs:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: echo "${GHCR_PAT}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Resolve previous and current snowloaded tags
+      - name: Resolve previous and current snow tags
         id: versions
         if: steps.current.outputs.tag != ''
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/snowloaded
+          IMAGE: ghcr.io/${{ github.repository_owner }}/snow
           CURRENT: ${{ steps.current.outputs.tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -365,12 +359,12 @@ jobs:
           # past release run failed, the next one diffs across the gap instead
           # of silently losing that interval. Fall back to the registry for
           # first runs / pre-marker releases.
-          previous=$(gh release view --repo "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null | grep -oP '(?<=<!-- snowloaded-tag: )[0-9]{14}(?= -->)' | head -n1 || true)
+          previous=$(gh release view --repo "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null | grep -oP '(?<=<!-- snow-tag: )[0-9]{14}(?= -->)' | head -n1 || true)
           if [[ -z "$previous" ]]; then
             previous=$(oras repo tags "$IMAGE" | grep -E '^[0-9]{14}$' | grep -vx "$CURRENT" | sort -r | head -n1 || true)
           fi
           if [[ -z "$previous" ]]; then
-            echo "::warning::No previous snowloaded tag found; nothing to diff against; skipping release"
+            echo "::warning::No previous snow tag found; nothing to diff against; skipping release"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -387,7 +381,7 @@ jobs:
         if: steps.current.outputs.tag != '' && steps.versions.outputs.skip != 'true'
         uses: frostyard/changelog-generator@7bd6be9ecc9ab8297d73fdc1f1925f727c6bdeb9 # main 2026-04-09
         with:
-          image: ghcr.io/${{ github.repository_owner }}/snowloaded
+          image: ghcr.io/${{ github.repository_owner }}/snow
           previous-tag: ${{ steps.versions.outputs.previous }}
           current-tag: ${{ steps.versions.outputs.current }}
           output-file: changelog.md
@@ -397,7 +391,7 @@ jobs:
         env:
           CURRENT: ${{ steps.versions.outputs.current }}
         run: |
-          printf '\n<!-- snowloaded-tag: %s -->\n' "$CURRENT" >> changelog.md
+          printf '\n<!-- snow-tag: %s -->\n' "$CURRENT" >> changelog.md
 
       - name: Compute release tag and title
         id: release-meta

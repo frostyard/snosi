@@ -47,6 +47,17 @@ fi
 ${SUDO} mv /opt/microsoft/msedge /usr/lib/microsoft-edge
 ${SUDO} rm -rf /opt/microsoft
 ${SUDO} ln -sf /usr/lib/microsoft-edge/microsoft-edge /usr/bin/microsoft-edge-stable
+# Repoint the update-alternatives-managed symlinks at the real binary. The
+# postinst created them pointing into /etc/alternatives, which ships in a
+# profile image's /etc but is STRIPPED from a sysext (sysexts carry only
+# /usr) — so via sysext they dangle on the target system (and the logo-menu
+# gschema override launches /usr/bin/microsoft-edge). Harmless on profiles:
+# same resolution, one hop shorter.
+for alt in microsoft-edge x-www-browser gnome-www-browser; do
+    if [[ -L /usr/bin/$alt ]]; then
+        ${SUDO} ln -sf /usr/lib/microsoft-edge/microsoft-edge /usr/bin/$alt
+    fi
+done
 ${SUDO} mkdir -p /usr/share/icons/hicolor/{16x16/apps,24x24/apps,32x32/apps,48x48/apps,64x64/apps,128x128/apps,256x256/apps}
 for i in "16" "24" "32" "48" "64" "128" "256"; do
         ${SUDO} ln -sf /usr/lib/microsoft-edge/product_logo_$i.png /usr/share/icons/hicolor/${i}x${i}/apps/microsoft-edge.png

@@ -44,11 +44,10 @@ ${SUDO} patchelf --set-rpath '/usr/lib/microsoft-azurevpnclient/lib' /usr/lib/mi
 ${SUDO} patchelf --set-rpath '/usr/lib/microsoft-azurevpnclient/lib' /usr/lib/microsoft-azurevpnclient/lib/libXplatSharedLibrary.so
 
 # Fix executable permissions.
-# NOTE: the capability is lost by the OCI IMAGE packaging path (hence the
-# microsoft-azurevpn-workaround.service the loaded-profile trees ship), but
-# it SURVIVES the sysext path — erofs preserves security.capability xattrs
-# and overlayfs passes them through, so the azurevpn sysext ships neither
-# the workaround service nor its preset.
+# NOTE: the capability SURVIVES the sysext path — erofs preserves
+# security.capability xattrs and overlayfs passes them through. (The retired
+# loaded profiles needed a runtime setcap workaround service because the OCI
+# image packaging path dropped the cap.)
 ${SUDO} /usr/sbin/setcap cap_net_admin+eip /usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient
 
 # Remove unneeded Rsyslog config
