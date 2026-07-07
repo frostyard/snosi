@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Per-user desktop notification for a staged OS update. Ack-gated per staged
+# digest: notifies once per staged update, not per login or path trigger.
+[Unit]
+Description=Notify about a staged OS update pending reboot
+After=graphical-session.target
+ConditionPathExists=/run/snosi/update-staged
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/bootc-update-notify
+
+[Install]
+WantedBy=graphical-session.target

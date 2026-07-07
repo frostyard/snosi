@@ -42,8 +42,21 @@ if [[ "$pulled" == "$booted" ]]; then
     echo "Already running $image ($pulled); nothing to stage."
     exit 0
 fi
+# Semaphore for "reboot pending": consumed by the motd hook
+# (/etc/update-motd.d/86-bootc-update-staged) and the desktop notification
+# (bootc-update-notify.path/.service, user scope). Lives in /run so the
+# reboot that applies the update clears it automatically.
+write_staged_semaphore() {
+    mkdir -p /run/snosi
+    printf 'image=%s\ndigest=%s\nstaged_at=%s\n' \
+        "$image" "$1" "$(date --iso-8601=seconds)" >/run/snosi/update-staged
+}
+
 if [[ "$pulled" == "$staged" ]]; then
     echo "$image ($pulled) is already staged; will apply at next reboot."
+    # Re-assert the semaphore: it is runtime state and this covers updates
+    # staged outside this script (e.g. a manual `bootc upgrade`).
+    write_staged_semaphore "$pulled"
     exit 0
 fi
 if [[ -n "$rollback" && "$pulled" == "$rollback" ]]; then
@@ -81,4 +94,5 @@ fi
 # prune dangling transfer images to keep podman storage bounded.
 podman image prune -f >/dev/null || true
 
+write_staged_semaphore "$pulled"
 echo "Update staged; it will apply at the next reboot."

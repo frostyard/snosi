@@ -1,0 +1,43 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Build the boot-time /etc drift report consumed by the desktop
+# notification (snosi-etc-drift-notify, user scope) and the motd hook.
+#
+# Contents: M/D entries from snosi-etc-diff (local drift vs the booted
+# image) plus, if preset-reconcile recorded any, enablement-manifest
+# entries the new image no longer enables (notify-only; never
+# auto-disabled). The report hash gates notifications: users are notified
+# once per CHANGE of the report, not once per boot.
+set -euo pipefail
+
+STATE_DIR=/var/lib/snosi
+REPORT="$STATE_DIR/etc-drift.report"
+HASH_FILE="$STATE_DIR/etc-drift.hash"
+PRESET_REMOVALS="$STATE_DIR/preset-removals"
+
+mkdir -p "$STATE_DIR"
+
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
+
+/usr/bin/snosi-etc-diff --machine > "$tmp" || true
+
+if [[ -s "$PRESET_REMOVALS" ]]; then
+    while IFS= read -r line; do
+        [[ -n "$line" ]] && printf 'P\t%s\n' "$line" >> "$tmp"
+    done < "$PRESET_REMOVALS"
+fi
+
+if [[ ! -s "$tmp" ]]; then
+    rm -f "$REPORT" "$HASH_FILE"
+    echo "no /etc drift (after ignores)"
+    exit 0
+fi
+
+LC_ALL=C sort -o "$tmp" "$tmp"
+mv "$tmp" "$REPORT"
+trap - EXIT
+chmod 0644 "$REPORT"
+sha256sum "$REPORT" | awk '{print $1}' > "$HASH_FILE"
+chmod 0644 "$HASH_FILE"
+echo "drift report: $(wc -l < "$REPORT") entries ($REPORT)"

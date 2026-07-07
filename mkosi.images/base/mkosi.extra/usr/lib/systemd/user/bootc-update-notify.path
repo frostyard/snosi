@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Fire the staged-update notification when the semaphore appears (update
+# staged mid-session) or changes (a newer image replaced the staged one).
+# PathExists= also triggers immediately if the file is already present when
+# the session starts, so login-while-pending is covered too.
+[Unit]
+Description=Watch for a staged OS update
+
+[Path]
+PathExists=/run/snosi/update-staged
+PathModified=/run/snosi/update-staged
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,7 @@
+#!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# motd hook (headless/server logins): surface the /etc drift report.
+REPORT=/var/lib/snosi/etc-drift.report
+[ -s "$REPORT" ] || exit 0
+count=$(wc -l < "$REPORT")
+printf '\n%s entries of /etc drift vs the booted image — run: sudo snosi-etc-diff\n' "$count"
