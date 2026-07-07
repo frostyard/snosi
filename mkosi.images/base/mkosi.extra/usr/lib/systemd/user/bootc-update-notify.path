@@ -10,5 +10,4 @@ Description=Watch for a staged OS update
 PathExists=/run/snosi/update-staged
 PathModified=/run/snosi/update-staged
 
-[Install]
-WantedBy=graphical-session.target
+# No [Install]: static /usr wants activation (graphical-session.target.wants/).

@@ -14,5 +14,6 @@ ConditionPathExists=/var/lib/preset-enablement.done
 Type=oneshot
 ExecStart=/usr/libexec/preset-reconcile
 
-[Install]
-WantedBy=multi-user.target
+# No [Install]: activated by the static /usr wants symlink
+# (multi-user.target.wants/), so it works identically on fresh installs and
+# installs whose first boot predates this unit. Override with `systemctl mask`.

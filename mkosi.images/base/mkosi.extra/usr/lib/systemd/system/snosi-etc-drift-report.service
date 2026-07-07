@@ -12,5 +12,4 @@ ConditionPathExists=/usr/bin/snosi-etc-diff
 Type=oneshot
 ExecStart=/usr/libexec/snosi-etc-drift-report
 
-[Install]
-WantedBy=multi-user.target
+# No [Install]: static /usr wants activation (see preset-reconcile.service).
