@@ -10,5 +10,5 @@ ConditionPathExists=/run/snosi/update-staged
 Type=oneshot
 ExecStart=/usr/libexec/bootc-update-notify
 
-[Install]
-WantedBy=graphical-session.target
+# No [Install]: triggered solely by bootc-update-notify.path (whose
+# PathExists= also fires at session start when the semaphore already exists).

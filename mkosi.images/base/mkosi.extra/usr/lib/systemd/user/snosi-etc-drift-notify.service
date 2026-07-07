@@ -10,5 +10,4 @@ ConditionPathExists=/var/lib/snosi/etc-drift.report
 Type=oneshot
 ExecStart=/usr/libexec/snosi-etc-drift-notify
 
-[Install]
-WantedBy=graphical-session.target
+# No [Install]: static /usr wants activation (graphical-session.target.wants/).
