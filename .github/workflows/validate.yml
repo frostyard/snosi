@@ -20,10 +20,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install shellcheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
+      - name: Verify shellcheck is available
+        # ShellCheck ships preinstalled on the ubuntu-latest runner image.
+        # Avoid apt here because host-level apt-get update can fail on
+        # unrelated preconfigured third-party mirrors, as seen in #381.
+        run: shellcheck --version
 
       - name: Lint shell scripts
         # Discover scripts by first-line shebang instead of extension globs:
