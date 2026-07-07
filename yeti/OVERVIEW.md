@@ -131,7 +131,7 @@ See [sysexts.md](sysexts.md) for details.
 
 ### Verified Downloads
 
-External resources are pinned in `shared/download/checksums.json` with URL + SHA256. Scripts use `verified_download(key, output_path)` from `shared/download/verified-download.sh`. CI workflow `check-dependencies.yml` detects updates weekly and creates PRs.
+External resources are pinned in `shared/download/checksums.json` with URL + SHA256. Scripts use `verified_download(key, output_path)` from `shared/download/verified-download.sh`. CI workflow `check-dependencies.yml` detects updates weekly and creates PRs. The same workflow also tracks a small set of inline CI/build pins that cannot live in `checksums.json`: `RUST_VERSION`, the chunkah image digest, and the Syft/Cosign workflow version inputs.
 
 Package versions for selected APT-based externals (VSCode, Docker, 1Password, Himmelblau) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
 

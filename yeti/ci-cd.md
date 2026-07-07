@@ -59,7 +59,7 @@ After the matrix completes, a self-contained `release` job runs on main-branch p
 
 **Skip paths:** Missing/invalid snow artifact, no previous tag, or `previous == current` all emit warnings and skip release creation.
 
-### check-dependencies.yml — External Download Updates
+### check-dependencies.yml — External Dependency Updates
 
 **Trigger:** Weekly (Monday 9am UTC), manual dispatch
 
@@ -75,11 +75,18 @@ Checks for updates to resources managed by the verified download system:
 - Microsoft Azure VPN Client
 - Microsoft Edge Stable .deb
 
+Also checks inline CI/build tool pins that are not stored in `checksums.json`:
+
+- chunkah image digest in `shared/outformat/image/chunkah-package.sh`
+- Syft `syft-version` input in `build-images.yml`
+- Cosign `cosign-release` input in `build-images.yml`
+
 **Process:**
-1. Downloads each resource from its upstream URL
-2. Computes SHA256 checksum
-3. Compares against `shared/download/checksums.json`
-4. If changed: updates checksums.json, creates PR
+1. Compares pinned versions/commits/digests against upstream releases, commits, package indexes, or quay.io tag metadata
+2. For verified downloads, downloads the new resource and computes its SHA256 checksum
+3. Updates `shared/download/checksums.json` for checksum-managed downloads
+4. Updates inline tool pins in place with validated `sed` replacements for Rust, chunkah, Syft, and Cosign
+5. If anything changed: creates PR
 
 ### check-packages.yml — APT Package Version Updates
 
