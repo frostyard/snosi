@@ -11,20 +11,17 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 | Image | Kernel | Extras |
 |-------|--------|--------|
 | **snow** | backports | GNOME desktop, podman, flatpak |
-| **snowloaded** | backports | snow + Edge, VSCode, Bitwarden, Incus, Azure VPN, Entra SSO (linux-entra-sso) |
 | **snowfield** | linux-surface | GNOME desktop (Surface devices) |
-| **snowfieldloaded** | linux-surface | snowfield + loaded extras (Edge, VSCode, Bitwarden, Incus, Azure VPN, Entra SSO (linux-entra-sso)) |
 
 ### Server Images (OCI, pushed to ghcr.io)
 
 | Image | Kernel | Extras |
 |-------|--------|--------|
 | **cayo** | backports | Headless server, podman |
-| **cayoloaded** | backports | cayo + Docker CE + Incus (baked in) |
 
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
-1password-cli, code-server, debdev, dev, docker, himmelblau, incus, nix, podman, tailscale
+1password-cli, azurevpn, bitwarden, code-server, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode
 
 ## Architecture
 
@@ -34,7 +31,7 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 mkosi.conf                  # Root config: distribution, dependencies, build settings
 mkosi.version               # Version tag script (date-based, overridden by CI IMAGE_VERSION)
 mkosi.clean                 # Clean script (rm -rf output/*)
-mkosi.images/               # Image definitions (base + 10 sysexts)
+mkosi.images/               # Image definitions (base + 13 sysexts)
   base/                     # Foundation image: systemd, bootc/ostree (frostyard debs), firmware, core utils
     mkosi.extra/            # Base filesystem overlay (dracut, systemd units/timers, sysupdate, tmpfiles, sysusers)
       usr/lib/sysupdate.d/  # .transfer + .feature files for all sysexts
@@ -56,9 +53,9 @@ shared/                     # Reusable fragments composed via Include=
   sysext/postoutput/        # Shared sysext versioning and manifest logic
   manifest/postoutput/      # Image manifest processing
   snow/                     # Snow desktop: build scripts + tree overlay
-  snowloaded/               # Snowloaded: additional tree overlay
   cayo/                     # Cayo server: postinstall scripts + tree overlay
-mkosi.sandbox/etc/apt/      # External APT repo configs + GPG keyrings
+mkosi.sandbox/etc/apt/       # External APT repo configs + GPG keyrings
+mkosi.tools.sandbox/etc/apt/ # APT config for mkosi's ToolsTree=default bootstrap
 .github/workflows/          # CI/CD (build, publish, dependency checks, testing)
 test/                       # Bootc install, update, rollback, and VM smoke test framework
 docs/                       # Design specs, implementation plans, superpowers
@@ -72,7 +69,7 @@ Justfile                    # Build targets (just sysexts, just snow, etc.)
 
 mkosi configs compose via `Include=` directives. Each profile pulls in reusable fragments:
 
-Root `mkosi.conf` lists `base` plus all in-repo sysexts for the sysext publishing build. Each `mkosi.profiles/*/mkosi.conf` starts with `Dependencies=` and then `Dependencies=base` to reset mkosi's append-only collection semantics; profile image builds must not inherit the sysext list. The base image also carries sysupdate registration for the external `emdash` sysext even though that sysext is published from a separate repository.
+Root `mkosi.conf` lists `base` plus all in-repo sysexts for the sysext publishing build. It also sets `ToolsTree=default` and `ToolsTreeSandboxTrees=mkosi.tools.sandbox`; files needed by the tools-tree package manager must go in `mkosi.tools.sandbox/`, while `mkosi.sandbox/` applies to the target image package manager. Both sandbox trees currently carry the same APT retry/timeout hardening. Each `mkosi.profiles/*/mkosi.conf` starts with `Dependencies=` and then `Dependencies=base` to reset mkosi's append-only collection semantics; profile image builds must not inherit the sysext list.
 
 ```
 Profile (e.g., snow/mkosi.conf)
@@ -87,10 +84,7 @@ Profile (e.g., snow/mkosi.conf)
 └── PostOutputScripts: mkosi.postoutput             # Post-output scripts
 ```
 
-The "loaded" variants extend their base profile by adding more Include directives, ExtraTrees, and PostInstallationScripts:
-
-- **snowloaded/snowfieldloaded** add Edge, VS Code, Bitwarden, Azure VPN, Incus, and Entra SSO (`linux-entra-sso`). Incus is on-image here through `shared/packages/virt`, not the separate Incus sysext.
-- **cayoloaded** adds Docker CE on-image via `docker-onimage` and Incus on-image via `virt-base`.
+The app-bundling "loaded" variants (snowloaded, snowfieldloaded, cayoloaded) were retired in 2026-07: every app they baked in (Edge, VS Code, Bitwarden, Azure VPN, Incus, Docker) is delivered as a sysext instead. The shared `packages/{edge,vscode,bitwarden,azurevpn}` fragments now serve only the sysext builds.
 
 ### Script Pipeline
 
@@ -129,7 +123,7 @@ Sysexts overlay `/usr` at runtime. They cannot modify `/etc` or `/var` directly.
 - Needs matching `.transfer` + `.feature` files in base image's `usr/lib/sysupdate.d/`
 - Configs needed in `/etc` go through `/usr/share/factory/etc` + systemd-tmpfiles
 
-The base image also registers `emdash.transfer` and `emdash.feature`; keep those files even though `mkosi.conf` does not build an `emdash` image in this repository.
+Every sysext built in this repository has a matching pair here.
 
 See [sysexts.md](sysexts.md) for details.
 
@@ -141,7 +135,7 @@ External resources are pinned in `shared/download/checksums.json` with URL + SHA
 
 Package versions for selected APT-based externals (VSCode, Docker, 1Password, Himmelblau) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
 
-Current checksum-managed downloads are Bitwarden, Homebrew install script, code-server, Surface secure boot certificate, Hotedge, Logomenu, Bazaar Companion, Azure VPN, and Microsoft Edge. Current APT version tracking covers `code`, `docker-ce`, `1password-cli`, and `himmelblau`; Edge is checksum-managed because the build installs a patched downloaded `.deb`. `code-server` is a sysext exception: it is installed by `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` + `dpkg -i`, while `KEYPACKAGE=code-server` still drives version extraction from the merged dpkg database.
+Current checksum-managed downloads are Bitwarden, Homebrew install script, code-server, Surface secure boot certificate, Hotedge, Logomenu, Bazaar Companion, Azure VPN, and Microsoft Edge. Current APT version tracking covers `code`, `docker-ce`, and `1password-cli`; Edge is checksum-managed because the build installs a patched downloaded `.deb`. `code-server` is a sysext exception: it is installed by `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` + `dpkg -i`, while `KEYPACKAGE=code-server` still drives version extraction from the merged dpkg database.
 
 ### User Service Enablement in Chroot
 
@@ -185,13 +179,10 @@ Use build-time enablement/presets for desired service state. For run-once runtim
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 10 sysexts
+just sysexts            # Build base + all 13 sysexts
 just snow               # Build snow desktop
-just snowloaded         # Build snowloaded variant
 just snowfield          # Build snowfield (Surface)
-just snowfieldloaded    # Build snowfieldloaded variant
 just cayo               # Build cayo server
-just cayoloaded         # Build cayoloaded variant
 just clean              # Remove build artifacts
 just test-install       # Run bootc install test
 just run-qemu           # Run image in QEMU
@@ -212,13 +203,12 @@ All `just` targets run `mkosi clean` first (clean build every time).
 
 ### External APT Repositories
 
-Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
+Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GPG keyrings. APT retry and timeout settings live in both `mkosi.sandbox/etc/apt/apt.conf.d/80-snosi-network-retries.conf` and `mkosi.tools.sandbox/etc/apt/apt.conf.d/80-snosi-network-retries.conf`; the latter is required because mkosi's default tools tree does not inherit the target-image sandbox.
 
 - 1Password — CLI tool
 - Debian Backports — Newer kernel + firmware + mesa
 - Debian Griffo.io (debian.griffo.io) — Additional Debian packages
 - Docker (docker.com) — Docker CE packages
-- Himmelblau (packages.himmelblau-idm.org) — Entra ID authentication (nightly)
 - Frostyard (repository.frostyard.org) — Custom packages: bootc, libostree-1-1 (built by frostyard/bootc-debian), nbc, chairlift, updex, igloo, intuneme, snow-first-setup.
 - Linux Surface (pkg.surfacelinux.com) — Surface kernel + tools
 - Microsoft Edge (packages.microsoft.com) — Edge browser

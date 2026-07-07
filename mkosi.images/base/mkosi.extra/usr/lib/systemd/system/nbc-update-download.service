@@ -2,6 +2,12 @@
 Description=NBC Update Download
 After=network-online.target
 Wants=network-online.target
+# nbc only manages repart-style A/B installs. On bootc/composefs installs
+# (composefs=<digest> on the kernel command line) nbc cannot determine the
+# active root partition and exits 1, leaving a permanently failed unit and a
+# degraded system state (frostyard/nbc#139). Skip on composefs boots;
+# bootc-update-stage owns updates there.
+ConditionKernelCommandLine=!composefs
 
 [Service]
 Type=oneshot

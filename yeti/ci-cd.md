@@ -6,7 +6,7 @@
 
 **Trigger:** Push/PR to main, manual dispatch
 
-Builds the base image and all 10 sysexts, publishes to the Frostyard repository on Cloudflare R2.
+Builds the base image and all 13 sysexts, publishes to the Frostyard repository on Cloudflare R2.
 
 **Steps:**
 1. Aggressive cleanup of runner (removes JDK, .NET, Android SDK, etc. to free disk space)
@@ -30,7 +30,7 @@ path in the image's `required-paths.txt` is missing from the buildroot.
 
 **Trigger:** repository_dispatch type `build`, push/PR to main, manual dispatch
 
-Matrix build of all 6 profiles (snow, snowloaded, snowfield, snowfieldloaded, cayo, cayoloaded).
+Matrix build of all 3 profiles (snow, snowfield, cayo).
 
 Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependency=base`). This prevents the root sysext dependency list from being appended into every profile build. The sysext publishing set is built once by `build.yml`; profile image jobs build only `base` plus the selected main image.
 
@@ -51,13 +51,13 @@ Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependen
 
 #### release job — Automated GitHub Releases
 
-After the matrix completes, a self-contained `release` job runs on main-branch pushes only and creates a GitHub Release summarising what changed in the build. It uses `!cancelled()` so it can still run after a matrix leg fails, but only proceeds when the `snowloaded` leg uploaded its tag artifact. Release failures are visible; the job is not `continue-on-error`.
+After the matrix completes, a self-contained `release` job runs on main-branch pushes only and creates a GitHub Release summarising what changed in the build. It uses `!cancelled()` so it can still run after a matrix leg fails, but only proceeds when the `snow` leg uploaded its tag artifact. Release failures are visible; the job is not `continue-on-error`.
 
-**Resolution:** The `snowloaded` matrix leg writes the just-pushed timestamp tag to a short-lived artifact. The release job reads that as `current`, then prefers the previous tag recorded in the latest GitHub Release body (`<!-- snowloaded-tag: ... -->`). If no release marker exists, it falls back to `oras repo tags ghcr.io/<owner>/snowloaded` and selects the newest other timestamp tag. It then runs `frostyard/changelog-generator` with those two exact tags to produce the diff. Only `snowloaded` is diffed; the other five profiles build and push unchanged and are not referenced in the release.
+**Resolution:** The `snow` matrix leg writes the just-pushed timestamp tag to a short-lived artifact. The release job reads that as `current`, then prefers the previous tag recorded in the latest GitHub Release body (`<!-- snow-tag: ... -->`). If no release marker exists, it falls back to `oras repo tags ghcr.io/<owner>/snow` and selects the newest other timestamp tag. It then runs `frostyard/changelog-generator` with those two exact tags to produce the diff. Only `snow` is diffed; the other profiles build and push unchanged and are not referenced in the release.
 
-**Release tag scheme:** `YYYY-MM-DD.N` (daily counter, e.g. `2026-04-09.1`). The release title is `Build YYYY-MM-DD HH:MM:SS UTC`. The body comes from the generated changelog plus the hidden `snowloaded-tag` marker used by future releases.
+**Release tag scheme:** `YYYY-MM-DD.N` (daily counter, e.g. `2026-04-09.1`). The release title is `Build YYYY-MM-DD HH:MM:SS UTC`. The body comes from the generated changelog plus the hidden `snow-tag` marker used by future releases.
 
-**Skip paths:** Missing/invalid snowloaded artifact, no previous tag, or `previous == current` all emit warnings and skip release creation.
+**Skip paths:** Missing/invalid snow artifact, no previous tag, or `previous == current` all emit warnings and skip release creation.
 
 ### check-dependencies.yml — External Dependency Updates
 
@@ -94,7 +94,6 @@ Also checks inline CI/build tool pins that are not stored in `checksums.json`:
 
 Checks for version updates to external APT packages:
 
-- himmelblau
 - code (VS Code)
 - docker-ce
 - 1password-cli

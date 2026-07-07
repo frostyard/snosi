@@ -1,0 +1,34 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Desktop notification for /etc drift (user scope). Fires once per CHANGE
+# of the drift report, gated by comparing the report hash against the
+# per-user acknowledged hash — never once per boot.
+set -euo pipefail
+
+REPORT=/var/lib/snosi/etc-drift.report
+HASH_FILE=/var/lib/snosi/etc-drift.hash
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/snosi"
+ACK="$STATE_DIR/etc-drift.ack"
+
+[[ -s "$REPORT" && -s "$HASH_FILE" ]] || exit 0
+hash=$(cat "$HASH_FILE")
+[[ "$hash" == "$(cat "$ACK" 2>/dev/null || true)" ]] && exit 0
+
+command -v notify-send >/dev/null || exit 0
+
+modified=$(grep -c $'^M\t' "$REPORT" || true)
+deleted=$(grep -c $'^D\t' "$REPORT" || true)
+policy=$(grep -c $'^P\t' "$REPORT" || true)
+
+parts=()
+[[ "$modified" -gt 0 ]] && parts+=("$modified locally modified")
+[[ "$deleted" -gt 0 ]] && parts+=("$deleted deleted")
+[[ "$policy" -gt 0 ]] && parts+=("$policy enablement policy changes")
+summary=$(IFS='; '; echo "${parts[*]}")
+
+notify-send --app-name="Snow Linux" --icon=dialog-information \
+    "System configuration has drifted from the image" \
+    "$summary. Run 'sudo snosi-etc-diff' to review; see /var/lib/snosi/etc-drift.report for details."
+
+mkdir -p "$STATE_DIR"
+echo "$hash" > "$ACK"

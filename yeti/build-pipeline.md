@@ -32,7 +32,7 @@ bootc and ostree install as regular APT packages from the Frostyard repository (
 - **Runtime lib pinning:** the debs declare only a partial `Depends` list; base `Packages=` keeps the full set of runtime link deps explicit (`libfuse3-4`, `libsoup-3.0-0`, `liblzma5`, `libzstd1`, `libmount1`, `libselinux1`, `libcom-err2`, `libext2fs2t64`, plus the declared ones). Do not remove them from `Packages=` just because apt does not demand them.
 - **History (until 2026-07):** both were compiled from source during the base image build via `shared/bootc/build/bootc.chroot` (BuildScript + `BuildPackages=` overlay deps + rustup toolchain + ostree double-install + stub-deb dpkg registration in `shared/bootc/postinst/bootc-register.chroot`). All of that machinery was removed when the deb path landed; see git history if the in-tree build ever needs resurrecting.
 
-**Server profiles (cayo/cayoloaded):** Only `brew.chroot` (no desktop build scripts).
+**Server profile (cayo):** Only `brew.chroot` (no desktop build scripts).
 
 ### 2. PostInstallationScripts (after packages)
 
@@ -51,8 +51,29 @@ The base overlay ships `bootc-update-stage.service` and `bootc-update-stage.time
 - exits cleanly when the system is not bootc-managed,
 - prunes stale transfer images before pulling to avoid `/var` exhaustion,
 - pulls the followed image with `podman` so containers policy is enforced,
-- stages it with `bootc switch --transport containers-storage`, and
+- stages it with `bootc upgrade` when the spec already follows
+  `containers-storage` (the steady state after the first staged update) or
+  `bootc switch --transport containers-storage` otherwise — switch to an
+  identical spec is a SILENT no-op in bootc <= 1.16.3 and left installs
+  unable to take a second update (root-caused 2026-07-06),
+- verifies the staged digest equals the pulled digest (fails loudly on any
+  future silent no-op),
+- writes the reboot-pending semaphore `/run/snosi/update-staged`
+  (image/digest/timestamp; also re-asserted when an update is found already
+  staged, covering manual `bootc upgrade`; /run placement means the applying
+  reboot clears it), and
 - prunes dangling transfer images after the switch.
+
+Two consumers surface the pending reboot:
+- `/etc/update-motd.d/86-bootc-update-staged` — SSH/console logins (all
+  images, including headless cayo).
+- `bootc-update-notify.path` + `.service` (user scope) with
+  `/usr/libexec/bootc-update-notify` — desktop notification. The path unit
+  fires when the semaphore appears mid-session or is modified (newer image
+  re-staged), and PathExists= also triggers at session start when the file
+  already exists; the helper is ack-gated per staged digest (same pattern as
+  snosi-etc-drift-notify) so users see one notification per staged update,
+  not one per login or trigger.
 
 This mirrors the previous nbc-style download-only semantics: the staged deployment applies at the next normal reboot. The podman transfer path is also the current workaround for bootc registry-transport composefs pull failures noted in `docs/plans/2026-07-03-bootc-update-validation-plan.md`.
 
@@ -76,7 +97,7 @@ Both snow and cayo postinstall scripts source this shared script after setting `
 **Server postinstall:**
 - `shared/cayo/scripts/postinstall/cayo.postinst.chroot` — Sources `common-postinst.sh` with OS_PRETTY_NAME="Cayo Linux" (no additional steps beyond common logic)
 
-**Loaded variant postinstall scripts (desktop loaded — snowloaded/snowfieldloaded):**
+**App package-set postinstall scripts (now consumed only by the app sysext builds — the loaded variants that used them were retired 2026-07):**
 
 | Script | Location | Purpose |
 |--------|----------|---------|
@@ -85,7 +106,6 @@ Both snow and cayo postinstall scripts source this shared script after setting `
 | `bitwarden.chroot` | `shared/packages/bitwarden/mkosi.postinst.d/` | Downloads Bitwarden .deb via `verified_download()`, relocates `/opt/Bitwarden` → `/usr/lib/Bitwarden`, sets SUID on chrome-sandbox |
 | `vscode.chroot` | `shared/packages/vscode/mkosi.postinst.d/` | Patches desktop entry to add inode/directory MIME type |
 
-**Server loaded variant (cayoloaded):** No additional postinstall scripts beyond the base cayo postinstall. Docker CE and Incus are baked into the image via `docker-onimage` and `virt-base` package sets with their tree overlays providing systemd presets, sysusers, and tmpfiles.
 
 ### 3. FinalizeScripts (pre-output)
 
@@ -104,7 +124,7 @@ Prepare the image for output. Run after postinstall, before the image format is 
 
 **Sysext finalize** (per-sysext `mkosi.finalize` scripts):
 - Captures `/etc` configs to `/usr/share/factory/etc/` for tmpfiles-based injection at boot
-- Used by: docker, himmelblau, incus, nix, tailscale
+- Used by: docker, incus, nix, tailscale
 - Capture ONLY the specific paths referenced by the sysext's tmpfiles.d `C` directives — never all of `/etc`. With `Overlay=yes` the buildroot `/etc` is the merged base view, so a full capture ships the base image's `/etc/shadow` and SSH host keys in the published sysext (frostyard/snosi#282)
 
 ### 4. PostOutputScripts (after image creation)
@@ -127,6 +147,8 @@ Run after the image directory/file is created. Handle manifest processing and pa
 After `mkosi build` completes, the output directory contains all images, sysexts, and manifests flat in `output/`. Two root scripts organize them for publishing:
 
 Root `mkosi.conf` intentionally lists `base` plus all sysexts in `Dependencies=` so plain `mkosi build` and `just sysexts` produce the sysext publishing set. Profile configs clear that inherited collection with an empty `Dependencies=` assignment and then add `Dependencies=base`; without the reset, mkosi appends list settings and profile builds would rebuild every sysext. CI enforces this with `check-profile-dependencies.sh`.
+
+Root `mkosi.conf` also configures mkosi's build tooling bootstrap with `ToolsTree=default` and `ToolsTreeSandboxTrees=mkosi.tools.sandbox`. Keep package-manager settings for that tools tree in `mkosi.tools.sandbox/`; the regular `mkosi.sandbox/` tree only affects target-image APT operations. Network hardening that should protect both surfaces, such as APT retries/timeouts, needs matching files in both trees.
 
 ### sysextmv.sh
 
@@ -234,7 +256,7 @@ Provides `verified_download(key, output_path)`:
 
 ### package-versions.json
 
-Tracks APT-based external package versions (VSCode `code`, `docker-ce`, `1password-cli`, `himmelblau`) separately from download checksums. Updated daily by `check-packages.yml`. Edge is NOT tracked here — it is pinned via `checksums.json` and updated by `check-dependencies.yml`.
+Tracks APT-based external package versions (VSCode `code`, `docker-ce`, `1password-cli`) separately from download checksums. Updated daily by `check-packages.yml`. Edge is NOT tracked here — it is pinned via `checksums.json` and updated by `check-dependencies.yml`.
 
 ### update-checksums.sh
 
@@ -267,24 +289,12 @@ Server configuration overlay:
 - systemd mounts and presets (no desktop services)
 - sysusers/tmpfiles for avahi, dnsmasq, docker, incus
 
-### shared/snowloaded/tree/
+## /etc Drift Tooling and Preset Reconciliation (base mkosi.extra)
 
-Single GLib schema override for "loaded" variant defaults.
+- `usr/bin/snosi-etc-diff` — root CLI; bind-mounts `/` (submount-free) to reach the pristine composefs image `/etc` under the writable `/etc` bind mount, then reports `M`(odified)/`D`(eleted) — and `A`(dded) with `--added` — relative to it. `--machine` emits tab-separated lines. With explicit `PATH...` arguments it shows the *actual* difference (unified diff for regular files, symlink targets, permission/ownership lines; ignore globs do not apply), and `--restore PATH...` copies the pristine image version back over the live `/etc` (content+perms+ownership; refuses paths the image doesn't ship and live-dir/image-file type mismatches). The human list mode ends with a resolution footer (inspect / accept-via-ignore / revert) so the report is actionable, not just a path list. Ignore globs: `usr/lib/snosi/etc-diff.ignore` (image defaults, tuned against a live install) plus optional `/etc/snosi/etc-diff.ignore`.
+- `preset-reconcile.service` → `usr/libexec/preset-reconcile` — closes the "new image preset policy never reaches existing installs" gap: diffs the image's enablement manifest against `/var/lib/snosi/enablement-manifest.applied`; entries ADDED to policy are preset (creates-only; masked units skipped, so admin masks win; admin disables of pre-existing policy are never re-applied), entries REMOVED are written to `/var/lib/snosi/preset-removals` for the drift report (never auto-disabled), then the applied snapshot is updated. Gated on the enablement marker so first boot/migration initialize the model first. Newly enabled units take effect at the next boot (runs after the boot transaction on purpose).
+- `snosi-etc-drift-report.service` → `usr/libexec/snosi-etc-drift-report` — per boot, writes `M`/`D` diff entries plus `P`(olicy removal) lines to `/var/lib/snosi/etc-drift.report` with a sha256 in `etc-drift.hash`; removes both when clean.
+- `snosi-etc-drift-notify.service` (user scope, `graphical-session.target`) → one `notify-send` per report *change*, gated by comparing the report hash against `$XDG_STATE_HOME/snosi/etc-drift.ack`.
+- `etc/update-motd.d/85-snosi-etc-drift` — headless equivalent: one summary line at login when the report is non-empty.
 
-### shared/packages/virt-base/tree/
-
-Incus on-image enablement overlay (used by cayoloaded and snowloaded/snowfieldloaded):
-- systemd preset: `40-incus.preset` (enables incus services)
-- sysusers.d: `dnsmasq.conf`, `rdma.conf`
-
-### shared/packages/docker-onimage/tree/
-
-Docker CE on-image enablement overlay (used by cayoloaded):
-- systemd preset: enables docker services
-- sysusers.d: Docker user/group definitions
-- tmpfiles.d: Runtime directory setup
-
-### shared/packages/azurevpn/tree/
-
-Azure VPN capability fixes overlay (used by snowloaded/snowfieldloaded):
-- systemd preset and workaround service for Azure VPN client capabilities
+All verified functionally on a live spike-image install (2026-07-05): diff correctly isolated one real drift entry (`gdm3/daemon.conf`) after ignore tuning; reconciler initialize/add/remove/steady paths all exercised (preset recreated a removed enablement symlink; removals recorded, never disabled).

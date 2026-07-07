@@ -12,21 +12,21 @@ The project produces:
 | Image               | Description                                                     | Output Format |
 | ------------------- | --------------------------------------------------------------- | ------------- |
 | **snow**            | GNOME desktop with backports kernel                             | directory → OCI (buildah/chunkah) |
-| **snowloaded**      | snow + Edge + VSCode + Bitwarden + Incus + Azure VPN            | directory → OCI (buildah/chunkah) |
 | **snowfield**       | snow with linux-surface kernel for Surface devices              | directory → OCI (buildah/chunkah) |
-| **snowfieldloaded** | snowfield + Edge + VSCode + Bitwarden + Incus + Azure VPN       | directory → OCI (buildah/chunkah) |
 | **cayo**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
-| **cayoloaded**      | cayo + Docker + Incus (baked in)                                | directory → OCI (buildah/chunkah) |
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
+| **azurevpn**        | Microsoft Azure VPN client                                      | sysext        |
+| **bitwarden**       | Bitwarden password manager desktop application                  | sysext        |
 | **code-server**     | code-server (VS Code in the browser)                            | sysext        |
 | **debdev**          | Debian development tools (debootstrap, distro-info)             | sysext        |
 | **dev**             | Build essentials, Python, cmake, valgrind, gdb                  | sysext        |
 | **docker**          | Docker CE container runtime                                     | sysext        |
-| **himmelblau**      | Himmelblau Entra ID authentication                              | sysext        |
+| **edge**            | Microsoft Edge browser                                          | sysext        |
 | **incus**           | Incus container/VM manager                                      | sysext        |
 | **nix**             | Nix package manager                                             | sysext        |
 | **podman**          | Podman + Distrobox                                              | sysext        |
 | **tailscale**       | Tailscale VPN client                                            | sysext        |
+| **vscode**          | Visual Studio Code desktop application                          | sysext        |
 
 ## Architecture
 
@@ -38,11 +38,9 @@ The project produces:
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1pass code-server debdev dev docker himmelblau incus nix podman tailscale │         │
+  1pass azurevpn bitwarden code-server debdev dev docker edge incus nix podman tailscale vscode │         │
                                      snow            cayo
-                               ┌──────┼──────┐        │
-                               │      │      │    cayoloaded
-                          snowloaded  │  snowfieldloaded
+                                      │
                                   snowfield
 ```
 
@@ -68,7 +66,6 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | **debdev**        | debootstrap, distro-info, archive keyrings    | [mkosi.images/debdev/mkosi.conf](mkosi.images/debdev/mkosi.conf)               |
 | **dev**           | build-essential, cmake, Python, valgrind, gdb | [mkosi.images/dev/mkosi.conf](mkosi.images/dev/mkosi.conf)                     |
 | **docker**        | Docker CE, containerd, buildx, compose        | [mkosi.images/docker/mkosi.conf](mkosi.images/docker/mkosi.conf)               |
-| **himmelblau**    | Himmelblau Entra ID auth, PAM/NSS modules     | [mkosi.images/himmelblau/mkosi.conf](mkosi.images/himmelblau/mkosi.conf)       |
 | **incus**         | Incus, QEMU/KVM, OVMF, virt-viewer            | [mkosi.images/incus/mkosi.conf](mkosi.images/incus/mkosi.conf)                 |
 | **nix**           | Nix package manager, systemd integration      | [mkosi.images/nix/mkosi.conf](mkosi.images/nix/mkosi.conf)                     |
 | **podman**        | Podman, Distrobox, buildah, crun              | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf)               |
@@ -83,11 +80,8 @@ Profiles in `mkosi.profiles/` define complete image variants by composing shared
 ```
 mkosi.profiles/
 ├── cayo/           ← Headless server + podman
-├── cayoloaded/     ← cayo + Docker + Incus
 ├── snow/           ← GNOME desktop + backports kernel
-├── snowfield/      ← GNOME desktop + Surface kernel
-├── snowloaded/     ← snow + extra packages (Edge, Incus)
-└── snowfieldloaded/← snowfield + extra packages
+└── snowfield/      ← GNOME desktop + Surface kernel
 ```
 
 ### Shared Components
@@ -122,7 +116,6 @@ shared/
 │   ├── azurevpn/mkosi.conf    ← Azure VPN Client
 │   ├── vscode/mkosi.conf      ← Visual Studio Code
 │   ├── bitwarden/mkosi.conf   ← Bitwarden password manager
-│   ├── entra-sso/mkosi.conf   ← linux-entra-sso browser SSO
 │   ├── docker-onimage/        ← Docker CE for baked-in images
 │   ├── virt-base/mkosi.conf   ← Headless Incus virtualization
 │   └── virt/mkosi.conf        ← Incus virtualization
@@ -139,7 +132,6 @@ shared/
 │   └── scripts/
 │       ├── build/             ← Build-time scripts (hotedge, logomenu, bazaar, surface-cert)
 │       └── postinstall/       ← Post-installation customizations
-└── snowloaded/                ← Loaded-variant tree overlay
 ```
 
 ### Example: snow Profile
@@ -187,9 +179,6 @@ Include=%D/shared/outformat/image/mkosi.conf    # OCI output format
 | **snow**            | backports | —                              | `kernel/backports`, `packages/snow`, `outformat/image`                        |
 | **snowfield**       | surface   | —                              | `kernel/surface`, `packages/snow`, `outformat/image`                          |
 | **cayo**            | backports | —                              | `kernel/backports`, `packages/cayo`, `outformat/image`                        |
-| **cayoloaded**      | backports | Docker, Incus                  | + `packages/docker-onimage`, `packages/virt-base`                           |
-| **snowloaded**      | backports | Azure VPN, Edge, VSCode, Bitwarden, Incus, Entra SSO | + `packages/edge`, `packages/azurevpn`, `packages/vscode`, `packages/bitwarden`, `packages/virt`, `packages/entra-sso` |
-| **snowfieldloaded** | surface   | Azure VPN, Edge, VSCode, Bitwarden, Incus, Entra SSO | + `packages/edge`, `packages/azurevpn`, `packages/vscode`, `packages/bitwarden`, `packages/virt`, `packages/entra-sso` |
 
 ## Building Images
 
@@ -220,15 +209,8 @@ just snow
 # Build snowfield (Surface devices)
 just snowfield
 
-# Build loaded variants
-just snowloaded
-just snowfieldloaded
-
 # Build cayo server image
 just cayo
-
-# Build cayo with docker + incus
-just cayoloaded
 
 # Clean build artifacts
 just clean
@@ -268,7 +250,6 @@ output/
 External repositories are configured in `mkosi.sandbox/etc/apt/` for packages not in Debian:
 
 - **Docker**: docker.com official repository
-- **Himmelblau**: Himmelblau Entra ID authentication (nightly)
 - **Incus**: Debian trixie (no external repo)
 - **linux-surface**: Surface kernel packages
 - **Frostyard**: Custom packages (nbc, chairlift, updex)
@@ -284,7 +265,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all sysexts (1password-cli, code-server, debdev, dev, docker, himmelblau, incus, nix, podman, tailscale)
+1. Builds the base image and all sysexts (1password-cli, azurevpn, bitwarden, code-server, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode)
 2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Uploads package manifests for version tracking
 
@@ -292,25 +273,25 @@ Triggered on push/PR to main, this workflow:
 
 Triggered on push/PR to main or via repository dispatch, this workflow:
 
-1. Runs a matrix build of all 6 profiles (cayo, cayoloaded, snow, snowloaded, snowfield, snowfieldloaded)
+1. Runs a matrix build of all 3 profiles (cayo, snow, snowfield)
 2. Resets mkosi dependencies to `base` for each profile build so sysexts are not rebuilt in every matrix job
 3. Pushes OCI images to GitHub Container Registry (ghcr.io) with version and `latest` tags
 4. Generates SBOMs (Syft), attaches them via ORAS, and signs both images and SBOM artifacts with Cosign
 5. Uploads manifests to R2 for tracking
-6. Creates a GitHub Release (main-branch pushes only) with a changelog generated by diffing the new `snowloaded` image against the previously published one — see [Releases](https://github.com/frostyard/snosi/releases)
+6. Creates a GitHub Release (main-branch pushes only) with a changelog generated by diffing the new `snow` image against the previously published one — see [Releases](https://github.com/frostyard/snosi/releases)
 
 ### Verifying image signatures
 
 All published images are signed with a fixed keypair. The public key is committed at [`cosign.pub`](cosign.pub); verify any image with cosign (v2.6.x is the tested release — cosign v3 currently trips over the co-published GitHub provenance attestations when doing key verification):
 
 ```bash
-cosign verify --key cosign.pub ghcr.io/frostyard/snowloaded:latest
+cosign verify --key cosign.pub ghcr.io/frostyard/snow:latest
 ```
 
 Images also carry GitHub build-provenance attestations, independently verifiable with:
 
 ```bash
-gh attestation verify oci://ghcr.io/frostyard/snowloaded:latest --owner frostyard
+gh attestation verify oci://ghcr.io/frostyard/snow:latest --owner frostyard
 ```
 
 The `test-install.yml` workflow verifies the signature before every installation test.
@@ -442,7 +423,7 @@ sed -i 's|/opt/microsoft/msedge/microsoft-edge|/usr/lib/microsoft-edge/microsoft
     /usr/share/gnome-control-center/default-apps/microsoft-edge.xml
 ```
 
-**Profile usage** ([snowloaded/mkosi.conf](mkosi.profiles/snowloaded/mkosi.conf)):
+**Sysext usage** ([mkosi.images/edge/mkosi.conf](mkosi.images/edge/mkosi.conf)):
 
 ```ini
 [Content]

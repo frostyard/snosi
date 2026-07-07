@@ -1,0 +1,9 @@
+#!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# motd hook (headless/server logins): surface a staged OS update. The
+# semaphore is written by /usr/libexec/bootc-update-stage and lives in /run,
+# so the reboot that applies the update clears it.
+SEM=/run/snosi/update-staged
+[ -s "$SEM" ] || exit 0
+digest=$(sed -n 's/^digest=sha256:\(.\{12\}\).*/\1/p' "$SEM")
+printf '\nA system update is staged (%s) and will apply at the next reboot.\n' "${digest:-unknown}"

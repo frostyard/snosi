@@ -18,15 +18,18 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | Sysext | KEYPACKAGE | Description |
 |--------|------------|-------------|
 | **1password-cli** | 1password-cli | 1Password CLI tool |
+| **azurevpn** | microsoft-azurevpnclient | Microsoft Azure VPN client (pinned .deb via verified_download, relocated from /opt) |
+| **bitwarden** | bitwarden | Bitwarden desktop app (pinned .deb via verified_download, relocated from /opt) |
 | **code-server** | code-server | code-server (VS Code in the browser) — downloaded via `verified_download()` from coder/code-server GitHub releases |
 | **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test, archive keyrings) |
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
-| **himmelblau** | himmelblau | Entra ID authentication (himmelblau, pam-himmelblau, nss-himmelblau) |
+| **edge** | microsoft-edge-stable | Microsoft Edge browser (pinned .deb via verified_download, relocated from /opt) |
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF, virt-viewer |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
 | **tailscale** | tailscale | Tailscale VPN client |
+| **vscode** | code | Visual Studio Code desktop application (from packages.microsoft.com) |
 
 ## Sysext Configuration Pattern
 
@@ -47,7 +50,7 @@ Format=sysext
 Bootable=no
 BaseTrees=%O/base
 PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh
-FinalizeScripts=%D/shared/sysext/finalize/sysext-required-paths.sh
+FinalizeScripts=%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh
 
 Packages=<package-list>
 
@@ -83,11 +86,22 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server` is the current exception to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database.
+`code-server`, `edge`, `bitwarden`, and `azurevpn` are the current exceptions to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file Exec rewrite, deps via `Include=`.
 
 ## Sysext-Specific Extra Files
 
 Some sysexts include extra files via `mkosi.extra/`:
+
+### azurevpn
+- No `mkosi.extra/` — the fragment + postinst live in `shared/packages/azurevpn/`
+- Ships `cap_net_admin` as a real file capability: erofs preserves `security.capability`, so the sysext deliberately does NOT carry the loaded profiles' `microsoft-azurevpn-workaround.service` (that service exists only because the OCI image packaging path drops caps)
+- Desktop entry uses an absolute-path `Icon=` — no icon theme/cache involvement
+- The postinst purges `patchelf` after the rpath fixes so the build tool ships nowhere
+
+### bitwarden
+- No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/bitwarden/`)
+- Desktop app with no systemd service: no preset, no `Upholds=` drop-in
+- Ships hicolor icons — depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below)
 
 ### code-server
 - `mkosi.postinst.chroot` — Downloads code-server .deb via `verified_download()`, installs with `dpkg -i`. Upstream package targets `/usr/lib/code-server` with `/usr/bin/code-server` symlink and systemd units under `/usr/lib/systemd/`, so no relocation is required.
@@ -102,14 +116,11 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/sysusers.d/docker.conf` — Docker user/group definitions
 - `usr/lib/tmpfiles.d/docker.conf` — Factory config injection
 
-### himmelblau
-- `mkosi.postinst.chroot` — Post-install customization hook (currently minimal)
-- `mkosi.finalize` — Captures `/etc/himmelblau` to `/usr/share/factory/etc/` for tmpfiles injection at boot
-- `usr/lib/himmelblau/himmelblau-sysext-setup` — Runtime PAM/NSS injection script (idempotent, runs at boot): adds `himmelblau` to nsswitch.conf passwd/group/shadow, runs `pam-auth-update --enable himmelblau`
-- `usr/lib/systemd/system/himmelblau-sysext-setup.service` — Oneshot service to run setup script (conditioned on `/run/himmelblau-sysext-setup.done`)
-- `usr/lib/systemd/system-preset/40-himmelblau.preset` — Enable himmelblaud and himmelblau-sysext-setup services
-- `usr/lib/systemd/system/multi-user.target.d/10-himmelblau.conf` — `Upholds=` drop-in for reliable boot activation (himmelblaud upholds himmelblaud-tasks itself)
-- `usr/lib/tmpfiles.d/himmelblau.conf` — Config injection from `/usr/share/factory/etc/`
+### edge
+- No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/edge/`)
+- Desktop app with no systemd service: no preset, no `Upholds=` drop-in
+- The postinst repoints the update-alternatives symlinks (`/usr/bin/microsoft-edge`, `x-www-browser`, `gnome-www-browser`) at the real binary: their `/etc/alternatives` targets ship in profile images but are stripped from sysexts, so they would dangle on target systems
+- Its icons are hicolor symlinks created by the relocation script — visibility depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below), so on images that still ship `icon-theme.cache` the Edge icon renders generic
 
 ### incus
 - `mkosi.finalize` — Captures the tmpfiles-referenced `/etc` paths to factory defaults
@@ -133,6 +144,11 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/systemd/system-preset/40-tailscale.preset` — Enable tailscaled
 - `usr/lib/systemd/system/multi-user.target.d/10-tailscale.conf` — `Upholds=tailscaled.service` drop-in for reliable boot activation
 - `usr/lib/tmpfiles.d/tailscale.conf` — Factory config injection
+
+### vscode
+- No `mkosi.extra/` — the Microsoft `code` deb installs natively under `/usr` (`/usr/share/code` + `/usr/bin/code` symlink), so no relocation is needed
+- Reuses `shared/packages/vscode/mkosi.postinst.d/vscode.chroot` to add `inode/directory` to code.desktop's MimeType
+- Desktop app with no systemd service: no preset, no `Upholds=` drop-in; the deliverables are the `.desktop` entry and icon (see Desktop Applications in Sysexts below)
 
 ## Version Extraction and Naming
 
@@ -170,10 +186,10 @@ moves on its own.
 
 Each sysext distributed to users needs two files in the base image at `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`:
 
-> Note: `emdash.transfer`/`emdash.feature` are also registered here even though
-> the emdash sysext is built and published from a separate repository — every
-> sysext distributed via repository.frostyard.org needs its sysupdate wiring in
-> the base image regardless of where it is built.
+> Note: a sysext built and published from a separate repository still needs its
+> sysupdate wiring registered in the base image (every sysext distributed via
+> repository.frostyard.org does). emdash was registered this way until 2026-07-07,
+> when it was retired.
 
 ### Transfer file (`<name>.transfer`)
 
@@ -213,7 +229,7 @@ Documentation=<url>
 Enabled=false
 ```
 
-All sysexts default to `Enabled=false` — users opt in via systemd-sysupdate configuration. The base also registers `emdash.transfer` and `emdash.feature` for a sysext built in another repository, so do not infer the root `mkosi.conf` dependency list from the sysupdate directory alone.
+All sysexts default to `Enabled=false` — users opt in via systemd-sysupdate configuration. Externally-built sysexts may be registered here too, so do not infer the root `mkosi.conf` dependency list from the sysupdate directory alone.
 
 ## Service Activation Pattern (Upholds=)
 
@@ -240,12 +256,77 @@ The preset (`40-<name>.preset`) is still required to set the enabled state; the 
 
 Some sysexts need to modify files that already exist in the base image (e.g., `/etc/nsswitch.conf`, PAM configs). The tmpfiles `C` (copy-if-absent) directive cannot overwrite existing files, so a runtime setup service is needed instead.
 
-**Pattern** (used by himmelblau and incus):
+**Pattern** (used by incus):
 1. Create an idempotent setup script at `usr/lib/<name>/<name>-sysext-setup` that patches the target files (e.g., adds NSS modules to nsswitch.conf, configures PAM stacks)
 2. Create a oneshot systemd service (`<name>-sysext-setup.service`) that runs the script at boot
 3. Enable via preset (`40-<name>.preset`)
 
 The setup script must be idempotent — safe to run on every boot without accumulating duplicate entries.
+
+## Desktop Applications in Sysexts
+
+Sysexts can ship GUI applications (`.desktop` entry + icon), but icon visibility
+has a trap that made every sysext app show GNOME's generic gear icon until
+2026-07-07 (root-caused on the emdash sysext).
+
+**Root cause — the hicolor icon cache is a validity-gated singleton.** GTK 3/4,
+GNOME Shell (St's icon theme is a fork of GTK's), and Qt all read
+`/usr/share/icons/hicolor/icon-theme.cache` and treat it as an *authoritative
+index of the entire theme directory* whenever the cache file's mtime is >= the
+theme directory's mtime. The base image ships a cache generated by the
+`gtk-update-icon-cache` dpkg trigger at image build time. A merged sysext adds
+icon files with their upstream timestamps — typically *older* than the image
+build — so the merged `hicolor/` directory mtime (overlayfs surfaces the
+topmost layer's dir mtime) stays older than the cache. The cache remains
+"valid", the toolkit never readdirs the theme, and every icon not present at
+image build time is invisible. Verified by differential test: an identical
+copy of the merged tree fails `has_icon('emdash')` with the cache present and
+succeeds the moment the cache is stale or absent.
+
+**The pattern (both halves mandatory):**
+
+1. **Images ship NO hicolor cache.** The shared image finalize
+   (`shared/outformat/image/finalize/mkosi.finalize.chroot`) deletes
+   `/usr/share/icons/hicolor/icon-theme.cache`. With no cache, toolkits scan
+   the theme directories and find base *and* sysext icons. Only hicolor is
+   stripped — named themes (Adwaita, …) never gain icons at runtime, so their
+   caches stay valid and keep their startup benefit.
+2. **Sysexts ship NO hicolor cache either.** Every sysext lists
+   `shared/sysext/finalize/sysext-strip-icon-cache.sh` in `FinalizeScripts=`.
+   If a sysext package pulls in icons, the dpkg trigger regenerates the cache
+   inside the merged buildroot and the file lands in the sysext DELTA — a
+   snapshot of base + this sysext's icons at build time. Merged on a host, that
+   copy shadows the theme's cache for the whole `/usr` overlay and masks other
+   sysexts' icons and any base icons newer than this sysext's build. This
+   applies equally to sysexts built in other repositories: never
+   ship `usr/share/icons/**/icon-theme.cache` in a sysext.
+
+**Icon placement notes:**
+
+- `/usr/share/icons/hicolor/<size>/apps/<icon>.png` (or `scalable/apps/*.svg`)
+  is the spec-correct location and works under this pattern.
+- `/usr/share/pixmaps/` (VS Code puts `vscode.png` there) is the unthemed
+  fallback path — always scanned, never covered by any cache, so it works even
+  on images that predate the fix. Not a reason to prefer it: single size, last
+  in lookup order.
+- **gsettings/gschema overrides cannot ride sysexts**: defaults only take effect
+  via recompiled `gschemas.compiled`, which is a shadow-the-singleton cache
+  (same failure shape as the icon cache). App-pointing defaults (logo-menu
+  buttons, dock favorites) ship in the snow base tree instead
+  (`zz0-01-snowlinux-desktop` / `zz0-02-snowlinux-apps` overrides) — GNOME
+  degrades gracefully when the referenced app is not merged: missing
+  favorites are skipped, logo-menu buttons spawn nothing.
+- A running GNOME Shell may not notice icons from a sysext merged mid-session
+  (theme rescan is gated on directory mtimes); icons are reliably present from
+  the next session start. The `.desktop` entry itself appears without a cache
+  concern — GIO scans `/usr/share/applications` directly.
+- Related caches with the same shadow-the-singleton failure shape to keep in
+  mind for future desktop sysexts: `/usr/share/applications/mimeinfo.cache`
+  and `/usr/share/glib-2.0/schemas/gschemas.compiled`. These are NOT stripped
+  today — absence has real costs (GIO needs mimeinfo.cache for MIME→app
+  lookups; GSettings requires compiled schemas) — but a sysext shipping its
+  own copy of either will mask newer base state the same way the icon cache
+  did. Evaluate per sysext.
 
 ## Adding a New Sysext
 
@@ -256,7 +337,8 @@ The setup script must be idempotent — safe to run on every boot without accumu
 5. If configs needed in `/etc`: create `mkosi.finalize` to capture ONLY the needed paths to `/usr/share/factory/etc/` (never all of `/etc` — see Constraints), add tmpfiles.d rules
 6. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`
 7. **If the sysext ships a systemd service:** add `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` with `Upholds=<name>.service` (see [Service Activation Pattern](#service-activation-pattern-upholds) above)
-8. Add the sysext name to root `mkosi.conf` Dependencies list
-9. Add a corresponding update check to `.github/workflows/check-dependencies.yml` if it has external downloads
+8. **If the sysext ships a desktop application:** include `sysext-strip-icon-cache.sh` in `FinalizeScripts=` (all sysexts do, per the template) and list the `.desktop` file and icon in `required-paths.txt` (see [Desktop Applications in Sysexts](#desktop-applications-in-sysexts) above)
+9. Add the sysext name to root `mkosi.conf` Dependencies list
+10. Add a corresponding update check to `.github/workflows/check-dependencies.yml` if it has external downloads
 
 For runtime setup scripts and units shipped inside `mkosi.extra/`, do not call `systemctl enable`, `systemctl disable`, `systemctl preset`, or remove shipped paths under `/etc` from the running guest. These mutate the live `/etc` overlay and can break bootc's `/etc` merge when a staged deployment finalizes. Express service state through presets/drop-ins at build time, and use `/var` marker files for run-once behavior.

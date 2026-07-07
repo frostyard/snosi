@@ -43,9 +43,16 @@ ${SUDO} patchelf --set-rpath '/usr/lib/microsoft-azurevpnclient/lib' /usr/lib/mi
 ${SUDO} patchelf --set-rpath '/usr/lib/microsoft-azurevpnclient/lib' /usr/lib/microsoft-azurevpnclient/lib/liburl_launcher_linux_plugin.so
 ${SUDO} patchelf --set-rpath '/usr/lib/microsoft-azurevpnclient/lib' /usr/lib/microsoft-azurevpnclient/lib/libXplatSharedLibrary.so
 
-# Fix executable permissions
-# FIXME: This change is lost upon the image being built. See workaround in microsoft-azurevpn-workaround.service
+# Fix executable permissions.
+# NOTE: the capability SURVIVES the sysext path — erofs preserves
+# security.capability xattrs and overlayfs passes them through. (The retired
+# loaded profiles needed a runtime setcap workaround service because the OCI
+# image packaging path dropped the cap.)
 ${SUDO} /usr/sbin/setcap cap_net_admin+eip /usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient
 
 # Remove unneeded Rsyslog config
 ${SUDO} rm -f /etc/rsyslog.d/AzureVPNClient.conf
+
+# patchelf is only needed at build time (rpath fixes above) — don't ship it
+# in the image or the sysext delta.
+${SUDO} dpkg --purge patchelf
