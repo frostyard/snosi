@@ -1,5 +1,0 @@
-# himmelblau sysext: daemon, tools, and boot activation
-/usr/sbin/himmelblaud
-/usr/sbin/himmelblaud_tasks
-/usr/bin/aad-tool
-/usr/lib/systemd/system/multi-user.target.d/10-himmelblau.conf

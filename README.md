@@ -24,7 +24,6 @@ The project produces:
 | **dev**             | Build essentials, Python, cmake, valgrind, gdb                  | sysext        |
 | **docker**          | Docker CE container runtime                                     | sysext        |
 | **edge**            | Microsoft Edge browser                                          | sysext        |
-| **himmelblau**      | Himmelblau Entra ID authentication                              | sysext        |
 | **incus**           | Incus container/VM manager                                      | sysext        |
 | **nix**             | Nix package manager                                             | sysext        |
 | **podman**          | Podman + Distrobox                                              | sysext        |
@@ -41,7 +40,7 @@ The project produces:
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1pass code-server debdev dev docker himmelblau incus nix podman tailscale │         │
+  1pass bitwarden code-server debdev dev docker edge incus nix podman tailscale vscode │         │
                                      snow            cayo
                                ┌──────┼──────┐        │
                                │      │      │    cayoloaded
@@ -71,7 +70,6 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | **debdev**        | debootstrap, distro-info, archive keyrings    | [mkosi.images/debdev/mkosi.conf](mkosi.images/debdev/mkosi.conf)               |
 | **dev**           | build-essential, cmake, Python, valgrind, gdb | [mkosi.images/dev/mkosi.conf](mkosi.images/dev/mkosi.conf)                     |
 | **docker**        | Docker CE, containerd, buildx, compose        | [mkosi.images/docker/mkosi.conf](mkosi.images/docker/mkosi.conf)               |
-| **himmelblau**    | Himmelblau Entra ID auth, PAM/NSS modules     | [mkosi.images/himmelblau/mkosi.conf](mkosi.images/himmelblau/mkosi.conf)       |
 | **incus**         | Incus, QEMU/KVM, OVMF, virt-viewer            | [mkosi.images/incus/mkosi.conf](mkosi.images/incus/mkosi.conf)                 |
 | **nix**           | Nix package manager, systemd integration      | [mkosi.images/nix/mkosi.conf](mkosi.images/nix/mkosi.conf)                     |
 | **podman**        | Podman, Distrobox, buildah, crun              | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf)               |
@@ -125,7 +123,6 @@ shared/
 │   ├── azurevpn/mkosi.conf    ← Azure VPN Client
 │   ├── vscode/mkosi.conf      ← Visual Studio Code
 │   ├── bitwarden/mkosi.conf   ← Bitwarden password manager
-│   ├── entra-sso/mkosi.conf   ← linux-entra-sso browser SSO
 │   ├── docker-onimage/        ← Docker CE for baked-in images
 │   ├── virt-base/mkosi.conf   ← Headless Incus virtualization
 │   └── virt/mkosi.conf        ← Incus virtualization
@@ -191,8 +188,8 @@ Include=%D/shared/outformat/image/mkosi.conf    # OCI output format
 | **snowfield**       | surface   | —                              | `kernel/surface`, `packages/snow`, `outformat/image`                          |
 | **cayo**            | backports | —                              | `kernel/backports`, `packages/cayo`, `outformat/image`                        |
 | **cayoloaded**      | backports | Docker, Incus                  | + `packages/docker-onimage`, `packages/virt-base`                           |
-| **snowloaded**      | backports | Azure VPN, Edge, VSCode, Bitwarden, Incus, Entra SSO | + `packages/edge`, `packages/azurevpn`, `packages/vscode`, `packages/bitwarden`, `packages/virt`, `packages/entra-sso` |
-| **snowfieldloaded** | surface   | Azure VPN, Edge, VSCode, Bitwarden, Incus, Entra SSO | + `packages/edge`, `packages/azurevpn`, `packages/vscode`, `packages/bitwarden`, `packages/virt`, `packages/entra-sso` |
+| **snowloaded**      | backports | Azure VPN, Edge, VSCode, Bitwarden, Incus | + `packages/edge`, `packages/azurevpn`, `packages/vscode`, `packages/bitwarden`, `packages/virt` |
+| **snowfieldloaded** | surface   | Azure VPN, Edge, VSCode, Bitwarden, Incus | + `packages/edge`, `packages/azurevpn`, `packages/vscode`, `packages/bitwarden`, `packages/virt` |
 
 ## Building Images
 
@@ -271,7 +268,6 @@ output/
 External repositories are configured in `mkosi.sandbox/etc/apt/` for packages not in Debian:
 
 - **Docker**: docker.com official repository
-- **Himmelblau**: Himmelblau Entra ID authentication (nightly)
 - **Incus**: Debian trixie (no external repo)
 - **linux-surface**: Surface kernel packages
 - **Frostyard**: Custom packages (nbc, chairlift, updex)
@@ -287,7 +283,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all sysexts (1password-cli, code-server, debdev, dev, docker, himmelblau, incus, nix, podman, tailscale)
+1. Builds the base image and all sysexts (1password-cli, bitwarden, code-server, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode)
 2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Uploads package manifests for version tracking
 
