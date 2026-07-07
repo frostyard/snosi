@@ -17,10 +17,19 @@ DEBS=$(mktemp -d)
 trap 'rm -rf "$DEBS"' EXIT
 verified_download "microsoft-edge-stable" "$DEBS/microsoft-edge-stable.deb"
 
-# Strip the postinst calls that add Edge's APT repo — they invoke apt-config,
-# which fails inside the mkosi chroot and breaks the build.
+# Strip the postinst's APT repo management (add repo/key, remove legacy
+# repo/key) — irrelevant in an image build. This must ALSO neutralize the
+# top-level `APT_CONFIG="$(command -v apt-config ...)"` assignment: the base
+# tree used for sysext overlay builds ships no apt, the postinst runs under
+# dash with `set -e`, and dash's `command -v` returns 127 on a miss, so the
+# bare assignment alone kills the install with exit 127 before MAIN even
+# runs (and remove_legacy_* would later exec the empty "$APT_CONFIG").
+# Profile chroots have apt, which is why only sysext builds ever hit this.
 dpkg-deb -R "$DEBS/microsoft-edge-stable.deb" "$DEBS/edge-unpacked"
-sed -i -e '/^install_key$/d' -e '/^install_deb822_sources$/d' "$DEBS/edge-unpacked/DEBIAN/postinst"
+sed -i -e '/^install_key$/d' -e '/^install_deb822_sources$/d' \
+       -e '/^remove_legacy_list$/d' -e '/^remove_legacy_key$/d' \
+       -e 's/^APT_CONFIG=.*/APT_CONFIG=/' \
+       "$DEBS/edge-unpacked/DEBIAN/postinst"
 dpkg-deb -b "$DEBS/edge-unpacked" "$DEBS/microsoft-edge-stable-fixed.deb"
 
 ${SUDO} dpkg -i "$DEBS/microsoft-edge-stable-fixed.deb"

@@ -1,0 +1,7 @@
+# edge sysext: Microsoft Edge browser, relocated from /opt to /usr/lib
+/usr/lib/microsoft-edge/microsoft-edge
+/usr/bin/microsoft-edge-stable
+# Desktop integration: launcher entry and hicolor icon symlink (see
+# yeti/sysexts.md "Desktop Applications in Sysexts")
+/usr/share/applications/microsoft-edge.desktop
+/usr/share/icons/hicolor/256x256/apps/microsoft-edge.png

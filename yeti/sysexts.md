@@ -22,6 +22,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test, archive keyrings) |
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
+| **edge** | microsoft-edge-stable | Microsoft Edge browser (pinned .deb via verified_download, relocated from /opt) |
 | **himmelblau** | himmelblau | Entra ID authentication (himmelblau, pam-himmelblau, nss-himmelblau) |
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF, virt-viewer |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
@@ -84,7 +85,7 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server` is the current exception to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database.
+`code-server` and `edge` are the current exceptions to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift.
 
 ## Sysext-Specific Extra Files
 
@@ -102,6 +103,11 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `mkosi.finalize` — Captures `/etc/default/docker`, `/etc/docker`, `/etc/containerd` to factory defaults
 - `usr/lib/sysusers.d/docker.conf` — Docker user/group definitions
 - `usr/lib/tmpfiles.d/docker.conf` — Factory config injection
+
+### edge
+- No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/edge/`), reused verbatim from the loaded profiles
+- Desktop app with no systemd service: no preset, no `Upholds=` drop-in
+- Its icons are hicolor symlinks created by the relocation script — visibility depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below), so on images that still ship `icon-theme.cache` the Edge icon renders generic
 
 ### himmelblau
 - `mkosi.postinst.chroot` — Post-install customization hook (currently minimal)
