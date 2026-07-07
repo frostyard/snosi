@@ -24,7 +24,6 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
 | **edge** | microsoft-edge-stable | Microsoft Edge browser (pinned .deb via verified_download, relocated from /opt) |
-| **himmelblau** | himmelblau | Entra ID authentication (himmelblau, pam-himmelblau, nss-himmelblau) |
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF, virt-viewer |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
@@ -114,15 +113,6 @@ Some sysexts include extra files via `mkosi.extra/`:
 - No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/edge/`), reused verbatim from the loaded profiles
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
 - Its icons are hicolor symlinks created by the relocation script — visibility depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below), so on images that still ship `icon-theme.cache` the Edge icon renders generic
-
-### himmelblau
-- `mkosi.postinst.chroot` — Post-install customization hook (currently minimal)
-- `mkosi.finalize` — Captures `/etc/himmelblau` to `/usr/share/factory/etc/` for tmpfiles injection at boot
-- `usr/lib/himmelblau/himmelblau-sysext-setup` — Runtime PAM/NSS injection script (idempotent, runs at boot): adds `himmelblau` to nsswitch.conf passwd/group/shadow, runs `pam-auth-update --enable himmelblau`
-- `usr/lib/systemd/system/himmelblau-sysext-setup.service` — Oneshot service to run setup script (conditioned on `/run/himmelblau-sysext-setup.done`)
-- `usr/lib/systemd/system-preset/40-himmelblau.preset` — Enable himmelblaud and himmelblau-sysext-setup services
-- `usr/lib/systemd/system/multi-user.target.d/10-himmelblau.conf` — `Upholds=` drop-in for reliable boot activation (himmelblaud upholds himmelblaud-tasks itself)
-- `usr/lib/tmpfiles.d/himmelblau.conf` — Config injection from `/usr/share/factory/etc/`
 
 ### incus
 - `mkosi.finalize` — Captures the tmpfiles-referenced `/etc` paths to factory defaults
@@ -258,7 +248,7 @@ The preset (`40-<name>.preset`) is still required to set the enabled state; the 
 
 Some sysexts need to modify files that already exist in the base image (e.g., `/etc/nsswitch.conf`, PAM configs). The tmpfiles `C` (copy-if-absent) directive cannot overwrite existing files, so a runtime setup service is needed instead.
 
-**Pattern** (used by himmelblau and incus):
+**Pattern** (used by incus):
 1. Create an idempotent setup script at `usr/lib/<name>/<name>-sysext-setup` that patches the target files (e.g., adds NSS modules to nsswitch.conf, configures PAM stacks)
 2. Create a oneshot systemd service (`<name>-sysext-setup.service`) that runs the script at boot
 3. Enable via preset (`40-<name>.preset`)

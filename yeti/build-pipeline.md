@@ -125,7 +125,7 @@ Prepare the image for output. Run after postinstall, before the image format is 
 
 **Sysext finalize** (per-sysext `mkosi.finalize` scripts):
 - Captures `/etc` configs to `/usr/share/factory/etc/` for tmpfiles-based injection at boot
-- Used by: docker, himmelblau, incus, nix, tailscale
+- Used by: docker, incus, nix, tailscale
 - Capture ONLY the specific paths referenced by the sysext's tmpfiles.d `C` directives — never all of `/etc`. With `Overlay=yes` the buildroot `/etc` is the merged base view, so a full capture ships the base image's `/etc/shadow` and SSH host keys in the published sysext (frostyard/snosi#282)
 
 ### 4. PostOutputScripts (after image creation)
@@ -257,7 +257,7 @@ Provides `verified_download(key, output_path)`:
 
 ### package-versions.json
 
-Tracks APT-based external package versions (VSCode `code`, `docker-ce`, `1password-cli`, `himmelblau`) separately from download checksums. Updated daily by `check-packages.yml`. Edge is NOT tracked here — it is pinned via `checksums.json` and updated by `check-dependencies.yml`.
+Tracks APT-based external package versions (VSCode `code`, `docker-ce`, `1password-cli`) separately from download checksums. Updated daily by `check-packages.yml`. Edge is NOT tracked here — it is pinned via `checksums.json` and updated by `check-dependencies.yml`.
 
 ### update-checksums.sh
 

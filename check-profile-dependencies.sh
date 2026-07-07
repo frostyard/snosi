@@ -10,7 +10,6 @@ sysexts=(
     debdev
     dev
     docker
-    himmelblau
     incus
     nix
     podman

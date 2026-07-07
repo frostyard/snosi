@@ -11,9 +11,9 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 | Image | Kernel | Extras |
 |-------|--------|--------|
 | **snow** | backports | GNOME desktop, podman, flatpak |
-| **snowloaded** | backports | snow + Edge, VSCode, Bitwarden, Incus, Azure VPN, Entra SSO (linux-entra-sso) |
+| **snowloaded** | backports | snow + Edge, VSCode, Bitwarden, Incus, Azure VPN |
 | **snowfield** | linux-surface | GNOME desktop (Surface devices) |
-| **snowfieldloaded** | linux-surface | snowfield + loaded extras (Edge, VSCode, Bitwarden, Incus, Azure VPN, Entra SSO (linux-entra-sso)) |
+| **snowfieldloaded** | linux-surface | snowfield + loaded extras (Edge, VSCode, Bitwarden, Incus, Azure VPN) |
 
 ### Server Images (OCI, pushed to ghcr.io)
 
@@ -24,7 +24,7 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
-1password-cli, code-server, debdev, dev, docker, himmelblau, incus, nix, podman, tailscale
+1password-cli, bitwarden, code-server, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode
 
 ## Architecture
 
@@ -34,7 +34,7 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 mkosi.conf                  # Root config: distribution, dependencies, build settings
 mkosi.version               # Version tag script (date-based, overridden by CI IMAGE_VERSION)
 mkosi.clean                 # Clean script (rm -rf output/*)
-mkosi.images/               # Image definitions (base + 13 sysexts)
+mkosi.images/               # Image definitions (base + 12 sysexts)
   base/                     # Foundation image: systemd, bootc/ostree (frostyard debs), firmware, core utils
     mkosi.extra/            # Base filesystem overlay (dracut, systemd units/timers, sysupdate, tmpfiles, sysusers)
       usr/lib/sysupdate.d/  # .transfer + .feature files for all sysexts
@@ -90,7 +90,7 @@ Profile (e.g., snow/mkosi.conf)
 
 The "loaded" variants extend their base profile by adding more Include directives, ExtraTrees, and PostInstallationScripts:
 
-- **snowloaded/snowfieldloaded** add Edge, VS Code, Bitwarden, Azure VPN, Incus, and Entra SSO (`linux-entra-sso`). Incus is on-image here through `shared/packages/virt`, not the separate Incus sysext.
+- **snowloaded/snowfieldloaded** add Edge, VS Code, Bitwarden, Azure VPN, and Incus. Incus is on-image here through `shared/packages/virt`, not the separate Incus sysext.
 - **cayoloaded** adds Docker CE on-image via `docker-onimage` and Incus on-image via `virt-base`.
 
 ### Script Pipeline
@@ -142,7 +142,7 @@ External resources are pinned in `shared/download/checksums.json` with URL + SHA
 
 Package versions for selected APT-based externals (VSCode, Docker, 1Password, Himmelblau) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
 
-Current checksum-managed downloads are Bitwarden, Homebrew install script, code-server, Surface secure boot certificate, Hotedge, Logomenu, Bazaar Companion, Azure VPN, and Microsoft Edge. Current APT version tracking covers `code`, `docker-ce`, `1password-cli`, and `himmelblau`; Edge is checksum-managed because the build installs a patched downloaded `.deb`. `code-server` is a sysext exception: it is installed by `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` + `dpkg -i`, while `KEYPACKAGE=code-server` still drives version extraction from the merged dpkg database.
+Current checksum-managed downloads are Bitwarden, Homebrew install script, code-server, Surface secure boot certificate, Hotedge, Logomenu, Bazaar Companion, Azure VPN, and Microsoft Edge. Current APT version tracking covers `code`, `docker-ce`, and `1password-cli`; Edge is checksum-managed because the build installs a patched downloaded `.deb`. `code-server` is a sysext exception: it is installed by `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` + `dpkg -i`, while `KEYPACKAGE=code-server` still drives version extraction from the merged dpkg database.
 
 ### User Service Enablement in Chroot
 
@@ -186,7 +186,7 @@ Use build-time enablement/presets for desired service state. For run-once runtim
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 13 sysexts
+just sysexts            # Build base + all 12 sysexts
 just snow               # Build snow desktop
 just snowloaded         # Build snowloaded variant
 just snowfield          # Build snowfield (Surface)
@@ -219,7 +219,6 @@ Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GP
 - Debian Backports — Newer kernel + firmware + mesa
 - Debian Griffo.io (debian.griffo.io) — Additional Debian packages
 - Docker (docker.com) — Docker CE packages
-- Himmelblau (packages.himmelblau-idm.org) — Entra ID authentication (nightly)
 - Frostyard (repository.frostyard.org) — Custom packages: bootc, libostree-1-1 (built by frostyard/bootc-debian), nbc, chairlift, updex, igloo, intuneme, snow-first-setup.
 - Linux Surface (pkg.surfacelinux.com) — Surface kernel + tools
 - Microsoft Edge (packages.microsoft.com) — Edge browser
