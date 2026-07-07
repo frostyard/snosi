@@ -119,6 +119,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 ### edge
 - No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/edge/`), reused verbatim from the loaded profiles
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
+- The postinst repoints the update-alternatives symlinks (`/usr/bin/microsoft-edge`, `x-www-browser`, `gnome-www-browser`) at the real binary: their `/etc/alternatives` targets ship in profile images but are stripped from sysexts, so they would dangle on target systems
 - Its icons are hicolor symlinks created by the relocation script — visibility depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below), so on images that still ship `icon-theme.cache` the Edge icon renders generic
 
 ### incus
@@ -308,6 +309,13 @@ succeeds the moment the cache is stale or absent.
   fallback path — always scanned, never covered by any cache, so it works even
   on images that predate the fix. Not a reason to prefer it: single size, last
   in lookup order.
+- **gsettings/gschema overrides cannot ride sysexts**: defaults only take effect
+  via recompiled `gschemas.compiled`, which is a shadow-the-singleton cache
+  (same failure shape as the icon cache). App-pointing defaults (logo-menu
+  buttons, dock favorites) ship in the snow base tree instead
+  (`zz0-01-snowlinux-desktop` / `zz0-02-snowlinux-apps` overrides) — GNOME
+  degrades gracefully when the referenced app is not merged: missing
+  favorites are skipped, logo-menu buttons spawn nothing.
 - A running GNOME Shell may not notice icons from a sysext merged mid-session
   (theme rescan is gated on directory mtimes); icons are reliably present from
   the next session start. The `.desktop` entry itself appears without a cache
