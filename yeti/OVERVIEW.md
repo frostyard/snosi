@@ -34,7 +34,7 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 mkosi.conf                  # Root config: distribution, dependencies, build settings
 mkosi.version               # Version tag script (date-based, overridden by CI IMAGE_VERSION)
 mkosi.clean                 # Clean script (rm -rf output/*)
-mkosi.images/               # Image definitions (base + 12 sysexts)
+mkosi.images/               # Image definitions (base + 13 sysexts)
   base/                     # Foundation image: systemd, bootc/ostree (frostyard debs), firmware, core utils
     mkosi.extra/            # Base filesystem overlay (dracut, systemd units/timers, sysupdate, tmpfiles, sysusers)
       usr/lib/sysupdate.d/  # .transfer + .feature files for all sysexts
@@ -73,7 +73,7 @@ Justfile                    # Build targets (just sysexts, just snow, etc.)
 
 mkosi configs compose via `Include=` directives. Each profile pulls in reusable fragments:
 
-Root `mkosi.conf` lists `base` plus all in-repo sysexts for the sysext publishing build. It also sets `ToolsTree=default` and `ToolsTreeSandboxTrees=mkosi.tools.sandbox`; files needed by the tools-tree package manager must go in `mkosi.tools.sandbox/`, while `mkosi.sandbox/` applies to the target image package manager. Both sandbox trees currently carry the same APT retry/timeout hardening. Each `mkosi.profiles/*/mkosi.conf` starts with `Dependencies=` and then `Dependencies=base` to reset mkosi's append-only collection semantics; profile image builds must not inherit the sysext list. The base image also carries sysupdate registration for the external `emdash` sysext even though that sysext is published from a separate repository.
+Root `mkosi.conf` lists `base` plus all in-repo sysexts for the sysext publishing build. It also sets `ToolsTree=default` and `ToolsTreeSandboxTrees=mkosi.tools.sandbox`; files needed by the tools-tree package manager must go in `mkosi.tools.sandbox/`, while `mkosi.sandbox/` applies to the target image package manager. Both sandbox trees currently carry the same APT retry/timeout hardening. Each `mkosi.profiles/*/mkosi.conf` starts with `Dependencies=` and then `Dependencies=base` to reset mkosi's append-only collection semantics; profile image builds must not inherit the sysext list.
 
 ```
 Profile (e.g., snow/mkosi.conf)
@@ -130,7 +130,7 @@ Sysexts overlay `/usr` at runtime. They cannot modify `/etc` or `/var` directly.
 - Needs matching `.transfer` + `.feature` files in base image's `usr/lib/sysupdate.d/`
 - Configs needed in `/etc` go through `/usr/share/factory/etc` + systemd-tmpfiles
 
-The base image also registers `emdash.transfer` and `emdash.feature`; keep those files even though `mkosi.conf` does not build an `emdash` image in this repository.
+Every sysext built in this repository has a matching pair here.
 
 See [sysexts.md](sysexts.md) for details.
 
@@ -186,7 +186,7 @@ Use build-time enablement/presets for desired service state. For run-once runtim
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 12 sysexts
+just sysexts            # Build base + all 13 sysexts
 just snow               # Build snow desktop
 just snowloaded         # Build snowloaded variant
 just snowfield          # Build snowfield (Surface)
