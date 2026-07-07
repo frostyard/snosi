@@ -6,7 +6,7 @@
 
 **Trigger:** Push/PR to main, manual dispatch
 
-Builds the base image and all 12 sysexts, publishes to the Frostyard repository on Cloudflare R2.
+Builds the base image and all 13 sysexts, publishes to the Frostyard repository on Cloudflare R2.
 
 **Steps:**
 1. Aggressive cleanup of runner (removes JDK, .NET, Android SDK, etc. to free disk space)

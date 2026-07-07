@@ -18,6 +18,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | Sysext | KEYPACKAGE | Description |
 |--------|------------|-------------|
 | **1password-cli** | 1password-cli | 1Password CLI tool |
+| **azurevpn** | microsoft-azurevpnclient | Microsoft Azure VPN client (pinned .deb via verified_download, relocated from /opt) |
 | **bitwarden** | bitwarden | Bitwarden desktop app (pinned .deb via verified_download, relocated from /opt) |
 | **code-server** | code-server | code-server (VS Code in the browser) — downloaded via `verified_download()` from coder/code-server GitHub releases |
 | **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test, archive keyrings) |
@@ -85,11 +86,17 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server`, `edge`, and `bitwarden` are the current exceptions to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file Exec rewrite, deps via `Include=`.
+`code-server`, `edge`, `bitwarden`, and `azurevpn` are the current exceptions to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file Exec rewrite, deps via `Include=`.
 
 ## Sysext-Specific Extra Files
 
 Some sysexts include extra files via `mkosi.extra/`:
+
+### azurevpn
+- No `mkosi.extra/` — reuses `shared/packages/azurevpn/` (fragment + postinst) verbatim from the loaded profiles
+- Ships `cap_net_admin` as a real file capability: erofs preserves `security.capability`, so the sysext deliberately does NOT carry the loaded profiles' `microsoft-azurevpn-workaround.service` (that service exists only because the OCI image packaging path drops caps)
+- Desktop entry uses an absolute-path `Icon=` — no icon theme/cache involvement
+- The postinst purges `patchelf` after the rpath fixes so the build tool ships nowhere
 
 ### bitwarden
 - No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/bitwarden/`), reused verbatim from the loaded profiles

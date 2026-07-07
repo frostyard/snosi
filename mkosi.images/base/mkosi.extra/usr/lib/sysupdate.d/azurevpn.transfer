@@ -1,0 +1,20 @@
+[Transfer]
+Features=azurevpn
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/azurevpn/
+MatchPattern=azurevpn_@v_%w_%a.raw.zst \
+             azurevpn_@v_%w_%a.raw.xz \
+             azurevpn_@v_%w_%a.raw.gz \
+             azurevpn_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=azurevpn_@v_%w_%a.raw.zst \
+             azurevpn_@v_%w_%a.raw.xz \
+             azurevpn_@v_%w_%a.raw.gz \
+             azurevpn_@v_%w_%a.raw
+CurrentSymlink=azurevpn.raw
