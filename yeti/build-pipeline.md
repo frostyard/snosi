@@ -57,8 +57,23 @@ The base overlay ships `bootc-update-stage.service` and `bootc-update-stage.time
   identical spec is a SILENT no-op in bootc <= 1.16.3 and left installs
   unable to take a second update (root-caused 2026-07-06),
 - verifies the staged digest equals the pulled digest (fails loudly on any
-  future silent no-op), and
+  future silent no-op),
+- writes the reboot-pending semaphore `/run/snosi/update-staged`
+  (image/digest/timestamp; also re-asserted when an update is found already
+  staged, covering manual `bootc upgrade`; /run placement means the applying
+  reboot clears it), and
 - prunes dangling transfer images after the switch.
+
+Two consumers surface the pending reboot:
+- `/etc/update-motd.d/86-bootc-update-staged` — SSH/console logins (all
+  images, including headless cayo).
+- `bootc-update-notify.path` + `.service` (user scope) with
+  `/usr/libexec/bootc-update-notify` — desktop notification. The path unit
+  fires when the semaphore appears mid-session or is modified (newer image
+  re-staged), and PathExists= also triggers at session start when the file
+  already exists; the helper is ack-gated per staged digest (same pattern as
+  snosi-etc-drift-notify) so users see one notification per staged update,
+  not one per login or trigger.
 
 This mirrors the previous nbc-style download-only semantics: the staged deployment applies at the next normal reboot. The podman transfer path is also the current workaround for bootc registry-transport composefs pull failures noted in `docs/plans/2026-07-03-bootc-update-validation-plan.md`.
 

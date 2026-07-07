@@ -1,0 +1,27 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Desktop notification for a staged OS update (user scope). Fires once per
+# staged DIGEST, gated by comparing against the per-user acknowledged digest
+# — never once per login or per path-unit trigger. The ack lives in state
+# (not runtime) but stays correct: the semaphore in /run disappears at the
+# reboot that applies the update, and a different staged digest re-notifies.
+set -euo pipefail
+
+SEM=/run/snosi/update-staged
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/snosi"
+ACK="$STATE_DIR/update-staged.ack"
+
+[[ -s "$SEM" ]] || exit 0
+digest=$(sed -n 's/^digest=//p' "$SEM")
+[[ -n "$digest" ]] || exit 0
+[[ "$digest" == "$(cat "$ACK" 2>/dev/null || true)" ]] && exit 0
+
+command -v notify-send >/dev/null || exit 0
+
+short="${digest#sha256:}"
+notify-send --app-name="Snow Linux" --icon=software-update-available \
+    "System update ready" \
+    "An update (${short:0:12}) is staged and will apply the next time you reboot."
+
+mkdir -p "$STATE_DIR"
+echo "$digest" > "$ACK"
