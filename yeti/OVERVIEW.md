@@ -58,7 +58,8 @@ shared/                     # Reusable fragments composed via Include=
   snow/                     # Snow desktop: build scripts + tree overlay
   snowloaded/               # Snowloaded: additional tree overlay
   cayo/                     # Cayo server: postinstall scripts + tree overlay
-mkosi.sandbox/etc/apt/      # External APT repo configs + GPG keyrings
+mkosi.sandbox/etc/apt/       # External APT repo configs + GPG keyrings
+mkosi.tools.sandbox/etc/apt/ # APT config for mkosi's ToolsTree=default bootstrap
 .github/workflows/          # CI/CD (build, publish, dependency checks, testing)
 test/                       # Bootc install, update, rollback, and VM smoke test framework
 docs/                       # Design specs, implementation plans, superpowers
@@ -72,7 +73,7 @@ Justfile                    # Build targets (just sysexts, just snow, etc.)
 
 mkosi configs compose via `Include=` directives. Each profile pulls in reusable fragments:
 
-Root `mkosi.conf` lists `base` plus all in-repo sysexts for the sysext publishing build. Each `mkosi.profiles/*/mkosi.conf` starts with `Dependencies=` and then `Dependencies=base` to reset mkosi's append-only collection semantics; profile image builds must not inherit the sysext list. The base image also carries sysupdate registration for the external `emdash` sysext even though that sysext is published from a separate repository.
+Root `mkosi.conf` lists `base` plus all in-repo sysexts for the sysext publishing build. It also sets `ToolsTree=default` and `ToolsTreeSandboxTrees=mkosi.tools.sandbox`; files needed by the tools-tree package manager must go in `mkosi.tools.sandbox/`, while `mkosi.sandbox/` applies to the target image package manager. Both sandbox trees currently carry the same APT retry/timeout hardening. Each `mkosi.profiles/*/mkosi.conf` starts with `Dependencies=` and then `Dependencies=base` to reset mkosi's append-only collection semantics; profile image builds must not inherit the sysext list. The base image also carries sysupdate registration for the external `emdash` sysext even though that sysext is published from a separate repository.
 
 ```
 Profile (e.g., snow/mkosi.conf)
@@ -212,7 +213,7 @@ All `just` targets run `mkosi clean` first (clean build every time).
 
 ### External APT Repositories
 
-Configured in `mkosi.sandbox/etc/apt/` with GPG keyrings:
+Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GPG keyrings. APT retry and timeout settings live in both `mkosi.sandbox/etc/apt/apt.conf.d/80-snosi-network-retries.conf` and `mkosi.tools.sandbox/etc/apt/apt.conf.d/80-snosi-network-retries.conf`; the latter is required because mkosi's default tools tree does not inherit the target-image sandbox.
 
 - 1Password — CLI tool
 - Debian Backports — Newer kernel + firmware + mesa

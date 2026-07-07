@@ -149,6 +149,8 @@ After `mkosi build` completes, the output directory contains all images, sysexts
 
 Root `mkosi.conf` intentionally lists `base` plus all sysexts in `Dependencies=` so plain `mkosi build` and `just sysexts` produce the sysext publishing set. Profile configs clear that inherited collection with an empty `Dependencies=` assignment and then add `Dependencies=base`; without the reset, mkosi appends list settings and profile builds would rebuild every sysext. CI enforces this with `check-profile-dependencies.sh`.
 
+Root `mkosi.conf` also configures mkosi's build tooling bootstrap with `ToolsTree=default` and `ToolsTreeSandboxTrees=mkosi.tools.sandbox`. Keep package-manager settings for that tools tree in `mkosi.tools.sandbox/`; the regular `mkosi.sandbox/` tree only affects target-image APT operations. Network hardening that should protect both surfaces, such as APT retries/timeouts, needs matching files in both trees.
+
 ### sysextmv.sh
 
 Moves sysext files matching `{image_id}_{version}_{os_version}_{arch}.{ext}` into `output/sysexts/`, organized by sysext name (e.g., `output/sysexts/docker/`). This structure is required by the `frostyard/repogen` action for R2 publishing.
