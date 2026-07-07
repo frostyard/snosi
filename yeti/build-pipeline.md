@@ -51,7 +51,13 @@ The base overlay ships `bootc-update-stage.service` and `bootc-update-stage.time
 - exits cleanly when the system is not bootc-managed,
 - prunes stale transfer images before pulling to avoid `/var` exhaustion,
 - pulls the followed image with `podman` so containers policy is enforced,
-- stages it with `bootc switch --transport containers-storage`, and
+- stages it with `bootc upgrade` when the spec already follows
+  `containers-storage` (the steady state after the first staged update) or
+  `bootc switch --transport containers-storage` otherwise — switch to an
+  identical spec is a SILENT no-op in bootc <= 1.16.3 and left installs
+  unable to take a second update (root-caused 2026-07-06),
+- verifies the staged digest equals the pulled digest (fails loudly on any
+  future silent no-op), and
 - prunes dangling transfer images after the switch.
 
 This mirrors the previous nbc-style download-only semantics: the staged deployment applies at the next normal reboot. The podman transfer path is also the current workaround for bootc registry-transport composefs pull failures noted in `docs/plans/2026-07-03-bootc-update-validation-plan.md`.
