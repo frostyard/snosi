@@ -100,6 +100,18 @@ echo "Stripped $(wc -l < "$manifest") enablement symlinks from /etc (recreated b
 # Remove SSH Keys
 rm -f /etc/ssh/ssh_host_*
 
+# Ship NO hicolor icon cache. GTK/St/Qt treat a present icon-theme.cache as
+# an authoritative index whenever its mtime is >= the theme directory's mtime.
+# Sysexts merge app icons into /usr/share/icons/hicolor with their upstream
+# file timestamps (typically older than the image build), so the base image's
+# cache stays "valid" and every sysext icon is invisible — GNOME shows the
+# generic gear icon (root-caused 2026-07-07 on the emdash sysext). With the
+# cache absent, GTK falls back to scanning the theme directories and finds
+# both base and sysext icons. Only hicolor is stripped: sysext app icons land
+# in hicolor per the icon spec; named themes (Adwaita, ...) never gain icons
+# at runtime, so their caches stay valid and useful.
+rm -f /usr/share/icons/hicolor/icon-theme.cache
+
 # Compile GLib schemas
 if command -v glib-compile-schemas >/dev/null 2>&1; then
     glib-compile-schemas /usr/share/glib-2.0/schemas/
