@@ -19,6 +19,7 @@ if [[ -z "$image" ]]; then
     echo "No bootc image spec; not a bootc-managed system. Nothing to do."
     exit 0
 fi
+transport=$(jq -r '.spec.image.transport // empty' <<<"$status")
 
 booted=$(jq -r '.status.booted.image.imageDigest // empty' <<<"$status")
 staged=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$status")
@@ -55,7 +56,26 @@ if [[ -n "$rollback" && "$pulled" == "$rollback" ]]; then
 fi
 
 echo "Staging update: $image ($pulled)"
-bootc switch --quiet --transport containers-storage "$image"
+if [[ "$transport" == "containers-storage" ]]; then
+    # The spec already follows containers-storage:<image> — the steady state
+    # after the FIRST staged update flips the transport. `bootc switch` to an
+    # identical spec is a SILENT no-op (bootc <= 1.16.3 composefs switch
+    # returns before staging when new_spec == host.spec), which left every
+    # install unable to take a second update while this script reported
+    # success (root-caused 2026-07-06 on minisnow). `bootc upgrade` pulls the
+    # spec's image and stages it properly.
+    bootc upgrade --quiet
+else
+    bootc switch --quiet --transport containers-storage "$image"
+fi
+
+# Verify bootc actually staged what we pulled: both failure modes here have
+# been observed to be SILENT (exit 0), so do not trust the exit code alone.
+staged_now=$(bootc status --format json | jq -r '.status.staged.image.imageDigest // empty')
+if [[ "$staged_now" != "$pulled" ]]; then
+    echo "ERROR: staging silently failed: staged deployment is '${staged_now:-none}', expected $pulled" >&2
+    exit 1
+fi
 
 # The image content is copied into the composefs repository at switch time;
 # prune dangling transfer images to keep podman storage bounded.
