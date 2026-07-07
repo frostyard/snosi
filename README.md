@@ -22,6 +22,7 @@ The project produces:
 | **debdev**          | Debian development tools (debootstrap, distro-info)             | sysext        |
 | **dev**             | Build essentials, Python, cmake, valgrind, gdb                  | sysext        |
 | **docker**          | Docker CE container runtime                                     | sysext        |
+| **edge**            | Microsoft Edge browser                                          | sysext        |
 | **himmelblau**      | Himmelblau Entra ID authentication                              | sysext        |
 | **incus**           | Incus container/VM manager                                      | sysext        |
 | **nix**             | Nix package manager                                             | sysext        |
