@@ -27,6 +27,7 @@ The project produces:
 | **nix**             | Nix package manager                                             | sysext        |
 | **podman**          | Podman + Distrobox                                              | sysext        |
 | **tailscale**       | Tailscale VPN client                                            | sysext        |
+| **vscode**          | Visual Studio Code desktop application                          | sysext        |
 
 ## Architecture
 

@@ -1,0 +1,7 @@
+# vscode sysext: Visual Studio Code desktop application
+/usr/share/code/code
+/usr/bin/code
+# Desktop integration: launcher entry and app icon (see yeti/sysexts.md
+# "Desktop Applications in Sysexts")
+/usr/share/applications/code.desktop
+/usr/share/pixmaps/vscode.png
