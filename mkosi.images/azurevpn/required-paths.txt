@@ -1,0 +1,8 @@
+# azurevpn sysext: Microsoft Azure VPN client, relocated from /opt to /usr/lib
+/usr/lib/microsoft-azurevpnclient/microsoft-azurevpnclient
+/usr/lib/microsoft-azurevpnclient/lib/libLinuxCore.so
+# Desktop integration: launcher entry (absolute-path Icon=, no theme lookup)
+/usr/share/applications/microsoft-azurevpnclient.desktop
+/usr/share/icons/microsoft-azurevpnclient.png
+# Debian-adapted polkit rules
+/usr/share/polkit-1/rules.d/microsoft-azurevpnclient.rules

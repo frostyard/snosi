@@ -18,6 +18,7 @@ The project produces:
 | **cayo**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
 | **cayoloaded**      | cayo + Docker + Incus (baked in)                                | directory → OCI (buildah/chunkah) |
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
+| **azurevpn**        | Microsoft Azure VPN client                                      | sysext        |
 | **bitwarden**       | Bitwarden password manager desktop application                  | sysext        |
 | **code-server**     | code-server (VS Code in the browser)                            | sysext        |
 | **debdev**          | Debian development tools (debootstrap, distro-info)             | sysext        |
@@ -40,7 +41,7 @@ The project produces:
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1pass bitwarden code-server debdev dev docker edge incus nix podman tailscale vscode │         │
+  1pass azurevpn bitwarden code-server debdev dev docker edge incus nix podman tailscale vscode │         │
                                      snow            cayo
                                ┌──────┼──────┐        │
                                │      │      │    cayoloaded
@@ -283,7 +284,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all sysexts (1password-cli, bitwarden, code-server, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode)
+1. Builds the base image and all sysexts (1password-cli, azurevpn, bitwarden, code-server, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode)
 2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Uploads package manifests for version tracking
 
