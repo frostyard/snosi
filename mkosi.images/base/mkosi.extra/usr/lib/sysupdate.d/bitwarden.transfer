@@ -1,0 +1,20 @@
+[Transfer]
+Features=bitwarden
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/bitwarden/
+MatchPattern=bitwarden_@v_%w_%a.raw.zst \
+             bitwarden_@v_%w_%a.raw.xz \
+             bitwarden_@v_%w_%a.raw.gz \
+             bitwarden_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=bitwarden_@v_%w_%a.raw.zst \
+             bitwarden_@v_%w_%a.raw.xz \
+             bitwarden_@v_%w_%a.raw.gz \
+             bitwarden_@v_%w_%a.raw
+CurrentSymlink=bitwarden.raw

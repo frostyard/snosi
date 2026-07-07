@@ -18,6 +18,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | Sysext | KEYPACKAGE | Description |
 |--------|------------|-------------|
 | **1password-cli** | 1password-cli | 1Password CLI tool |
+| **bitwarden** | bitwarden | Bitwarden desktop app (pinned .deb via verified_download, relocated from /opt) |
 | **code-server** | code-server | code-server (VS Code in the browser) — downloaded via `verified_download()` from coder/code-server GitHub releases |
 | **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test, archive keyrings) |
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
@@ -85,11 +86,16 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server` and `edge` are the current exceptions to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift.
+`code-server`, `edge`, and `bitwarden` are the current exceptions to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file Exec rewrite, deps via `Include=`.
 
 ## Sysext-Specific Extra Files
 
 Some sysexts include extra files via `mkosi.extra/`:
+
+### bitwarden
+- No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/bitwarden/`), reused verbatim from the loaded profiles
+- Desktop app with no systemd service: no preset, no `Upholds=` drop-in
+- Ships hicolor icons — depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below)
 
 ### code-server
 - `mkosi.postinst.chroot` — Downloads code-server .deb via `verified_download()`, installs with `dpkg -i`. Upstream package targets `/usr/lib/code-server` with `/usr/bin/code-server` symlink and systemd units under `/usr/lib/systemd/`, so no relocation is required.
@@ -182,10 +188,10 @@ moves on its own.
 
 Each sysext distributed to users needs two files in the base image at `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`:
 
-> Note: `emdash.transfer`/`emdash.feature` are also registered here even though
-> the emdash sysext is built and published from a separate repository — every
-> sysext distributed via repository.frostyard.org needs its sysupdate wiring in
-> the base image regardless of where it is built.
+> Note: a sysext built and published from a separate repository still needs its
+> sysupdate wiring registered in the base image (every sysext distributed via
+> repository.frostyard.org does). emdash was registered this way until 2026-07-07,
+> when it was retired.
 
 ### Transfer file (`<name>.transfer`)
 
@@ -225,7 +231,7 @@ Documentation=<url>
 Enabled=false
 ```
 
-All sysexts default to `Enabled=false` — users opt in via systemd-sysupdate configuration. The base also registers `emdash.transfer` and `emdash.feature` for a sysext built in another repository, so do not infer the root `mkosi.conf` dependency list from the sysupdate directory alone.
+All sysexts default to `Enabled=false` — users opt in via systemd-sysupdate configuration. Externally-built sysexts may be registered here too, so do not infer the root `mkosi.conf` dependency list from the sysupdate directory alone.
 
 ## Service Activation Pattern (Upholds=)
 
@@ -294,7 +300,7 @@ succeeds the moment the cache is stale or absent.
    snapshot of base + this sysext's icons at build time. Merged on a host, that
    copy shadows the theme's cache for the whole `/usr` overlay and masks other
    sysexts' icons and any base icons newer than this sysext's build. This
-   applies equally to sysexts built in other repositories (e.g. emdash): never
+   applies equally to sysexts built in other repositories: never
    ship `usr/share/icons/**/icon-theme.cache` in a sysext.
 
 **Icon placement notes:**

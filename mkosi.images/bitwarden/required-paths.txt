@@ -1,0 +1,8 @@
+# bitwarden sysext: Bitwarden desktop app, relocated from /opt to /usr/lib
+/usr/lib/Bitwarden/bitwarden
+/usr/lib/Bitwarden/chrome-sandbox
+/usr/bin/bitwarden
+# Desktop integration: launcher entry and hicolor icon (see yeti/sysexts.md
+# "Desktop Applications in Sysexts")
+/usr/share/applications/bitwarden.desktop
+/usr/share/icons/hicolor/512x512/apps/bitwarden.png

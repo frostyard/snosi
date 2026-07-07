@@ -18,6 +18,7 @@ The project produces:
 | **cayo**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
 | **cayoloaded**      | cayo + Docker + Incus (baked in)                                | directory → OCI (buildah/chunkah) |
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
+| **bitwarden**       | Bitwarden password manager desktop application                  | sysext        |
 | **code-server**     | code-server (VS Code in the browser)                            | sysext        |
 | **debdev**          | Debian development tools (debootstrap, distro-info)             | sysext        |
 | **dev**             | Build essentials, Python, cmake, valgrind, gdb                  | sysext        |
