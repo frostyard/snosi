@@ -11,16 +11,13 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 | Image | Kernel | Extras |
 |-------|--------|--------|
 | **snow** | backports | GNOME desktop, podman, flatpak |
-| **snowloaded** | backports | snow + Edge, VSCode, Bitwarden, Incus, Azure VPN |
 | **snowfield** | linux-surface | GNOME desktop (Surface devices) |
-| **snowfieldloaded** | linux-surface | snowfield + loaded extras (Edge, VSCode, Bitwarden, Incus, Azure VPN) |
 
 ### Server Images (OCI, pushed to ghcr.io)
 
 | Image | Kernel | Extras |
 |-------|--------|--------|
 | **cayo** | backports | Headless server, podman |
-| **cayoloaded** | backports | cayo + Docker CE + Incus (baked in) |
 
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
@@ -56,7 +53,6 @@ shared/                     # Reusable fragments composed via Include=
   sysext/postoutput/        # Shared sysext versioning and manifest logic
   manifest/postoutput/      # Image manifest processing
   snow/                     # Snow desktop: build scripts + tree overlay
-  snowloaded/               # Snowloaded: additional tree overlay
   cayo/                     # Cayo server: postinstall scripts + tree overlay
 mkosi.sandbox/etc/apt/       # External APT repo configs + GPG keyrings
 mkosi.tools.sandbox/etc/apt/ # APT config for mkosi's ToolsTree=default bootstrap
@@ -88,10 +84,7 @@ Profile (e.g., snow/mkosi.conf)
 └── PostOutputScripts: mkosi.postoutput             # Post-output scripts
 ```
 
-The "loaded" variants extend their base profile by adding more Include directives, ExtraTrees, and PostInstallationScripts:
-
-- **snowloaded/snowfieldloaded** add Edge, VS Code, Bitwarden, Azure VPN, and Incus. Incus is on-image here through `shared/packages/virt`, not the separate Incus sysext.
-- **cayoloaded** adds Docker CE on-image via `docker-onimage` and Incus on-image via `virt-base`.
+The app-bundling "loaded" variants (snowloaded, snowfieldloaded, cayoloaded) were retired in 2026-07: every app they baked in (Edge, VS Code, Bitwarden, Azure VPN, Incus, Docker) is delivered as a sysext instead. The shared `packages/{edge,vscode,bitwarden,azurevpn}` fragments now serve only the sysext builds.
 
 ### Script Pipeline
 
@@ -188,11 +181,8 @@ Use build-time enablement/presets for desired service state. For run-once runtim
 just                    # List targets
 just sysexts            # Build base + all 13 sysexts
 just snow               # Build snow desktop
-just snowloaded         # Build snowloaded variant
 just snowfield          # Build snowfield (Surface)
-just snowfieldloaded    # Build snowfieldloaded variant
 just cayo               # Build cayo server
-just cayoloaded         # Build cayoloaded variant
 just clean              # Remove build artifacts
 just test-install       # Run bootc install test
 just run-qemu           # Run image in QEMU

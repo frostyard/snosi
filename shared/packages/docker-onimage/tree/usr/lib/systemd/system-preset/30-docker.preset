@@ -1,2 +1,0 @@
-enable docker.socket
-enable containerd.service

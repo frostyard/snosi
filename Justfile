@@ -22,20 +22,11 @@ sysexts: ensure-mkosi
 snow: ensure-mkosi
     sudo PATH="$PATH" {{just}} _snow
 
-snowloaded: ensure-mkosi
-    sudo PATH="$PATH" {{just}} _snowloaded
-
 snowfield: ensure-mkosi
     sudo PATH="$PATH" {{just}} _snowfield
 
-snowfieldloaded: ensure-mkosi
-    sudo PATH="$PATH" {{just}} _snowfieldloaded
-
 cayo: ensure-mkosi
     sudo PATH="$PATH" {{just}} _cayo
-
-cayoloaded: ensure-mkosi
-    sudo PATH="$PATH" {{just}} _cayoloaded
 
 test-install image="output/snow":
     sudo PATH="$PATH" {{just}} _test-install {{image}}
@@ -77,24 +68,12 @@ _snow: _clean
     {{mkosi}} --profile snow build
 
 [private]
-_snowloaded: _clean
-    {{mkosi}} --profile snowloaded build
-
-[private]
 _snowfield: _clean
     {{mkosi}} --profile snowfield build
 
 [private]
-_snowfieldloaded: _clean
-    {{mkosi}} --profile snowfieldloaded build
-
-[private]
 _cayo: _clean
     {{mkosi}} --profile cayo build
-
-[private]
-_cayoloaded: _clean
-    {{mkosi}} --profile cayoloaded build
 
 [private]
 _test-install image="output/snow":

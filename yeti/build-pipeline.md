@@ -32,7 +32,7 @@ bootc and ostree install as regular APT packages from the Frostyard repository (
 - **Runtime lib pinning:** the debs declare only a partial `Depends` list; base `Packages=` keeps the full set of runtime link deps explicit (`libfuse3-4`, `libsoup-3.0-0`, `liblzma5`, `libzstd1`, `libmount1`, `libselinux1`, `libcom-err2`, `libext2fs2t64`, plus the declared ones). Do not remove them from `Packages=` just because apt does not demand them.
 - **History (until 2026-07):** both were compiled from source during the base image build via `shared/bootc/build/bootc.chroot` (BuildScript + `BuildPackages=` overlay deps + rustup toolchain + ostree double-install + stub-deb dpkg registration in `shared/bootc/postinst/bootc-register.chroot`). All of that machinery was removed when the deb path landed; see git history if the in-tree build ever needs resurrecting.
 
-**Server profiles (cayo/cayoloaded):** Only `brew.chroot` (no desktop build scripts).
+**Server profile (cayo):** Only `brew.chroot` (no desktop build scripts).
 
 ### 2. PostInstallationScripts (after packages)
 
@@ -97,7 +97,7 @@ Both snow and cayo postinstall scripts source this shared script after setting `
 **Server postinstall:**
 - `shared/cayo/scripts/postinstall/cayo.postinst.chroot` — Sources `common-postinst.sh` with OS_PRETTY_NAME="Cayo Linux" (no additional steps beyond common logic)
 
-**Loaded variant postinstall scripts (desktop loaded — snowloaded/snowfieldloaded):**
+**App package-set postinstall scripts (now consumed only by the app sysext builds — the loaded variants that used them were retired 2026-07):**
 
 | Script | Location | Purpose |
 |--------|----------|---------|
@@ -106,7 +106,6 @@ Both snow and cayo postinstall scripts source this shared script after setting `
 | `bitwarden.chroot` | `shared/packages/bitwarden/mkosi.postinst.d/` | Downloads Bitwarden .deb via `verified_download()`, relocates `/opt/Bitwarden` → `/usr/lib/Bitwarden`, sets SUID on chrome-sandbox |
 | `vscode.chroot` | `shared/packages/vscode/mkosi.postinst.d/` | Patches desktop entry to add inode/directory MIME type |
 
-**Server loaded variant (cayoloaded):** No additional postinstall scripts beyond the base cayo postinstall. Docker CE and Incus are baked into the image via `docker-onimage` and `virt-base` package sets with their tree overlays providing systemd presets, sysusers, and tmpfiles.
 
 ### 3. FinalizeScripts (pre-output)
 
@@ -289,24 +288,6 @@ Server configuration overlay:
 - NetworkManager/IWD networking config
 - systemd mounts and presets (no desktop services)
 - sysusers/tmpfiles for avahi, dnsmasq, docker, incus
-
-### shared/packages/virt-base/tree/
-
-Incus on-image enablement overlay (used by cayoloaded and snowloaded/snowfieldloaded):
-- systemd preset: `40-incus.preset` (enables incus services)
-- sysusers.d: `dnsmasq.conf`, `rdma.conf`
-
-### shared/packages/docker-onimage/tree/
-
-Docker CE on-image enablement overlay (used by cayoloaded):
-- systemd preset: enables docker services
-- sysusers.d: Docker user/group definitions
-- tmpfiles.d: Runtime directory setup
-
-### shared/packages/azurevpn/tree/
-
-Azure VPN capability fixes overlay (used by snowloaded/snowfieldloaded):
-- systemd preset and workaround service for Azure VPN client capabilities
 
 ## /etc Drift Tooling and Preset Reconciliation (base mkosi.extra)
 
