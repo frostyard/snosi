@@ -290,10 +290,6 @@ Server configuration overlay:
 - systemd mounts and presets (no desktop services)
 - sysusers/tmpfiles for avahi, dnsmasq, docker, incus
 
-### shared/snowloaded/tree/
-
-Single GLib schema override for "loaded" variant defaults.
-
 ### shared/packages/virt-base/tree/
 
 Incus on-image enablement overlay (used by cayoloaded and snowloaded/snowfieldloaded):
