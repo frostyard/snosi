@@ -5,6 +5,13 @@
 # the session starts, so login-while-pending is covered too.
 [Unit]
 Description=Watch for a staged OS update
+# The stager writes the semaphore in several syscalls, so one staging emits
+# multiple PathModified events in a burst; combined with the login-time
+# PathExists trigger this can exceed systemd's default start-rate limit (5/10s)
+# and leave this unit in a permanent 'unit-start-limit-hit' failure that stops
+# watching. Disable the limit — the triggered service is ack-gated, so repeat
+# triggers for the same staged digest are harmless no-ops.
+StartLimitIntervalSec=0
 
 [Path]
 PathExists=/run/snosi/update-staged
