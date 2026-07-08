@@ -45,7 +45,7 @@ mkosi.profiles/             # Desktop/server profile definitions (6 profiles)
   cayo/
   ...
 shared/                     # Reusable fragments composed via Include=
-  download/                 # Verified download system (checksums.json, package-versions.json + helpers)
+  download/                 # Verified download metadata (sysext/image checksums, package version sentinels) + helpers
   kernel/                   # Kernel variant configs (backports, surface, stock)
   packages/                 # Package set configs (desktop/server bases plus loaded-image extras)
   scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot build script)
@@ -131,11 +131,31 @@ See [sysexts.md](sysexts.md) for details.
 
 ### Verified Downloads
 
-External resources are pinned in `shared/download/checksums.json` with URL + SHA256. Scripts use `verified_download(key, output_path)` from `shared/download/verified-download.sh`. CI workflow `check-dependencies.yml` detects updates weekly and creates PRs.
+Direct external downloads are pinned with URL + SHA256 in target-specific
+metadata files under `shared/download/`:
 
-Package versions for selected APT-based externals (VSCode, Docker, 1Password, Himmelblau) are tracked separately in `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
+- `sysext-checksums.json` — direct downloads consumed by sysext builds
+- `image-checksums.json` — direct downloads consumed by OCI profile builds
 
-Current checksum-managed downloads are Bitwarden, Homebrew install script, code-server, Surface secure boot certificate, Hotedge, Logomenu, Bazaar Companion, Azure VPN, and Microsoft Edge. Current APT version tracking covers `code`, `docker-ce`, and `1password-cli`; Edge is checksum-managed because the build installs a patched downloaded `.deb`. `code-server` is a sysext exception: it is installed by `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` + `dpkg -i`, while `KEYPACKAGE=code-server` still drives version extraction from the merged dpkg database.
+Scripts use `verified_download(key, output_path)` from
+`shared/download/verified-download.sh`; by default it searches both checksum
+files. CI workflow `check-dependencies.yml` detects updates weekly and opens
+target-specific PRs so sysext-only changes do not spend the OCI image matrix.
+
+Package versions for selected APT-based sysext externals (VSCode `code`,
+Docker, 1Password) are tracked separately in
+`shared/download/package-versions.json`, checked daily by `check-packages.yml`.
+This file is only a rebuild sentinel; mkosi still resolves packages from APT.
+
+Current sysext checksum-managed downloads are Bitwarden, code-server, Azure
+VPN, and Microsoft Edge. Current image checksum-managed downloads are Homebrew
+install script, Surface secure boot certificate, Hotedge, Logomenu, and Bazaar
+Companion. Current APT version tracking covers `code`, `docker-ce`, and
+`1password-cli`; Edge is checksum-managed because the build installs a patched
+downloaded `.deb`. `code-server` is a sysext exception: it is installed by
+`mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` +
+`dpkg -i`, while `KEYPACKAGE=code-server` still drives version extraction from
+the merged dpkg database.
 
 ### User Service Enablement in Chroot
 

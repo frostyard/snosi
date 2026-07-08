@@ -257,11 +257,23 @@ Optimizes OCI image layers using [chunkah](https://quay.io/jlebon/chunkah).
 
 ## Verified Download System
 
-External resources are managed through `shared/download/`:
+External resources are managed through `shared/download/` with metadata split
+by the build artifact that must be rebuilt when a dependency changes:
 
-### checksums.json
+### sysext-checksums.json
 
-Pins URL + SHA256 for each external download:
+Pins URL + SHA256 for direct downloads consumed by sysext builds. Current
+consumers include the Bitwarden, Edge, Azure VPN, and code-server sysexts.
+Updates to this file should trigger `build.yml` and skip the OCI image matrix.
+
+### image-checksums.json
+
+Pins URL + SHA256 for direct downloads consumed by OCI profile builds. Current
+consumers include Homebrew, Surface secure boot cert, Hotedge, Logomenu, and
+Bazaar Companion. Updates to this file should trigger `build-images.yml` and
+skip the sysext publishing workflow.
+
+Both checksum files use the same schema:
 
 ```json
 {
@@ -276,18 +288,26 @@ Pins URL + SHA256 for each external download:
 ### verified-download.sh
 
 Provides `verified_download(key, output_path)`:
-1. Reads URL + checksum from checksums.json via jq
+1. Searches `sysext-checksums.json` and `image-checksums.json` via jq
 2. Downloads with curl + retries
 3. Validates SHA256 post-download
-4. Fails the build on checksum mismatch
+4. Fails the build on missing keys or checksum mismatch
+
+Set `CHECKSUMS_FILE` only when a script must intentionally restrict lookup to
+one explicit metadata file.
 
 ### package-versions.json
 
-Tracks APT-based external package versions (VSCode `code`, `docker-ce`, `1password-cli`) separately from download checksums. Updated daily by `check-packages.yml`. Edge is NOT tracked here — it is pinned via `checksums.json` and updated by `check-dependencies.yml`.
+Tracks APT-based external package versions for sysexts (`code`, `docker-ce`,
+`1password-cli`) separately from download checksums. Updated daily by
+`check-packages.yml`. This file is only a rebuild sentinel; it does not pin
+what mkosi installs from APT. Edge is NOT tracked here — it is pinned as a
+direct `.deb` in `sysext-checksums.json` and updated by `check-dependencies.yml`.
 
 ### update-checksums.sh
 
-Helper for CI to update checksums.json:
+Helper for manual updates to existing checksum keys. It updates whichever split
+checksum file already contains the key:
 ```bash
 ./update-checksums.sh <key> <url> [version]
 ```

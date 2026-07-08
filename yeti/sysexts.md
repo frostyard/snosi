@@ -65,6 +65,25 @@ Key settings:
 - `Format=sysext` — Outputs an EROFS sysext image
 - `KEYPACKAGE` — The package whose version determines the sysext version
 
+
+### Dependency update metadata
+
+Use the dependency metadata file that matches how the sysext consumes the
+upstream artifact:
+
+| Sysext dependency source | Metadata file | Update workflow |
+|--------------------------|---------------|-----------------|
+| Direct `.deb`, tarball, raw file, or commit archive downloaded with `verified_download()` | `shared/download/sysext-checksums.json` | `.github/workflows/check-dependencies.yml` `check-sysext-updates` job |
+| External APT package installed through `Packages=` | `shared/download/package-versions.json` | `.github/workflows/check-packages.yml` |
+
+Do not put sysext-only direct downloads in `image-checksums.json`; that file is
+for OCI profile build inputs and triggers the expensive `build-images.yml`
+matrix. When adding a new sysext package from an external APT repo, add the
+package to `check-packages.yml` so a version change opens a sysext rebuild PR.
+When adding a new sysext direct download, add the checksum entry to
+`sysext-checksums.json` and add the upstream version check to the
+`check-sysext-updates` job.
+
 Every sysext must also have a `mkosi.images/<name>/required-paths.txt`: one
 absolute path per line (comments with `#`) that must exist in the finished
 buildroot. The shared finalize script

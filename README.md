@@ -95,8 +95,10 @@ shared/
 │   ├── surface/mkosi.conf     ← linux-surface kernel + iptsd
 │   └── scripts/               ← dracut postinst scripts
 ├── download/
-│   ├── checksums.json         ← Pinned URLs + SHA256s for all external downloads
-│   └── verified-download.sh   ← verified_download() helper
+│   ├── sysext-checksums.json ← Pinned direct downloads consumed by sysext builds
+│   ├── image-checksums.json  ← Pinned direct downloads consumed by OCI profile builds
+│   ├── package-versions.json ← External APT package version sentinels for sysexts
+│   └── verified-download.sh  ← verified_download() helper
 ├── kernel/
 │   ├── backports/mkosi.conf   ← Trixie backports kernel + firmware
 │   ├── surface/mkosi.conf     ← linux-surface kernel + iptsd
@@ -300,8 +302,8 @@ The `test-install.yml` workflow verifies the signature before every installation
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `check-dependencies.yml` | Weekly | Checks pinned external downloads (checksums.json) for updates, opens PRs |
-| `check-packages.yml` | Daily | Checks external APT package versions, opens PRs |
+| `check-dependencies.yml` | Weekly | Checks pinned direct downloads, updates `sysext-checksums.json` and/or `image-checksums.json`, opens target-specific PRs |
+| `check-packages.yml` | Daily | Checks external APT package versions for sysexts, updates `package-versions.json`, opens PRs |
 | `validate.yml` | PR/push | shellcheck (all shebang-discovered scripts, `-S warning`) + `mkosi summary` validation for every profile |
 | `test-install.yml` | Manual | Signature-verified bootc installation test in QEMU/KVM |
 | `scorecard.yml` | Weekly | OpenSSF supply-chain security analysis |
@@ -596,28 +598,48 @@ cp --archive --no-target-directory --update=none \
 
 ### Adding External Downloads with Checksum Verification
 
-Some build scripts download files directly from external URLs (not via apt). These downloads use SHA256 checksum verification for security and reproducibility.
+Some build scripts download files directly from external URLs instead of resolving
+them through APT. These downloads use SHA256 checksum verification for security,
+reproducibility, and reviewable update PRs.
 
 #### Files Involved
 
 ```
 shared/download/
-├── verified-download.sh   # Helper function for verified downloads
-├── checksums.json         # Pinned URLs and SHA256 checksums
-└── update-checksums.sh    # Manual helper to update a checksum
+├── verified-download.sh      # Helper function for verified downloads
+├── sysext-checksums.json     # Direct downloads consumed by mkosi.images/* sysexts
+├── image-checksums.json      # Direct downloads consumed by OCI profile builds
+├── package-versions.json     # APT package version sentinels for sysexts
+└── update-checksums.sh       # Manual helper to update an existing checksum key
 ```
 
-**checksums.json** contains entries like:
+The checksum files have the same schema. They are split by the build artifact
+that must be rebuilt when a dependency changes:
 
 ```json
 {
   "bitwarden": {
-    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2025.12.1/Bitwarden-2025.12.1-amd64.deb",
-    "sha256": "33a5056f43b6205fe168f64f3fc7d52cef4c5ccbe06951584d037664aa3c6c50",
-    "version": "2025.12.1"
+    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.6.1/Bitwarden-2026.6.1-amd64.deb",
+    "sha256": "421bfc6d787d842406909d393c2a9044791e957aa234718ae5670e87ae4deba7",
+    "version": "2026.6.1"
   }
 }
 ```
+
+Use the target-specific file:
+
+| Dependency kind | Metadata file | Rebuild workflow |
+|-----------------|---------------|------------------|
+| Direct download used by a sysext (`mkosi.images/<name>/...` or `shared/packages/<app>/...` consumed only by sysexts) | `shared/download/sysext-checksums.json` | `build.yml` |
+| Direct download used by profile/image build scripts (`shared/scripts/build/`, `shared/snow/scripts/build/`, `shared/cayo/...`) | `shared/download/image-checksums.json` | `build-images.yml` |
+| External APT package installed by a sysext through `Packages=` | `shared/download/package-versions.json` | `build.yml` |
+
+This routing keeps sysext-only dependency updates from spending the larger OCI
+image matrix. A dependency consumed by both sysexts and OCI profile builds
+needs an explicit design choice: split the consumers so each target has its own
+metadata entry, or update the workflow filters in the same PR. Do not hide a
+shared build input in one target-specific checksum file and assume both build
+workflows will run.
 
 #### Using Verified Downloads in Build Scripts
 
@@ -632,22 +654,29 @@ verified_download "mykey" "/path/to/output"
 ```
 
 The `verified_download` function:
-1. Reads the URL and checksum from `checksums.json` using the provided key
+1. Searches `sysext-checksums.json` and `image-checksums.json` for the key
 2. Downloads the file with retries
 3. Verifies the SHA256 checksum matches
 4. Fails the build with a clear error if verification fails
 
+Set `CHECKSUMS_FILE=/path/to/file.json` before sourcing the helper only when a
+script must intentionally restrict lookup to one explicit metadata file.
+
 #### Adding a New External Download
 
-1. **Add the entry to checksums.json:**
+1. **Choose the metadata file by consumer.**
+   - Sysext-only direct download: `shared/download/sysext-checksums.json`
+   - OCI profile direct download: `shared/download/image-checksums.json`
+   - Sysext APT package, no direct URL/checksum: `shared/download/package-versions.json`
+
+2. **Add the checksum entry.**
 
    ```bash
-   # Download the file and compute checksum
    curl -fsSL -o /tmp/myfile "https://example.com/myfile.tar.gz"
    sha256sum /tmp/myfile
    ```
 
-   Then add to `shared/download/checksums.json`:
+   Then add to the selected checksum file:
 
    ```json
    {
@@ -659,18 +688,24 @@ The `verified_download` function:
    }
    ```
 
-   Or use the helper script:
+   For an existing key, the helper updates whichever split checksum file
+   already contains the key:
 
    ```bash
    ./shared/download/update-checksums.sh mykey "https://example.com/myfile.tar.gz" "1.2.3"
    ```
 
-2. **Use in your build script:**
+3. **Use the key in the build script.**
 
    ```bash
    source "$SRCDIR/shared/download/verified-download.sh"
    verified_download "mykey" "/tmp/myfile.tar.gz"
    ```
+
+4. **Add the update check.**
+   - Sysext direct downloads go in the `check-sysext-updates` job in `.github/workflows/check-dependencies.yml`.
+   - OCI profile direct downloads go in the `check-image-updates` job in `.github/workflows/check-dependencies.yml`.
+   - Sysext APT package sentinels go in `.github/workflows/check-packages.yml` and `shared/download/package-versions.json`.
 
 #### Pinning Strategy
 
@@ -680,12 +715,18 @@ The `verified_download` function:
 
 #### Automated Update Checking
 
-The `.github/workflows/check-dependencies.yml` workflow runs weekly to check for updates:
+The `.github/workflows/check-dependencies.yml` workflow runs weekly and has two
+independent jobs:
 
-1. Compares pinned versions against latest releases/commits
-2. If updates are found, downloads new files and computes checksums
-3. Creates a PR with updated `checksums.json`
-4. **Requires manual review** before merging - verify builds work with new versions
+1. `check-sysext-updates` compares sysext direct-download pins and opens
+   `auto-update-sysext-checksums` PRs against `sysext-checksums.json`.
+2. `check-image-updates` compares OCI profile direct-download pins and opens
+   `auto-update-image-checksums` PRs against `image-checksums.json`.
+
+The `.github/workflows/check-packages.yml` workflow runs daily for external APT
+packages consumed by sysexts (`code`, `docker-ce`, `1password-cli`). It updates
+`package-versions.json`, which is only a change-detection sentinel; mkosi still
+resolves the package from APT during the sysext build.
 
 To check manually or trigger an update PR, use the "Run workflow" button in GitHub Actions.
 

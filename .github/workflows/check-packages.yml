@@ -19,6 +19,10 @@ jobs:
         with:
           persist-credentials: false
 
+
+      # These packages are installed by sysext images from external APT repos.
+      # package-versions.json is only a change-detection sentinel; mkosi still
+      # resolves packages from APT during the sysext build.
       - name: Check latest package versions
         run: |
           get_latest_version() {
@@ -96,10 +100,10 @@ jobs:
           # WORKFLOW_PAT repo secret to give auto-update PRs real CI (see
           # check-dependencies.yml for details).
           token: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
-          commit-message: "chore: update package versions"
-          title: "chore: update package versions"
+          commit-message: "chore: update sysext package versions"
+          title: "chore: update sysext package versions"
           body: |
-            Automated update of pinned package versions.
+            Automated update of external APT package version sentinels for sysext builds.
 
             ${{ steps.compare.outputs.summary }}
 

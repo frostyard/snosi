@@ -93,7 +93,7 @@ The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput
 
 ## Key Directories
 
-- `shared/download/` - Verified download system: `checksums.json` pins URLs+SHA256s, `verified-download.sh` provides the `verified_download()` helper
+- `shared/download/` - Verified download system: `sysext-checksums.json` pins direct downloads consumed by sysexts, `image-checksums.json` pins direct downloads consumed by OCI profile builds, `package-versions.json` tracks external APT package version sentinels for sysexts, and `verified-download.sh` provides the `verified_download()` helper
 - `shared/kernel/` - Kernel configs (backports, surface, stock) and dracut scripts
 - `shared/packages/` - Package set definitions, some with postinstall scripts for relocation
 - `shared/outformat/image/` - Image output format config (directory), finalize scripts, `buildah-package.sh` (OCI packaging), and `chunkah-package.sh` (CI re-chunks the OCI image for efficient delta updates)
@@ -104,9 +104,9 @@ The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput
 
 - Use `set -euo pipefail` at the top of all scripts
 - Build scripts running in chroot use `.chroot` extension
-- External downloads must go through `verified_download()` with entries in `checksums.json`
+- External direct downloads must go through `verified_download()` with entries in `sysext-checksums.json` for sysext consumers or `image-checksums.json` for OCI profile consumers
 - Pin external URLs to specific versions/commits, never `latest` or branch names
-- When adding a new verified download, also add a corresponding update check to `.github/workflows/check-dependencies.yml`
+- When adding a new verified download, also add a corresponding update check to `.github/workflows/check-dependencies.yml`; sysext APT package sentinels go in `.github/workflows/check-packages.yml`
 
 ## User Service Enablement in Chroot
 

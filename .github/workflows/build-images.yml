@@ -6,8 +6,18 @@ on:
       - build
   push:
     branches: [main]
+    paths-ignore:
+      # Sysext-only dependency metadata should rebuild/publish sysexts via
+      # build.yml without spending the OCI image matrix.
+      - "shared/download/package-versions.json"
+      - "latest-versions.txt"
+      - "shared/download/sysext-checksums.json"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "shared/download/package-versions.json"
+      - "latest-versions.txt"
+      - "shared/download/sysext-checksums.json"
   workflow_dispatch:
 
 permissions: {}
