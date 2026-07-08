@@ -1,9 +1,39 @@
 #!/bin/sh
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# motd hook (headless/server logins): surface a staged OS update. The
-# semaphore is written by /usr/libexec/bootc-update-stage and lives in /run,
-# so the reboot that applies the update clears it.
+# motd hook (headless/server logins): surface OS update status. Two inputs,
+# both written by /usr/libexec/bootc-update-stage and living in /run (the
+# applying reboot clears them):
+#   /run/snosi/update-staged - reboot-pending semaphore (also re-asserted for
+#     updates staged manually via `bootc upgrade`)
+#   /run/snosi/update-check  - result of the last hourly check, so "up to
+#     date" and "checker broken" are distinguishable at a glance
 SEM=/run/snosi/update-staged
-[ -s "$SEM" ] || exit 0
-digest=$(sed -n 's/^digest=sha256:\(.\{12\}\).*/\1/p' "$SEM")
-printf '\nA system update is staged (%s) and will apply at the next reboot.\n' "${digest:-unknown}"
+CHECK=/run/snosi/update-check
+
+if [ -s "$SEM" ]; then
+    digest=$(sed -n 's/^digest=sha256:\(.\{12\}\).*/\1/p' "$SEM")
+    printf '\nA system update is staged (%s) and will apply at the next reboot.\n' "${digest:-unknown}"
+    exit 0
+fi
+
+# No check recorded yet this boot (timer has not fired): stay silent rather
+# than guess.
+[ -s "$CHECK" ] || exit 0
+
+outcome=$(sed -n 's/^outcome=//p' "$CHECK")
+checked_at=$(sed -n 's/^checked_at=//p' "$CHECK")
+running=$(sed -n 's/^running_version=//p' "$CHECK")
+
+case "$outcome" in
+current)
+    printf '\nsnosi %s is up to date (checked %s).\n' "${running:-unknown}" "${checked_at:-unknown}"
+    ;;
+failed)
+    printf '\nWARNING: the last OS update check FAILED (%s).\n' "${checked_at:-unknown}"
+    printf 'See: journalctl -u bootc-update-stage.service\n'
+    ;;
+held-rollback)
+    printf '\nAn OS update is available but matches the rollback deployment;\n'
+    printf 'not applied automatically. Use `bootc rollback` if intended.\n'
+    ;;
+esac

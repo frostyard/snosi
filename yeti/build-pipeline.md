@@ -61,12 +61,29 @@ The base overlay ships `bootc-update-stage.service` and `bootc-update-stage.time
 - writes the reboot-pending semaphore `/run/snosi/update-staged`
   (image/digest/timestamp; also re-asserted when an update is found already
   staged, covering manual `bootc upgrade`; /run placement means the applying
-  reboot clears it), and
+  reboot clears it),
+- writes the check-result file `/run/snosi/update-check` on EVERY run —
+  `outcome=current|staged|held-rollback|failed`, `checked_at`, `image`,
+  `running_version`, `remote_version` (the image's
+  `org.opencontainers.image.version` label, which matches os-release
+  `IMAGE_VERSION`; the only cross-transport identity since digests differ
+  between registry/ISO/podman transports). An EXIT trap records
+  `outcome=failed` on any error, so a silently broken checker is
+  distinguishable from an up-to-date machine (the visibility gap that hid
+  the bootc second-update bug), and
 - prunes dangling transfer images after the switch.
 
-Two consumers surface the pending reboot:
+Consumers of the update state:
 - `/etc/update-motd.d/86-bootc-update-staged` — SSH/console logins (all
-  images, including headless cayo).
+  images, including headless cayo). Staged semaphore wins; otherwise it
+  prints one line per check outcome ("snosi VERSION is up to date
+  (checked TIME)", a FAILED warning pointing at the journal, or the
+  held-rollback note). Silent when no check has run this boot.
+- `snosi-update-status` (root CLI, base `usr/bin/`) — running version,
+  followed image, last-check outcome, staged deployment (also shown when
+  staged outside the checker via manual `bootc upgrade`); `--check` does a
+  live `skopeo inspect` of the followed registry image and compares
+  version labels. No-ops gracefully on nbc (non-bootc) installs.
 - `bootc-update-notify.path` + `.service` (user scope) with
   `/usr/libexec/bootc-update-notify` — desktop notification. The path unit
   fires when the semaphore appears mid-session or is modified (newer image

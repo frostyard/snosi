@@ -1,0 +1,108 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# snosi-update-status — answer "is this machine current?" in one command.
+#
+# Reads local state only by default: the running IMAGE_VERSION, the bootc
+# deployment status, and the result files written by the hourly checker
+# (/usr/libexec/bootc-update-stage): /run/snosi/update-check (outcome of the
+# last check) and /run/snosi/update-staged (reboot-pending semaphore).
+#
+# Usage: snosi-update-status [--check]
+#
+#   --check   also query the registry live (skopeo inspect) and compare the
+#             published org.opencontainers.image.version label against the
+#             running version. Compare VERSIONS, never digests: the same
+#             build has a different digest per transport (registry vs ISO
+#             vs podman-loaded).
+set -euo pipefail
+
+CHECK=/run/snosi/update-check
+SEM=/run/snosi/update-staged
+
+usage() {
+    echo "Usage: snosi-update-status [--check]" >&2
+    exit 2
+}
+
+LIVE=0
+for arg in "$@"; do
+    case "$arg" in
+        --check) LIVE=1 ;;
+        *) usage ;;
+    esac
+done
+
+if [[ $EUID -ne 0 ]]; then
+    echo "snosi-update-status: must run as root (bootc status requires it)" >&2
+    exit 1
+fi
+
+running_version=""
+if [[ -r /usr/lib/os-release ]]; then
+    running_version=$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
+fi
+
+status=$(bootc status --format json)
+image=$(jq -r '.spec.image.image // empty' <<<"$status")
+staged_digest=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$status")
+
+echo "Running:    snosi ${running_version:-unknown}"
+if [[ -z "$image" ]]; then
+    echo "Following:  (not a bootc-managed system; updates handled by nbc)"
+    exit 0
+fi
+echo "Following:  $image"
+
+# key FILE - print the value of key= from FILE, empty if absent
+key() { sed -n "s/^$1=//p" "$2" 2>/dev/null || true; }
+
+if [[ -s "$CHECK" ]]; then
+    outcome=$(key outcome "$CHECK")
+    checked_at=$(key checked_at "$CHECK")
+    remote_version=$(key remote_version "$CHECK")
+    case "$outcome" in
+    current)
+        echo "Last check: up to date ($checked_at)"
+        ;;
+    staged)
+        echo "Last check: update to ${remote_version:-unknown} staged ($checked_at)"
+        ;;
+    held-rollback)
+        echo "Last check: published image equals the rollback deployment ($checked_at)"
+        echo "            Not applied automatically; use \`bootc rollback\` if intended."
+        ;;
+    failed)
+        echo "Last check: FAILED ($checked_at)"
+        echo "            See: journalctl -u bootc-update-stage.service"
+        ;;
+    *)
+        echo "Last check: unknown outcome '${outcome:-}' ($checked_at)"
+        ;;
+    esac
+else
+    echo "Last check: none recorded this boot (bootc-update-stage.timer runs hourly)"
+fi
+
+if [[ -s "$SEM" ]]; then
+    staged_at=$(key staged_at "$SEM")
+    digest=$(key digest "$SEM")
+    echo "Staged:     ${digest:0:19} at $staged_at — reboot to apply"
+elif [[ -n "$staged_digest" ]]; then
+    # Staged outside the checker (manual bootc upgrade) before the next
+    # timer run re-asserts the semaphore.
+    echo "Staged:     ${staged_digest:0:19} — reboot to apply"
+fi
+
+if [[ $LIVE -eq 1 ]]; then
+    published=$(skopeo inspect "docker://$image" 2>/dev/null |
+        jq -r '.Labels["org.opencontainers.image.version"] // empty') || published=""
+    if [[ -z "$published" ]]; then
+        echo "Registry:   query failed (network? unpublished tag?)"
+        exit 1
+    fi
+    if [[ "$published" == "$running_version" ]]; then
+        echo "Registry:   $published — this machine is current"
+    else
+        echo "Registry:   $published — differs from running ${running_version:-unknown}"
+    fi
+fi
