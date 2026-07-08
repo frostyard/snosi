@@ -11,6 +11,30 @@
 # enforces containers-policy.json at pull time.
 set -euo pipefail
 
+# Check-result state: written on EVERY run (not only when staging) so that
+# "current", "update staged", and "checker broken" are distinguishable
+# without reading the journal. Consumed by the motd hook
+# (/etc/update-motd.d/86-bootc-update-staged) and snosi-update-status.
+# Lives in /run: stale results do not survive a reboot.
+CHECK=/run/snosi/update-check
+
+running_version=""
+if [[ -r /usr/lib/os-release ]]; then
+    running_version=$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
+fi
+
+write_check() { # outcome
+    mkdir -p /run/snosi
+    printf 'outcome=%s\nchecked_at=%s\nimage=%s\nrunning_version=%s\nremote_version=%s\n' \
+        "$1" "$(date --iso-8601=seconds)" "${image:-}" "$running_version" \
+        "${remote_version:-}" >"$CHECK"
+}
+
+# Any failure (podman pull, bootc, the post-stage digest verify) records
+# outcome=failed; a broken checker must not be indistinguishable from an
+# up-to-date system.
+trap '[[ $? -eq 0 ]] || write_check failed' EXIT
+
 status=$(bootc status --format json)
 
 image=$(jq -r '.spec.image.image // empty' <<<"$status")
@@ -36,10 +60,18 @@ podman pull --quiet "$image" >/dev/null
 pulled=$(podman image inspect --format '{{.Id}}' "$image")
 pulled="sha256:${pulled#sha256:}"
 
+# The version label CI stamps on published images; matches IMAGE_VERSION in
+# os-release, and is the only cross-transport identity (digests differ
+# between registry, ISO, and podman-loaded copies of the same build).
+remote_version=$(podman image inspect \
+    --format '{{index .Config.Labels "org.opencontainers.image.version"}}' \
+    "$image" 2>/dev/null) || remote_version=""
+
 # For containers-storage deployments, bootc's imageDigest is the storage
 # image ID (config digest), which is exactly what podman reports as .Id.
 if [[ "$pulled" == "$booted" ]]; then
     echo "Already running $image ($pulled); nothing to stage."
+    write_check current
     exit 0
 fi
 # Semaphore for "reboot pending": consumed by the motd hook
@@ -57,6 +89,7 @@ if [[ "$pulled" == "$staged" ]]; then
     # Re-assert the semaphore: it is runtime state and this covers updates
     # staged outside this script (e.g. a manual `bootc upgrade`).
     write_staged_semaphore "$pulled"
+    write_check staged
     exit 0
 fi
 if [[ -n "$rollback" && "$pulled" == "$rollback" ]]; then
@@ -65,6 +98,7 @@ if [[ -n "$rollback" && "$pulled" == "$rollback" ]]; then
     # "Target image has the same fs-verity digest as the existing rollback
     # deployment"). Use `bootc rollback` deliberately if that is intended.
     echo "$image ($pulled) equals the rollback deployment; not re-staging automatically."
+    write_check held-rollback
     exit 0
 fi
 
@@ -95,4 +129,5 @@ fi
 podman image prune -f >/dev/null || true
 
 write_staged_semaphore "$pulled"
+write_check staged
 echo "Update staged; it will apply at the next reboot."
