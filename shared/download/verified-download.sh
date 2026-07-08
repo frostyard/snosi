@@ -1,19 +1,36 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Shared helper for verified downloads with SHA256 checksum validation.
+# By default, lookup is split by build target:
+#   - sysext-checksums.json: direct downloads consumed by mkosi.images/* sysexts
+#   - image-checksums.json: direct downloads consumed by OCI profile builds
+# Set CHECKSUMS_FILE to force lookup against one explicit metadata file.
 set -euo pipefail
 
-CHECKSUMS_FILE="${CHECKSUMS_FILE:-$(dirname "${BASH_SOURCE[0]}")/checksums.json}"
+CHECKSUMS_DIR="$(dirname "${BASH_SOURCE[0]}")"
+if [[ -n "${CHECKSUMS_FILE:-}" ]]; then
+    CHECKSUMS_FILES=("$CHECKSUMS_FILE")
+else
+    CHECKSUMS_FILES=(
+        "$CHECKSUMS_DIR/sysext-checksums.json"
+        "$CHECKSUMS_DIR/image-checksums.json"
+    )
+fi
 
 verified_download() {
     local key="$1"
     local output_path="$2"
 
-    [[ -f "$CHECKSUMS_FILE" ]] || { echo "Error: Checksums file not found: $CHECKSUMS_FILE" >&2; return 1; }
+    local url="" checksum="" checksums_file
+    for checksums_file in "${CHECKSUMS_FILES[@]}"; do
+        [[ -f "$checksums_file" ]] || { echo "Error: Checksums file not found: $checksums_file" >&2; return 1; }
 
-    local url checksum
-    url=$(jq -r --arg key "$key" '.[$key].url // empty' "$CHECKSUMS_FILE")
-    checksum=$(jq -r --arg key "$key" '.[$key].sha256 // empty' "$CHECKSUMS_FILE")
+        url=$(jq -r --arg key "$key" '.[$key].url // empty' "$checksums_file")
+        checksum=$(jq -r --arg key "$key" '.[$key].sha256 // empty' "$checksums_file")
+        if [[ -n "$url" || -n "$checksum" ]]; then
+            break
+        fi
+    done
 
     [[ -n "$url" ]] || { echo "Error: No URL for key '$key'" >&2; return 1; }
     [[ -n "$checksum" ]] || { echo "Error: No checksum for key '$key'" >&2; return 1; }

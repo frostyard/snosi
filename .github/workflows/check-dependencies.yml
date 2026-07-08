@@ -8,7 +8,8 @@ on:
 permissions: {}
 
 jobs:
-  check-updates:
+  check-sysext-updates:
+    name: Check sysext dependency updates
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -19,12 +20,12 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check for dependency updates
+      - name: Check for sysext dependency updates
         id: check
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          CHECKSUMS="shared/download/checksums.json"
+          CHECKSUMS="shared/download/sysext-checksums.json"
           UPDATES=""
 
           # Authenticated, retried GitHub API fetch. On persistent failure it
@@ -50,16 +51,6 @@ jobs:
             echo "bitwarden_version=$LATEST_BW" >> $GITHUB_OUTPUT
           fi
 
-          # Check Homebrew install script
-          CURRENT_BREW=$(jq -r '.["brew-install"].version' "$CHECKSUMS")
-          LATEST_BREW=$(gh_api https://api.github.com/repos/Homebrew/install/commits/HEAD | jq -r '.sha' | head -c 12)
-          CURRENT_BREW_SHORT=$(echo "$CURRENT_BREW" | head -c 12)
-          if [[ -n "$LATEST_BREW" && "$LATEST_BREW" != "null" && "$LATEST_BREW" != "$CURRENT_BREW_SHORT" ]]; then
-            UPDATES="${UPDATES}brew-install: $CURRENT_BREW_SHORT -> $LATEST_BREW\n"
-            echo "brew_update=true" >> $GITHUB_OUTPUT
-            echo "brew_commit=$LATEST_BREW" >> $GITHUB_OUTPUT
-          fi
-
           # Check code-server
           CURRENT_CS=$(jq -r '.["code-server"].version' "$CHECKSUMS")
           LATEST_CS=$(gh_api https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's/^v//')
@@ -69,9 +60,159 @@ jobs:
             echo "codeserver_version=$LATEST_CS" >> $GITHUB_OUTPUT
           fi
 
+          # Check Microsoft Azure VPN Client
+          CURRENT_AZ=$(jq -r '.["microsoft-azurevpnclient"].version' "$CHECKSUMS")
+          LATEST_AZ=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
+          if [[ -n "$LATEST_AZ" && "$LATEST_AZ" != "$CURRENT_AZ" ]]; then
+            UPDATES="${UPDATES}microsoft-azurevpnclient: $CURRENT_AZ -> $LATEST_AZ\n"
+            echo "azurevpn_update=true" >> $GITHUB_OUTPUT
+            echo "azurevpn_version=$LATEST_AZ" >> $GITHUB_OUTPUT
+          fi
+
+          # Check Microsoft Edge Stable
+          CURRENT_EDGE=$(jq -r '.["microsoft-edge-stable"].version' "$CHECKSUMS")
+          LATEST_EDGE=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
+          if [[ -n "$LATEST_EDGE" && "$LATEST_EDGE" != "$CURRENT_EDGE" ]]; then
+            UPDATES="${UPDATES}microsoft-edge-stable: $CURRENT_EDGE -> $LATEST_EDGE\n"
+            echo "edge_update=true" >> $GITHUB_OUTPUT
+            echo "edge_version=$LATEST_EDGE" >> $GITHUB_OUTPUT
+          fi
+
+          if [[ -n "$UPDATES" ]]; then
+            echo "has_updates=true" >> $GITHUB_OUTPUT
+            echo -e "Updates available:\n$UPDATES"
+          else
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "All sysext dependencies up to date"
+          fi
+
+      - name: Update sysext checksums
+        if: steps.check.outputs.has_updates == 'true'
+        # Step outputs derive from external release/commit data; passing them
+        # through env (rather than inline ${{ }} interpolation in the script)
+        # keeps a malicious upstream tag from injecting shell commands.
+        env:
+          BITWARDEN_UPDATE: ${{ steps.check.outputs.bitwarden_update }}
+          BITWARDEN_VERSION: ${{ steps.check.outputs.bitwarden_version }}
+          CODESERVER_UPDATE: ${{ steps.check.outputs.codeserver_update }}
+          CODESERVER_VERSION: ${{ steps.check.outputs.codeserver_version }}
+          AZUREVPN_UPDATE: ${{ steps.check.outputs.azurevpn_update }}
+          AZUREVPN_VERSION: ${{ steps.check.outputs.azurevpn_version }}
+          EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
+          EDGE_VERSION: ${{ steps.check.outputs.edge_version }}
+        run: |
+          CHECKSUMS="shared/download/sysext-checksums.json"
+
+          if [[ "$BITWARDEN_UPDATE" == "true" ]]; then
+            VER="$BITWARDEN_VERSION"
+            URL="https://github.com/bitwarden/clients/releases/download/desktop-v${VER}/Bitwarden-${VER}-amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.bitwarden.url=$u | .bitwarden.sha256=$s | .bitwarden.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$CODESERVER_UPDATE" == "true" ]]; then
+            VER="$CODESERVER_VERSION"
+            URL="https://github.com/coder/code-server/releases/download/v${VER}/code-server_${VER}_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.["code-server"].url=$u | .["code-server"].sha256=$s | .["code-server"].version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$AZUREVPN_UPDATE" == "true" ]]; then
+            VER="$AZUREVPN_VERSION"
+            URL="https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_${VER}_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.["microsoft-azurevpnclient"].url=$u | .["microsoft-azurevpnclient"].sha256=$s | .["microsoft-azurevpnclient"].version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$EDGE_UPDATE" == "true" ]]; then
+            VER="$EDGE_VERSION"
+            URL="https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_${VER}_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.["microsoft-edge-stable"].url=$u | .["microsoft-edge-stable"].sha256=$s | .["microsoft-edge-stable"].version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+      - name: Create sysext dependency PR
+        if: steps.check.outputs.has_updates == 'true'
+        uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
+        with:
+          # GITHUB_TOKEN-created PRs do not trigger workflows (validate/build
+          # never run on them). Set the WORKFLOW_PAT repo secret (fine-grained
+          # PAT or GitHub App token with contents+pull-requests write) to give
+          # auto-update PRs real CI; until then this falls back to
+          # GITHUB_TOKEN and PRs must be checked manually.
+          token: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update sysext dependency checksums"
+          title: "chore: update sysext dependency checksums"
+          body: |
+            Automated update of pinned direct-download dependencies consumed by sysext builds.
+
+            These updates modify `shared/download/sysext-checksums.json` and should trigger `build.yml`, not the OCI image matrix.
+
+            **Please verify the sysext build works before merging.**
+          branch: auto-update-sysext-checksums
+          delete-branch: true
+
+  check-image-updates:
+    name: Check image dependency updates
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Check for image dependency updates
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CHECKSUMS="shared/download/image-checksums.json"
+          UPDATES=""
+
+          gh_api() {
+            curl -fsSL --retry 3 --retry-delay 2 \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$1" || true
+          }
+
           # ostree + bootc are NOT checked here: they are consumed as debs
           # from the frostyard APT repo, built by frostyard/bootc-debian,
           # which has its own weekly upstream-version check.
+
+          # Check Homebrew install script
+          CURRENT_BREW=$(jq -r '.["brew-install"].version' "$CHECKSUMS")
+          LATEST_BREW=$(gh_api https://api.github.com/repos/Homebrew/install/commits/HEAD | jq -r '.sha' | head -c 12)
+          CURRENT_BREW_SHORT=$(echo "$CURRENT_BREW" | head -c 12)
+          if [[ -n "$LATEST_BREW" && "$LATEST_BREW" != "null" && "$LATEST_BREW" != "$CURRENT_BREW_SHORT" ]]; then
+            UPDATES="${UPDATES}brew-install: $CURRENT_BREW_SHORT -> $LATEST_BREW\n"
+            echo "brew_update=true" >> $GITHUB_OUTPUT
+            echo "brew_commit=$LATEST_BREW" >> $GITHUB_OUTPUT
+          fi
 
           # Check Surface cert (less frequent changes)
           CURRENT_SURF=$(jq -r '.["surface-cert"].version' "$CHECKSUMS")
@@ -110,42 +251,17 @@ jobs:
             echo "bazaar_commit=$LATEST_BZ" >> $GITHUB_OUTPUT
           fi
 
-          # Check Microsoft Azure VPN Client
-          CURRENT_AZ=$(jq -r '.["microsoft-azurevpnclient"].version' "$CHECKSUMS")
-          LATEST_AZ=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
-          if [[ -n "$LATEST_AZ" && "$LATEST_AZ" != "$CURRENT_AZ" ]]; then
-            UPDATES="${UPDATES}microsoft-azurevpnclient: $CURRENT_AZ -> $LATEST_AZ\n"
-            echo "azurevpn_update=true" >> $GITHUB_OUTPUT
-            echo "azurevpn_version=$LATEST_AZ" >> $GITHUB_OUTPUT
-          fi
-
-          # Check Microsoft Edge Stable
-          CURRENT_EDGE=$(jq -r '.["microsoft-edge-stable"].version' "$CHECKSUMS")
-          LATEST_EDGE=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
-          if [[ -n "$LATEST_EDGE" && "$LATEST_EDGE" != "$CURRENT_EDGE" ]]; then
-            UPDATES="${UPDATES}microsoft-edge-stable: $CURRENT_EDGE -> $LATEST_EDGE\n"
-            echo "edge_update=true" >> $GITHUB_OUTPUT
-            echo "edge_version=$LATEST_EDGE" >> $GITHUB_OUTPUT
-          fi
-
           if [[ -n "$UPDATES" ]]; then
             echo "has_updates=true" >> $GITHUB_OUTPUT
             echo -e "Updates available:\n$UPDATES"
           else
             echo "has_updates=false" >> $GITHUB_OUTPUT
-            echo "All dependencies up to date"
+            echo "All image dependencies up to date"
           fi
 
-      - name: Update checksums
+      - name: Update image checksums
         if: steps.check.outputs.has_updates == 'true'
-        # Step outputs derive from external release/commit data; passing them
-        # through env (rather than inline ${{ }} interpolation in the script)
-        # keeps a malicious upstream tag from injecting shell commands.
         env:
-          BITWARDEN_UPDATE: ${{ steps.check.outputs.bitwarden_update }}
-          BITWARDEN_VERSION: ${{ steps.check.outputs.bitwarden_version }}
-          CODESERVER_UPDATE: ${{ steps.check.outputs.codeserver_update }}
-          CODESERVER_VERSION: ${{ steps.check.outputs.codeserver_version }}
           BREW_UPDATE: ${{ steps.check.outputs.brew_update }}
           BREW_COMMIT: ${{ steps.check.outputs.brew_commit }}
           SURFACE_UPDATE: ${{ steps.check.outputs.surface_update }}
@@ -156,36 +272,8 @@ jobs:
           LOGOMENU_COMMIT: ${{ steps.check.outputs.logomenu_commit }}
           BAZAAR_UPDATE: ${{ steps.check.outputs.bazaar_update }}
           BAZAAR_COMMIT: ${{ steps.check.outputs.bazaar_commit }}
-          AZUREVPN_UPDATE: ${{ steps.check.outputs.azurevpn_update }}
-          AZUREVPN_VERSION: ${{ steps.check.outputs.azurevpn_version }}
-          EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
-          EDGE_VERSION: ${{ steps.check.outputs.edge_version }}
         run: |
-          CHECKSUMS="shared/download/checksums.json"
-
-          if [[ "$BITWARDEN_UPDATE" == "true" ]]; then
-            VER="$BITWARDEN_VERSION"
-            URL="https://github.com/bitwarden/clients/releases/download/desktop-v${VER}/Bitwarden-${VER}-amd64.deb"
-            TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
-              '.bitwarden.url=$u | .bitwarden.sha256=$s | .bitwarden.version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-          if [[ "$CODESERVER_UPDATE" == "true" ]]; then
-            VER="$CODESERVER_VERSION"
-            URL="https://github.com/coder/code-server/releases/download/v${VER}/code-server_${VER}_amd64.deb"
-            TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
-              '.["code-server"].url=$u | .["code-server"].sha256=$s | .["code-server"].version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
+          CHECKSUMS="shared/download/image-checksums.json"
 
           if [[ "$BREW_UPDATE" == "true" ]]; then
             COMMIT="$BREW_COMMIT"
@@ -247,45 +335,18 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "$AZUREVPN_UPDATE" == "true" ]]; then
-            VER="$AZUREVPN_VERSION"
-            URL="https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_${VER}_amd64.deb"
-            TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
-              '.["microsoft-azurevpnclient"].url=$u | .["microsoft-azurevpnclient"].sha256=$s | .["microsoft-azurevpnclient"].version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-          if [[ "$EDGE_UPDATE" == "true" ]]; then
-            VER="$EDGE_VERSION"
-            URL="https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_${VER}_amd64.deb"
-            TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
-              '.["microsoft-edge-stable"].url=$u | .["microsoft-edge-stable"].sha256=$s | .["microsoft-edge-stable"].version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-      - name: Create Pull Request
+      - name: Create image dependency PR
         if: steps.check.outputs.has_updates == 'true'
         uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
         with:
-          # GITHUB_TOKEN-created PRs do not trigger workflows (validate/build
-          # never run on them). Set the WORKFLOW_PAT repo secret (fine-grained
-          # PAT or GitHub App token with contents+pull-requests write) to give
-          # auto-update PRs real CI; until then this falls back to
-          # GITHUB_TOKEN and PRs must be checked manually.
           token: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
-          commit-message: "chore: update external dependency checksums"
-          title: "chore: update external dependency checksums"
+          commit-message: "chore: update image dependency checksums"
+          title: "chore: update image dependency checksums"
           body: |
-            Automated update of pinned external dependencies.
+            Automated update of pinned direct-download dependencies consumed by OCI image profile builds.
 
-            **Please verify the builds work before merging.**
-          branch: auto-update-checksums
+            These updates modify `shared/download/image-checksums.json` and should trigger `build-images.yml`, not the sysext publishing workflow.
+
+            **Please verify the image builds work before merging.**
+          branch: auto-update-image-checksums
           delete-branch: true

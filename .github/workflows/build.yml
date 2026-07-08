@@ -3,8 +3,14 @@ name: Build sysexts
 on:
   push:
     branches: [main]
+    paths-ignore:
+      # Image-only direct-download metadata should rebuild OCI profiles, not
+      # the base+sysext publishing workflow.
+      - "shared/download/image-checksums.json"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "shared/download/image-checksums.json"
   workflow_dispatch:
 
 permissions: {}

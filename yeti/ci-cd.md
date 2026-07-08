@@ -4,7 +4,9 @@
 
 ### build.yml — Sysext Build and Publish
 
-**Trigger:** Push/PR to main, manual dispatch
+**Trigger:** Push/PR to main, manual dispatch. Push/PR events ignore
+`shared/download/image-checksums.json` when that is the only changed path;
+image-only direct-download updates should rebuild OCI profiles instead.
 
 Builds the base image and all 13 sysexts, publishes to the Frostyard repository on Cloudflare R2.
 
@@ -28,7 +30,11 @@ path in the image's `required-paths.txt` is missing from the buildroot.
 
 ### build-images.yml — Desktop/Server Image Build and Publish
 
-**Trigger:** repository_dispatch type `build`, push/PR to main, manual dispatch
+**Trigger:** repository_dispatch type `build`, push/PR to main, manual dispatch.
+Push/PR events ignore sysext-only dependency metadata
+(`shared/download/sysext-checksums.json`,
+`shared/download/package-versions.json`, `latest-versions.txt`) when those are
+the only changed paths.
 
 Matrix build of all 3 profiles (snow, snowfield, cayo).
 
@@ -59,42 +65,57 @@ After the matrix completes, a self-contained `release` job runs on main-branch p
 
 **Skip paths:** Missing/invalid snow artifact, no previous tag, or `previous == current` all emit warnings and skip release creation.
 
-### check-dependencies.yml — External Download Updates
+### check-dependencies.yml — Direct Download Updates
 
 **Trigger:** Weekly (Monday 9am UTC), manual dispatch
 
-Checks for updates to resources managed by the verified download system:
+Checks for updates to resources managed by the verified download system. The
+workflow has two independent jobs so update PRs touch only the metadata file
+for the build artifact that must be rebuilt.
 
+**Sysext dependency job (`shared/download/sysext-checksums.json`):**
 - Bitwarden desktop .deb
-- Homebrew install script
 - code-server .deb
+- Microsoft Azure VPN Client
+- Microsoft Edge Stable .deb
+
+Updates open `auto-update-sysext-checksums` PRs. Those PRs should trigger
+`build.yml` and skip the OCI image matrix.
+
+**OCI image dependency job (`shared/download/image-checksums.json`):**
+- Homebrew install script
 - Surface secure boot certificate
 - Hotedge GNOME extension
 - Logomenu GNOME extension
 - Bazaar Companion GNOME extension
-- Microsoft Azure VPN Client
-- Microsoft Edge Stable .deb
+
+Updates open `auto-update-image-checksums` PRs. Those PRs should trigger
+`build-images.yml` and skip the sysext publishing workflow.
 
 **Process:**
-1. Downloads each resource from its upstream URL
-2. Computes SHA256 checksum
-3. Compares against `shared/download/checksums.json`
-4. If changed: updates checksums.json, creates PR
+1. Checks each upstream release/commit/package index
+2. Downloads changed resources
+3. Computes SHA256 checksums
+4. Updates the target-specific checksum file and creates a PR
 
-### check-packages.yml — APT Package Version Updates
+### check-packages.yml — Sysext APT Package Version Updates
 
 **Trigger:** Daily (8am UTC)
 
-Checks for version updates to external APT packages:
+Checks for version updates to external APT packages installed by sysext images:
 
-- code (VS Code)
+- code (VS Code sysext)
 - docker-ce
 - 1password-cli
+
+`shared/download/package-versions.json` is only a change-detection sentinel.
+It does not pin installed package versions; mkosi resolves the package from APT
+during the sysext build.
 
 **Process:**
 1. Queries APT repositories for current versions
 2. Compares against `shared/download/package-versions.json`
-3. If changed: updates package-versions.json, creates PR
+3. If changed: updates `package-versions.json`, creates a sysext package-version PR
 
 ### validate.yml — Code Validation
 
@@ -128,8 +149,8 @@ Runs OpenSSF Scorecard analysis for supply-chain security assessment. Publishes 
 - **SBOM generation:** Syft generates SBOMs for all OCI images, attached as OCI referrers via ORAS
 - **Image signing:** OCI images and SBOM artifacts signed with Cosign after push. The public key is committed at repo root as `cosign.pub` (same keypair across frostyard repos); `test-install.yml` runs `cosign verify --key cosign.pub` before installation tests. cosign v2.6.x is the tested verifier — v3 currently fails key verification when GitHub provenance attestations are attached
 - **Build attestation:** GitHub Actions provenance attestation on image builds
-- **Checksum verification:** All external downloads verified against pinned SHA256 hashes
-- **Automated updates:** Dependency and package version checks create PRs for review (never auto-merge)
+- **Checksum verification:** Direct external downloads are verified against pinned SHA256 hashes in target-specific sysext/image metadata files
+- **Automated updates:** Dependency and package version checks create target-specific PRs for review (never auto-merge)
 
 ## Publishing Targets
 
