@@ -5,6 +5,10 @@
 Description=Notify about a staged OS update pending reboot
 After=graphical-session.target
 ConditionPathExists=/run/snosi/update-staged
+# See bootc-update-notify.path: one staging can trigger this several times in a
+# burst. Repeat runs no-op via the per-digest ack but still count as starts, so
+# disable the default start-rate limit to avoid a spurious start-limit failure.
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot

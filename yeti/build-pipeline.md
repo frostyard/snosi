@@ -90,7 +90,17 @@ Consumers of the update state:
   re-staged), and PathExists= also triggers at session start when the file
   already exists; the helper is ack-gated per staged digest (same pattern as
   snosi-etc-drift-notify) so users see one notification per staged update,
-  not one per login or trigger.
+  not one per login or trigger. The toast requires the `notify-send` CLI from
+  `libnotify-bin` (the graphical package set `shared/packages/snow/mkosi.conf`,
+  snow+snowfield only) — the transitively-present `libnotify4` is just the
+  library and does not ship the CLI, so without the package the helper
+  `command -v notify-send || exit 0`s into a silent no-op (this affects
+  snosi-etc-drift-notify too). Both units set `StartLimitIntervalSec=0`: the
+  stager writes the semaphore in several syscalls, so a single staging emits a
+  burst of PathModified triggers that otherwise trips systemd's default 5/10s
+  start-limit and permanently fails the `.path` watcher (`unit-start-limit-hit`,
+  observed on the first real desktop bootc host 2026-07-07); the per-digest ack
+  keeps the repeat triggers harmless.
 
 This mirrors the previous nbc-style download-only semantics: the staged deployment applies at the next normal reboot. The podman transfer path is also the current workaround for bootc registry-transport composefs pull failures noted in `docs/plans/2026-07-03-bootc-update-validation-plan.md`.
 
