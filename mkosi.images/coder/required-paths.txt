@@ -1,0 +1,11 @@
+# coder sysext: installed via verified_download + dpkg -i in postinst
+/usr/bin/coder
+/usr/lib/systemd/system/coder.service
+/usr/lib/systemd/system/coder-workspace-proxy.service
+# Factory copy of /etc/coder.d (injected at boot by tmpfiles)
+/usr/share/factory/etc/coder.d/coder.env
+# Boot-time user creation, config injection, and activation
+/usr/lib/sysusers.d/coder.conf
+/usr/lib/tmpfiles.d/coder.conf
+/usr/lib/systemd/system-preset/40-coder.preset
+/usr/lib/systemd/system/multi-user.target.d/10-coder.conf

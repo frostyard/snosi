@@ -18,5 +18,10 @@
     "url": "https://github.com/coder/code-server/releases/download/v4.127.0/code-server_4.127.0_amd64.deb",
     "sha256": "a1cb96f64d5c68736764726cd3b0c9b6e500bdc30cfefebc05f59259149380e2",
     "version": "4.127.0"
+  },
+  "coder": {
+    "url": "https://github.com/coder/coder/releases/download/v2.35.1/coder_2.35.1_linux_amd64.deb",
+    "sha256": "f14dd6654a801f23e753a3cbff894dfc9ca76281ffd457dbf5fcff67a18b085a",
+    "version": "2.35.1"
   }
 }

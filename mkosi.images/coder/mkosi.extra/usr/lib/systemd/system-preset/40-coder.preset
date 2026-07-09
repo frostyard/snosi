@@ -1,0 +1,4 @@
+enable coder.service
+# The workspace proxy is a separate opt-in role (needs its own env file and
+# a running coder server to register with); admins enable it explicitly.
+disable coder-workspace-proxy.service

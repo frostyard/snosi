@@ -60,6 +60,15 @@ jobs:
             echo "codeserver_version=$LATEST_CS" >> $GITHUB_OUTPUT
           fi
 
+          # Check coder
+          CURRENT_CODER=$(jq -r '.coder.version' "$CHECKSUMS")
+          LATEST_CODER=$(gh_api https://api.github.com/repos/coder/coder/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_CODER" && "$LATEST_CODER" != "null" && "$LATEST_CODER" != "$CURRENT_CODER" ]]; then
+            UPDATES="${UPDATES}coder: $CURRENT_CODER -> $LATEST_CODER\n"
+            echo "coder_update=true" >> $GITHUB_OUTPUT
+            echo "coder_version=$LATEST_CODER" >> $GITHUB_OUTPUT
+          fi
+
           # Check Microsoft Azure VPN Client
           CURRENT_AZ=$(jq -r '.["microsoft-azurevpnclient"].version' "$CHECKSUMS")
           LATEST_AZ=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
@@ -96,6 +105,8 @@ jobs:
           BITWARDEN_VERSION: ${{ steps.check.outputs.bitwarden_version }}
           CODESERVER_UPDATE: ${{ steps.check.outputs.codeserver_update }}
           CODESERVER_VERSION: ${{ steps.check.outputs.codeserver_version }}
+          CODER_UPDATE: ${{ steps.check.outputs.coder_update }}
+          CODER_VERSION: ${{ steps.check.outputs.coder_version }}
           AZUREVPN_UPDATE: ${{ steps.check.outputs.azurevpn_update }}
           AZUREVPN_VERSION: ${{ steps.check.outputs.azurevpn_version }}
           EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
@@ -123,6 +134,18 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.["code-server"].url=$u | .["code-server"].sha256=$s | .["code-server"].version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$CODER_UPDATE" == "true" ]]; then
+            VER="$CODER_VERSION"
+            URL="https://github.com/coder/coder/releases/download/v${VER}/coder_${VER}_linux_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.coder.url=$u | .coder.sha256=$s | .coder.version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi

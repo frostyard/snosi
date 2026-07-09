@@ -21,6 +21,7 @@ The project produces:
 | **bitwarden**       | Bitwarden password manager desktop application                  | sysext        |
 | **claude-desktop**  | Claude desktop application                                      | sysext        |
 | **code-server**     | code-server (VS Code in the browser)                            | sysext        |
+| **coder**           | Coder self-hosted development workspaces server                 | sysext        |
 | **debdev**          | Debian development tools (debootstrap, distro-info)             | sysext        |
 | **dev**             | Build essentials, Python, cmake, valgrind, gdb                  | sysext        |
 | **docker**          | Docker CE container runtime                                     | sysext        |
@@ -41,7 +42,7 @@ The project produces:
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1pass azurevpn bitwarden claude-desktop code-server debdev dev docker edge incus nix podman tailscale vscode │         │
+  1pass azurevpn bitwarden claude-desktop code-server coder debdev dev docker edge incus nix podman tailscale vscode │         │
                                      snow            cayo
                                       │
                                   snowfield
@@ -66,6 +67,7 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | ----------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
 | **1password-cli** | 1Password CLI tool                            | [mkosi.images/1password-cli/mkosi.conf](mkosi.images/1password-cli/mkosi.conf) |
 | **code-server**   | code-server (VS Code in the browser)          | [mkosi.images/code-server/mkosi.conf](mkosi.images/code-server/mkosi.conf)     |
+| **coder**         | Coder workspaces server + workspace proxy     | [mkosi.images/coder/mkosi.conf](mkosi.images/coder/mkosi.conf)                 |
 | **debdev**        | debootstrap, distro-info, archive keyrings    | [mkosi.images/debdev/mkosi.conf](mkosi.images/debdev/mkosi.conf)               |
 | **dev**           | build-essential, cmake, Python, valgrind, gdb | [mkosi.images/dev/mkosi.conf](mkosi.images/dev/mkosi.conf)                     |
 | **docker**        | Docker CE, containerd, buildx, compose        | [mkosi.images/docker/mkosi.conf](mkosi.images/docker/mkosi.conf)               |
@@ -270,7 +272,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all sysexts (1password-cli, azurevpn, bitwarden, claude-desktop, code-server, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode)
+1. Builds the base image and all sysexts (1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode)
 2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Uploads package manifests for version tracking
 
