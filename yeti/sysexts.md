@@ -20,6 +20,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **1password-cli** | 1password-cli | 1Password CLI tool |
 | **azurevpn** | microsoft-azurevpnclient | Microsoft Azure VPN client (pinned .deb via verified_download, relocated from /opt) |
 | **bitwarden** | bitwarden | Bitwarden desktop app (pinned .deb via verified_download, relocated from /opt) |
+| **claude-desktop** | claude-desktop | Claude desktop application (from downloads.claude.ai apt repo) |
 | **code-server** | code-server | code-server (VS Code in the browser) — downloaded via `verified_download()` from coder/code-server GitHub releases |
 | **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test, archive keyrings) |
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
@@ -121,6 +122,12 @@ Some sysexts include extra files via `mkosi.extra/`:
 - No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/bitwarden/`)
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
 - Ships hicolor icons — depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below)
+
+### claude-desktop
+- No `mkosi.extra/` and no postinst — the Anthropic `claude-desktop` deb (apt repo at `downloads.claude.ai/claude-desktop/apt/stable`, registered in `mkosi.sandbox`) installs natively under `/usr` (`/usr/lib/claude-desktop` + `/usr/bin/claude-desktop` symlink), so no relocation is needed
+- Ships SUID `chrome-sandbox` (like bitwarden); Electron app, hicolor icons → `sysext-strip-icon-cache.sh` required
+- The deb's postinst writes an AppArmor userns profile to `/etc/apparmor.d/` and an apt-repo placeholder to `/etc/apt/` — both are stripped from the sysext (only `/usr` ships) and neither is needed on Debian Trixie (userns restriction is Ubuntu 24.04+; updates come via sysupdate, not apt)
+- Desktop app with no systemd service: no preset, no `Upholds=` drop-in
 
 ### code-server
 - `mkosi.postinst.chroot` — Downloads code-server .deb via `verified_download()`, installs with `dpkg -i`. Upstream package targets `/usr/lib/code-server` with `/usr/bin/code-server` symlink and systemd units under `/usr/lib/systemd/`, so no relocation is required.

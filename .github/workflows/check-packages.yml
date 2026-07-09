@@ -52,6 +52,9 @@ jobs:
             echo "1password-cli=$(get_latest_version \
               'https://downloads.1password.com/linux/debian/amd64/dists/stable/main/binary-amd64/Packages.gz' \
               '1password-cli')"
+            echo "claude-desktop=$(get_latest_version \
+              'https://downloads.claude.ai/claude-desktop/apt/stable/dists/stable/main/binary-amd64/Packages.gz' \
+              'claude-desktop')"
           } > latest-versions.txt
           cat latest-versions.txt
 

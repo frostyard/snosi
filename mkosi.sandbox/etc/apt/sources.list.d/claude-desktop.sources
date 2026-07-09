@@ -1,0 +1,7 @@
+Enabled: yes
+Types: deb
+URIs: https://downloads.claude.ai/claude-desktop/apt/stable
+Suites: stable
+Components: main
+Architectures: amd64,arm64
+Signed-By: /etc/apt/keyrings/anthropic.gpg

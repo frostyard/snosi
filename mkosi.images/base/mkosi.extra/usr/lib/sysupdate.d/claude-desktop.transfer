@@ -1,0 +1,20 @@
+[Transfer]
+Features=claude-desktop
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/claude-desktop/
+MatchPattern=claude-desktop_@v_%w_%a.raw.zst \
+             claude-desktop_@v_%w_%a.raw.xz \
+             claude-desktop_@v_%w_%a.raw.gz \
+             claude-desktop_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=claude-desktop_@v_%w_%a.raw.zst \
+             claude-desktop_@v_%w_%a.raw.xz \
+             claude-desktop_@v_%w_%a.raw.gz \
+             claude-desktop_@v_%w_%a.raw
+CurrentSymlink=claude-desktop.raw
