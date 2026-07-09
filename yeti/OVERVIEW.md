@@ -21,7 +21,7 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
-1password-cli, azurevpn, bitwarden, code-server, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode
+1password-cli, azurevpn, bitwarden, claude-desktop, code-server, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode
 
 ## Architecture
 
@@ -31,7 +31,7 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 mkosi.conf                  # Root config: distribution, dependencies, build settings
 mkosi.version               # Version tag script (date-based, overridden by CI IMAGE_VERSION)
 mkosi.clean                 # Clean script (rm -rf output/*)
-mkosi.images/               # Image definitions (base + 13 sysexts)
+mkosi.images/               # Image definitions (base + 14 sysexts)
   base/                     # Foundation image: systemd, bootc/ostree (frostyard debs), firmware, core utils
     mkosi.extra/            # Base filesystem overlay (dracut, systemd units/timers, sysupdate, tmpfiles, sysusers)
       usr/lib/sysupdate.d/  # .transfer + .feature files for all sysexts
@@ -150,8 +150,8 @@ This file is only a rebuild sentinel; mkosi still resolves packages from APT.
 Current sysext checksum-managed downloads are Bitwarden, code-server, Azure
 VPN, and Microsoft Edge. Current image checksum-managed downloads are Homebrew
 install script, Surface secure boot certificate, Hotedge, Logomenu, and Bazaar
-Companion. Current APT version tracking covers `code`, `docker-ce`, and
-`1password-cli`; Edge is checksum-managed because the build installs a patched
+Companion. Current APT version tracking covers `code`, `docker-ce`,
+`1password-cli`, and `claude-desktop`; Edge is checksum-managed because the build installs a patched
 downloaded `.deb`. `code-server` is a sysext exception: it is installed by
 `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` +
 `dpkg -i`, while `KEYPACKAGE=code-server` still drives version extraction from
@@ -199,7 +199,7 @@ Use build-time enablement/presets for desired service state. For run-once runtim
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 13 sysexts
+just sysexts            # Build base + all 14 sysexts
 just snow               # Build snow desktop
 just snowfield          # Build snowfield (Surface)
 just cayo               # Build cayo server

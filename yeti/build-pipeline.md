@@ -299,7 +299,7 @@ one explicit metadata file.
 ### package-versions.json
 
 Tracks APT-based external package versions for sysexts (`code`, `docker-ce`,
-`1password-cli`) separately from download checksums. Updated daily by
+`1password-cli`, `claude-desktop`) separately from download checksums. Updated daily by
 `check-packages.yml`. This file is only a rebuild sentinel; it does not pin
 what mkosi installs from APT. Edge is NOT tracked here — it is pinned as a
 direct `.deb` in `sysext-checksums.json` and updated by `check-dependencies.yml`.

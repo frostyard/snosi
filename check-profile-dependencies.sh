@@ -6,6 +6,7 @@ cd "$(dirname "$0")"
 profiles=(cayo snow snowfield)
 sysexts=(
     1password-cli
+    claude-desktop
     code-server
     debdev
     dev

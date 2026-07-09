@@ -1,0 +1,8 @@
+# claude-desktop sysext: Claude desktop application (Electron)
+/usr/lib/claude-desktop/claude-desktop
+/usr/lib/claude-desktop/chrome-sandbox
+/usr/bin/claude-desktop
+# Desktop integration: launcher entry and hicolor icons (see yeti/sysexts.md
+# "Desktop Applications in Sysexts")
+/usr/share/applications/claude-desktop.desktop
+/usr/share/icons/hicolor/256x256/apps/claude-desktop.png

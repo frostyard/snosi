@@ -19,6 +19,7 @@ The project produces:
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
 | **azurevpn**        | Microsoft Azure VPN client                                      | sysext        |
 | **bitwarden**       | Bitwarden password manager desktop application                  | sysext        |
+| **claude-desktop**  | Claude desktop application                                      | sysext        |
 | **code-server**     | code-server (VS Code in the browser)                            | sysext        |
 | **debdev**          | Debian development tools (debootstrap, distro-info)             | sysext        |
 | **dev**             | Build essentials, Python, cmake, valgrind, gdb                  | sysext        |
@@ -40,7 +41,7 @@ The project produces:
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1pass azurevpn bitwarden code-server debdev dev docker edge incus nix podman tailscale vscode │         │
+  1pass azurevpn bitwarden claude-desktop code-server debdev dev docker edge incus nix podman tailscale vscode │         │
                                      snow            cayo
                                       │
                                   snowfield
@@ -269,7 +270,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all sysexts (1password-cli, azurevpn, bitwarden, code-server, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode)
+1. Builds the base image and all sysexts (1password-cli, azurevpn, bitwarden, claude-desktop, code-server, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode)
 2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Uploads package manifests for version tracking
 
@@ -726,7 +727,8 @@ independent jobs:
    `auto-update-image-checksums` PRs against `image-checksums.json`.
 
 The `.github/workflows/check-packages.yml` workflow runs daily for external APT
-packages consumed by sysexts (`code`, `docker-ce`, `1password-cli`). It updates
+packages consumed by sysexts (`code`, `docker-ce`, `1password-cli`,
+`claude-desktop`). It updates
 `package-versions.json`, which is only a change-detection sentinel; mkosi still
 resolves the package from APT during the sysext build.
 
