@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+source "$SRCDIR/shared/download/verified-download.sh"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "coder" "$DEBS/coder.deb"
+
+# The deb has no Depends (single static binary); its preinst creates the
+# coder user in the buildroot, which is stripped from the sysext delta —
+# the shipped sysusers.d fragment recreates it at boot.
+dpkg -i "$DEBS/coder.deb"

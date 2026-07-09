@@ -1,0 +1,14 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+set -euo pipefail
+
+# Capture /etc/coder.d to factory defaults for tmpfiles.d to restore at boot.
+# coder.service has EnvironmentFile=/etc/coder.d/coder.env and is gated on
+# ConditionFileNotEmpty=/etc/coder.d/coder.env, so the unit stays inert until
+# an admin fills in the config (CODER_ACCESS_URL etc.).
+mkdir -p "$BUILDROOT/usr/share/factory/etc"
+
+if [ -d "$BUILDROOT/etc/coder.d" ]; then
+    cp --archive --update=none "$BUILDROOT/etc/coder.d" \
+       "$BUILDROOT/usr/share/factory/etc/"
+fi

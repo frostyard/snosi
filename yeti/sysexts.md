@@ -22,6 +22,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **bitwarden** | bitwarden | Bitwarden desktop app (pinned .deb via verified_download, relocated from /opt) |
 | **claude-desktop** | claude-desktop | Claude desktop application (from downloads.claude.ai apt repo) |
 | **code-server** | code-server | code-server (VS Code in the browser) — downloaded via `verified_download()` from coder/code-server GitHub releases |
+| **coder** | coder | Coder workspaces server — downloaded via `verified_download()` from coder/coder GitHub releases |
 | **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test, archive keyrings) |
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
@@ -106,7 +107,7 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server`, `edge`, `bitwarden`, and `azurevpn` are the current exceptions to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file Exec rewrite, deps via `Include=`.
+`code-server`, `coder`, `edge`, `bitwarden`, and `azurevpn` are the current exceptions to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file Exec rewrite, deps via `Include=`.
 
 ## Sysext-Specific Extra Files
 
@@ -131,6 +132,14 @@ Some sysexts include extra files via `mkosi.extra/`:
 
 ### code-server
 - `mkosi.postinst.chroot` — Downloads code-server .deb via `verified_download()`, installs with `dpkg -i`. Upstream package targets `/usr/lib/code-server` with `/usr/bin/code-server` symlink and systemd units under `/usr/lib/systemd/`, so no relocation is required.
+
+### coder
+- `mkosi.postinst.chroot` — Downloads the coder .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Single static binary + two units, all natively under `/usr`; no relocation
+- `mkosi.finalize` — Captures `/etc/coder.d/` to factory defaults; `coder.service` is gated on `ConditionFileNotEmpty=/etc/coder.d/coder.env`, so the enabled+upheld unit stays inert until an admin fills in `CODER_ACCESS_URL` etc.
+- `usr/lib/sysusers.d/coder.conf` — Recreates the `coder` system user at boot (the deb preinst's `useradd` lands in the buildroot `/etc/passwd`, stripped from the delta) with membership in `docker` (mirrors preinst) and `incus-admin` (Incus-template provisioning); `m` lines implicitly create those groups when the owning sysext isn't merged
+- `usr/lib/tmpfiles.d/coder.conf` — Factory config injection + `/home/coder` creation
+- `usr/lib/systemd/system-preset/40-coder.preset` — Enables `coder.service`, explicitly disables `coder-workspace-proxy.service` (separate opt-in role, needs its own env file)
+- `usr/lib/systemd/system/multi-user.target.d/10-coder.conf` — `Upholds=coder.service` drop-in for reliable boot activation
 
 ### debdev / dev
 - `mkosi.postinst.chroot` — Repoints `/usr/bin`+`/usr/sbin` symlinks that route through `/etc/alternatives` to their resolved targets. Sysexts cannot ship `/etc`, so alternatives symlinks created while installing these sysexts' packages would dangle at runtime (observed live: `/usr/bin/automake -> /etc/alternatives/automake`, missing).

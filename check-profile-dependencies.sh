@@ -8,6 +8,7 @@ sysexts=(
     1password-cli
     claude-desktop
     code-server
+    coder
     debdev
     dev
     docker
