@@ -76,8 +76,17 @@ for the build artifact that must be rebuilt.
 **Sysext dependency job (`shared/download/sysext-checksums.json`):**
 - Bitwarden desktop .deb
 - code-server .deb
+- coder .deb — deliberately tracks coder's **stable** channel (GitHub
+  "latest"); mainline releases carry higher version numbers but are not
+  followed
 - Microsoft Azure VPN Client
 - Microsoft Edge Stable .deb
+
+Version-based checks only propose an update when the candidate sorts
+**strictly newer** (`sort -V`) than the pinned version — a plain `!=`
+comparison once let coder's stable/mainline channel split generate a
+downgrade PR (2.35.1 -> 2.34.5, 2026-07-09). A pin ahead of the tracked
+channel therefore stays put until the channel passes it.
 
 Updates open `auto-update-sysext-checksums` PRs. Those PRs should trigger
 `build.yml` and skip the OCI image matrix.
