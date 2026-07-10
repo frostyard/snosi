@@ -27,6 +27,7 @@ The project produces:
 | **docker**          | Docker CE container runtime                                     | sysext        |
 | **edge**            | Microsoft Edge browser                                          | sysext        |
 | **incus**           | Incus container/VM manager                                      | sysext        |
+| **lemonade**        | Lemonade local LLM server (GPU/NPU accelerated)                 | sysext        |
 | **nix**             | Nix package manager                                             | sysext        |
 | **podman**          | Podman + Distrobox                                              | sysext        |
 | **tailscale**       | Tailscale VPN client                                            | sysext        |
@@ -42,7 +43,7 @@ The project produces:
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1pass azurevpn bitwarden claude-desktop code-server coder debdev dev docker edge incus nix podman tailscale vscode │         │
+  1pass azurevpn bitwarden claude-desktop code-server coder debdev dev docker edge incus lemonade nix podman tailscale vscode │         │
                                      snow            cayo
                                       │
                                   snowfield
@@ -72,6 +73,7 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | **dev**           | build-essential, cmake, Python, valgrind, gdb | [mkosi.images/dev/mkosi.conf](mkosi.images/dev/mkosi.conf)                     |
 | **docker**        | Docker CE, containerd, buildx, compose        | [mkosi.images/docker/mkosi.conf](mkosi.images/docker/mkosi.conf)               |
 | **incus**         | Incus, QEMU/KVM, OVMF, virt-viewer            | [mkosi.images/incus/mkosi.conf](mkosi.images/incus/mkosi.conf)                 |
+| **lemonade**      | Lemonade local LLM server (lemond)            | [mkosi.images/lemonade/mkosi.conf](mkosi.images/lemonade/mkosi.conf)           |
 | **nix**           | Nix package manager, systemd integration      | [mkosi.images/nix/mkosi.conf](mkosi.images/nix/mkosi.conf)                     |
 | **podman**        | Podman, Distrobox, buildah, crun              | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf)               |
 | **tailscale**     | Tailscale VPN client                          | [mkosi.images/tailscale/mkosi.conf](mkosi.images/tailscale/mkosi.conf)         |
@@ -272,7 +274,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all sysexts (1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, nix, podman, tailscale, vscode)
+1. Builds the base image and all sysexts (1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, lemonade, nix, podman, tailscale, vscode)
 2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Uploads package manifests for version tracking
 

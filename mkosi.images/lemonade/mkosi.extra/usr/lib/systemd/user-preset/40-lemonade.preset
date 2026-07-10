@@ -1,0 +1,4 @@
+# The deb also ships a legacy per-user lemond.service (superseded by the
+# system service in 10.10.0); keep it off so a user-scope preset pass never
+# starts a second instance alongside the system one.
+disable lemond.service
