@@ -80,6 +80,15 @@ jobs:
             echo "coder_version=$LATEST_CODER" >> $GITHUB_OUTPUT
           fi
 
+          # Check Lemonade Server
+          CURRENT_LEM=$(jq -r '.lemonade.version' "$CHECKSUMS")
+          LATEST_LEM=$(gh_api https://api.github.com/repos/lemonade-sdk/lemonade/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_LEM" && "$LATEST_LEM" != "null" ]] && ver_gt "$LATEST_LEM" "$CURRENT_LEM"; then
+            UPDATES="${UPDATES}lemonade: $CURRENT_LEM -> $LATEST_LEM\n"
+            echo "lemonade_update=true" >> $GITHUB_OUTPUT
+            echo "lemonade_version=$LATEST_LEM" >> $GITHUB_OUTPUT
+          fi
+
           # Check Microsoft Azure VPN Client
           CURRENT_AZ=$(jq -r '.["microsoft-azurevpnclient"].version' "$CHECKSUMS")
           LATEST_AZ=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
@@ -118,6 +127,8 @@ jobs:
           CODESERVER_VERSION: ${{ steps.check.outputs.codeserver_version }}
           CODER_UPDATE: ${{ steps.check.outputs.coder_update }}
           CODER_VERSION: ${{ steps.check.outputs.coder_version }}
+          LEMONADE_UPDATE: ${{ steps.check.outputs.lemonade_update }}
+          LEMONADE_VERSION: ${{ steps.check.outputs.lemonade_version }}
           AZUREVPN_UPDATE: ${{ steps.check.outputs.azurevpn_update }}
           AZUREVPN_VERSION: ${{ steps.check.outputs.azurevpn_version }}
           EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
@@ -157,6 +168,18 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.coder.url=$u | .coder.sha256=$s | .coder.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$LEMONADE_UPDATE" == "true" ]]; then
+            VER="$LEMONADE_VERSION"
+            URL="https://github.com/lemonade-sdk/lemonade/releases/download/v${VER}/lemonade-server_${VER}-debian13_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.lemonade.url=$u | .lemonade.sha256=$s | .lemonade.version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi

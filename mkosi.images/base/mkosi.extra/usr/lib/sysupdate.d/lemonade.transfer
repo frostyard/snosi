@@ -1,0 +1,20 @@
+[Transfer]
+Features=lemonade
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/lemonade/
+MatchPattern=lemonade_@v_%w_%a.raw.zst \
+             lemonade_@v_%w_%a.raw.xz \
+             lemonade_@v_%w_%a.raw.gz \
+             lemonade_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=lemonade_@v_%w_%a.raw.zst \
+             lemonade_@v_%w_%a.raw.xz \
+             lemonade_@v_%w_%a.raw.gz \
+             lemonade_@v_%w_%a.raw
+CurrentSymlink=lemonade.raw

@@ -1,0 +1,14 @@
+# lemonade sysext: installed via verified_download + dpkg -i in postinst
+/usr/bin/lemonade
+/usr/bin/lemond
+/usr/lib/systemd/system/lemond.service
+/usr/lib/sysusers.d/lemonade.conf
+# Sole backports dependency, pulled via Packages= (not present in base)
+/usr/lib/x86_64-linux-gnu/libcpp-httplib.so.0.41
+# Factory copy of /etc/lemonade (injected at boot by tmpfiles)
+/usr/share/factory/etc/lemonade/conf.d/zz-secrets.conf
+# Boot-time group memberships, config injection, and activation
+/usr/lib/sysusers.d/lemonade-groups.conf
+/usr/lib/tmpfiles.d/lemonade.conf
+/usr/lib/systemd/system-preset/40-lemonade.preset
+/usr/lib/systemd/system/multi-user.target.d/10-lemonade.conf

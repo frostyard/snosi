@@ -28,6 +28,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
 | **edge** | microsoft-edge-stable | Microsoft Edge browser (pinned .deb via verified_download, relocated from /opt) |
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF, virt-viewer |
+| **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
 | **tailscale** | tailscale | Tailscale VPN client |
@@ -165,6 +166,16 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/incus/incus-sysext-setup` — The setup script the service runs
 - `usr/lib/sysusers.d/{dnsmasq,rdma}.conf` — User/group definitions
 - `usr/lib/tmpfiles.d/incus.conf` — Factory config injection + runtime dirs + xz alternatives links
+
+### lemonade
+- `mkosi.postinst.chroot` — Downloads the lemonade-server .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Everything ships natively under `/usr`; no relocation
+- `Packages=` carries the deb's runtime Depends (`dpkg -i` can't resolve them; the chroot has no apt), including `libcpp-httplib0.41` which exists only in trixie-backports — the sandbox's low backports pin still selects it as the sole candidate
+- `mkosi.finalize` — Captures `/etc/lemonade/` to factory defaults; `lemond.service` reads `EnvironmentFile=-/etc/lemonade/conf.d/*.conf` (HF_TOKEN, LEMONADE_API_KEY — the deb ships only a commented template, no real secrets)
+- `usr/lib/sysusers.d/lemonade-groups.conf` — Adds the `lemonade` user (created at boot by the deb's own sysusers fragment) to `systemd-journal` and `render` (GPU access), mirroring the deb postinst's build-time-only `usermod` calls
+- `usr/lib/tmpfiles.d/lemonade.conf` — Factory config injection
+- `usr/lib/systemd/system-preset/40-lemonade.preset` — Enables `lemond.service` (web UI on port 13305)
+- `usr/lib/systemd/user-preset/40-lemonade.preset` — Disables the legacy per-user `lemond.service` the deb still ships (superseded by the system service)
+- `usr/lib/systemd/system/multi-user.target.d/10-lemonade.conf` — `Upholds=lemond.service` drop-in for reliable boot activation
 
 ### nix
 - `mkosi.finalize` — Captures `/etc/nix` to factory defaults

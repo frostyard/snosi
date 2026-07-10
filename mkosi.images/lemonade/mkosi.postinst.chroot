@@ -1,0 +1,18 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+source "$SRCDIR/shared/download/verified-download.sh"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "lemonade" "$DEBS/lemonade-server.deb"
+
+# Depends are preinstalled via Packages= (no apt in this chroot). The deb's
+# postinst creates the lemonade user and its group memberships in the
+# buildroot /etc, which is stripped from the sysext delta — the deb's own
+# sysusers.d fragment plus mkosi.extra's lemonade-groups.conf recreate them
+# at boot.
+dpkg -i "$DEBS/lemonade-server.deb"
