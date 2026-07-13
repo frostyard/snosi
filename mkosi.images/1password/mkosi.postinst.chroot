@@ -1,0 +1,70 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+source "$SRCDIR/shared/download/verified-download.sh"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "1password" "$DEBS/1password.deb"
+
+# Patch the deb's postinst (edge-style repack) before installing:
+# - drop the apt self-update channel setup: it unconditionally curls the
+#   1Password signing key, which fails in the buildroot (no DNS for
+#   maintainer scripts), and apt-based updates never run on the immutable
+#   image anyway — updates come via sysupdate;
+# - drop its chgrp calls on the helper binaries: they target dynamic GIDs we
+#   re-pin below anyway, and chgrp to a just-created group fails with EINVAL
+#   in rootless dev builds (user-namespace limitation, like the SUID drop).
+# The rest of the postinst (polkit template, groupadd, chrome-sandbox SUID,
+# custom_allowed_browsers) runs offline and is kept.
+dpkg-deb -R "$DEBS/1password.deb" "$DEBS/1password-unpacked"
+sed -i -e '/^installAutoupdateChannel$/d' \
+       -e '/^[[:space:]]*chgrp /d' \
+       "$DEBS/1password-unpacked/DEBIAN/postinst"
+dpkg-deb -b "$DEBS/1password-unpacked" "$DEBS/1password-fixed.deb"
+
+dpkg -i "$DEBS/1password-fixed.deb"
+
+# The 1password deb installs to /opt/1Password, which is shadowed at runtime
+# by the opt.mount bind to /var/opt — relocate to /usr/lib/1Password.
+mv /opt/1Password /usr/lib/1Password
+ln -sf /usr/lib/1Password/1password /usr/bin/1password
+# op-ssh-sign is the git SSH commit-signing helper (gpg.ssh.program)
+ln -sf /usr/lib/1Password/op-ssh-sign /usr/bin/op-ssh-sign
+sed -i 's|/opt/1Password|/usr/lib/1Password|g' /usr/share/applications/1password.desktop
+
+# Electron sandbox helper must be SUID root. The deb postinst already set
+# this, but rootless dev builds drop it silently — keep it explicit so the
+# intent is visible (published raws must come from the root/CI build).
+chmod 4755 /usr/lib/1Password/chrome-sandbox
+
+# The deb postinst groupadd'ed onepassword/onepassword-mcp with dynamic
+# GIDs. The chroot /etc/group is stripped from the sysext delta, so pin the
+# GIDs to match the shipped sysusers.d fragment (applied at boot by
+# reload-sysext.service) and setgid the helper binaries to them (erofs
+# records the numeric gid + mode in the raw; chgrp clears setgid, so chmod
+# comes after). GID 1937 is left unassigned in case 1password-cli ever
+# needs an onepassword-cli group. Rootless dev builds cannot chgrp to these
+# GIDs (EINVAL, like the dropped SUID bit) — warn and continue; published
+# raws come from the root CI build, where this must and does succeed.
+groupmod -g 1936 onepassword
+groupmod -g 1938 onepassword-mcp
+if chgrp onepassword /usr/lib/1Password/1Password-BrowserSupport 2>/dev/null; then
+    chmod g+s /usr/lib/1Password/1Password-BrowserSupport
+    chgrp onepassword-mcp /usr/lib/1Password/onepassword-mcp
+    chmod g+s /usr/lib/1Password/onepassword-mcp
+else
+    echo "WARNING: chgrp to pinned GIDs failed (rootless build?);" \
+         "helper binaries ship without setgid group hardening" >&2
+fi
+
+# The deb postinst filled the polkit system-authentication policy's owner
+# list from the chroot's /etc/passwd (no human users -> empty owners, which
+# breaks the CLI/SSH-agent authorize actions). Regenerate with the
+# onepassword group as owner: members get system-auth unlock integration.
+sed 's|\${POLICY_OWNERS}|unix-group:onepassword|g' \
+    /usr/lib/1Password/com.1password.1Password.policy.tpl \
+    > /usr/share/polkit-1/actions/com.1password.1Password.policy

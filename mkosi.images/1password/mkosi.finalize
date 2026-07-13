@@ -1,0 +1,11 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+set -euo pipefail
+
+# Capture only /etc/1password (custom_allowed_browsers, written by the deb
+# postinst) into the factory tree; the tmpfiles.d fragment copies it to /etc
+# at boot — sysexts cannot ship /etc directly.
+if [ -d "$BUILDROOT/etc/1password" ]; then
+    mkdir -p "$BUILDROOT/usr/share/factory/etc"
+    cp --archive --update=none "$BUILDROOT/etc/1password" "$BUILDROOT/usr/share/factory/etc/"
+fi

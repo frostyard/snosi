@@ -107,6 +107,16 @@ jobs:
             echo "edge_version=$LATEST_EDGE" >> $GITHUB_OUTPUT
           fi
 
+          # Check 1Password desktop (stable apt channel; installed as a pinned
+          # .deb because the deb postinst needs network the buildroot lacks)
+          CURRENT_OP=$(jq -r '.["1password"].version' "$CHECKSUMS")
+          LATEST_OP=$(curl -fsSL --retry 3 --retry-delay 2 https://downloads.1password.com/linux/debian/amd64/dists/stable/main/binary-amd64/Packages.gz | zcat | awk '/^Package: 1password$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
+          if [[ -n "$LATEST_OP" ]] && ver_gt "$LATEST_OP" "$CURRENT_OP"; then
+            UPDATES="${UPDATES}1password: $CURRENT_OP -> $LATEST_OP\n"
+            echo "onepassword_update=true" >> $GITHUB_OUTPUT
+            echo "onepassword_version=$LATEST_OP" >> $GITHUB_OUTPUT
+          fi
+
           if [[ -n "$UPDATES" ]]; then
             echo "has_updates=true" >> $GITHUB_OUTPUT
             echo -e "Updates available:\n$UPDATES"
@@ -133,6 +143,8 @@ jobs:
           AZUREVPN_VERSION: ${{ steps.check.outputs.azurevpn_version }}
           EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
           EDGE_VERSION: ${{ steps.check.outputs.edge_version }}
+          ONEPASSWORD_UPDATE: ${{ steps.check.outputs.onepassword_update }}
+          ONEPASSWORD_VERSION: ${{ steps.check.outputs.onepassword_version }}
         run: |
           CHECKSUMS="shared/download/sysext-checksums.json"
 
@@ -204,6 +216,18 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.["microsoft-edge-stable"].url=$u | .["microsoft-edge-stable"].sha256=$s | .["microsoft-edge-stable"].version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$ONEPASSWORD_UPDATE" == "true" ]]; then
+            VER="$ONEPASSWORD_VERSION"
+            URL="https://downloads.1password.com/linux/debian/amd64/pool/main/1/1password/1password-${VER}.amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.["1password"].url=$u | .["1password"].sha256=$s | .["1password"].version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi

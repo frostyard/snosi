@@ -74,6 +74,8 @@ workflow has two independent jobs so update PRs touch only the metadata file
 for the build artifact that must be rebuilt.
 
 **Sysext dependency job (`shared/download/sysext-checksums.json`):**
+- 1Password desktop .deb (stable apt channel metadata, installed as a pinned
+  .deb because the deb postinst needs network the buildroot lacks)
 - Bitwarden desktop .deb
 - code-server .deb
 - coder .deb — deliberately tracks coder's **stable** channel (GitHub

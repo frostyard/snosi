@@ -16,6 +16,7 @@ The project produces:
 | **snow**            | GNOME desktop with backports kernel                             | directory → OCI (buildah/chunkah) |
 | **snowfield**       | snow with linux-surface kernel for Surface devices              | directory → OCI (buildah/chunkah) |
 | **cayo**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
+| **1password**       | 1Password desktop application                                   | sysext        |
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
 | **azurevpn**        | Microsoft Azure VPN client                                      | sysext        |
 | **bitwarden**       | Bitwarden password manager desktop application                  | sysext        |
@@ -66,6 +67,7 @@ Sysexts are overlay images that extend the base system without modifying it. The
 
 | Sysext            | Contents                                      | Config                                                                         |
 | ----------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
+| **1password**     | 1Password desktop app                         | [mkosi.images/1password/mkosi.conf](mkosi.images/1password/mkosi.conf)         |
 | **1password-cli** | 1Password CLI tool                            | [mkosi.images/1password-cli/mkosi.conf](mkosi.images/1password-cli/mkosi.conf) |
 | **code-server**   | code-server (VS Code in the browser)          | [mkosi.images/code-server/mkosi.conf](mkosi.images/code-server/mkosi.conf)     |
 | **coder**         | Coder workspaces server + workspace proxy     | [mkosi.images/coder/mkosi.conf](mkosi.images/coder/mkosi.conf)                 |
@@ -274,7 +276,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all sysexts (1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, lemonade, nix, podman, tailscale, vscode)
+1. Builds the base image and all sysexts (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, lemonade, nix, podman, tailscale, vscode)
 2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Uploads package manifests for version tracking
 
