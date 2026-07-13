@@ -1,4 +1,9 @@
 {
+  "1password": {
+    "url": "https://downloads.1password.com/linux/debian/amd64/pool/main/1/1password/1password-8.12.26.amd64.deb",
+    "sha256": "67599218ab1624d9179b75a2bd5d9ff523521ad30841562616b3945bc0dcc61b",
+    "version": "8.12.26"
+  },
   "bitwarden": {
     "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.6.1/Bitwarden-2026.6.1-amd64.deb",
     "sha256": "421bfc6d787d842406909d393c2a9044791e957aa234718ae5670e87ae4deba7",
