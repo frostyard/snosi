@@ -1,0 +1,7 @@
+# The native A/B root is selected through Discoverable Partitions + verity.
+# Keep the verity-backed root immutable when systemd applies fstab mount policy.
+/dev/mapper/root / erofs ro 0 1
+# The ESP carries versioned UKIs and must be available to systemd-sysupdate.
+PARTLABEL=esp /boot vfat umask=0077 0 2
+# /var is persistent state and must be mounted explicitly after switch-root.
+PARTLABEL=var /var ext4 defaults 0 2

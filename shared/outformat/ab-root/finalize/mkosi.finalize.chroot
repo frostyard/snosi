@@ -1,0 +1,16 @@
+#!/bin/bash
+set -euo pipefail
+
+# The initrd mounts the persistent overlay before switch-root, so host PID 1
+# sees the golden-image machine-id and persistent /etc from its first access.
+if [[ ! -d /.etc.lower ]]; then
+    mv /etc /.etc.lower
+    mkdir /etc
+fi
+
+# The cayo profile's historical tree carries this bootc-only config. The A/B
+# extra tree overwrites it before this point; fail closed if that changes.
+if grep -qr 'add_dracutmodules.*\bbootc\b' /usr/lib/dracut/dracut.conf.d; then
+    echo "bootc dracut configuration leaked into the native A/B image" >&2
+    exit 1
+fi

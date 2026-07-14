@@ -1,0 +1,157 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ab="$root/shared/outformat/ab-root"
+
+[[ -f "$ab/tree/usr/lib/snosi/native-ab" ]]
+[[ ! -e "$ab/tree/usr/lib/systemd/system/serial-getty@ttyS0.service.d/autologin.conf" ]]
+[[ ! -e "$ab/tree/usr/lib/systemd/system/snosi-etc-overlay.service" ]]
+if grep -q '^MachineId=' "$ab/mkosi.conf"; then
+    echo "Native A/B image must use golden-image machine-id semantics" >&2
+    exit 1
+fi
+grep -q '^KernelCommandLine=.*rd\.etc\.overlay=1' "$ab/mkosi.conf"
+grep -q '^Initrds=$' "$ab/mkosi.conf"
+grep -q '^KernelModulesInitrd=no$' "$ab/mkosi.conf"
+grep -q '^KernelCommandLine=.*rd\.luks=1' "$ab/mkosi.conf"
+grep -q '^[[:space:]]*dm_crypt$' "$ab/mkosi.conf"
+grep -q 'ARTIFACTDIR/io\.mkosi\.initrd' \
+    "$root/shared/kernel/scripts/postinst/mkosi.postinst.chroot"
+grep -q 'systemd-veritysetup' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/module-setup.sh"
+grep -q 'chmod 0755.*snosi-etc-overlay-initrd' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/module-setup.sh"
+grep -q 'initrd-root-fs.target.d' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/module-setup.sh"
+grep -q '^Wants=snosi-etc-overlay-initrd.service$' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/10-snosi-etc-overlay.conf"
+grep -q '^Before=initrd-root-fs.target initrd-switch-root.target$' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/snosi-etc-overlay-initrd.service"
+if grep -q '^ConditionKernelCommandLine=' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/snosi-etc-overlay-initrd.service"; then
+    echo "The initrd executable owns the kernel-command-line gate" >&2
+    exit 1
+fi
+grep -q 'getargbool 0 rd\.etc\.overlay' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/etc-overlay-mount.sh"
+grep -q 'var_device=/dev/mapper/var' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/etc-overlay-mount.sh"
+grep -q 'systemd-cryptsetup attach var' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/etc-overlay-mount.sh"
+grep -q 'blkid -p -s TYPE -o value' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/etc-overlay-mount.sh"
+grep -q '^After=sysroot.mount cryptsetup.target$' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/snosi-etc-overlay-initrd.service"
+
+secure="$root/mkosi.profiles/cayo-ab-secure/mkosi.conf"
+forky_tree="$root/shared/cayo-ab-secure/package-manager/etc/apt"
+grep -q '^Bootloader=systemd-boot$' "$secure"
+grep -q '^ShimBootloader=signed$' "$secure"
+grep -q '^UnifiedKernelImages=unsigned$' "$secure"
+grep -q '^SecureBoot=yes$' "$secure"
+grep -q '^SecureBootAutoEnroll=no$' "$secure"
+grep -q '^SignExpectedPcr=yes$' "$secure"
+grep -q '^SandboxTrees=%D/shared/cayo-ab-secure/package-manager$' "$secure"
+grep -q '^ExtraSearchPaths=%D/shared/cayo-ab-secure/tools$' "$secure"
+grep -q '^SandboxTrees=%D/.snosi-private/history:/usr/lib/snosi-pcr-history$' "$secure"
+grep -q '^Environment=PCR_SIGNING_KEY_PREVIOUS$' "$secure"
+[[ -x "$root/shared/cayo-ab-secure/tools/ukify" ]]
+grep -q 'PCR_SIGNING_KEY_PREVIOUS' "$root/shared/cayo-ab-secure/tools/ukify"
+grep -q '^Suites: forky$' "$forky_tree/sources.list.d/forky.sources"
+grep -q '^Pin: release n=forky$' "$forky_tree/preferences.d/forky"
+grep -q '^Pin-Priority: 50$' "$forky_tree/preferences.d/forky"
+for package in libnss-myhostname libnss-mymachines libnss-systemd \
+    libpam-systemd libsystemd-shared libsystemd0 libudev1 systemd \
+    systemd-boot systemd-boot-efi systemd-boot-tools systemd-container \
+    systemd-cryptsetup systemd-repart systemd-resolved systemd-sysv \
+    systemd-timesyncd systemd-tpm udev; do
+    grep -q "^[[:space:]]*$package/forky$" "$secure"
+done
+if grep -q 'grub-efi-amd64-signed' "$secure"; then
+    exit 1
+fi
+grep -q '^[[:space:]]*shim-signed$' "$secure"
+if grep -Rqi forky "$root/mkosi.conf" "$root/mkosi.images" \
+    "$root/mkosi.profiles/cayo-ab" "$root/mkosi.sandbox"; then
+    echo "Forky must remain isolated to cayo-ab-secure" >&2
+    exit 1
+fi
+
+installer="$root/test/cayo-ab-install-spike.sh"
+grep -q -- '--encrypt-var' "$installer"
+grep -qF -- "--tpm2-pcrs= \\" "$installer"
+grep -qF -- "--tpm2-pcrlock= \\" "$installer"
+if grep -q -- '--tpm2-pcrs=7' "$installer"; then
+    exit 1
+fi
+grep -q -- '--tpm2-public-key-pcrs=11' "$installer"
+grep -q 'mokutil --import' "$installer"
+grep -q 'cryptsetup luksFormat --type luks2' "$installer"
+
+nvpcr_finalize="$root/shared/cayo-ab-secure/finalize/disable-nvpcr.chroot"
+[[ -x "$nvpcr_finalize" ]]
+grep -q '/usr/lib/nvpcr/\*\.nvpcr' "$nvpcr_finalize"
+grep -q '/etc/systemd/system/systemd-pcrproduct.service' "$nvpcr_finalize"
+grep -q '/etc/systemd/system/systemd-pcrlogin@\.service' "$nvpcr_finalize"
+grep -q 'FinalizeScripts=%D/shared/cayo-ab-secure/finalize/disable-nvpcr.chroot' "$secure"
+
+rotation_test="$root/test/native-ab-secure-rotation-test.sh"
+secure_update_test="$root/test/native-ab-secure-update-test.sh"
+negative_test="$root/test/native-ab-secure-artifact-negative-test.sh"
+[[ -x "$rotation_test" ]]
+[[ -x "$secure_update_test" ]]
+[[ -x "$negative_test" ]]
+grep -q 'EXPECTED_MACHINE_ID' "$rotation_test"
+grep -q 'open --test-passphrase' "$rotation_test"
+grep -q 'assert_only_tpm_token.*old_fingerprint' "$rotation_test"
+grep -q 'assert_only_tpm_token.*new_fingerprint' "$rotation_test"
+grep -q 'systemd-sysupdate' "$rotation_test"
+grep -q '^Verify=yes$' "$rotation_test"
+if grep -q '^Verify=no$' "$rotation_test"; then
+    echo "Secure rotation transfers must verify their signed manifest" >&2
+    exit 1
+fi
+grep -q 'tampered signed manifest' "$rotation_test"
+grep -q 'root payload checksum mismatch' "$rotation_test"
+grep -q 'systemd-sysupdate.*vacuum' "$rotation_test"
+grep -q 'EXPECTED_MACHINE_ID' "$secure_update_test"
+grep -q 'INCUS_INSTANCE' "$secure_update_test"
+grep -q '^Verify=yes$' "$secure_update_test"
+grep -q 'bootctl set-oneshot' "$secure_update_test"
+grep -q 'Entering emergency mode' "$secure_update_test"
+grep -q 'stop.*--force' "$secure_update_test"
+grep -q 'assert_new_only_token' "$secure_update_test"
+grep -q 'systemd-pcrproduct.service systemd-pcrlogin@0.service' "$secure_update_test"
+grep -q 'rearmed_entry=.*+3-0\.efi' "$secure_update_test"
+grep -q 'N+3 was not blessed before boot-count re-arming' "$secure_update_test"
+grep -q '\.sha256\[0\]\.pol = \.sha256\[1\]\.pol' "$negative_test"
+grep -q -- '--update-section.*\.pcrpkey' "$negative_test"
+
+for transfer in 10-root-verity 20-root 90-uki; do
+    file="$ab/tree/usr/lib/sysupdate.d/$transfer.transfer"
+    [[ -f "$file" ]]
+    grep -q '^Verify=yes$' "$file"
+    grep -q '^ProtectVersion=%A$' "$file"
+    grep -q '^InstancesMax=2$' "$file"
+done
+grep -q '^PartitionFlags=0$' "$ab/tree/usr/lib/sysupdate.d/10-root-verity.transfer"
+grep -q '^PartitionFlags=0$' "$ab/tree/usr/lib/sysupdate.d/20-root.transfer"
+
+grep -q 'MatchPattern=cayo_@v_@u.root-verity.raw.xz' \
+    "$ab/tree/usr/lib/sysupdate.d/10-root-verity.transfer"
+grep -q 'MatchPattern=cayo_@v_@u.root.raw.xz' \
+    "$ab/tree/usr/lib/sysupdate.d/20-root.transfer"
+grep -q '^TriesLeft=3$' "$ab/tree/usr/lib/sysupdate.d/90-uki.transfer"
+grep -q '^Path=/EFI/Linux$' "$ab/tree/usr/lib/sysupdate.d/90-uki.transfer"
+grep -q '^disable systemd-sysupdate.timer$' \
+    "$ab/tree/usr/lib/systemd/system-preset/00-native-ab.preset"
+grep -q '^disable systemd-sysupdate-reboot.timer$' \
+    "$ab/tree/usr/lib/systemd/system-preset/00-native-ab.preset"
+grep -q 'ln -sf /dev/null /etc/systemd/system/systemd-sysupdate.timer' \
+    "$root/shared/outformat/image/finalize/mkosi.finalize.chroot"
+grep -q 'ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-reboot.timer' \
+    "$root/shared/outformat/image/finalize/mkosi.finalize.chroot"
+
+echo "Native A/B static validation passed"

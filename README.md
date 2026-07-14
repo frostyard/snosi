@@ -16,6 +16,7 @@ The project produces:
 | **snow**            | GNOME desktop with backports kernel                             | directory → OCI (buildah/chunkah) |
 | **snowfield**       | snow with linux-surface kernel for Surface devices              | directory → OCI (buildah/chunkah) |
 | **cayo**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
+| **cayo-ab**         | Experimental native A/B server image                            | GPT disk (EROFS + dm-verity) |
 | **1password**       | 1Password desktop application                                   | sysext        |
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
 | **azurevpn**        | Microsoft Azure VPN client                                      | sysext        |
@@ -35,6 +36,107 @@ The project produces:
 | **vscode**          | Visual Studio Code desktop application                          | sysext        |
 
 ## Architecture
+
+The isolated `cayo-ab` profile is an experimental development spike for native
+systemd-repart/systemd-sysupdate A/B roots. Its raw image and installer boot in
+QEMU, and `test/native-ab-update-test.sh` validates signed three-hop updates,
+inactive-slot reuse, dm-verity boot, `/var` plus `/etc` persistence, rejected
+incomplete/tampered update sets, explicit rollback, and boot-count fallback.
+Production key management, publication integration, and hardware soak remain.
+It does not replace the supported bootc images. See
+`docs/plans/2026-07-13-mkosi-native-ab-root-design.md`; the destructive raw-disk
+installer spike lives at `test/cayo-ab-install-spike.sh`. Its UKI uses the
+profile's dracut archive rather than mkosi's independently generated default
+initrd so the pre-pivot persistent `/etc` service is present at boot.
+
+`cayo-ab-secure` extends the spike with standard Secure Boot through Debian's
+Microsoft-signed shim and MOK-signed systemd-boot. Snosi UKIs are locally signed, so
+their certificate must be enrolled once through shim's MokManager; this does
+not require UEFI setup mode or custom firmware keys. The installer can replace
+the image's disposable ext4 `/var` with per-machine LUKS2, retain an external
+recovery passphrase, and enroll TPM unlock against a signed PCR 11 policy. Raw
+PCR 7 cannot be bound by the installer because its Debian boot authority differs
+from the installed MOK-signed UKI. Signed PCR 11 lets newly authorized A/B UKIs
+unlock the same `/var` without binding to one immutable PCR value. LUKS2 and
+TPM/recovery unlock are validated. Secure Boot profile construction is also
+validated, including signed shim and MOK-signed systemd-boot on the ESP and a
+signed UKI carrying `.pcrpkey`/`.pcrsig`. MOK boot, virtual-TPM unlock, and PCR
+signing-key rotation, signed updates, rollback, and boot-count fallback are
+validated in Incus. Systemd 261's optional NvPCR measurements are disabled in
+this profile: their anchor credential cannot migrate between PCR signing keys,
+and they are not used by the signed-PCR LUKS policy.
+
+PCR signing-key overlap must use a transition UKI signed by both old and new
+PCR keys. Two independent TPM tokens are not sufficient: systemd 261.1 falls
+through after a raw-PCR mismatch, but a signed-policy key mismatch stops at the
+lower-numbered token. Place the old private key in `.snosi-private/history/`,
+make the new key active, and opt into a transition build with
+`PCR_SIGNING_KEY_PREVIOUS=<old-key-filename>`. The UKI keeps the new key in
+`.pcrpkey` and carries each PCR 11 policy signed by both keys. Retain the old
+token until every supported rollback UKI contains the new signature. The secure
+profile carries a coherent Forky 261+ systemd family through an isolated,
+low-priority APT source; normal Trixie profiles remain unchanged. Validate a
+transition artifact with:
+
+```bash
+test/native-ab-secure-artifact-test.sh \
+  output/cayo-ab-secure.manifest output/cayo-ab-secure.efi \
+  .snosi-private/history/<old-key-certificate> \
+  .snosi-private/pcr-signing.pub
+```
+
+`test/native-ab-secure-artifact-negative-test.sh` also proves that a missing
+signature and an old published `.pcrpkey` are rejected. To exercise runtime
+rotation on an already MOK-enrolled disposable VM, retain its external recovery
+key and run:
+
+```bash
+test/native-ab-secure-rotation-test.sh --yes \
+  output/cayo-ab-secure \
+  .snosi-private/history/<old-key-certificate> \
+  .snosi-private/pcr-signing.pub /path/to/recovery.key \
+  root@<vm-address> /path/to/ssh-key <expected-machine-id>
+```
+
+The destructive harness verifies the recovery key and exact machine ID before
+making changes. It installs the transition through guest-local
+`systemd-sysupdate` using a verified ephemeral signed manifest, boots with only
+the old TPM token, enrolls the new token, retires the old token, and reboots the
+identical UKI with only the new token. It requires MOK enrollment and VM
+provisioning to have been completed first.
+
+Keep durable signing keys outside `.mkosi-private`: that directory belongs to
+mkosi and `mkosi clean -ff` removes it. The gitignored `.snosi-private` directory
+is the repository convention for active and archived PCR signing keys.
+
+After validating rotation, exercise the complete secure rollback window on the
+same disposable Incus VM with three preserved builds:
+
+```bash
+test/native-ab-secure-update-test.sh --yes \
+  /path/to/N+1/cayo-ab-secure \
+  /path/to/N+2/cayo-ab-secure \
+  /path/to/N+3/cayo-ab-secure \
+  .snosi-private/history/<old-key-certificate> \
+  .snosi-private/pcr-signing.pub /path/to/recovery.key \
+  root@<vm-address> /path/to/ssh-key <expected-machine-id> <incus-instance>
+```
+
+The harness requires N+1 and N+2 to be dual-signed and N+3 to be new-only. It
+checks signed transfer, alternating slots, new-key-only TPM unlock, explicit
+rollback, a return to N+3, three failed dm-verity boots, the exhausted `+0-3`
+entry, and automatic N+2 fallback.
+
+To run the full spike, preserve the N raw image and three consecutive builds,
+then pass each update artifact prefix:
+
+```bash
+sudo test/native-ab-update-test.sh \
+  /path/to/cayo-ab-N.raw \
+  /path/to/N+1/cayo-ab \
+  /path/to/N+2/cayo-ab \
+  /path/to/N+3/cayo-ab
+```
 
 ```
                               base                ← Debian Trixie + bootc foundation

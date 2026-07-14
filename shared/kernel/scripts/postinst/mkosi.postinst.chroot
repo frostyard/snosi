@@ -21,6 +21,12 @@ fi
 dracut --force --no-hostonly --reproducible --zstd --verbose --add etc-overlay \
   --kver "$KERNEL_VERSION" "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
 
+if [[ -e /usr/lib/snosi/native-ab ]]; then
+  mkdir -p "$ARTIFACTDIR/io.mkosi.initrd"
+  cp "/usr/lib/modules/$KERNEL_VERSION/initramfs.img" \
+    "$ARTIFACTDIR/io.mkosi.initrd/50-dracut.img"
+fi
+
 if [ -f "/boot/vmlinuz-$KERNEL_VERSION" ]; then
   cp -f "/boot/vmlinuz-$KERNEL_VERSION" "/usr/lib/modules/$KERNEL_VERSION/vmlinuz"
   echo "vmlinuz moved successfully"

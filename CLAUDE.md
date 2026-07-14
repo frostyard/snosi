@@ -76,6 +76,103 @@ bootc and ostree install as regular APT packages (`bootc`, `libostree-1-1` — t
 - **Runtime libs:** the debs declare only a partial `Depends` list; base `Packages=` keeps the full set of runtime link deps explicit (`libfuse3-4`, `libsoup-3.0-0`, `liblzma5`, etc.) — do not remove them just because apt doesn't demand them.
 - **History:** until 2026-07 these were compiled from source during the base image build (`shared/bootc/build/bootc.chroot` + stub-deb dpkg registration); that machinery is gone.
 
+### Native A/B Prototype
+
+`mkosi.profiles/cayo-ab` is an isolated experimental disk profile. Its initrd
+must mount persistent `var` and overlay `/etc` before switch-root; never add a
+host system-service fallback. The image ships `machine-id=uninitialized`, and
+first boot commits a unique ID into the overlay upperdir. The installer grows
+only the final ext4 `var` partition. OS transfers are mandatory, UUID-bearing,
+and `Verify=yes`; do not enable `systemd-sysupdate.timer` until a dedicated
+`/usr/lib/systemd/import-pubring.gpg` and signed publication pipeline exist.
+Partition payloads must use XZ: Debian's systemd 257 `systemd-pull` does not
+decode Zstandard URL payloads and writes them compressed into the target slot.
+Partition transfers must reset `PartitionFlags=0` before applying `ReadOnly=yes`.
+The kernel postinstall exports its dracut archive to
+`$ARTIFACTDIR/io.mkosi.initrd`; `Initrds=` and `KernelModulesInitrd=no` prevent
+mkosi from silently embedding an unrelated default initrd instead. The custom
+dracut module depends on `systemd-veritysetup` so the UKI `roothash` creates the
+verified root before the overlay service runs. Until signed publication is
+available, the image finalizer masks both sysupdate timers in `/etc`: initrd PID
+1 starts before real-root preset policy is visible, so a preset alone cannot
+reliably prevent first-boot timer enablement. Manual sysupdate remains available.
+`test/native-ab-update-test.sh` validates N to N+1 to N+2 to N+3 with four real
+mkosi builds: signed-manifest acceptance/rejection, missing UKI/verity and bad
+checksum rejection, inactive-slot reuse, dm-verity boot, explicit rollback,
+boot-count fallback from a corrupted unblessed update, and `/var` plus `/etc`
+persistence.
+
+`mkosi.profiles/cayo-ab-secure` is the security spike. Standard Secure Boot
+uses Debian's Microsoft-signed shim and MOK-signed systemd-boot; generated snosi
+UKIs are signed by `mkosi.key`/`mkosi.crt` and require one-time enrollment of
+that certificate through shim's MokManager. GRUB is unsuitable because its
+generated configuration hard-codes the build-time UKI and ignores sysupdate's
+Type #2 entries and boot counters. Never use mkosi Secure Boot auto-enroll,
+UEFI setup mode, or custom firmware db keys for this path. The installer creates
+LUKS2 `/var` per machine after expanding the final partition; never publish a
+pre-encrypted `/var`, which would clone LUKS metadata and key material. Always
+retain a recovery passphrase outside the installed disk. TPM enrollment uses
+the signed PCR 11 policy key with an empty raw-PCR set and explicitly disables
+automatic pcrlock policy selection. Do not bind PCR 7 in the
+installer: its Debian-signed boot authority differs from the installed
+MOK-signed UKI, so the value changes before first boot. A raw PCR 11 value would
+break each A/B update. The initrd explicitly detects LUKS and invokes
+`systemd-cryptsetup attach`; GPT auto-discovery does not unlock `var` during this
+dracut phase. Raw ext4 remains only for the baseline spike. LUKS2 creation,
+MOK enrollment, enforced Secure Boot, TPM auto-unlock, TPM replacement failure,
+recovery unlock, and PCR signing-key rotation are validated in Incus. Update,
+rollback, and boot-count fallback are also validated end to end with the sole
+new-key TPM token. The secure profile upgrades the complete systemd family to
+Forky 261+ through a profile-only, low-priority APT source; never expose that
+source to the base or normal profiles, and keep all exact-version systemd
+libraries and companion packages qualified together.
+Do not implement signing-key overlap as two independent TPM tokens. A controlled
+systemd 261.1 test continued from a raw-PCR-mismatched token 0 to token 1, but a
+real signed-policy key mismatch returned `ENXIO` and stopped before token 1. The
+validated rotation sequence uses a transition UKI whose PCR 11 policies are
+signed by both keys while `.pcrpkey` contains the new key. Archive the old private
+key under `.snosi-private/history/`, make the new key active, and set
+`PCR_SIGNING_KEY_PREVIOUS` to the old key's filename for transition builds. Keep
+the old TPM token until every supported rollback UKI contains the new signature;
+then remove it and verify the same transition UKI unlocks with the new token.
+Validate each secure build with
+`test/native-ab-secure-artifact-test.sh`, which checks root-package coherence,
+the initrd's private systemd library and TPM token plugin, and UKI PCR sections.
+When given the old certificate and new public key, it also requires eight PCR
+signatures: four policies signed once by each key, with the new key in `.pcrpkey`.
+`test/native-ab-secure-artifact-negative-test.sh` mutates those sections and
+requires rejection. `test/native-ab-secure-rotation-test.sh` is the destructive
+runtime proof for an already MOK-enrolled disposable VM. It requires `--yes`, an
+exact machine ID, a working external recovery key, and root SSH. It uses
+guest-local `systemd-sysupdate` with a verified ephemeral signed manifest,
+establishes old-only and new-only TPM states, and requires two unattended boots
+of the identical transition UKI. Never point it at a production host. It
+intentionally does not automate MokManager or VM creation, and N-through-N+3
+rollback/fallback is validated separately by
+`test/native-ab-secure-update-test.sh`. That destructive harness requires
+N+1/N+2 dual-signed artifacts, an N+3 new-only artifact, exact machine and Incus
+instance identities, and the external recovery key. It verifies alternating
+slots, sole-new-key unlock, explicit rollback, re-arms the successfully tested
+N+3 entry as `+3-0`, corrupts its root, observes three emergency boots, and
+requires automatic N+2 fallback plus the exhausted `+0-3` entry.
+A clean secure-profile build is
+validated: its ESP contains Debian-signed shim, MokManager, and MOK-signed
+systemd-boot, and its MOK-signed UKI contains `.pcrpkey` and `.pcrsig`. In pinned mkosi,
+`UnifiedKernelImages=unsigned` means build locally; `SecureBoot=yes` still signs
+the result. Setting it to `signed` incorrectly requests a distro-prebuilt UKI.
+Never store durable keys or retained test artifacts under `.mkosi-private`:
+mkosi owns that directory and `mkosi clean -ff` removes it. Use the gitignored
+`.snosi-private` directory.
+
+Systemd 261 NvPCR anchor credentials embed the PCR signing public key and have
+no supported migration operation. A dual-signed transition can read an old
+anchor, but a new-only UKI then fails `systemd-tpm2-setup`, `systemd-pcrproduct`,
+and `systemd-pcrlogin` with `ENXIO`. The secure profile does not consume NvPCR
+attestation, so `shared/cayo-ab-secure/finalize/disable-nvpcr.chroot` masks every
+shipped NvPCR definition plus the product/login writers. Keep TPM SRK setup and
+the signed-PCR-11 LUKS path enabled. Do not delete/recreate the anchor or TPM NV
+indexes as a key-rotation shortcut; that changes the attestation baseline.
+
 ### Sysext Constraints
 
 Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var` at runtime. Configs needed in `/etc` must be:

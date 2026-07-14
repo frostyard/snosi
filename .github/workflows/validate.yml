@@ -38,6 +38,9 @@ jobs:
             git ls-files | xargs awk 'FNR==1 && /^#!\/(usr\/)?bin\/(env )?(ba)?sh/ {print FILENAME} {nextfile}' 2>/dev/null
           } | grep -v '^saved-unused/' | sort -u | xargs -r shellcheck -S warning -x
 
+      - name: Validate native A/B invariants
+        run: ./test/native-ab-static-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:

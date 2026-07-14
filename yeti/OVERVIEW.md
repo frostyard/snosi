@@ -19,6 +19,132 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 |-------|--------|--------|
 | **cayo** | backports | Headless server, podman |
 
+### Native A/B Prototype
+
+`mkosi.profiles/cayo-ab` is an isolated, non-production GPT disk prototype. It
+uses systemd-boot UKIs, two fixed EROFS root slots with paired dm-verity slots,
+a persistent ext4 `/var`, and an overlay `/etc` backed by `/var`. The full raw
+disk is the installer artifact; `test/cayo-ab-install-spike.sh` performs a
+checksum- and layout-guarded destructive write. The file-target option is only
+for QEMU. Do not remove bootc or treat this as supported until signed manifests,
+per-install identity, `/var` growth, rollback, and failure-injection tests pass.
+
+The kernel postinstall passes its dracut archive to mkosi through
+`$ARTIFACTDIR/io.mkosi.initrd`; the profile disables mkosi's unrelated default
+and kernel-module initrd layers. That archive pulls in a oneshot that mounts
+`var` and the persistent `/etc` overlay before switch-root. The executable
+gates itself on `rd.etc.overlay`; failure must be fatal because a host-service
+fallback would break true first-boot identity. Its dracut module explicitly
+depends on `systemd-veritysetup`; otherwise `roothash` leaves
+`/dev/mapper/root` unresolved. The image finalizer masks both sysupdate timers
+in `/etc`; this survives first-boot preset population even though initrd PID 1
+starts before the real-root preset policy is visible. Administrators can still
+run updates manually or explicitly unmask the timers in the overlay. The
+installer grows only the final `var` partition. OS transfers use `Verify=yes`,
+but unattended updates stay disabled until the dedicated OS OpenPGP keyring
+and signed publication pipeline exist. Partition payloads use XZ because the
+Debian systemd 257 `systemd-pull` build does not support Zstandard; unsupported
+compressed payloads are written verbatim and then fail dm-verity activation.
+`test/native-ab-update-test.sh` runs a four-build N through N+3 sequence. It
+asserts missing UKI/verity and checksum failures are transactional, verifies a
+tampered signed manifest is rejected and a valid ephemeral signature accepted,
+boots a one-shot rollback, proves alternating physical slot reuse, and corrupts
+unblessed N+3 so systemd-boot exhausts all three tries and falls back to N+2.
+
+The isolated `cayo-ab-secure` profile answers the security-design questions
+without changing the baseline test image. Its chain is firmware Microsoft db ->
+Debian signed shim -> MOK-signed systemd-boot -> MOK-signed snosi UKI. Debian shim
+does not trust a locally signed UKI automatically, so the installer schedules
+the certificate for the normal one-time MokManager enrollment; firmware setup
+mode and custom db enrollment are explicitly disabled. `SignExpectedPcr=yes`
+embeds a signed PCR 11 policy in each UKI. Per-machine LUKS2 `/var` enrollment
+uses that authority with no raw PCR binding, allowing signed future and rollback
+UKIs while rejecting an arbitrary measured payload. Secure Boot independently
+enforces the shim/MOK trust chain. A separately stored recovery passphrase
+remains mandatory for TPM clear or motherboard replacement. The installer
+encrypts `/var` only after writing the generic raw image and growing its final
+partition, preventing cloned volume keys and LUKS UUIDs. The initrd explicitly
+unlocks LUKS `/var`, then falls back to raw ext4 for `cayo-ab`. Static config and
+real LUKS2 conversion have passed. A clean secure build also proved that the ESP
+carries Debian-signed shim, MokManager, and MOK-signed systemd-boot and that the
+generated MOK-signed UKI contains the
+`.pcrpkey` and `.pcrsig` sections. Pinned mkosi calls local UKI construction
+`UnifiedKernelImages=unsigned`; `SecureBoot=yes` signs that output. Incus then
+validated MOK enrollment, enforced Secure Boot/kernel lockdown, TPM automatic
+unlock through signed PCR 11 policy, TPM replacement failure, and recovery
+unlock. The installer leaves the raw-PCR set empty: PCR 7 measured in the
+Debian-signed installer differs from PCR 7 after the MOK-signed UKI boots. The
+installer also passes an empty `--tpm2-pcrlock=` because systemd otherwise
+auto-selects `/run/systemd/pcrlock.json` or `/var/lib/systemd/pcrlock.json` when
+present, silently replacing the intended signed-PCR-only policy. The initrd must
+explicitly detect LUKS and run `systemd-cryptsetup attach`; GPT auto
+discovery does not create `/dev/mapper/var` at this dracut stage.
+GRUB was rejected after an end-to-end update installed N+1 correctly but rebooted
+N: its generated configuration chainloaded one build-time UKI and ignored the
+new Type #2 entry and `+3-0` boot counter. systemd-boot is required for A/B
+selection, boot counting, and fallback.
+An Incus N+1 run then proved that MOK-signed systemd-boot selects and loads the
+new UKI and that its new dm-verity root mounts. Two-token PCR signing-key overlap
+was then disproved. Systemd 257 stopped at a stale lower-numbered token. A narrow
+systemd 261.1 test fell through when token 0 had a raw-PCR mismatch, but the real
+signed-policy mismatch returned `ENXIO` and stopped before valid token 1. Token
+iteration is therefore error-dependent, and two independently signed TPM tokens
+are not a rotation mechanism.
+
+The validated rotation mechanism dual-signs each transition UKI's four PCR 11
+policies with old and new keys while keeping the new key in `.pcrpkey`. The
+mkosi `ukify` wrapper is opt-in through `PCR_SIGNING_KEY_PREVIOUS`, accepts only
+a filename under `.snosi-private/history/`, derives the active public key from
+the sandbox-bound private key, and delegates normal builds unchanged. A fresh
+Incus VM with enrolled MOK and vTPM first booted the dual-signed UKI and unlocked
+`/var` through old token 0/keyslot 1. After that slot was wiped, the identical
+UKI rebooted under enforced Secure Boot and unlocked through new token 1/keyslot
+2. The old token must remain until every supported rollback UKI contains the new
+signature. `test/native-ab-secure-artifact-test.sh` verifies eight signatures,
+four policy digests, both key fingerprints, and the new `.pcrpkey` in addition
+to package and initrd coherence. The mutation test
+`test/native-ab-secure-artifact-negative-test.sh` requires rejection of a
+broken old/new policy pair and an old published `.pcrpkey`.
+
+`test/native-ab-secure-rotation-test.sh` codifies the runtime sequence for an
+already MOK-enrolled disposable VM. Its destructive boundary is explicit: the
+caller must supply `--yes`, the exact guest machine ID, root SSH, and the external
+recovery key. Before modifying LUKS metadata it proves that recovery key with
+`cryptsetup --test-passphrase`. It transfers the transition root, verity image,
+and UKI through guest-local `systemd-sysupdate`; an ephemeral OpenPGP key signs
+the local HTTP manifest and `Verify=yes` is enforced. It then ensures only the
+old signed-PCR token exists before the first unattended boot. After that boot it
+enrolls the new token, removes the old token by fingerprint-discovered keyslot,
+and requires a second unattended boot of the byte-identical UKI with only the
+new token. Boot IDs, Secure Boot, lockdown, measured UKI state, roothash, LUKS2
+`/var`, token policy, the firmware-reported running UKI hash, and system health
+are checked. MokManager enrollment and VM/vTPM creation remain preconditions
+rather than automated steps.
+
+`test/native-ab-secure-update-test.sh` extends that proof across three retained
+secure builds. N+1 and N+2 must be dual-signed, N+3 must be signed only by the
+new key, and the target must begin on N+1 with only the new TPM token. The checked
+run installed and booted N+2 and N+3, verified physical slot reuse, rolled back
+to N+2, returned to N+3, re-armed its blessed entry as `+3-0`, corrupted its
+dm-verity root, observed three N+3 emergency boots through the Incus console,
+and required automatic N+2 fallback with N+3 left as `+0-3`. Secure Boot,
+measured UKI identity, roothash, persistence, and sole-new-key LUKS policy were
+checked after every successful boot.
+
+The run also exposed two lifecycle constraints. First, `.mkosi-private` is
+mkosi-owned and `mkosi clean -ff` removes it; durable active and archived PCR
+keys belong in gitignored `.snosi-private`. Second, systemd 261's NvPCR anchor
+credential embeds the PCR signing key and cannot be migrated. Dual-signed UKIs
+can temporarily open an old anchor, but new-only UKIs fail the NvPCR setup and
+writer units. `cayo-ab-secure` does not use NvPCR attestation, so its finalize
+script masks all packaged NvPCR definitions and the product/login writers while
+retaining SRK setup and signed-PCR LUKS unlock. A fresh new-only build and sole
+fresh-key TPM token booted without those failures.
+
+`cayo-ab-secure` upgrades the complete exact-version systemd family to Forky
+261+ using a profile-only `SandboxTrees=` APT source pinned at priority 50. The
+base, `cayo-ab`, and production profiles remain on Trixie.
+
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
 1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, lemonade, nix, podman, tailscale, vscode
