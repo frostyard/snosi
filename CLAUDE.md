@@ -78,6 +78,15 @@ bootc and ostree install as regular APT packages (`bootc`, `libostree-1-1` — t
 
 ### Native A/B Prototype
 
+Naming, path, and policy contracts for the eventual production native A/B
+products (`cayo-ab`, `snow-ab`, `snowfield-ab`) are frozen in
+`docs/native-ab-contracts.md` and enforced statically by
+`test/native-ab-contracts-test.sh`. Read that document before adding or
+renaming anything under the native A/B tree — it is the source of truth, not
+this section. Known deviations of the current prototype from the frozen
+contract are tracked in `test/native-ab-contracts-allow.txt`, not silently
+carried forward.
+
 `mkosi.profiles/cayo-ab` is an isolated experimental disk profile. Its initrd
 must mount persistent `var` and overlay `/etc` before switch-root; never add a
 host system-service fallback. The image ships `machine-id=uninitialized`, and

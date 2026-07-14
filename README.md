@@ -37,6 +37,13 @@ The project produces:
 
 ## Architecture
 
+Naming, path, and policy contracts for the production native A/B products
+(`cayo-ab`, `snow-ab`, `snowfield-ab`) are frozen in
+[`docs/native-ab-contracts.md`](docs/native-ab-contracts.md) and validated
+statically by `test/native-ab-contracts-test.sh`; see
+`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md` for the coexistence
+plan that freeze unblocks.
+
 The isolated `cayo-ab` profile is an experimental development spike for native
 systemd-repart/systemd-sysupdate A/B roots. Its raw image and installer boot in
 QEMU, and `test/native-ab-update-test.sh` validates signed three-hop updates,

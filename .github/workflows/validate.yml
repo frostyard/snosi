@@ -41,6 +41,12 @@ jobs:
       - name: Validate native A/B invariants
         run: ./test/native-ab-static-test.sh
 
+      - name: Validate frozen native A/B contracts
+        # docs/native-ab-contracts.md is the source of truth for native A/B
+        # naming, paths, and policy; this is its executable form. No root,
+        # no network, no image build.
+        run: ./test/native-ab-contracts-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:

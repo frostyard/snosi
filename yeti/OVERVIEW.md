@@ -21,6 +21,17 @@ snosi is a bootable container image build system that uses [mkosi](https://githu
 
 ### Native A/B Prototype
 
+The frozen naming/path/policy contract for the eventual production native A/B
+products (`cayo-ab`, `snow-ab`, `snowfield-ab` — channel `<ImageId>-ab`,
+14-digit `YYYYMMDDHHMMSS` versions, `<ImageId>_<version>_r`/`_v` GPT labels,
+`os/native/v1/<product>/x86-64/` R2 paths, sysupdate component topology, key
+custody/rotation, capacity, and retention policy) lives in
+`docs/native-ab-contracts.md` and is enforced statically by
+`test/native-ab-contracts-test.sh` against an allowlisted set of tracked
+prototype deviations (`test/native-ab-contracts-allow.txt`). Treat that
+document as authoritative over anything below in this section, which
+describes the current, pre-freeze prototype.
+
 `mkosi.profiles/cayo-ab` is an isolated, non-production GPT disk prototype. It
 uses systemd-boot UKIs, two fixed EROFS root slots with paired dm-verity slots,
 a persistent ext4 `/var`, and an overlay `/etc` backed by `/var`. The full raw
