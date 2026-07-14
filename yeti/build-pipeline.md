@@ -8,6 +8,14 @@ Each image build runs four phases of scripts sequentially:
 
 Download and install items not available as Debian packages. These run inside the chroot with network access.
 
+Per-product BuildScripts/PostInstallationScripts/FinalizeScripts/PostOutputScripts
+live in `shared/composition/<product>/mkosi.conf` (`shared/composition/cayo`,
+`shared/composition/snow`) and are `Include=`d by every profile that ships that
+product's payload — the bootc profile (`cayo`/`snow`/`snowfield`) and the native
+A/B prototypes (`cayo-ab-raw`, `cayo-ab-secure`) alike — so the two transports
+cannot drift apart. See CLAUDE.md "Configuration Composition" for the ordering
+rules that apply when editing these fragments.
+
 **All profiles (shared):**
 
 | Script | Location | Purpose |
@@ -32,7 +40,7 @@ bootc and ostree install as regular APT packages from the Frostyard repository (
 - **Runtime lib pinning:** the debs declare only a partial `Depends` list; base `Packages=` keeps the full set of runtime link deps explicit (`libfuse3-4`, `libsoup-3.0-0`, `liblzma5`, `libzstd1`, `libmount1`, `libselinux1`, `libcom-err2`, `libext2fs2t64`, plus the declared ones). Do not remove them from `Packages=` just because apt does not demand them.
 - **History (until 2026-07):** both were compiled from source during the base image build via `shared/bootc/build/bootc.chroot` (BuildScript + `BuildPackages=` overlay deps + rustup toolchain + ostree double-install + stub-deb dpkg registration in `shared/bootc/postinst/bootc-register.chroot`). All of that machinery was removed when the deb path landed; see git history if the in-tree build ever needs resurrecting.
 
-**Server profile (cayo):** Only `brew.chroot` (no desktop build scripts).
+**Server payload (cayo, cayo-ab-raw, cayo-ab-secure):** Only `brew.chroot` (no desktop build scripts) — all three consume it via `shared/composition/cayo/mkosi.conf`.
 
 ### 2. PostInstallationScripts (after packages)
 

@@ -190,20 +190,25 @@ mkosi.images/               # Image definitions (base + 17 sysexts)
   docker/                   # Each sysext: mkosi.conf + optional extra/scripts
   tailscale/
   ...
-mkosi.profiles/             # Desktop/server profile definitions (6 profiles)
-  snow/                     # Each profile: mkosi.conf + build/postinst/finalize scripts
-  cayo/
-  ...
+mkosi.profiles/             # Transport+kernel selector profiles (5: cayo, snow,
+  snow/                     # snowfield, cayo-ab-raw, cayo-ab-secure). Each
+  cayo/                     # profile: mkosi.conf + (native only) its own
+  ...                       # transport-specific extras.
 shared/                     # Reusable fragments composed via Include=
   download/                 # Verified download metadata (sysext/image checksums, package version sentinels) + helpers
   kernel/                   # Kernel variant configs (backports, surface, stock)
-  packages/                 # Package set configs (desktop/server bases plus loaded-image extras)
+  packages/                 # Package set configs (desktop/server bases, bootc runtime deps)
+  composition/              # Per-product payload fragments (tree/scripts/packages),
+                             # shared verbatim by every transport for that product
+    cayo/                   # ExtraTrees + postinst/build/finalize/postoutput scripts + Include packages/cayo
+    snow/                   # Same pattern with snow's extra BuildScripts (hotedge, logomenu, bazaar, surface-cert)
   scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot build script)
-  outformat/image/          # OCI output format, buildah/chunkah packaging
+  outformat/image/          # bootc OCI output format, buildah/chunkah packaging
+  outformat/ab-root/        # Native A/B disk output format, repart definitions
   sysext/postoutput/        # Shared sysext versioning and manifest logic
   manifest/postoutput/      # Image manifest processing
-  snow/                     # Snow desktop: build scripts + tree overlay
-  cayo/                     # Cayo server: postinstall scripts + tree overlay
+  snow/                     # Snow desktop: build scripts + tree overlay (consumed by shared/composition/snow)
+  cayo/                     # Cayo server: postinstall scripts + tree overlay (consumed by shared/composition/cayo)
 mkosi.sandbox/etc/apt/       # External APT repo configs + GPG keyrings
 mkosi.tools.sandbox/etc/apt/ # APT config for mkosi's ToolsTree=default bootstrap
 .github/workflows/          # CI/CD (build, publish, dependency checks, testing)
@@ -222,17 +227,33 @@ mkosi configs compose via `Include=` directives. Each profile pulls in reusable 
 Root `mkosi.conf` lists `base` plus all in-repo sysexts for the sysext publishing build. It also sets `ToolsTree=default` and `ToolsTreeSandboxTrees=mkosi.tools.sandbox`; files needed by the tools-tree package manager must go in `mkosi.tools.sandbox/`, while `mkosi.sandbox/` applies to the target image package manager. Both sandbox trees currently carry the same APT retry/timeout hardening. Each `mkosi.profiles/*/mkosi.conf` starts with `Dependencies=` and then `Dependencies=base` to reset mkosi's append-only collection semantics; profile image builds must not inherit the sysext list.
 
 ```
-Profile (e.g., snow/mkosi.conf)
-├── Include: shared/packages/snow/mkosi.conf       # Package set
-├── Include: shared/kernel/backports/mkosi.conf    # Kernel variant
-├── Include: shared/outformat/image/mkosi.conf     # Output format (directory)
-├── Dependencies: base                              # Requires base image
+Profile (e.g., snow/mkosi.conf)                     # transport+kernel selector only
+├── Include: shared/packages/bootc/mkosi.conf       # bootc/ostree runtime deps
+├── Include: shared/composition/snow/mkosi.conf     # snow payload (see below)
+├── Include: shared/kernel/backports/mkosi.conf     # Kernel variant
+├── Include: shared/outformat/image/mkosi.conf      # Output format (directory)
+└── Dependencies: base                              # Requires base image
+
+shared/composition/snow/mkosi.conf                  # snow payload, shared by every transport
 ├── ExtraTrees: shared/snow/tree                    # Filesystem overlay
-├── BuildScripts: shared brew.chroot, hotedge.chroot, ... # Build-time scripts
-├── PostInstallationScripts: snow.postinst.chroot   # Post-package scripts
+├── PostInstallationScripts: kernel postinst, then snow.postinst.chroot
+├── BuildScripts: brew.chroot, hotedge.chroot, logomenu.chroot, bazaar.chroot, surface-cert.chroot
+├── PostOutputScripts: mkosi.postoutput             # Manifest copy
 ├── FinalizeScripts: mkosi.finalize.chroot          # Pre-output scripts
-└── PostOutputScripts: mkosi.postoutput             # Post-output scripts
+└── Include: shared/packages/snow/mkosi.conf        # Package set
 ```
+
+`mkosi.profiles/cayo-ab-raw` and `mkosi.profiles/cayo-ab-secure` (the native A/B
+prototypes) `Include=shared/composition/cayo/mkosi.conf` the same way the bootc
+`cayo` profile does, instead of restating ExtraTrees/scripts/packages — this is
+what makes the cayo brew BuildScript and manifest PostOutputScript apply to
+every transport instead of only bootc. They swap `shared/packages/bootc/mkosi.conf`
+for nothing (native images never ship bootc) and `shared/outformat/image/mkosi.conf`
+for `shared/outformat/ab-root/mkosi.conf`. Because mkosi accumulates list settings
+(`Packages=`, `FinalizeScripts=`, ...) in `Include=` encounter order across the
+whole resolved config, the relative order of `Include=` lines in a profile is
+significant whenever more than one fragment sets the same key — verify any
+composition change with a `mkosi cat-config`/`summary` diff, not just a source read.
 
 The app-bundling "loaded" variants (snowloaded, snowfieldloaded, cayoloaded) were retired in 2026-07: every app they baked in (Edge, VS Code, Bitwarden, Azure VPN, Incus, Docker) is delivered as a sysext instead. The shared `packages/{edge,vscode,bitwarden,azurevpn}` fragments now serve only the sysext builds.
 
