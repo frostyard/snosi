@@ -87,7 +87,10 @@ resolve_pristine() {
         PRISTINE=/.etc.lower
         return
     fi
-    local mnt
+    # NOT `local`: the EXIT trap invokes cleanup() after resolve_pristine()
+    # has already returned, so this must stay reachable as a script-global
+    # for the trap's dynamic scope lookup (a `local` here dies with "mnt:
+    # unbound variable" under set -u on every invocation).
     mnt=$(mktemp -d /run/snosi-etc-diff.XXXXXX)
     cleanup() { umount "$mnt" 2>/dev/null || true; rmdir "$mnt" 2>/dev/null || true; }
     trap cleanup EXIT

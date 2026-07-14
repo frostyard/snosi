@@ -174,6 +174,70 @@ fi
 assert_contains "restore-refusal error names the path" \
     "$(cat "$WORK_DIR/restore-added.err")" "not in the image"
 
+echo "# snosi-etc-diff resolve_pristine cleanup contract (real bootc bind-mount branch)"
+
+# Unlike everything above, this drives the REAL bootc code path (no test
+# hooks set), i.e. resolve_pristine()'s bind-mount + EXIT trap. That needs
+# root (bind-mount + the script's own EUID check) and must never bind-mount
+# the host's real /. So we run a wrapper copy of the script with the
+# `mount --bind ... /` line's source swapped for a throwaway fixture
+# directory that stands in for "/", and let the wrapper's own resolve_pristine
+# bind-mount THAT.
+HAVE_ROOT=0
+SUDO=()
+if [[ $EUID -eq 0 ]]; then
+    HAVE_ROOT=1
+elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    HAVE_ROOT=1
+    SUDO=(sudo -n)
+fi
+
+if [[ -e /usr/lib/snosi/native-ab ]]; then
+    echo "ok - resolve_pristine cleanup contract # SKIP native-ab marker present on this host, can't force the bootc branch"
+elif [[ $HAVE_ROOT -eq 0 ]]; then
+    echo "ok - resolve_pristine cleanup contract # SKIP neither root nor passwordless sudo available"
+else
+    CONTRACT_DIR="$(mktemp -d)"
+    FIXTURE_ROOT="$CONTRACT_DIR/fixture-root"
+    mkdir -p "$FIXTURE_ROOT/etc"
+    printf 'fixture pristine\n' >"$FIXTURE_ROOT/etc/probe.conf"
+
+    WRAPPER="$CONTRACT_DIR/snosi-etc-diff-wrapper"
+    sed "s#mount --bind -o ro / \"\$mnt\"#mount --bind -o ro \"$FIXTURE_ROOT\" \"\$mnt\"#; \
+         s#mount --bind / \"\$mnt\"#mount --bind \"$FIXTURE_ROOT\" \"\$mnt\"#" \
+        "$SCRIPT" >"$WRAPPER"
+    chmod +x "$WRAPPER"
+
+    # Sanity: the substitution actually landed (otherwise this "test" would
+    # silently bind-mount the real host / via the unmodified script).
+    if ! grep -q "mount --bind -o ro \"$FIXTURE_ROOT\"" "$WRAPPER"; then
+        record_fail "cleanup-contract wrapper substitution applied" \
+            "mount --bind line in $WRAPPER was not rewritten to the fixture root"
+    else
+        record_pass "cleanup-contract wrapper substitution applied"
+
+        set +e
+        "${SUDO[@]}" "$WRAPPER" --machine >"$CONTRACT_DIR/out.log" 2>"$CONTRACT_DIR/err.log"
+        rc=$?
+        set -e
+
+        assert_eq "resolve_pristine bootc branch exits 0" "$rc" "0"
+
+        leftover_mounts="$(grep -c 'snosi-etc-diff' /proc/mounts || true)"
+        assert_eq "no leftover bind mount after run" "$leftover_mounts" "0"
+
+        leftover_dirs="$(find /run -maxdepth 1 -name 'snosi-etc-diff.*' 2>/dev/null | wc -l)"
+        assert_eq "no leftover /run tmp dir after run" "$leftover_dirs" "0"
+
+        if [[ $rc -ne 0 ]]; then
+            echo "  wrapper stderr:" >&2
+            sed 's/^/    /' "$CONTRACT_DIR/err.log" >&2
+        fi
+    fi
+
+    "${SUDO[@]}" rm -rf "$CONTRACT_DIR"
+fi
+
 echo ""
 echo "# Results: $PASS passed, $FAIL failed, $(( PASS + FAIL )) total"
 exit "$FAIL"
