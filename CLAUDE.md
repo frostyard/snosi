@@ -137,6 +137,24 @@ checksum rejection, inactive-slot reuse, dm-verity boot, explicit rollback,
 boot-count fallback from a corrupted unblessed update, and `/var` plus `/etc`
 persistence.
 
+`test/native-ab-components-test.sh` is the Phase 1 exit-criterion QEMU test: it
+builds two real `cayo-ab-raw` versions itself, boots N, and asserts no failed
+systemd units and the bootc/nbc/systemd-sysupdate masks from above; that
+`/usr/lib/sysupdate.d/` contains only the three OS transfers (no `.feature`
+files) while `systemd-sysupdate components` enumerates all 17 shipped sysext
+components; that two independently versioned ad hoc test components
+(`testa`/`testb`, created under `/etc/sysupdate.<name>.d/`) update via
+`--component=` without touching OS partitions, the ESP, or each other's
+version; that an unqualified N to N+1 OS update succeeds with both test
+components still enabled and `/var/lib/extensions.d` untouched; and that
+`snosi-etc-diff`/`snosi-etc-drift-report.service` correctly report, diff, and
+restore live `/etc` drift against `/.etc.lower` with no leftover bind mounts.
+It caught a real bug: the `KernelModules=` allowlist below excluded
+`nf_tables`/`nfnetlink`, so the base image's unconditionally-shipped,
+preset-enabled `nftables.service` failed on every native A/B boot
+("Unable to initialize Netlink socket: Protocol not supported") — fixed by
+adding both modules to the allowlist.
+
 `mkosi.profiles/cayo-ab-secure` is the security spike. Standard Secure Boot
 uses Debian's Microsoft-signed shim and MOK-signed systemd-boot; generated snosi
 UKIs are signed by `mkosi.key`/`mkosi.crt` and require one-time enrollment of

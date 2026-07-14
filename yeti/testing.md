@@ -14,6 +14,7 @@ test/
 ├── bootc-install-test.sh      # Orchestrator script (headless, for CI)
 ├── bootc-update-test.sh       # Update/rollback orchestrator (headless)
 ├── native-ab-update-test.sh   # Native A/B N through N+3 QEMU test
+├── native-ab-components-test.sh # Phase 1 exit-criterion QEMU test (masks, components, etc drift)
 ├── native-ab-static-test.sh   # Cheap A/B configuration invariants
 ├── native-ab-secure-artifact-test.sh # Secure package/initrd/PCR metadata
 ├── native-ab-secure-artifact-negative-test.sh # Rejection mutations
@@ -109,7 +110,39 @@ The production base image uses the same containers-storage staging strategy in `
 
 `native-ab-update-test.sh` uses four real `cayo-ab-raw` builds to exercise signed
 manifest rejection, N through N+3 updates, slot reuse, rollback, and boot-count
-fallback in QEMU. `native-ab-secure-artifact-test.sh` checks the secure build's
+fallback in QEMU.
+
+`native-ab-components-test.sh` is the Phase 1 exit-criterion QEMU test
+(`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`, "Phase 1: Fix
+Current Prototype Safety"). It is self-contained: it builds two real
+`cayo-ab-raw` versions itself (mirroring the Justfile's `ensure-mkosi`
+bootstrap plus `mkosi clean -ff` + `mkosi --profile cayo-ab-raw build` --
+`SKIP_BUILD=1 BUILD_N_DIR=... BUILD_N1_DIR=...` lets it reuse two already-built
+`cayo-ab-raw` output directories for fast iteration instead of paying the
+~15-25 min clean-build cost, which includes a full mkosi ToolsTree rebuild,
+twice per run), boots N, and asserts in order: (1) no failed systemd units and
+bootc/nbc/systemd-sysupdate auto-update timers and services report `masked`,
+including the user-scope `bootc-update-notify` mask symlinks; (2)
+`/usr/lib/sysupdate.d/` contains only the three OS transfers (no `.feature`
+files) and `systemd-sysupdate components` enumerates all 17 shipped sysext
+components; (3) two ad hoc test components (`testa`, `testb`, independently
+versioned) created under `/etc/sysupdate.<name>.d/` update independently via
+`--component=`, leave the GPT partition table and ESP `/EFI/Linux` listing
+byte-identical, and enumerate correctly; (4) an unqualified N -> N+1 OS update
+(via a `--definitions=` override pointing at a guest-local HTTP fixture, same
+pattern as `native-ab-update-test.sh`) succeeds with both test components still
+enabled, leaves `/var/lib/extensions.d` untouched, and both components still
+list correctly after reboot; (5) `snosi-etc-diff` and
+`snosi-etc-drift-report.service` correctly report, diff, and restore a live
+`/etc/issue` modification against the native A/B `/.etc.lower` tree, and leave
+no bind mounts behind. It found and fixed a real bug: the ab-root profile's
+`KernelModules=` allowlist excluded `nf_tables`/`nfnetlink`, so
+`nftables.service` (shipped and preset-enabled unconditionally by the base
+image) failed on every native A/B boot with "Unable to initialize Netlink
+socket: Protocol not supported" -- fixed by adding both modules to
+`shared/outformat/ab-root/mkosi.conf`.
+
+`native-ab-secure-artifact-test.sh` checks the secure build's
 coherent systemd package set, TPM-capable initrd, `.pcrpkey`, and `.pcrsig`.
 Passing an old PCR certificate and new public key enables the eight-signature
 transition checks. `native-ab-secure-artifact-negative-test.sh` requires the

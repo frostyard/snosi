@@ -52,6 +52,10 @@ systemd-repart/systemd-sysupdate A/B roots. Its raw image and installer boot in
 QEMU, and `test/native-ab-update-test.sh` validates signed three-hop updates,
 inactive-slot reuse, dm-verity boot, `/var` plus `/etc` persistence, rejected
 incomplete/tampered update sets, explicit rollback, and boot-count fallback.
+`test/native-ab-components-test.sh` validates the Phase 1 exit criterion: no
+failed legacy updaters, independently versioned sysext components updating
+without touching OS partitions or each other, an OS update succeeding with
+those components enabled, and native `/etc` drift reporting.
 Production key management, publication integration, and hardware soak remain.
 It does not replace the supported bootc images. See
 `docs/plans/2026-07-13-mkosi-native-ab-root-design.md`; the destructive raw-disk
