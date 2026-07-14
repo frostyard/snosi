@@ -47,6 +47,13 @@ jobs:
         # no network, no image build.
         run: ./test/native-ab-contracts-test.sh
 
+      - name: Validate native A/B publication guard
+        # A profile literally named cayo-ab, snow-ab, or snowfield-ab is
+        # production-facing (docs/native-ab-contracts.md §15) and must never
+        # be publishable without shim/Secure Boot/PCR signing/NvPCR/pubring
+        # markers; the raw dev fixture must never gain them either.
+        run: ./check-native-publication-guard.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:

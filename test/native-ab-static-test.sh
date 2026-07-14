@@ -74,7 +74,7 @@ if grep -q 'grub-efi-amd64-signed' "$secure"; then
 fi
 grep -q '^[[:space:]]*shim-signed$' "$secure"
 if grep -Rqi forky "$root/mkosi.conf" "$root/mkosi.images" \
-    "$root/mkosi.profiles/cayo-ab" "$root/mkosi.sandbox"; then
+    "$root/mkosi.profiles/cayo-ab-raw" "$root/mkosi.sandbox"; then
     echo "Forky must remain isolated to cayo-ab-secure" >&2
     exit 1
 fi
@@ -153,5 +153,38 @@ grep -q 'ln -sf /dev/null /etc/systemd/system/systemd-sysupdate.timer' \
     "$root/shared/outformat/image/finalize/mkosi.finalize.chroot"
 grep -q 'ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-reboot.timer' \
     "$root/shared/outformat/image/finalize/mkosi.finalize.chroot"
+
+# ---------------------------------------------------------------------------
+# Native updater isolation: bootc and nbc units must never activate on native
+# images. The base image ships their unit files unconditionally (shared by
+# the bootc profiles and the native A/B profiles), so native ExtraTrees must
+# mask each one with a same-named /dev/null symlink -- the same mechanism
+# already used for systemd-growfs-root.service. Upstream's own
+# bootc-fetch-apply-updates.timer/.service ship inside the `bootc` deb itself
+# (via shared/packages/bootc/mkosi.conf), which only the bootc profiles
+# Include=; native profiles never install that package, so those two units
+# are never present on native images and need no mask here.
+assert_masked() { # relpath-under-tree
+    local target="$ab/tree/usr/lib/systemd/$1"
+    [[ -L "$target" ]] || { echo "Missing mask symlink: $target" >&2; exit 1; }
+    [[ "$(readlink "$target")" == /dev/null ]] || {
+        echo "Not masked to /dev/null: $target" >&2
+        exit 1
+    }
+}
+
+for unit in system/bootc-update-stage.timer system/bootc-update-stage.service \
+    system/nbc-update-download.timer system/nbc-update-download.service; do
+    base_unit="$root/mkosi.images/base/mkosi.extra/usr/lib/systemd/$unit"
+    [[ -f "$base_unit" ]] || { echo "Expected base unit missing: $base_unit" >&2; exit 1; }
+    assert_masked "$unit"
+done
+
+for unit in user/bootc-update-notify.path user/bootc-update-notify.service; do
+    base_unit="$root/mkosi.images/base/mkosi.extra/usr/lib/systemd/$unit"
+    if [[ -f "$base_unit" ]]; then
+        assert_masked "$unit"
+    fi
+done
 
 echo "Native A/B static validation passed"

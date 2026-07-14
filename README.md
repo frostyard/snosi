@@ -16,7 +16,7 @@ The project produces:
 | **snow**            | GNOME desktop with backports kernel                             | directory → OCI (buildah/chunkah) |
 | **snowfield**       | snow with linux-surface kernel for Surface devices              | directory → OCI (buildah/chunkah) |
 | **cayo**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
-| **cayo-ab**         | Experimental native A/B server image                            | GPT disk (EROFS + dm-verity) |
+| **cayo-ab-raw**     | Experimental native A/B server image (dev fixture, never published) | GPT disk (EROFS + dm-verity) |
 | **1password**       | 1Password desktop application                                   | sysext        |
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
 | **azurevpn**        | Microsoft Azure VPN client                                      | sysext        |
@@ -44,7 +44,10 @@ statically by `test/native-ab-contracts-test.sh`; see
 `docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md` for the coexistence
 plan that freeze unblocks.
 
-The isolated `cayo-ab` profile is an experimental development spike for native
+The isolated `cayo-ab-raw` profile (renamed from `cayo-ab` in Phase 1; `cayo-ab`
+is reserved for the eventual secure production posture and, until it exists,
+`check-native-publication-guard.sh` hard-fails if `cayo-ab-raw` ever picks up a
+publication marker) is an experimental development spike for native
 systemd-repart/systemd-sysupdate A/B roots. Its raw image and installer boot in
 QEMU, and `test/native-ab-update-test.sh` validates signed three-hop updates,
 inactive-slot reuse, dm-verity boot, `/var` plus `/etc` persistence, rejected
@@ -139,10 +142,10 @@ then pass each update artifact prefix:
 
 ```bash
 sudo test/native-ab-update-test.sh \
-  /path/to/cayo-ab-N.raw \
-  /path/to/N+1/cayo-ab \
-  /path/to/N+2/cayo-ab \
-  /path/to/N+3/cayo-ab
+  /path/to/cayo-ab-raw-N.raw \
+  /path/to/N+1/cayo-ab-raw \
+  /path/to/N+2/cayo-ab-raw \
+  /path/to/N+3/cayo-ab-raw
 ```
 
 ```

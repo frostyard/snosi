@@ -19,17 +19,6 @@
 #                                     sysupdate.<name>.d/ component. Removed
 #                                     in Phase 1 once frostyard-updex gains
 #                                     component discovery.
-#             pending-rename      -- mkosi.profiles/cayo-ab is today's raw
-#                                     prototype, not the secure production
-#                                     profile its name implies. Removed in
-#                                     Phase 1 when it is renamed to
-#                                     cayo-ab-raw and cayo-ab is reserved for
-#                                     the secure posture.
-#             pending-label-shortening -- GPT Label= computes over the 30
-#                                     code-unit ceiling under the frozen
-#                                     14-digit version. Removed in Phase 1/3
-#                                     when the split renames to the frozen
-#                                     _r/_v suffixes.
 
 shared/outformat/ab-root/tree/usr/lib/sysupdate.d/10-root-verity.transfer legacy-url
 shared/outformat/ab-root/tree/usr/lib/sysupdate.d/20-root.transfer legacy-url
@@ -52,7 +41,3 @@ mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/nix.transfer component-migrati
 mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/podman.transfer component-migration
 mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/tailscale.transfer component-migration
 mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/vscode.transfer component-migration
-
-mkosi.profiles/cayo-ab/mkosi.conf pending-rename
-
-shared/outformat/ab-root/mkosi.repart/10-root-verity.conf pending-label-shortening

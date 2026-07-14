@@ -105,9 +105,9 @@ install_update() {
     echo "Installing update $version"
     vm_ssh "/usr/lib/systemd/systemd-sysupdate --definitions=/var/tmp/native-ab-definitions --verify=$verify update '$version'"
     layout="$(vm_ssh 'lsblk -J -o PATH,PARTLABEL,PARTUUID')"
-    installed_root_uuid="$(jq -r --arg label "cayo_${version}_root" \
+    installed_root_uuid="$(jq -r --arg label "cayo_${version}_r" \
         '.. | objects | select(.partlabel? == $label) | .partuuid' <<<"$layout")"
-    installed_verity_uuid="$(jq -r --arg label "cayo_${version}_root_verity" \
+    installed_verity_uuid="$(jq -r --arg label "cayo_${version}_v" \
         '.. | objects | select(.partlabel? == $label) | .partuuid' <<<"$layout")"
     [[ "${installed_root_uuid,,}" == "$root_uuid" ]]
     [[ "${installed_verity_uuid,,}" == "$verity_uuid" ]]
@@ -169,8 +169,8 @@ for prefix in "${prefixes[@]}"; do
     done
     version="$(jq -er '.config.version' "$manifest")"
     layout="$(sfdisk --json "$raw")"
-    root_uuid="$(jq -er --arg label "cayo_${version}_root" '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$layout")"
-    verity_uuid="$(jq -er --arg label "cayo_${version}_root_verity" '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$layout")"
+    root_uuid="$(jq -er --arg label "cayo_${version}_r" '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$layout")"
+    verity_uuid="$(jq -er --arg label "cayo_${version}_v" '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$layout")"
     versions+=("$version")
     root_uuids+=("$root_uuid")
     verity_uuids+=("$verity_uuid")
@@ -191,7 +191,7 @@ MatchPattern=cayo_@v_@u.root-verity.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_root_verity
+MatchPattern=cayo_@v_v
 MatchPartitionType=root-verity
 PartitionFlags=0
 ReadOnly=yes
@@ -208,7 +208,7 @@ MatchPattern=cayo_@v_@u.root.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_root
+MatchPattern=cayo_@v_r
 MatchPartitionType=root
 PartitionFlags=0
 ReadOnly=yes
@@ -258,7 +258,7 @@ vm_start "$DISK_IMAGE"
 wait_for_ssh
 base_version="$(guest_version)"
 initial_uki="$(vm_ssh "find /boot/EFI/Linux -maxdepth 1 -type f -printf '%f\n'" | head -1)"
-base_root_path="$(partition_path "cayo_${base_version}_root")"
+base_root_path="$(partition_path "cayo_${base_version}_r")"
 vm_ssh "printf '%s\n' var-persist > /var/native-ab-update-test"
 vm_ssh "printf '%s\n' etc-persist > /etc/native-ab-update-test"
 vm_ssh 'mkdir -p /etc/systemd'
@@ -279,7 +279,7 @@ write_manifest valid
 sign_manifest
 
 install_update 0 yes
-hop1_root_path="$(partition_path "cayo_${versions[0]}_root")"
+hop1_root_path="$(partition_path "cayo_${versions[0]}_r")"
 reboot_guest
 verify_boot "${versions[0]}"
 
@@ -291,15 +291,15 @@ reboot_guest
 verify_boot "${versions[0]}"
 
 install_update 1 yes
-[[ "$(partition_path "cayo_${versions[1]}_root")" == "$base_root_path" ]] || { echo "Error: N+2 did not reuse baseline slot" >&2; exit 1; }
+[[ "$(partition_path "cayo_${versions[1]}_r")" == "$base_root_path" ]] || { echo "Error: N+2 did not reuse baseline slot" >&2; exit 1; }
 reboot_guest
 verify_boot "${versions[1]}"
 
 install_update 2 yes
-[[ "$(partition_path "cayo_${versions[2]}_root")" == "$hop1_root_path" ]] || { echo "Error: N+3 did not reuse N+1 slot" >&2; exit 1; }
+[[ "$(partition_path "cayo_${versions[2]}_r")" == "$hop1_root_path" ]] || { echo "Error: N+3 did not reuse N+1 slot" >&2; exit 1; }
 
 echo "Testing boot-count fallback from ${versions[2]} to ${versions[1]}"
-bad_root_path="$(partition_path "cayo_${versions[2]}_root")"
+bad_root_path="$(partition_path "cayo_${versions[2]}_r")"
 vm_ssh "dd if=/dev/zero of='$bad_root_path' bs=4096 count=1 conv=fsync status=none"
 vm_ssh systemctl reboot || true
 for attempt in 1 2 3; do

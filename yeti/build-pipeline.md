@@ -197,6 +197,10 @@ Config sanity check used by `validate.yml`. It runs `mkosi -f --profile <profile
 
 Runtime payload guard used by `validate.yml`. It scans tracked files in `mkosi.extra/` and `shared/**/tree/` for guest-side service enablement mutations (`systemctl enable/disable/revert/unmask/preset`, `deb-systemd-helper`) and deletion/rename patterns targeting `/etc`. Build-time scripts are intentionally outside the scan because build-time enablement is the correct way to define image service state.
 
+### check-native-publication-guard.sh
+
+Static publication guard used by `validate.yml`, enforcing `docs/native-ab-contracts.md` §15. For every `mkosi.profiles/<name>` directory literally named `cayo-ab`, `snow-ab`, or `snowfield-ab` (the production native profile names), it requires the profile's `mkosi.conf` (plus `shared/native-ab-secure/**` content, if the conf references that path) to carry `ShimBootloader=signed`, `SecureBoot=yes`, `SignExpectedPcr=yes`, a reference to the NvPCR-disable finalize script, an include of the ab-root outformat fragment, and the committed update pubring at `shared/native-ab/keys/import-pubring.gpg`; it also requires the profile's own conf to carry no `KernelModules=` final-root filter. If no profile with a production name exists yet, it exits 0 with a note. Independently, it hard-fails if `mkosi.profiles/cayo-ab-raw` — the permanent, never-published raw dev fixture — ever picks up any of the Shim/SecureBoot/SignExpectedPcr markers, since that would make it indistinguishable from a production profile.
+
 **CI usage in build.yml:**
 ```bash
 ./check-duplicate-packages.sh    # Validate

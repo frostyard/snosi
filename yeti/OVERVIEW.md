@@ -32,7 +32,10 @@ prototype deviations (`test/native-ab-contracts-allow.txt`). Treat that
 document as authoritative over anything below in this section, which
 describes the current, pre-freeze prototype.
 
-`mkosi.profiles/cayo-ab` is an isolated, non-production GPT disk prototype. It
+`mkosi.profiles/cayo-ab-raw` (renamed from `cayo-ab` in Phase 1; the name
+`cayo-ab` is reserved for the eventual secure production posture and
+`check-native-publication-guard.sh` hard-fails if `cayo-ab-raw` ever grows a
+publication marker) is an isolated, non-production GPT disk prototype. It
 uses systemd-boot UKIs, two fixed EROFS root slots with paired dm-verity slots,
 a persistent ext4 `/var`, and an overlay `/etc` backed by `/var`. The full raw
 disk is the installer artifact; `test/cayo-ab-install-spike.sh` performs a
@@ -50,8 +53,18 @@ depends on `systemd-veritysetup`; otherwise `roothash` leaves
 `/dev/mapper/root` unresolved. The image finalizer masks both sysupdate timers
 in `/etc`; this survives first-boot preset population even though initrd PID 1
 starts before the real-root preset policy is visible. Administrators can still
-run updates manually or explicitly unmask the timers in the overlay. The
-installer grows only the final `var` partition. OS transfers use `Verify=yes`,
+run updates manually or explicitly unmask the timers in the overlay. Separately,
+`shared/outformat/ab-root/tree/usr/lib/systemd/{system,user}/` masks the legacy
+bootc and nbc updater units (`bootc-update-stage.timer`/`.service`,
+`nbc-update-download.timer`/`.service`, and the user-scope
+`bootc-update-notify.path`/`.service`) with `/dev/null` symlinks, the same
+mechanism used for `systemd-growfs-root.service`: the base image ships those
+units unconditionally for the bootc profiles, and on native boot (no
+`composefs=` kernel argument) `nbc-update-download`'s
+`ConditionKernelCommandLine=!composefs` is true, so nbc would otherwise run
+against a GPT layout it does not understand. Upstream's own
+`bootc-fetch-apply-updates.*` ships inside the `bootc` deb, which native
+profiles never install, so it needs no mask. The installer grows only the final `var` partition. OS transfers use `Verify=yes`,
 but unattended updates stay disabled until the dedicated OS OpenPGP keyring
 and signed publication pipeline exist. Partition payloads use XZ because the
 Debian systemd 257 `systemd-pull` build does not support Zstandard; unsupported
@@ -75,7 +88,7 @@ enforces the shim/MOK trust chain. A separately stored recovery passphrase
 remains mandatory for TPM clear or motherboard replacement. The installer
 encrypts `/var` only after writing the generic raw image and growing its final
 partition, preventing cloned volume keys and LUKS UUIDs. The initrd explicitly
-unlocks LUKS `/var`, then falls back to raw ext4 for `cayo-ab`. Static config and
+unlocks LUKS `/var`, then falls back to raw ext4 for `cayo-ab-raw`. Static config and
 real LUKS2 conversion have passed. A clean secure build also proved that the ESP
 carries Debian-signed shim, MokManager, and MOK-signed systemd-boot and that the
 generated MOK-signed UKI contains the
@@ -154,7 +167,7 @@ fresh-key TPM token booted without those failures.
 
 `cayo-ab-secure` upgrades the complete exact-version systemd family to Forky
 261+ using a profile-only `SandboxTrees=` APT source pinned at priority 50. The
-base, `cayo-ab`, and production profiles remain on Trixie.
+base, `cayo-ab-raw`, and production profiles remain on Trixie.
 
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
@@ -377,6 +390,7 @@ Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GP
 - `compare-images.sh` — diffoscope-style comparison of two OCI images (extracts layers, handles whiteouts, reports file-level differences); dev tool, not used by CI
 - `packagediff.sh` — diffs the build manifest against the running system's package list (`/usr/share/frostyard/<id>.packages.txt`)
 - `check-duplicate-packages.sh` / `check-profile-dependencies.sh` — config sanity checks, run by CI
+- `check-native-publication-guard.sh` — static gate for `docs/native-ab-contracts.md` §15: requires any profile literally named `cayo-ab`/`snow-ab`/`snowfield-ab` to carry shim/Secure Boot/PCR-signing/NvPCR/pubring markers and no `KernelModules=` filter, and hard-fails `cayo-ab-raw` if it ever gains a publication marker; run by CI, exits 0 with a note today (no production-named profile exists yet)
 
 ## CI/CD
 

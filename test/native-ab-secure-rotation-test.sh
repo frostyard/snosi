@@ -155,7 +155,7 @@ matching_uki_entry() {
 
 assert_transition_not_activated() {
     local rc
-    if guest "lsblk -J -o PARTLABEL | jq -e --arg root 'cayo_${version}_root' --arg verity 'cayo_${version}_root_verity' '[.. | objects | .partlabel? // empty] | any(. == \$root or . == \$verity)'" >/dev/null; then
+    if guest "lsblk -J -o PARTLABEL | jq -e --arg root 'cayo_${version}_r' --arg verity 'cayo_${version}_v' '[.. | objects | .partlabel? // empty] | any(. == \$root or . == \$verity)'" >/dev/null; then
         echo "Error: rejected update activated a transition partition label" >&2
         return 1
     fi
@@ -374,9 +374,9 @@ version=$(jq -er '.config.version' "$manifest")
     exit 1
 }
 layout=$(sfdisk --json "$raw")
-root_uuid=$(jq -er --arg label "cayo_${version}_root" \
+root_uuid=$(jq -er --arg label "cayo_${version}_r" \
     '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<< "$layout")
-verity_uuid=$(jq -er --arg label "cayo_${version}_root_verity" \
+verity_uuid=$(jq -er --arg label "cayo_${version}_v" \
     '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<< "$layout")
 expected_roothash=${root_uuid//-/}${verity_uuid//-/}
 uki_hash=$(sha256sum "$uki")
@@ -439,7 +439,7 @@ MatchPattern=cayo_@v_@u.root-verity.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_root_verity
+MatchPattern=cayo_@v_v
 MatchPartitionType=root-verity
 PartitionFlags=0
 ReadOnly=yes
@@ -456,7 +456,7 @@ MatchPattern=cayo_@v_@u.root.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_root
+MatchPattern=cayo_@v_r
 MatchPartitionType=root
 PartitionFlags=0
 ReadOnly=yes

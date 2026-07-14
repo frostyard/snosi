@@ -10,7 +10,7 @@ MatchPattern=cayo_@v_@u.root-verity.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_root_verity
+MatchPattern=cayo_@v_v
 MatchPartitionType=root-verity
 PartitionFlags=0
 ReadOnly=yes

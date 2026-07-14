@@ -275,9 +275,9 @@ install_update() {
     echo "Installing secure update ${versions[index]}"
     guest "systemd-sysupdate --definitions='$remote_dir/definitions' --verify=yes update '${versions[index]}'"
     layout=$(guest 'lsblk -J -o PATH,PARTLABEL,PARTUUID')
-    installed_root_uuid=$(jq -er --arg label "cayo_${versions[index]}_root" \
+    installed_root_uuid=$(jq -er --arg label "cayo_${versions[index]}_r" \
         '.. | objects | select(.partlabel? == $label) | .partuuid | ascii_downcase' <<< "$layout")
-    installed_verity_uuid=$(jq -er --arg label "cayo_${versions[index]}_root_verity" \
+    installed_verity_uuid=$(jq -er --arg label "cayo_${versions[index]}_v" \
         '.. | objects | select(.partlabel? == $label) | .partuuid | ascii_downcase' <<< "$layout")
     [[ $installed_root_uuid == "${root_uuids[index]}" ]]
     [[ $installed_verity_uuid == "${verity_uuids[index]}" ]]
@@ -347,9 +347,9 @@ for prefix in "${prefixes[@]}"; do
         exit 1
     }
     layout=$(sfdisk --json "$raw")
-    root_uuid=$(jq -er --arg label "cayo_${version}_root" \
+    root_uuid=$(jq -er --arg label "cayo_${version}_r" \
         '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<< "$layout")
-    verity_uuid=$(jq -er --arg label "cayo_${version}_root_verity" \
+    verity_uuid=$(jq -er --arg label "cayo_${version}_v" \
         '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<< "$layout")
     uki_hash=$(sha256sum "$uki")
     versions+=("$version")
@@ -409,7 +409,7 @@ assert_new_only_token
 guest "printf '%s\n' var-persist > /var/native-ab-secure-update-test"
 guest "printf '%s\n' etc-persist > /etc/native-ab-secure-update-test"
 verify_boot 0
-current_root_path=$(partition_path "cayo_${versions[0]}_root")
+current_root_path=$(partition_path "cayo_${versions[0]}_r")
 
 echo "Preparing signed secure updates ${versions[1]} and ${versions[2]}"
 for index in 1 2; do
@@ -442,7 +442,7 @@ MatchPattern=cayo_@v_@u.root-verity.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_root_verity
+MatchPattern=cayo_@v_v
 MatchPartitionType=root-verity
 PartitionFlags=0
 ReadOnly=yes
@@ -459,7 +459,7 @@ MatchPattern=cayo_@v_@u.root.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_root
+MatchPattern=cayo_@v_r
 MatchPartitionType=root
 PartitionFlags=0
 ReadOnly=yes
@@ -494,7 +494,7 @@ guest "if test -e /etc/systemd/import-pubring.gpg; then cp -a /etc/systemd/impor
 start_source
 
 install_update 1
-dual_root_path=$(partition_path "cayo_${versions[1]}_root")
+dual_root_path=$(partition_path "cayo_${versions[1]}_r")
 [[ $dual_root_path != "$current_root_path" ]] || {
     echo "Error: N+2 overwrote the running N+1 slot" >&2
     exit 1
@@ -504,7 +504,7 @@ verify_boot 1
 start_source
 
 install_update 2
-new_root_path=$(partition_path "cayo_${versions[2]}_root")
+new_root_path=$(partition_path "cayo_${versions[2]}_r")
 [[ $new_root_path == "$current_root_path" ]] || {
     echo "Error: N+3 did not reuse the inactive N+1 slot" >&2
     exit 1
@@ -525,7 +525,7 @@ reboot_guest
 verify_boot 2
 
 echo "Testing boot-count fallback from corrupt ${versions[2]} to ${versions[1]}"
-bad_root_path=$(partition_path "cayo_${versions[2]}_root")
+bad_root_path=$(partition_path "cayo_${versions[2]}_r")
 matching_uki_entry 2
 [[ $MATCHING_UKI_ENTRY == "cayo_${versions[2]}.efi" ]] || {
     echo "Error: N+3 was not blessed before boot-count re-arming: $MATCHING_UKI_ENTRY" >&2

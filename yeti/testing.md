@@ -107,7 +107,7 @@ The production base image uses the same containers-storage staging strategy in `
 
 ## Native A/B Tests
 
-`native-ab-update-test.sh` uses four real `cayo-ab` builds to exercise signed
+`native-ab-update-test.sh` uses four real `cayo-ab-raw` builds to exercise signed
 manifest rejection, N through N+3 updates, slot reuse, rollback, and boot-count
 fallback in QEMU. `native-ab-secure-artifact-test.sh` checks the secure build's
 coherent systemd package set, TPM-capable initrd, `.pcrpkey`, and `.pcrsig`.
