@@ -180,7 +180,9 @@ ini_get() { # file section key
 transfer_files=()
 while IFS= read -r -d '' f; do
     transfer_files+=("$f")
-done < <(find shared mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d \
+done < <(find shared \
+    mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d \
+    mkosi.images/base/mkosi.extra/usr/lib/sysupdate.*.d \
     -name '*.transfer' -print0 2>/dev/null | sort -z)
 
 if [[ ${#transfer_files[@]} -eq 0 ]]; then
@@ -219,6 +221,54 @@ for f in "${transfer_files[@]}"; do
         if [[ "$dirbase" == "sysupdate.d" ]]; then
             record_violation "$relpath" "component-migration"
         fi
+    fi
+done
+
+# ---------------------------------------------------------------------------
+# 4b. Sysext component directory shape: every
+#     mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/ must contain
+#     exactly one <name>.transfer and one <name>.feature, and <name> must be
+#     a safe component-name string.
+# ---------------------------------------------------------------------------
+
+component_name_re='^[a-zA-Z0-9_-]+$'
+sysupdate_base_dir="mkosi.images/base/mkosi.extra/usr/lib"
+
+component_dirs=()
+while IFS= read -r -d '' d; do
+    component_dirs+=("$d")
+done < <(find "$sysupdate_base_dir" -mindepth 1 -maxdepth 1 -type d -name 'sysupdate.*.d' \
+    -print0 2>/dev/null | sort -z)
+
+if [[ ${#component_dirs[@]} -eq 0 ]]; then
+    fail_check "component dir scan: found no $sysupdate_base_dir/sysupdate.*.d directories"
+else
+    pass "component dir scan: found ${#component_dirs[@]} sysupdate.<name>.d directories"
+fi
+
+for d in "${component_dirs[@]}"; do
+    relpath="${d#"$root"/}"
+    dirname_only="$(basename "$d")"
+    name="${dirname_only#sysupdate.}"
+    name="${name%.d}"
+
+    if [[ ! "$name" =~ $component_name_re ]]; then
+        fail_check "component dir naming: $relpath component name '$name' does not match $component_name_re"
+        continue
+    fi
+
+    entries=()
+    while IFS= read -r -d '' e; do
+        entries+=("$(basename "$e")")
+    done < <(find "$d" -mindepth 1 -maxdepth 1 -print0 2>/dev/null | sort -z)
+
+    entries_sorted="$(printf '%s\n' "${entries[@]}" | sort)"
+    expected_sorted="$(printf '%s\n' "$name.feature" "$name.transfer" | sort)"
+
+    if [[ "$entries_sorted" == "$expected_sorted" ]]; then
+        pass "component dir shape: $relpath contains exactly $name.transfer + $name.feature"
+    else
+        fail_check "component dir shape: $relpath expected {$name.feature, $name.transfer}, found {${entries[*]:-empty}}"
     fi
 done
 

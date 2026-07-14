@@ -208,6 +208,24 @@ shipped NvPCR definition plus the product/login writers. Keep TPM SRK setup and
 the signed-PCR-11 LUKS path enabled. Do not delete/recreate the anchor or TPM NV
 indexes as a key-rotation shortcut; that changes the attestation baseline.
 
+**Accepted risk — unsigned sysexts on native installs:** native production
+candidates (`cayo-ab`, `snow-ab`, `snowfield-ab`) ship every sysext transfer
+with `Verify=false` and every sysext `.feature` defaulting to `Enabled=false`.
+Unlike the three OS transfers (`Verify=yes`, signed-manifest enforced), sysext
+downloads are not currently signature-verified. This is an explicit accepted
+risk until signed per-component metadata ships for sysexts — do not flip any
+sysext `.feature` to `Enabled=true` by default on a native production
+candidate before that lands.
+
+**Release-ordering constraint (sysext component migration):** as of the
+migration that split the shared `/usr/lib/sysupdate.d/` target into
+per-sysext `/usr/lib/sysupdate.<name>.d/` components (see "Sysext
+Constraints" below), base images built from this tree must not be
+merged/published until a `frostyard-updex` release with component discovery
+(`feat/sysupdate-components`) is published to the Frostyard APT repo — an
+older updex binary cannot discover component-scoped sysexts, silently
+dropping every sysext from update offers.
+
 ### Sysext Constraints
 
 Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var` at runtime. Configs needed in `/etc` must be:
@@ -215,7 +233,7 @@ Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var`
 1. Captured to `/usr/share/factory/etc` during build (via `mkosi.finalize`) — capture ONLY the specific paths the sysext's tmpfiles rules reference, never all of `/etc` (the buildroot `/etc` is the merged base view; a full capture ships `/etc/shadow` and SSH host keys in the published sysext)
 2. Injected at boot via systemd-tmpfiles
 
-Every sysext must have matching `<name>.transfer` and `<name>.feature` files in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`. The `.transfer` file defines how systemd-sysupdate downloads the sysext; the `.feature` file provides metadata and defaults to `Enabled=false`. Use existing files as templates.
+Every sysext must have matching `<name>.transfer` and `<name>.feature` files in their own component directory, `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/`. The `.transfer` file defines how systemd-sysupdate downloads the sysext; the `.feature` file provides metadata and defaults to `Enabled=false`. Use an existing component directory as a template. **Do not add sysext transfer/feature files to the shared `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/` target** — that directory is reserved for native-profile OS transfers only (see "Native A/B Prototype" below); systemd-sysupdate version-locks every enabled transfer sharing one definitions directory, so mixing sysext package versions into the OS transfer's directory would corrupt OS version resolution. **Release-ordering constraint:** this per-component layout requires component discovery support in `frostyard-updex` (landed upstream on branch `feat/sysupdate-components`); do not publish base images built after this migration until a frostyard-updex release with component discovery is available in the Frostyard APT repo — an older updex cannot discover component-scoped sysexts and every sysext update would silently stop being offered.
 
 **Service activation in sysexts:** Do NOT rely on `WantedBy=multi-user.target` + preset alone. At boot, the sysext is not yet merged when PID 1 scans units — the `.wants/` symlink is dangling and silently dropped. Always ship a `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` drop-in inside the sysext with `[Unit]\nUpholds=<name>.service`. This drop-in is new to systemd after the post-merge daemon-reload, so activation fires correctly. The preset is still required for enabled state; the drop-in handles timing.
 

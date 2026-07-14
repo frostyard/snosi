@@ -185,7 +185,7 @@ Validates the sysext infrastructure:
 
 - `systemd-sysext` binary is available
 - `systemd-sysext list` command succeeds
-- sysupdate config directory (`/usr/lib/sysupdate.d/`) exists and has entries
+- sysupdate component directories (`/usr/lib/sysupdate.<name>.d/`, one per sysext) exist and have entries
 - Lists currently active extensions
 
 ### Tier 4 — Smoke Tests (04-smoke.sh)

@@ -692,7 +692,7 @@ Packages=mypackage
 Environment=KEYPACKAGE=mypackage
 ```
 
-Then register it: add `mysysext` to the root `mkosi.conf` `Dependencies=` list, and create `mysysext.transfer` + `mysysext.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/` (copy an existing pair).
+Then register it: add `mysysext` to the root `mkosi.conf` `Dependencies=` list, and create `mysysext.transfer` + `mysysext.feature` in their own component directory, `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.mysysext.d/` (copy an existing component directory as a template).
 
 If the package needs relocation, add:
 

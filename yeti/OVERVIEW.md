@@ -184,7 +184,7 @@ mkosi.clean                 # Clean script (rm -rf output/*)
 mkosi.images/               # Image definitions (base + 17 sysexts)
   base/                     # Foundation image: systemd, bootc/ostree (frostyard debs), firmware, core utils
     mkosi.extra/            # Base filesystem overlay (dracut, systemd units/timers, sysupdate, tmpfiles, sysusers)
-      usr/lib/sysupdate.d/  # .transfer + .feature files for all sysexts
+      usr/lib/sysupdate.<name>.d/  # per-sysext .transfer + .feature component dirs (one pair each, 17 total)
     mkosi.postinst.chroot   # Mount enablement, useradd home dir, bls-garbage-collect removal
     mkosi.finalize.chroot   # Masks systemd-networkd-wait-online
   docker/                   # Each sysext: mkosi.conf + optional extra/scripts
@@ -270,10 +270,23 @@ Sysexts overlay `/usr` at runtime. They cannot modify `/etc` or `/var` directly.
 - Has `Overlay=yes`, `Format=sysext`, `Dependencies=base`, `BaseTrees=%O/base`
 - Sets `KEYPACKAGE` env var for version extraction from manifest
 - Uses shared postoutput script for versioned naming
-- Needs matching `.transfer` + `.feature` files in base image's `usr/lib/sysupdate.d/`
+- Needs matching `.transfer` + `.feature` files in base image's own component directory, `usr/lib/sysupdate.<name>.d/` — never in the shared `usr/lib/sysupdate.d/` target, which is reserved for native-profile OS transfers (systemd-sysupdate version-locks everything in one definitions directory, so mixing sysext and OS versions there would corrupt version resolution)
 - Configs needed in `/etc` go through `/usr/share/factory/etc` + systemd-tmpfiles
 
-Every sysext built in this repository has a matching pair here.
+Every sysext built in this repository has a matching component directory here.
+
+**Release-ordering constraint:** this per-component sysupdate layout requires
+`frostyard-updex` component discovery (branch `feat/sysupdate-components`);
+do not merge/publish base images built after this migration until that updex
+release is published to the Frostyard APT repo, or an old updex silently
+fails to discover any component-scoped sysext.
+
+**Accepted risk — unsigned sysexts on native installs:** on native A/B
+production candidates (`cayo-ab`, `snow-ab`, `snowfield-ab`), sysext
+transfers keep `Verify=false` and every `.feature` defaults to
+`Enabled=false`. This is an explicit accepted risk until signed
+per-component metadata ships for sysexts; do not enable sysexts by default
+on a native production candidate before that lands.
 
 See [sysexts.md](sysexts.md) for details.
 
