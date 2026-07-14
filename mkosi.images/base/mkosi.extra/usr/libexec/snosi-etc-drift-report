@@ -8,6 +8,10 @@
 # entries the new image no longer enables (notify-only; never
 # auto-disabled). The report hash gates notifications: users are notified
 # once per CHANGE of the report, not once per boot.
+#
+# Pristine-tree resolution (bootc bind-mount vs native A/B /.etc.lower) is
+# entirely delegated to snosi-etc-diff; this script has no tree-source
+# logic of its own to adapt.
 set -euo pipefail
 
 STATE_DIR=/var/lib/snosi

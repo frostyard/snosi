@@ -54,6 +54,12 @@ jobs:
         # markers; the raw dev fixture must never gain them either.
         run: ./check-native-publication-guard.sh
 
+      - name: Validate snosi-etc-diff drift tooling
+        # Static, non-root regression test driving the real script against
+        # fixture trees via its SNOSI_ETC_DIFF_LIVE_ETC/PRISTINE_ETC test
+        # hooks. No root, no bind mount, no image build.
+        run: ./test/snosi-etc-diff-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:
