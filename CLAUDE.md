@@ -585,9 +585,9 @@ against the cached `linux-image-6.19.8-surface-3` deb shows
 `CONFIG_LOCK_DOWN_KERNEL_FORCE_NONE=y`, and
 `# CONFIG_LOCK_DOWN_KERNEL_FORCE_INTEGRITY is not set` — but no
 `CONFIG_LOCK_DOWN_IN_EFI_SECURE_BOOT` line at all (not even as a commented-out
-"is not set", despite `CONFIG_EFI=y` being set elsewhere in the same
-`.config`, which is what makes that symbol visible to Kconfig in the first
-place) — unlike the backports kernel `cayo-ab`/`snow-ab` use, which evidently DOES
+"is not set" — that symbol is a Debian/Ubuntu patch, not mainline, so its total
+absence means the linux-surface source tree does not carry the SB→lockdown patch
+at all) — unlike the backports kernel `cayo-ab`/`snow-ab` use, which evidently DOES
 carry that wiring (Phase 5 never saw this). A related discovery while
 diagnosing it: module-signature enforcement was NOT actually broken by
 this — the unsigned test module in Step 3c was rejected even while lockdown
