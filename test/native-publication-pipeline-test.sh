@@ -225,4 +225,18 @@ GNUPGHOME="$WRONG_GNUPGHOME" gpg --batch --passphrase '' --quick-generate-key \
 assert_false "gpgv rejects an index signed by an untrusted key" \
     gpgv --keyring "$PUBRING" "$product_dir/SHA256SUMS.gpg" "$product_dir/SHA256SUMS"
 
+echo "=== promote.sh: missing pubring hard-fails without touching the origin ==="
+BAD_PUBRING="$WORK_DIR/does-not-exist.gpg"
+before_snapshot="$(find "$DEST" -type f -exec sha256sum {} + | sort)"
+promote_bad_pubring_output="$WORK_DIR/promote-bad-pubring.log"
+promote_bad_pubring_rc=0
+"$PUBLISH_DIR/promote.sh" --signing-key "$SIGNING_KEY" --pubring "$BAD_PUBRING" \
+    "$PREPARED1" "$BASE_URL" "$DEST" >"$promote_bad_pubring_output" 2>&1 || promote_bad_pubring_rc=$?
+assert_true "promote.sh exits non-zero on a missing --pubring" \
+    bash -c "[[ $promote_bad_pubring_rc -ne 0 ]]"
+assert_contains "missing --pubring error names the bad path" \
+    "$(cat "$promote_bad_pubring_output")" "pubring not found or empty: $BAD_PUBRING"
+after_snapshot="$(find "$DEST" -type f -exec sha256sum {} + | sort)"
+assert_eq "origin dir unchanged after missing-pubring promote failure" "$after_snapshot" "$before_snapshot"
+
 print_summary

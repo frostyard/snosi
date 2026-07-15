@@ -34,7 +34,10 @@
 #                           (see "Archive the OUTGOING signed index pair"
 #                           below) -- never used to authorize anything this
 #                           run itself signs. Defaults to the committed
-#                           shared/native-ab/keys/import-pubring.gpg.
+#                           shared/native-ab/keys/import-pubring.gpg. A
+#                           missing/empty pubring (e.g. a typo'd path) is a
+#                           hard failure -- promotion cannot proceed without
+#                           a usable pubring to pre-verify against.
 #
 
 # --purge-hook <cmd>: after a successful signature-first/manifest-last
@@ -142,6 +145,12 @@ fi
 for command in jq curl sha256sum gpg gpgv; do
     command -v "$command" >/dev/null || { echo "Error: required command not found: $command" >&2; exit 1; }
 done
+# A missing/empty pubring must hard-fail here rather than silently skip the
+# outgoing-index gpgv pre-check below (docs/native-ab-contracts.md §7): this
+# run cannot meaningfully pre-verify what it is about to archive-over without
+# a usable pubring, so it must not proceed at all. Same check as
+# withdraw.sh's own pubring gate.
+[[ -s "$PUBRING" ]] || { echo "Error: pubring not found or empty: $PUBRING" >&2; exit 1; }
 [[ -d "$PREPARED_DIR" ]] || { echo "Error: prepared-dir not found: $PREPARED_DIR" >&2; exit 1; }
 PREPARED_DIR="$(cd "$PREPARED_DIR" && pwd)"
 
@@ -243,7 +252,7 @@ if dest_object_exists "$product_dir/SHA256SUMS" && dest_object_exists "$product_
             sed -E "s/^${PUB_CHANNEL}_([0-9]{14})\\.manifest\\.json\$/\\1/" | head -1)"
         if [[ -z "$old_version" || "$old_version" == "$PUB_VERSION" ]]; then
             echo "Outgoing index already advertises $PUB_VERSION (or is unparseable); nothing to archive."
-        elif [[ -s "$PUBRING" ]] && ! gpgv --keyring "$PUBRING" "$old_sig" "$old_sums" 2>/dev/null; then
+        elif ! gpgv --keyring "$PUBRING" "$old_sig" "$old_sums" 2>/dev/null; then
             echo "WARNING: outgoing index (claims version $old_version) does not verify against $PUBRING -- skipping archival rather than overwriting a possibly-good .history/$old_version/ entry with a broken one. The NEW promotion below is unaffected." >&2
         else
             echo "Archiving outgoing signed index (version $old_version) to $(history_subpath "$old_version")/"
