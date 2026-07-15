@@ -10,10 +10,20 @@
 # it through the FULL candidate -> verify -> promote -> withdraw lifecycle
 # against a local directory `dest` and a local, real HTTP origin
 # (test/lib/range-http-server.py -- see its header for why not plain
-# `python3 -m http.server`). Uses the committed DEV signing key
-# (.snosi-private/os-update-signing.key) and the committed DEV pubring
-# (shared/native-ab/keys/import-pubring.gpg) -- both dev-only, never
-# production material.
+# `python3 -m http.server`).
+#
+# Signing key: if the gitignored DEV signing key
+# (.snosi-private/os-update-signing.key) and its committed DEV pubring
+# (shared/native-ab/keys/import-pubring.gpg) are both present, this test
+# uses them -- both dev-only, never production material -- so local runs
+# match the QEMU rehearsal. On a fresh checkout (no .snosi-private/), the
+# test instead generates an EPHEMERAL, no-passphrase ed25519 keypair in its
+# own temp workdir and exports a matching pubring, so every PR can run this
+# self-test without any dev key present. Ephemeral mode still validates
+# every script mechanic (candidate/verify/promote/withdraw, signature
+# ordering, gpgv acceptance/rejection) -- it just does not exercise the
+# shipped-image trust leg (a real client trusting the committed pubring),
+# which is covered instead by the QEMU rehearsal below.
 #
 # The full real-build QEMU rehearsal (real cayo-ab-raw images, a live
 # guest verifying against the stock shipped pubring, tamper cases at the
@@ -27,8 +37,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PUBLISH_DIR="$ROOT_DIR/shared/native-ab/publish"
-SIGNING_KEY="$ROOT_DIR/.snosi-private/os-update-signing.key"
-PUBRING="$ROOT_DIR/shared/native-ab/keys/import-pubring.gpg"
+DEV_SIGNING_KEY="$ROOT_DIR/.snosi-private/os-update-signing.key"
+DEV_PUBRING="$ROOT_DIR/shared/native-ab/keys/import-pubring.gpg"
 
 WORK_DIR=""
 HTTP_PID=""
@@ -98,10 +108,35 @@ trap cleanup EXIT
 for command in jq python3 sfdisk sha256sum git xz gpg gpgv curl; do
     command -v "$command" >/dev/null || { echo "Error: required command not found: $command" >&2; exit 1; }
 done
-[[ -s "$SIGNING_KEY" ]] || { echo "Error: DEV signing key not found: $SIGNING_KEY" >&2; exit 1; }
-[[ -s "$PUBRING" ]] || { echo "Error: DEV pubring not found: $PUBRING" >&2; exit 1; }
 
 WORK_DIR="$(mktemp -d /var/tmp/native-publication-pipeline-test.XXXXXX)"
+
+# ---------------------------------------------------------------------------
+# Signing key mode selection (see header comment). PROMOTE_KEY_ARGS is
+# spliced into every promote.sh invocation below; PUBRING is used both for
+# withdraw.sh's --pubring and for this script's own gpgv spot-checks. Never
+# mix an ephemeral key with the committed DEV_PUBRING, or vice versa --
+# gpgv would then reject everything this test itself just signed.
+# ---------------------------------------------------------------------------
+
+declare -a PROMOTE_KEY_ARGS=()
+if [[ -s "$DEV_SIGNING_KEY" && -s "$DEV_PUBRING" ]]; then
+    KEY_MODE="dev key (.snosi-private/os-update-signing.key + committed shared/native-ab/keys/import-pubring.gpg)"
+    PUBRING="$DEV_PUBRING"
+    PROMOTE_KEY_ARGS=(--signing-key "$DEV_SIGNING_KEY")
+else
+    KEY_MODE="ephemeral key (dev key not present -- generating a throwaway ed25519 keypair for this run only; exercises script mechanics, not the shipped-image trust leg)"
+    EPHEMERAL_GNUPGHOME="$WORK_DIR/ephemeral-gnupghome"
+    mkdir -p "$EPHEMERAL_GNUPGHOME"
+    chmod 700 "$EPHEMERAL_GNUPGHOME"
+    GNUPGHOME="$EPHEMERAL_GNUPGHOME" gpg --batch --passphrase '' --quick-generate-key \
+        'native-publication-pipeline-test EPHEMERAL key <ephemeral@invalid>' ed25519 sign 0 >/dev/null 2>&1
+    PUBRING="$WORK_DIR/ephemeral-pubring.gpg"
+    GNUPGHOME="$EPHEMERAL_GNUPGHOME" gpg --batch --export -o "$PUBRING"
+    [[ -s "$PUBRING" ]] || { echo "Error: failed to export ephemeral pubring" >&2; exit 1; }
+    PROMOTE_KEY_ARGS=(--gnupghome "$EPHEMERAL_GNUPGHOME")
+fi
+echo "=== signing key mode: $KEY_MODE ==="
 
 # build_fixture dir product profile-output-name version -- same synthetic
 # fixture as test/native-publish-test.sh.
@@ -174,7 +209,7 @@ assert_false "verify-remote.sh fails closed on a corrupted candidate byte" \
 assert_true "verify-remote.sh clean pass" "$PUBLISH_DIR/verify-remote.sh" "$PREPARED1" "$BASE_URL"
 
 echo "=== promote.sh: ordering, sidecars, gpgv ==="
-"$PUBLISH_DIR/promote.sh" --signing-key "$SIGNING_KEY" "$PREPARED1" "$BASE_URL" "$DEST"
+"$PUBLISH_DIR/promote.sh" "${PROMOTE_KEY_ARGS[@]}" --pubring "$PUBRING" "$PREPARED1" "$BASE_URL" "$DEST"
 product_dir="$DEST/os/native/v1/$PRODUCT/x86-64"
 assert_true "final SHA256SUMS.gpg exists" test -f "$product_dir/SHA256SUMS.gpg"
 assert_true "final SHA256SUMS exists" test -f "$product_dir/SHA256SUMS"
@@ -186,13 +221,13 @@ assert_contains "SHA256SUMS.gpg sidecar is no-store" \
     "$(cat "$product_dir/SHA256SUMS.gpg.meta.json")" "no-store"
 assert_contains "SHA256SUMS sidecar is no-store" \
     "$(cat "$product_dir/SHA256SUMS.meta.json")" "no-store"
-assert_true "gpgv accepts the promoted index against the committed DEV pubring" \
+assert_true "gpgv accepts the promoted index against the in-use pubring ($KEY_MODE)" \
     gpgv --keyring "$PUBRING" "$product_dir/SHA256SUMS.gpg" "$product_dir/SHA256SUMS"
 
 echo "=== a second promotion archives the outgoing pair ==="
 "$PUBLISH_DIR/publish-candidate.sh" "$PREPARED2" "$DEST" >/dev/null
 "$PUBLISH_DIR/verify-remote.sh" "$PREPARED2" "$BASE_URL" >/dev/null
-"$PUBLISH_DIR/promote.sh" --signing-key "$SIGNING_KEY" "$PREPARED2" "$BASE_URL" "$DEST" >/dev/null
+"$PUBLISH_DIR/promote.sh" "${PROMOTE_KEY_ARGS[@]}" --pubring "$PUBRING" "$PREPARED2" "$BASE_URL" "$DEST" >/dev/null
 assert_true "v1's signed index was archived to .history/$VERSION1/" \
     test -f "$product_dir/.history/$VERSION1/SHA256SUMS.gpg"
 assert_contains "current index now advertises v2" \
@@ -221,7 +256,7 @@ chmod 700 "$WRONG_GNUPGHOME"
 GNUPGHOME="$WRONG_GNUPGHOME" gpg --batch --passphrase '' --quick-generate-key \
     'native-publication-pipeline-test WRONG key <wrong@invalid>' ed25519 sign 0 >/dev/null 2>&1
 "$PUBLISH_DIR/publish-candidate.sh" "$PREPARED2" "$DEST" >/dev/null
-"$PUBLISH_DIR/promote.sh" --gnupghome "$WRONG_GNUPGHOME" "$PREPARED2" "$BASE_URL" "$DEST" >/dev/null
+"$PUBLISH_DIR/promote.sh" --gnupghome "$WRONG_GNUPGHOME" --pubring "$PUBRING" "$PREPARED2" "$BASE_URL" "$DEST" >/dev/null
 assert_false "gpgv rejects an index signed by an untrusted key" \
     gpgv --keyring "$PUBRING" "$product_dir/SHA256SUMS.gpg" "$product_dir/SHA256SUMS"
 
@@ -230,7 +265,7 @@ BAD_PUBRING="$WORK_DIR/does-not-exist.gpg"
 before_snapshot="$(find "$DEST" -type f -exec sha256sum {} + | sort)"
 promote_bad_pubring_output="$WORK_DIR/promote-bad-pubring.log"
 promote_bad_pubring_rc=0
-"$PUBLISH_DIR/promote.sh" --signing-key "$SIGNING_KEY" --pubring "$BAD_PUBRING" \
+"$PUBLISH_DIR/promote.sh" "${PROMOTE_KEY_ARGS[@]}" --pubring "$BAD_PUBRING" \
     "$PREPARED1" "$BASE_URL" "$DEST" >"$promote_bad_pubring_output" 2>&1 || promote_bad_pubring_rc=$?
 assert_true "promote.sh exits non-zero on a missing --pubring" \
     bash -c "[[ $promote_bad_pubring_rc -ne 0 ]]"
