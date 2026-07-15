@@ -32,16 +32,16 @@
 #     §7; this path does not exist yet as of Phase 1, so any production
 #     profile created before Phase 7 correctly fails this check).
 #   - NO `KernelModules=` final-root filter line in the profile's OWN
-#     mkosi.conf (docs/native-ab-contracts.md §9). This deliberately does NOT
-#     walk into shared/outformat/ab-root/mkosi.conf, which still carries a
-#     dev-only virtio-only filter today (removed in Phase 3) -- checking that
-#     shared fragment here would make this guard fail permanently for every
-#     profile that reaches it, including the not-yet-existing production
-#     ones, before Phase 3 has any chance to remove the filter. Phase 3 is
-#     expected to add an explicit marker (e.g. a per-product channel fragment
-#     or a documented sentinel comment) that this check can key off of once a
-#     real production profile exists; until then the profile-conf-only check
-#     is the simple, documented interim scope named in the Phase 1 brief.
+#     mkosi.conf (docs/native-ab-contracts.md §9). Phase 3 removed the
+#     dev-only virtio-only filter from the shared ab-root fragment entirely;
+#     it now lives only in mkosi.profiles/cayo-ab-raw/mkosi.conf, the one
+#     dev fixture permitted to carry it (never a production-named profile).
+#     This check still only inspects the profile's OWN conf, not
+#     shared/outformat/ab-root/mkosi.conf or the per-product channel
+#     fragment it Includes (shared/native-ab/channels/<product>/mkosi.conf)
+#     -- both are asserted filter-free unconditionally by
+#     test/native-ab-contracts-test.sh instead, since that's true for every
+#     consumer, not just production-named ones.
 #
 # If no directory named cayo-ab, snow-ab, or snowfield-ab exists yet (the
 # case as of Phase 1), this exits 0 with a note: there is nothing to publish,

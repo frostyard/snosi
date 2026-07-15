@@ -32,6 +32,35 @@ prototype deviations (`test/native-ab-contracts-allow.txt`). Treat that
 document as authoritative over anything below in this section, which
 describes the current, pre-freeze prototype.
 
+**Generic output + per-product channels (Phase 3).** `shared/outformat/ab-root/`
+is product-neutral: disk/boot mechanics only (`Format=disk`,
+`SplitArtifacts=`, `Bootable=yes`, `Initrds=`/`KernelModulesInitrd=no`,
+`KernelCommandLine=`, the shared `tree/`, the finalize script). It carries
+NO `RepartDirectories=`, NO `*.transfer` files, and NO `KernelModules=`
+filter. `shared/native-ab/channels/{cayo,snow,snowfield}/` each carry
+the product-specific half: `RepartDirectories=` (6 repart defs,
+`<ImageId>_%A_r`/`_v` labels, mkosi-internal `SplitName=`, 1 GiB ESP,
+provisional root/verity sizes for snow/snowfield — see
+`docs/native-ab-capacities.md`) and `tree/usr/lib/sysupdate.d/` (the 3 OS
+transfers, frozen `os/native/v1/<product>/x86-64/` URL, `<ImageId>-ab_`
+channel-prefixed `Source MatchPattern=`, `<ImageId>_`-based `Target
+MatchPattern=` labels). A profile `Include=`s BOTH the generic fragment and
+exactly one channel; `cayo-ab-raw`/`cayo-ab-secure` both include the `cayo`
+channel today, `snow`/`snowfield` channels exist and validate statically
+but have no consuming profile until Task 3.2. Release channels ship the
+complete packaged kernel module/firmware set (`docs/native-ab-contracts.md`
+§9) — the virtio-only dev filter that used to live in the shared fragment
+now lives only in `mkosi.profiles/cayo-ab-raw/mkosi.conf`, the one dev
+fixture permitted to carry it; `cayo-ab-secure` builds with the full set.
+Measured against cayo-ab-secure: the full module set barely changes UKI
+size (dracut's own non-hostonly selection logic bounds it, not the
+mkosi-level module filter) but grows `/usr/lib/firmware`
+from 21 MiB to 1019 MiB, leaving cayo's contract-frozen 4 GiB root slot
+under 5% headroom instead of the required 20% — flagged as an open
+capacity concern for whichever phase creates the real production `cayo-ab`
+profile, not fixed here (§12 marks cayo's slot "validated", not
+provisional).
+
 `mkosi.profiles/cayo-ab-raw` (renamed from `cayo-ab` in Phase 1; the name
 `cayo-ab` is reserved for the eventual secure production posture and
 `check-native-publication-guard.sh` hard-fails if `cayo-ab-raw` ever grows a
@@ -173,7 +202,9 @@ base, `cayo-ab-raw`, and production profiles remain on Trixie.
 
 Every product's disk image ships with an EMPTY `var` partition, always —
 this isn't installer behavior, it's baked in at build time. Confirmed by
-reading `shared/outformat/ab-root/mkosi.repart/11-root.conf`
+reading `shared/native-ab/channels/cayo/mkosi.repart/11-root.conf` (Phase 3
+moved the per-product repart defs out of the shared `ab-root` fragment; see
+"Generic output + per-product channels" below)
 (`ExcludeFilesTarget=/var/`, so the root erofs partition never gets any
 `/var` content copied in) and `30-var.conf` (no `CopyFiles=` at all, so the
 `var` ext4 partition is formatted and left empty). Mounting a built
@@ -327,7 +358,12 @@ shared/                     # Reusable fragments composed via Include=
     snow/                   # Same pattern with snow's extra BuildScripts (hotedge, logomenu, bazaar, surface-cert)
   scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot build script)
   outformat/image/          # bootc OCI output format, buildah/chunkah packaging
-  outformat/ab-root/        # Native A/B disk output format, repart definitions
+  outformat/ab-root/        # Native A/B GENERIC disk output format (product-neutral
+                             # disk/boot mechanics only -- no RepartDirectories=,
+                             # no *.transfer, no KernelModules=; Phase 3)
+  native-ab/channels/       # Per-product native A/B fragments (cayo, snow, snowfield):
+                             # RepartDirectories= (6 repart defs, ImageId labels,
+                             # 1G ESP) + the 3 OS sysupdate.d transfers (Phase 3)
   sysext/postoutput/        # Shared sysext versioning and manifest logic
   manifest/postoutput/      # Image manifest processing
   snow/                     # Snow desktop: build scripts + tree overlay (consumed by shared/composition/snow)
@@ -372,11 +408,15 @@ prototypes) `Include=shared/composition/cayo/mkosi.conf` the same way the bootc
 what makes the cayo brew BuildScript and manifest PostOutputScript apply to
 every transport instead of only bootc. They swap `shared/packages/bootc/mkosi.conf`
 for nothing (native images never ship bootc) and `shared/outformat/image/mkosi.conf`
-for `shared/outformat/ab-root/mkosi.conf`. Because mkosi accumulates list settings
-(`Packages=`, `FinalizeScripts=`, ...) in `Include=` encounter order across the
-whole resolved config, the relative order of `Include=` lines in a profile is
-significant whenever more than one fragment sets the same key — verify any
-composition change with a `mkosi cat-config`/`summary` diff, not just a source read.
+for TWO fragments: `shared/outformat/ab-root/mkosi.conf` (generic disk/boot
+mechanics) AND `shared/native-ab/channels/cayo/mkosi.conf` (cayo's
+`RepartDirectories=` + OS transfers — Phase 3 split; see "Generic output +
+per-product channels" in CLAUDE.md). Because mkosi accumulates list settings
+(`Packages=`, `FinalizeScripts=`, `ExtraTrees=`, `RepartDirectories=`, ...) in
+`Include=` encounter order across the whole resolved config, the relative
+order of `Include=` lines in a profile is significant whenever more than one
+fragment sets the same key — verify any composition change with a `mkosi
+cat-config`/`summary` diff, not just a source read.
 
 The app-bundling "loaded" variants (snowloaded, snowfieldloaded, cayoloaded) were retired in 2026-07: every app they baked in (Edge, VS Code, Bitwarden, Azure VPN, Incus, Docker) is delivered as a sysext instead. The shared `packages/{edge,vscode,bitwarden,azurevpn}` fragments now serve only the sysext builds.
 

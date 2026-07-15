@@ -1,0 +1,17 @@
+[Transfer]
+ProtectVersion=%A
+Verify=yes
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/os/native/v1/snow/x86-64/
+MatchPattern=snow-ab_@v_@u.root.raw.xz
+
+[Target]
+Type=partition
+Path=auto
+MatchPattern=snow_@v_r
+MatchPartitionType=root
+PartitionFlags=0
+ReadOnly=yes
+InstancesMax=2

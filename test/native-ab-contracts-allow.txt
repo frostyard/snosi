@@ -11,7 +11,8 @@
 # reason-tag: legacy-url -- OS transfer Path= still points at the pre-freeze
 #                            https://.../os/cayo/%a/ URL instead of the
 #                            frozen os/native/v1/<product>/x86-64/ prefix.
-#                            Removed in Phase 3.
+#                            Removed in Phase 3: every shipped transfer now
+#                            conforms (shared/native-ab/channels/<product>/).
 #
 # (component-migration -- sysext transfer/feature pair still shipping in the
 # shared default sysupdate.d/ target instead of its own sysupdate.<name>.d/
@@ -20,7 +21,6 @@
 # mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/. See CLAUDE.md's
 # "Native A/B Prototype" section for the release-ordering constraint this
 # depends on.)
-
-shared/outformat/ab-root/tree/usr/lib/sysupdate.d/10-root-verity.transfer legacy-url
-shared/outformat/ab-root/tree/usr/lib/sysupdate.d/20-root.transfer legacy-url
-shared/outformat/ab-root/tree/usr/lib/sysupdate.d/90-uki.transfer legacy-url
+#
+# No tracked deviations remain. This file is intentionally empty of entries;
+# the stale-entry check keeps it that way.

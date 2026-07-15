@@ -211,10 +211,18 @@ for f in "${transfer_files[@]}"; do
 
         source_path="$(ini_get "$f" Source Path)"
         match_pattern="$(ini_get "$f" Source MatchPattern)"
-        product="$(sed -E 's/^([a-z]+)_@v.*/\1/' <<<"$match_pattern")"
-        expected_prefix="${os_url_prefix}/${product}/x86-64/"
-        if [[ "$source_path" != "$expected_prefix" ]]; then
-            record_violation "$relpath" "legacy-url"
+        # Source MatchPattern is channel-prefixed (<ImageId>-ab_@v...), not
+        # product-prefixed -- derive the product by stripping the frozen
+        # "-ab" channel suffix (docs/native-ab-contracts.md §1, §5).
+        channel="$(sed -E 's/^([a-z]+-ab)_@v.*/\1/' <<<"$match_pattern")"
+        product="${channel%-ab}"
+        if [[ -z "$channel" || "$channel" == "$match_pattern" ]]; then
+            record_violation "$relpath" "unparseable-match-pattern"
+        else
+            expected_prefix="${os_url_prefix}/${product}/x86-64/"
+            if [[ "$source_path" != "$expected_prefix" ]]; then
+                record_violation "$relpath" "legacy-url"
+            fi
         fi
     else
         dirbase="$(basename "$(dirname "$f")")"
@@ -319,6 +327,124 @@ for f in "${repart_files[@]}"; do
         pass "repart label: $relpath -> '$substituted' is $len code units (<= $label_ceiling)"
     fi
 done
+
+# ---------------------------------------------------------------------------
+# 7. Channel fragment shape: shared/native-ab/channels/<product>/ carries the
+#    6 repart defs + 3 OS transfers, ESP sized 1G, ImageId-based labels and
+#    SplitNames; the generic shared/outformat/ab-root/ fragment carries none
+#    of that (product-neutral disk/boot mechanics only).
+# ---------------------------------------------------------------------------
+
+expected_repart_defs=(00-esp.conf 10-root-verity.conf 11-root.conf
+    20-root-verity-empty.conf 21-root-empty.conf 30-var.conf)
+expected_transfers=(10-root-verity.transfer 20-root.transfer 90-uki.transfer)
+
+for product in "${products[@]}"; do
+    channel_dir="shared/native-ab/channels/$product"
+
+    if [[ ! -d "$channel_dir" ]]; then
+        fail_check "channel shape: $channel_dir does not exist"
+        continue
+    fi
+
+    for def in "${expected_repart_defs[@]}"; do
+        f="$channel_dir/mkosi.repart/$def"
+        if [[ -f "$f" ]]; then
+            pass "channel shape: $f present"
+        else
+            fail_check "channel shape: $f missing"
+        fi
+    done
+
+    for tr in "${expected_transfers[@]}"; do
+        f="$channel_dir/tree/usr/lib/sysupdate.d/$tr"
+        if [[ -f "$f" ]]; then
+            pass "channel shape: $f present"
+        else
+            fail_check "channel shape: $f missing"
+        fi
+    done
+
+    # The 3 transfers above are only real once the channel's own tree/ is
+    # actually wired via ExtraTrees= -- RepartDirectories= alone does not
+    # compose it (caught live: native-ab-components-test.sh failed with
+    # /usr/lib/sysupdate.d/ missing entirely from a built image because this
+    # line was absent).
+    channel_conf="$channel_dir/mkosi.conf"
+    if [[ -f "$channel_conf" ]] && grep -qF "ExtraTrees=%D/$channel_dir/tree" "$channel_conf"; then
+        pass "channel wiring: $channel_conf sets ExtraTrees= for its own tree/"
+    else
+        fail_check "channel wiring: $channel_conf does not set ExtraTrees=%D/$channel_dir/tree -- the channel's sysupdate.d transfers would never reach a built image"
+    fi
+
+    esp_conf="$channel_dir/mkosi.repart/00-esp.conf"
+    if [[ -f "$esp_conf" ]]; then
+        esp_min="$(ini_get "$esp_conf" Partition SizeMinBytes)"
+        esp_max="$(ini_get "$esp_conf" Partition SizeMaxBytes)"
+        if [[ "$esp_min" == "1G" && "$esp_max" == "1G" ]]; then
+            pass "channel ESP size: $esp_conf is 1G/1G"
+        else
+            fail_check "channel ESP size: $esp_conf is ${esp_min:-<unset>}/${esp_max:-<unset>}, expected 1G/1G"
+        fi
+    fi
+
+    root_verity_conf="$channel_dir/mkosi.repart/10-root-verity.conf"
+    root_conf="$channel_dir/mkosi.repart/11-root.conf"
+    if [[ -f "$root_verity_conf" ]]; then
+        label="$(ini_get "$root_verity_conf" Partition Label)"
+        if [[ "$label" == "${product}_%A_v" ]]; then
+            pass "channel label: $root_verity_conf -> '$label'"
+        else
+            fail_check "channel label: $root_verity_conf -> '${label:-<unset>}', expected '${product}_%A_v'"
+        fi
+        split="$(ini_get "$root_verity_conf" Partition SplitName)"
+        if [[ "$split" == "${product}_@v.root-verity.raw" ]]; then
+            pass "channel SplitName: $root_verity_conf -> '$split'"
+        else
+            fail_check "channel SplitName: $root_verity_conf -> '${split:-<unset>}', expected '${product}_@v.root-verity.raw' (ImageId-based, not channel-based -- public artifact names come from the publisher, not mkosi's internal split output)"
+        fi
+    fi
+    if [[ -f "$root_conf" ]]; then
+        label="$(ini_get "$root_conf" Partition Label)"
+        if [[ "$label" == "${product}_%A_r" ]]; then
+            pass "channel label: $root_conf -> '$label'"
+        else
+            fail_check "channel label: $root_conf -> '${label:-<unset>}', expected '${product}_%A_r'"
+        fi
+        split="$(ini_get "$root_conf" Partition SplitName)"
+        if [[ "$split" == "${product}_@v.root.raw" ]]; then
+            pass "channel SplitName: $root_conf -> '$split'"
+        else
+            fail_check "channel SplitName: $root_conf -> '${split:-<unset>}', expected '${product}_@v.root.raw'"
+        fi
+    fi
+done
+
+generic_conf="shared/outformat/ab-root/mkosi.conf"
+if grep -q '^RepartDirectories=' "$generic_conf"; then
+    fail_check "generic fragment: $generic_conf must not carry RepartDirectories= (product-specific, moved to channels)"
+else
+    pass "generic fragment: $generic_conf carries no RepartDirectories="
+fi
+if grep -q '^KernelModules=' "$generic_conf"; then
+    fail_check "generic fragment: $generic_conf must not carry KernelModules= (docs/native-ab-contracts.md §9)"
+else
+    pass "generic fragment: $generic_conf carries no KernelModules="
+fi
+generic_transfers=()
+while IFS= read -r -d '' f; do
+    generic_transfers+=("$f")
+done < <(find shared/outformat/ab-root -name '*.transfer' -print0 2>/dev/null)
+if [[ ${#generic_transfers[@]} -eq 0 ]]; then
+    pass "generic fragment: shared/outformat/ab-root carries no *.transfer files"
+else
+    fail_check "generic fragment: shared/outformat/ab-root carries *.transfer files (moved to channels): ${generic_transfers[*]}"
+fi
+if [[ -d shared/outformat/ab-root/mkosi.repart ]]; then
+    fail_check "generic fragment: shared/outformat/ab-root/mkosi.repart must not exist (product-specific, moved to channels)"
+else
+    pass "generic fragment: shared/outformat/ab-root carries no mkosi.repart directory"
+fi
 
 # ---------------------------------------------------------------------------
 # Reconcile actual violations against the allowlist

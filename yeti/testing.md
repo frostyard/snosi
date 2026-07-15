@@ -141,12 +141,15 @@ enabled, leaves `/var/lib/extensions.d` untouched, and both components still
 list correctly after reboot; (5) `snosi-etc-diff` and
 `snosi-etc-drift-report.service` correctly report, diff, and restore a live
 `/etc/issue` modification against the native A/B `/.etc.lower` tree, and leave
-no bind mounts behind. It found and fixed a real bug: the ab-root profile's
-`KernelModules=` allowlist excluded `nf_tables`/`nfnetlink`, so
+no bind mounts behind. It found and fixed a real bug: the `KernelModules=`
+allowlist (at the time in the shared ab-root fragment; Phase 3 moved it to
+`mkosi.profiles/cayo-ab-raw/mkosi.conf` and removed it from
+`shared/outformat/ab-root/mkosi.conf` entirely, since release channels ship
+the full module set unconditionally) excluded `nf_tables`/`nfnetlink`, so
 `nftables.service` (shipped and preset-enabled unconditionally by the base
 image) failed on every native A/B boot with "Unable to initialize Netlink
-socket: Protocol not supported" -- fixed by adding both modules to
-`shared/outformat/ab-root/mkosi.conf`.
+socket: Protocol not supported" -- fixed by adding both modules to the
+allowlist.
 
 `native-ab-secure-artifact-test.sh` checks the secure build's
 coherent systemd package set, TPM-capable initrd, `.pcrpkey`, and `.pcrsig`.

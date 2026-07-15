@@ -4,8 +4,8 @@ Verify=yes
 
 [Source]
 Type=url-file
-Path=https://repository.frostyard.org/os/cayo/%a/
-MatchPattern=cayo_@v_@u.root-verity.raw.xz
+Path=https://repository.frostyard.org/os/native/v1/cayo/x86-64/
+MatchPattern=cayo-ab_@v_@u.root-verity.raw.xz
 
 [Target]
 Type=partition

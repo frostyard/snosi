@@ -4,13 +4,13 @@ Verify=yes
 
 [Source]
 Type=url-file
-Path=https://repository.frostyard.org/os/cayo/%a/
-MatchPattern=cayo_@v_@u.root.raw.xz
+Path=https://repository.frostyard.org/os/native/v1/snowfield/x86-64/
+MatchPattern=snowfield-ab_@v_@u.root.raw.xz
 
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_r
+MatchPattern=snowfield_@v_r
 MatchPartitionType=root
 PartitionFlags=0
 ReadOnly=yes

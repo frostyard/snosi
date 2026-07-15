@@ -99,6 +99,58 @@ hard-fails if `cayo-ab-raw` ever picks up a publication marker. It passes
 today only because no profile is yet named `cayo-ab`, `snow-ab`, or
 `snowfield-ab` — read the script's header before adding one.
 
+**Generic output + per-product channels (Phase 3):** `shared/outformat/ab-root/`
+carries ONLY product-neutral disk/boot mechanics — `Format=disk`,
+`SplitArtifacts=`, `Bootable=yes`, `Initrds=`/`KernelModulesInitrd=no`,
+`KernelCommandLine=`, the shared `tree/` (fstab, the etc-overlay dracut
+module, the legacy-updater masks, the sysupdate-timer preset, the
+`native-ab` marker), and the finalize script. It carries NO
+`RepartDirectories=`, NO `*.transfer` files, and NO final-root
+`KernelModules=` filter — `test/native-ab-contracts-test.sh` asserts all
+three unconditionally. Every one of those three lives instead in
+`shared/native-ab/channels/<product>/` (`cayo`, `snow`, `snowfield` —
+`docs/native-ab-contracts.md` §12), which supplies its own
+`RepartDirectories=` (the 6 repart defs, ImageId-based labels and
+mkosi-internal `SplitName=`, 1 GiB ESP) and its own
+`tree/usr/lib/sysupdate.d/` (the 3 OS transfers, frozen R2 URL, `<ImageId>-ab`
+channel-prefixed `Source MatchPattern=`, `<ImageId>`-based `Target
+MatchPattern=` labels — §3 labels are ImageId-scoped, not channel-scoped, so
+they never change when a new channel starts publishing). A profile consumes
+native A/B output by `Include=`ing BOTH the generic `shared/outformat/ab-root/mkosi.conf`
+fragment AND exactly one channel's `mkosi.conf`; mkosi's list-setting
+accumulation means the channel's `ExtraTrees=`/`RepartDirectories=` add to,
+not replace, the generic fragment's. `mkosi.profiles/cayo-ab-raw` and
+`cayo-ab-secure` both `Include=` the `cayo` channel today; `snow`/`snowfield`
+channels exist and are validated statically (repart shape, ESP size, labels,
+SplitNames, frozen URL) but have no consuming profile yet — that lands with
+Task 3.2. snow/snowfield root+verity slot sizes are PROVISIONAL: 7 GiB
+root / 256 MiB verity, from an `mkfs.erofs` measurement of the existing
+`snow` bootc directory build (`output/snow`, full production module set,
+`/var` excluded) at 6047731712 bytes (~5.63 GiB, ~24% headroom), with the
+verity size scaled from cayo's verity:root ratio (128M:4G = 1/32). That
+measurement overestimates snow-ab slightly (it still includes
+bootc/ostree/grub tooling the native profile never installs), which is
+conservative, not exact — finalized in Phase 5/6 from a real native-profile
+measurement. See `docs/native-ab-capacities.md` for full measured numbers.
+
+**Module policy (Phase 3):** release native profiles ship the complete
+packaged kernel module/firmware set — no final-root `KernelModules=` pruning
+(`docs/native-ab-contracts.md` §9). The virtio-only filter that used to live
+in the shared `ab-root` fragment moved into `mkosi.profiles/cayo-ab-raw/mkosi.conf`
+directly (the one dev fixture permitted to carry it — a QEMU-only
+restriction to keep dracut's `--no-hostonly` initrd self-contained and avoid
+mkosi's dependency sweep failing on unresolved Debian module aliases);
+`cayo-ab-secure` builds with the full module set. The generic tree's
+`usr/lib/dracut/dracut.conf.d/30-bootc-standard.conf` is a DELIBERATE
+same-named override: `ExtraTrees=` composition overwrites files at
+identical relative paths, so this file replaces (not supplements) the base
+image's copy of the same name, which is how `add_dracutmodules+=" lvm crypt
+etc-overlay "` replaces the base's `"... bootc"` line rather than both
+surviving into the same `dracut.conf.d` directory — the filename match is
+load-bearing and `test/native-ab-static-test.sh` asserts it holds by finding
+whichever base file adds the `bootc` dracut module and checking ab-root's
+tree shadows it at the identical relative path.
+
 `mkosi.profiles/cayo-ab-raw` (renamed from `cayo-ab` in Phase 1; `Output=`
 changed to match, `ImageId=cayo` unchanged) is an isolated experimental disk
 profile, a permanent, never-published dev fixture per
@@ -124,9 +176,11 @@ reliably prevent first-boot timer enablement. Manual sysupdate remains available
 GPT partition labels for the dynamic root/verity slots are `<ImageId>_<version>_r`
 and `<ImageId>_<version>_v` (`docs/native-ab-contracts.md` §3; shortened from the
 prototype's original `_root`/`_root_verity` suffixes in Phase 1 to stay under the
-30-code-unit ceiling at the frozen 14-digit version length) — set in
-`shared/outformat/ab-root/mkosi.repart/{10-root-verity,11-root}.conf` and matched
-by the `Target MatchPattern=` in the corresponding `*.transfer` files. Native
+30-code-unit ceiling at the frozen 14-digit version length) — set per-product
+in `shared/native-ab/channels/<product>/mkosi.repart/{10-root-verity,11-root}.conf`
+(Phase 3; formerly a single shared `shared/outformat/ab-root/mkosi.repart/`)
+and matched by the `Target MatchPattern=` in the corresponding channel
+`*.transfer` files. Native
 images must never run the legacy bootc or nbc update machinery: the base image
 ships `bootc-update-stage.timer`/`.service`, `nbc-update-download.timer`/`.service`,
 and the user-scope `bootc-update-notify.path`/`.service` unconditionally (shared
@@ -153,11 +207,12 @@ version; that an unqualified N to N+1 OS update succeeds with both test
 components still enabled and `/var/lib/extensions.d` untouched; and that
 `snosi-etc-diff`/`snosi-etc-drift-report.service` correctly report, diff, and
 restore live `/etc` drift against `/.etc.lower` with no leftover bind mounts.
-It caught a real bug: the `KernelModules=` allowlist below excluded
-`nf_tables`/`nfnetlink`, so the base image's unconditionally-shipped,
-preset-enabled `nftables.service` failed on every native A/B boot
-("Unable to initialize Netlink socket: Protocol not supported") — fixed by
-adding both modules to the allowlist.
+It caught a real bug: the `KernelModules=` allowlist (originally in the
+shared `ab-root` fragment, moved to `mkosi.profiles/cayo-ab-raw/mkosi.conf`
+in Phase 3 — see "Module policy" above) excluded `nf_tables`/`nfnetlink`, so
+the base image's unconditionally-shipped, preset-enabled `nftables.service`
+failed on every native A/B boot ("Unable to initialize Netlink socket:
+Protocol not supported") — fixed by adding both modules to the allowlist.
 
 `mkosi.profiles/cayo-ab-secure` is the security spike. Standard Secure Boot
 uses Debian's Microsoft-signed shim and MOK-signed systemd-boot; generated snosi

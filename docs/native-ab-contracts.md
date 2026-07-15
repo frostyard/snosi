@@ -236,9 +236,11 @@ No final-root `KernelModules=` pruning. Initrd content is controlled via
 dracut configuration only, with the custom dracut archive kept authoritative
 through `Initrds=` and `KernelModulesInitrd=no`.
 
-The virtio-only filter currently in `shared/outformat/ab-root/mkosi.conf` is
-permitted **only** in the `cayo-ab-raw` dev fixture (post Phase-1 rename); it
-must never ship in `cayo-ab`, `snow-ab`, or `snowfield-ab`.
+The virtio-only filter, now in `mkosi.profiles/cayo-ab-raw/mkosi.conf`
+(Phase 3 moved it out of the shared `shared/outformat/ab-root/mkosi.conf`
+fragment, which no longer carries any `KernelModules=` line), is permitted
+**only** in the `cayo-ab-raw` dev fixture; it must never ship in `cayo-ab`,
+`snow-ab`, or `snowfield-ab`.
 
 ## 10. `/var` mount contracts
 

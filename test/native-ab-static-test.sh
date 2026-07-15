@@ -16,7 +16,36 @@ grep -q '^KernelCommandLine=.*rd\.etc\.overlay=1' "$ab/mkosi.conf"
 grep -q '^Initrds=$' "$ab/mkosi.conf"
 grep -q '^KernelModulesInitrd=no$' "$ab/mkosi.conf"
 grep -q '^KernelCommandLine=.*rd\.luks=1' "$ab/mkosi.conf"
-grep -q '^[[:space:]]*dm_crypt$' "$ab/mkosi.conf"
+if grep -q '^KernelModules=' "$ab/mkosi.conf"; then
+    echo "Generic ab-root fragment must not carry a final-root KernelModules= filter (docs/native-ab-contracts.md §9)" >&2
+    exit 1
+fi
+# Production channels ship the full module set unconditionally (dm_crypt
+# included). The one remaining KernelModules= filter is the QEMU-only dev
+# fixture's own -- verify it still includes dm_crypt so LUKS /var unlock
+# keeps working there too.
+grep -q '^[[:space:]]*dm_crypt$' "$root/mkosi.profiles/cayo-ab-raw/mkosi.conf"
+
+# The native ab-root override of the base image's bootc dracut.conf.d file
+# only works because ExtraTrees= composition overwrites files at IDENTICAL
+# relative paths (last ExtraTrees= wins) -- find whichever base file adds
+# the "bootc" dracut module and assert ab-root's tree carries a file at that
+# exact same relative path. If a future rename ever let both survive
+# assembly, dracut would load both and re-add the bootc dracut module
+# (composefs boot) to an image that must never carry it.
+base_bootc_conf="$(grep -rl 'add_dracutmodules.*\bbootc\b' \
+    "$root/mkosi.images/base/mkosi.extra/usr/lib/dracut/dracut.conf.d" 2>/dev/null | head -1)"
+if [[ -z "$base_bootc_conf" ]]; then
+    echo "No base dracut.conf.d file adds the bootc dracut module -- update this check" >&2
+    exit 1
+fi
+base_rel="${base_bootc_conf#"$root"/mkosi.images/base/mkosi.extra/}"
+ab_shadow="$ab/tree/$base_rel"
+if [[ ! -f "$ab_shadow" ]]; then
+    echo "ab-root tree does not shadow $base_rel at the identical relative path ($ab_shadow missing) -- both the base bootc-module file and the native override would survive ExtraTrees composition" >&2
+    exit 1
+fi
+
 grep -q 'ARTIFACTDIR/io\.mkosi\.initrd' \
     "$root/shared/kernel/scripts/postinst/mkosi.postinst.chroot"
 grep -q 'systemd-veritysetup' \
@@ -129,22 +158,26 @@ grep -q 'N+3 was not blessed before boot-count re-arming' "$secure_update_test"
 grep -q '\.sha256\[0\]\.pol = \.sha256\[1\]\.pol' "$negative_test"
 grep -q -- '--update-section.*\.pcrpkey' "$negative_test"
 
+# The 3 OS transfers moved from the generic ab-root tree to the per-product
+# channel fragment (Phase 3, docs/native-ab-contracts.md §5); cayo is the
+# channel exercised by both cayo-ab-raw and cayo-ab-secure.
+channel="$root/shared/native-ab/channels/cayo"
 for transfer in 10-root-verity 20-root 90-uki; do
-    file="$ab/tree/usr/lib/sysupdate.d/$transfer.transfer"
+    file="$channel/tree/usr/lib/sysupdate.d/$transfer.transfer"
     [[ -f "$file" ]]
     grep -q '^Verify=yes$' "$file"
     grep -q '^ProtectVersion=%A$' "$file"
     grep -q '^InstancesMax=2$' "$file"
 done
-grep -q '^PartitionFlags=0$' "$ab/tree/usr/lib/sysupdate.d/10-root-verity.transfer"
-grep -q '^PartitionFlags=0$' "$ab/tree/usr/lib/sysupdate.d/20-root.transfer"
+grep -q '^PartitionFlags=0$' "$channel/tree/usr/lib/sysupdate.d/10-root-verity.transfer"
+grep -q '^PartitionFlags=0$' "$channel/tree/usr/lib/sysupdate.d/20-root.transfer"
 
-grep -q 'MatchPattern=cayo_@v_@u.root-verity.raw.xz' \
-    "$ab/tree/usr/lib/sysupdate.d/10-root-verity.transfer"
-grep -q 'MatchPattern=cayo_@v_@u.root.raw.xz' \
-    "$ab/tree/usr/lib/sysupdate.d/20-root.transfer"
-grep -q '^TriesLeft=3$' "$ab/tree/usr/lib/sysupdate.d/90-uki.transfer"
-grep -q '^Path=/EFI/Linux$' "$ab/tree/usr/lib/sysupdate.d/90-uki.transfer"
+grep -q 'MatchPattern=cayo-ab_@v_@u.root-verity.raw.xz' \
+    "$channel/tree/usr/lib/sysupdate.d/10-root-verity.transfer"
+grep -q 'MatchPattern=cayo-ab_@v_@u.root.raw.xz' \
+    "$channel/tree/usr/lib/sysupdate.d/20-root.transfer"
+grep -q '^TriesLeft=3$' "$channel/tree/usr/lib/sysupdate.d/90-uki.transfer"
+grep -q '^Path=/EFI/Linux$' "$channel/tree/usr/lib/sysupdate.d/90-uki.transfer"
 grep -q '^disable systemd-sysupdate.timer$' \
     "$ab/tree/usr/lib/systemd/system-preset/00-native-ab.preset"
 grep -q '^disable systemd-sysupdate-reboot.timer$' \
