@@ -298,6 +298,87 @@ unused NvPCR definitions and product/login writers because its anchor credential
 cannot migrate between PCR signing keys. Signed-PCR LUKS unlock and TPM SRK setup
 remain enabled.
 
+`native-ab-secure-boot-test.sh` (Phase 5) is a FULLY AUTOMATED end-to-end QEMU
+harness for a production native profile (`PROFILE`, default `snow-ab`; also
+accepts `cayo-ab`) — no MokManager interaction, no manual boot-time input. It
+builds two real versions (N, N+1) itself (same `SKIP_BUILD=1
+BUILD_N_DIR=...  BUILD_N1_DIR=...` fast-iteration knobs as the other native-ab
+QEMU tests), installs N to a raw disk FILE via `cayo-ab-install-spike.sh
+--allow-file --yes --encrypt-var --recovery-key-file` (deliberately no
+`--mok-certificate`: that talks to the HOST's live EFI variable store, wrong
+for a loopback install, and the spike script itself refuses the combination),
+then boots it under a from-scratch OVMF+swtpm+MOK stack it assembles itself:
+
+- `virt-fw-vars --add-mok <guid> mkosi.crt` pre-enrolls the Snosi cert into a
+  writable copy of `/usr/share/OVMF/OVMF_VARS_4M.ms.fd` (Microsoft keys
+  already enrolled ⇒ Secure Boot enforced from first boot, no
+  `SecureBootAutoEnroll`), paired with `OVMF_CODE_4M.secboot.fd`.
+- `swtpm socket --tpm2` provides the vTPM; QEMU's `-tpmdev emulator` chardev
+  MUST point at swtpm's `--ctrl` socket, not `--server` (pointing at
+  `--server` hangs QEMU at startup indefinitely — confirmed and documented in
+  the script's own comments, a real bug found building this harness).
+- The serial console is a bidirectional `server=on,wait=off` QEMU chardev
+  socket. Since this host has neither `expect` nor `socat`, a single
+  self-contained Python process (`start_console_pump`) both tees the console
+  to a log file AND types the LUKS recovery passphrase automatically the
+  first time (and only the first time) an `ask-password`-shaped prompt
+  appears — a separate read-only "log" process and a separate "sender"
+  process do NOT both work against one such socket (only one client
+  connection is accepted); this was tried and confirmed broken before
+  settling on the single combined design.
+
+Assertions, first boot (no TPM token yet — recovery-passphrase prompt
+automated): `mokutil --sb-state`/`bootctl status` show enforced Secure Boot
+and `Measured UKI: yes` (the MOK-signed shim → systemd-boot → UKI chain
+actually loaded, not merely present on disk), kernel lockdown is
+integrity/confidentiality mode, `/var` is LUKS2 via `/dev/mapper/var`, `/etc`
+is the overlay, no failed units, no NvPCR journal errors,
+`snow-linux-live-setup.service` did NOT fire (see CLAUDE.md's decision note —
+a real bug found and fixed while building this harness: its old marker-only
+gate could not distinguish a real native install's true first boot from live
+media), and `test/tests/05-firstboot-presets.sh` is reused VERBATIM via the
+same `TEST_LIB_DIR`/`lib/helpers.sh` remote-execution pattern
+`bootc-install-test.sh` already uses — reusing a bootc-authored check against
+a native/secure profile surfaces 3 fully-explained, expected differences
+(`bootc-update-stage.timer`/`nbc-update-download.timer` are permanently
+masked by native updater isolation; `run-lock.mount` no longer exists in the
+secure profile's Forky systemd 261 at all), asserted to be EXACTLY that set,
+not "any failure is fine" — a real regression anywhere else still fails hard.
+
+In-guest TPM enrollment mirrors `native-ab-secure-rotation-test.sh`'s
+`enroll_token` EXACTLY (`--tpm2-pcrs=` empty raw-PCR set,
+`--tpm2-public-key=.snosi-private/pcr-signing.pub --tpm2-public-key-pcrs=11`
+signed PCR 11 policy). Every reboot after enrollment feeds ZERO serial input
+by design — a hang at `wait_for_ssh` would itself prove the initrd needed a
+passphrase it didn't get. Desktop assertions (Snow only):
+`graphical.target`/`gdm.service` active, a logind seat, `notify-send`
+present, fresh-`/var` tmpfiles ownership (`/var/home`, `/var/roothome`,
+`/var/opt`), `dpkg-query` against the relocated `/var/lib/dpkg`, and a
+minimal ad hoc sysext fixture in PLAIN-DIRECTORY form (not a raw disk image —
+`systemd-sysext` merges directories under `/var/lib/extensions/` identically;
+no erofs/squashfs build or guest-side loop mount needed) proving the
+CLAUDE.md hicolor icon-cache contract end to end — including that the
+extension-release file must declare a matching `SYSEXT_LEVEL=`, not just
+`ID=`, when the host os-release sets one (another real bug found live:
+`systemd-sysext merge` silently reports "1 ignored due to incompatible
+image(s))" otherwise).
+
+The secure update hop publishes N+1 through the real
+`prepare-native-publication.sh --xz` pipeline to a local HTTP origin signed
+with an ephemeral GPG key (same `/etc/systemd/import-pubring.gpg` override
+mechanism as `native-ab-updateux-test.sh`), runs
+`/usr/libexec/snosi-sysupdate-stage`, and reboots with zero serial input —
+proving the signed PCR 11 policy survives a REAL UKI change (the entire point
+of signed-vs-raw PCR policy), that `/var` and `/etc`-overlay persistence
+markers survive, and that the N rollback entry is still present
+(`InstancesMax=2`). Finishes with a non-destructive recovery-keyslot check
+(`cryptsetup open --test-passphrase`), never a destructive token wipe. First
+full run: 56/56 assertions passed (2026-07-15, `snow-ab`
+N=20260715021239 → N+1=20260715021816). Requires `swtpm`/`swtpm-tools` and
+`virt-fw-vars` (`virt-firmware`); see CLAUDE.md for how those were installed
+on a snosi dev host itself (read-only `/usr`, no `apt-get install`) and the
+`$SUDO_USER`-home-resolution fix needed because plain `sudo` resets `$HOME`.
+
 ## Test Tiers
 
 ### Tier 1 — Installation Validation (01-installation.sh)

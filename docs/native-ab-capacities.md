@@ -131,6 +131,14 @@ headroom (~33.8%) than the provisional estimate implied. The 8 GiB root /
 256 MiB verity sizing already in `shared/native-ab/channels/snow/mkosi.repart/`
 is confirmed correct; no repart change was needed.
 
+**Runtime-confirmed, 2026-07-15 (Phase 5, `test/native-ab-secure-boot-test.sh`):**
+the 8 GiB root / 256 MiB verity slots were re-confirmed against real N/N+1
+`snow-ab` production builds under an actual install + boot cycle (not just a
+build-time measurement) — Secure Boot enforced, swtpm-backed TPM enrollment,
+a full GNOME desktop session (`graphical.target`, `gdm.service`), and a real
+signed N→N+1 update hop all completed successfully within the current slot
+sizes, 56/56 assertions passed. No capacity change needed.
+
 ## snowfield (validated, 2026-07-14, real `snowfield-ab` production build)
 
 Measured on a real `mkosi --profile snowfield-ab build` (Task 3.2), the

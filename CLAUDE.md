@@ -431,6 +431,49 @@ merged/published until a `frostyard-updex` release with component discovery
 older updex binary cannot discover component-scoped sysexts, silently
 dropping every sysext from update offers.
 
+**Automated Secure Boot + TPM + desktop validation (Phase 5,
+`test/native-ab-secure-boot-test.sh`):** proves the whole secure chain in
+QEMU with no MokManager interaction — `virt-fw-vars --add-mok` pre-enrolls
+the Snosi MOK into a copy of `OVMF_VARS_4M.ms.fd` (Microsoft keys already
+enrolled ⇒ Secure Boot enforced), paired with `OVMF_CODE_4M.secboot.fd` and
+an attached swtpm TPM2 device. Installs a real build via
+`cayo-ab-install-spike.sh --allow-file --encrypt-var` (no
+`--mok-certificate`: that flag drives `mokutil --import` against the
+*host's* live EFI variable store, which is wrong for a loopback install —
+MOK enrollment happens entirely on the guest's OVMF varstore instead), types
+the first-boot recovery passphrase on the serial console automatically (no
+expect/socat on this host; a single Python process both logs and drives the
+console — two separate connections to one `server=on,wait=off` QEMU chardev
+socket do not both work, confirmed live), enrolls a signed-PCR-11 TPM token
+in-guest exactly like `native-ab-secure-rotation-test.sh`'s `enroll_token`,
+and proves unattended TPM auto-unlock survives a real signed update hop to a
+new UKI. QEMU's `-tpmdev emulator` chardev must point at swtpm's `--ctrl`
+socket, not `--server` — `--server` hangs QEMU at startup indefinitely (this
+and other bugs found while building the harness are recorded in the test's
+own comments). Requires `swtpm`/`swtpm-tools` and `virt-fw-vars`
+(`virt-firmware` PyPI package); on a snosi dev host itself (read-only `/usr`
+sysext overlay, no `apt-get install`), install both via Homebrew/`pip3
+install --user`, and resolve `$SUDO_USER`'s real home for `PATH`/`HOME` since
+plain `sudo` resets `$HOME` to `/root` (breaks `pip --user` site-packages
+resolution).
+
+**`snow-linux-live-setup.service` native-boot decision:** this unit's only
+gate used to be a negative run-once marker
+(`ConditionPathExists=!/var/lib/snow-linux-live-setup.done`), indistinguishable
+from a freshly installed native A/B system's true first boot (fresh `/var`,
+marker absent) — an unpatched native install would have created a
+passwordless sudo `snow` user on first boot. Fixed by adding
+`ConditionKernelCommandLine=snow-linux.live=1`, the same positive live-media
+signal `docker.socket.d/override.conf`, `incus.socket.d/override.conf`, and
+`brew-setup.service` already use (inverted: `!snow-linux.live=1`, since those
+skip themselves on live media — `snow-linux-live-setup.service` is the
+inverse case, it must run ONLY on live media). Decision: native Snow does
+**not** get its own first-setup flow reusing this unit; a real installed
+system simply never sets `snow-linux.live=1` and this unit correctly never
+fires. `test/native-ab-secure-boot-test.sh` asserts the unit is
+`ActiveState=inactive` with `ConditionResult=no` (not failed) on a fresh
+native install, and that no `snow` user exists.
+
 ### Native `/var` Factory State
 
 The native installer creates a fresh per-machine `/var`; nothing written to

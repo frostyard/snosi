@@ -145,6 +145,16 @@ trap cleanup EXIT
 if $allow_file; then
     loop_device="$(losetup --find --show --partscan "$target")"
     disk="$loop_device"
+    # partscan's partition device nodes appear asynchronously via udev; the
+    # resize branch below already settles before its own lsblk scan, but
+    # when target_size == image_size (no resize needed -- the common case
+    # for a same-size install fixture) nothing previously settled before
+    # the var-partition lsblk scan a few lines down, racing udev and
+    # intermittently failing "expected exactly one var partition" even
+    # though the partition table is correct (root-caused running this
+    # script against a real snow-ab build in
+    # test/native-ab-secure-boot-test.sh).
+    udevadm settle
 fi
 
 # The image's backup GPT records the build size. Relocate it before using the
