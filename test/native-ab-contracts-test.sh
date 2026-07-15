@@ -458,6 +458,25 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 8. Publisher naming self-test: run test/native-publish-test.sh here too so
+#    a naming drift in shared/native-ab/publish/prepare-native-publication.sh
+#    (the frozen §4 names, derived from real mkosi manifest/split-artifact
+#    conventions) fails this same static CI gate, not just its own
+#    standalone invocation. No root, no network, no image build (fixture
+#    GPT via truncate+sfdisk script mode).
+# ---------------------------------------------------------------------------
+
+publish_test_rc=0
+publish_test_out="$(bash "$root/test/native-publish-test.sh" 2>&1)" || publish_test_rc=$?
+echo "$publish_test_out"
+if [[ $publish_test_rc -eq 0 ]]; then
+    publish_test_checks="$(grep -c '^ok - ' <<<"$publish_test_out" || true)"
+    pass "native-publish-test.sh: publisher naming self-test passed ($publish_test_checks checks)"
+else
+    fail_check "native-publish-test.sh: publisher naming self-test failed (exit $publish_test_rc, see output above)"
+fi
+
+# ---------------------------------------------------------------------------
 # Reconcile actual violations against the allowlist
 # ---------------------------------------------------------------------------
 

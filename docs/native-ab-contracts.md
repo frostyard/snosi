@@ -98,6 +98,17 @@ order is signature first, manifest last (§ Atomic Publication Procedure in
 the plan) — this document freezes the *names*; the plan freezes the
 *procedure*.
 
+Naming implemented by `shared/native-ab/publish/prepare-native-publication.sh`
+(Phase 3): given an mkosi output directory and a built profile's `Output=`
+name (validated to equal `<ImageId>-ab`, refusing e.g. the never-published
+`cayo-ab-raw` fixture), it derives product/channel/version from the built
+artifacts themselves and produces the `.root.raw[.xz]`, `.root-verity.raw[.xz]`,
+`.efi`, `.disk.raw[.xz]`, and `.manifest.json` names above plus an unsigned
+`SHA256SUMS` (signing is the Phase 7 promotion step, §7) and a
+`publication-info.json` pipeline record. `.sbom.spdx.json` generation is not
+yet wired into this script. Exercised statically (no root, no image build) by
+`test/native-publish-test.sh`.
+
 ## 5. R2 namespaces
 
 ```text

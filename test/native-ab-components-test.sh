@@ -9,10 +9,10 @@
 #   secure profile" (the publication-guard half is covered statically by
 #   check-native-publication-guard.sh; this test covers the runtime half).
 #
-# Builds two real versions (N, N+1) of profile cayo-ab-raw via the pinned
-# .mkosi checkout (mirrors the Justfile's ensure-mkosi bootstrap + `mkosi
-# clean -ff` + `mkosi --profile cayo-ab-raw build`), boots N in QEMU, and
-# validates in order:
+# Builds two real versions (N, N+1) of profile $PROFILE (default cayo-ab-raw)
+# via the pinned .mkosi checkout (mirrors the Justfile's ensure-mkosi
+# bootstrap + `mkosi clean -ff` + `mkosi --profile $PROFILE build`), boots N
+# in QEMU, and validates in order:
 #
 #   1. No failed legacy updaters; bootc/nbc/sysupdate auto-update units masked.
 #   2. The OS default sysupdate.d target and the 17 shipped sysext components
@@ -23,11 +23,17 @@
 #      and the ESP byte-identical.
 #   4. A real N -> N+1 OS update succeeds with those two components still
 #      enabled, without touching /var/lib/extensions.d, and the components
-#      still enumerate correctly after reboot.
+#      still enumerate correctly after reboot. The N+1 OS update source is
+#      generated via shared/native-ab/publish/prepare-native-publication.sh
+#      (--xz), so this exercises the real public artifact-naming contract
+#      end to end, not hand-rolled fixture naming.
 #   5. Native /etc drift tooling (snosi-etc-diff, snosi-etc-drift-report)
 #      works correctly against the /.etc.lower overlay on a booted image.
 #
 # Usage: sudo ./test/native-ab-components-test.sh
+# Env overrides (docs/native-ab-contracts.md §1): PROFILE (default
+# cayo-ab-raw), IMAGE_ID (derived from PROFILE by default), CHANNEL
+# (derived as <IMAGE_ID>-ab by default).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,6 +45,22 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 : "${SKIP_BUILD:=0}"
 : "${BUILD_N_DIR:=}"
 : "${BUILD_N1_DIR:=}"
+
+# Product parameterization (docs/native-ab-contracts.md §1). PROFILE is the
+# real `mkosi --profile` value built below; IMAGE_ID is the product/ImageId
+# (partition-label prefix, §3) derived from it by stripping the -ab-raw/-ab
+# dev-fixture/production suffixes; CHANNEL is the public name prefix
+# (<ImageId>-ab, §1) used for the OS transfer's Source/UKI names regardless
+# of which profile actually built the bits under test -- the shipped
+# transfers (shared/native-ab/channels/<product>/tree/usr/lib/sysupdate.d/)
+# always fetch channel-named blobs, so the CHANNEL default is "cayo-ab" even
+# though the default PROFILE is the never-published "cayo-ab-raw" fixture.
+: "${PROFILE:=cayo-ab-raw}"
+if [[ -z "${IMAGE_ID:-}" ]]; then
+    IMAGE_ID="${PROFILE%-ab-raw}"
+    IMAGE_ID="${IMAGE_ID%-ab}"
+fi
+: "${CHANNEL:=${IMAGE_ID}-ab}"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/ssh.sh"
@@ -142,19 +164,19 @@ resolve_mkosi() {
     git -C "$dir" checkout -q --detach FETCH_HEAD
 }
 
-# build_cayo_ab_raw - clean build cayo-ab-raw and copy its split artifacts
-# into a stable destination (mkosi clean -ff wipes output/ on the next call).
-build_cayo_ab_raw() { # dest_dir
+# build_profile - clean build $PROFILE and copy its split artifacts into a
+# stable destination (mkosi clean -ff wipes output/ on the next call).
+build_profile() { # dest_dir
     local dest="$1"
     mkdir -p "$dest"
-    echo "Building cayo-ab-raw -> $dest (started $(date -u +%FT%TZ))"
+    echo "Building $PROFILE -> $dest (started $(date -u +%FT%TZ))"
     "$MKOSI" clean -ff
-    "$MKOSI" --profile cayo-ab-raw build
-    cp --sparse=always "$ROOT_DIR/output/cayo-ab-raw.manifest" "$dest/"
-    cp --sparse=always "$ROOT_DIR/output/cayo-ab-raw.raw" "$dest/"
-    cp --sparse=always "$ROOT_DIR/output/cayo-ab-raw.efi" "$dest/"
-    cp --sparse=always "$ROOT_DIR/output/cayo-ab-raw.cayo_@v.root.raw.raw" "$dest/"
-    cp --sparse=always "$ROOT_DIR/output/cayo-ab-raw.cayo_@v.root-verity.raw.raw" "$dest/"
+    "$MKOSI" --profile "$PROFILE" build
+    cp --sparse=always "$ROOT_DIR/output/$PROFILE.manifest" "$dest/"
+    cp --sparse=always "$ROOT_DIR/output/$PROFILE.raw" "$dest/"
+    cp --sparse=always "$ROOT_DIR/output/$PROFILE.efi" "$dest/"
+    cp --sparse=always "$ROOT_DIR/output/$PROFILE.${IMAGE_ID}_@v.root.raw.raw" "$dest/"
+    cp --sparse=always "$ROOT_DIR/output/$PROFILE.${IMAGE_ID}_@v.root-verity.raw.raw" "$dest/"
     echo "Build done -> $dest (finished $(date -u +%FT%TZ))"
 }
 
@@ -187,8 +209,11 @@ done
 
 trap cleanup EXIT
 WORK_DIR="$(mktemp -d /var/tmp/native-ab-components-test.XXXXXX)"
-mkdir -p "$WORK_DIR/source/os" "$WORK_DIR/source/testa" "$WORK_DIR/source/testb" \
-    "$WORK_DIR/definitions" "$WORK_DIR/mnt" "$WORK_DIR/gnupg"
+# source/os is created later as a symlink straight into the publisher's own
+# output tree (see "Prepare the N+1 OS update source" below) so the
+# multi-gigabyte root/verity/disk artifacts are never copied a second time.
+mkdir -p "$WORK_DIR/source/testa" "$WORK_DIR/source/testb" \
+    "$WORK_DIR/definitions" "$WORK_DIR/mnt" "$WORK_DIR/gnupg" "$WORK_DIR/publish-src"
 chmod 700 "$WORK_DIR/gnupg"
 
 echo "=== Step 0: build N and N+1 (this takes tens of minutes) ==="
@@ -202,30 +227,42 @@ else
     resolve_mkosi
     BUILD_N_DIR="$WORK_DIR/build-n"
     BUILD_N1_DIR="$WORK_DIR/build-n1"
-    build_cayo_ab_raw "$BUILD_N_DIR"
-    build_cayo_ab_raw "$BUILD_N1_DIR"
+    build_profile "$BUILD_N_DIR"
+    build_profile "$BUILD_N1_DIR"
 fi
 
-for f in manifest raw efi "cayo_@v.root.raw.raw" "cayo_@v.root-verity.raw.raw"; do
-    [[ -f "$BUILD_N_DIR/cayo-ab-raw.$f" ]] || { echo "Error: missing N artifact: $f" >&2; exit 1; }
-    [[ -f "$BUILD_N1_DIR/cayo-ab-raw.$f" ]] || { echo "Error: missing N+1 artifact: $f" >&2; exit 1; }
+for f in manifest raw efi "${IMAGE_ID}_@v.root.raw.raw" "${IMAGE_ID}_@v.root-verity.raw.raw"; do
+    [[ -f "$BUILD_N_DIR/$PROFILE.$f" ]] || { echo "Error: missing N artifact: $f" >&2; exit 1; }
+    [[ -f "$BUILD_N1_DIR/$PROFILE.$f" ]] || { echo "Error: missing N+1 artifact: $f" >&2; exit 1; }
 done
 
-n_version="$(jq -er '.config.version' "$BUILD_N_DIR/cayo-ab-raw.manifest")"
-n1_version="$(jq -er '.config.version' "$BUILD_N1_DIR/cayo-ab-raw.manifest")"
+n_version="$(jq -er '.config.version' "$BUILD_N_DIR/$PROFILE.manifest")"
+n1_version="$(jq -er '.config.version' "$BUILD_N1_DIR/$PROFILE.manifest")"
 echo "N=$n_version  N+1=$n1_version"
 [[ "$n_version" != "$n1_version" ]] || { echo "Error: N and N+1 builds produced the same version" >&2; exit 1; }
 [[ "$n1_version" > "$n_version" ]] || { echo "Error: N+1 version is not newer than N" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Prepare the N+1 OS update source (same convention as native-ab-update-test.sh)
+# Prepare the N+1 OS update source VIA the publication naming pipeline
+# (shared/native-ab/publish/prepare-native-publication.sh), not hand-rolled
+# naming, so the update leg exercises the exact same public contract QEMU
+# will consume in production, including the frozen §4 filenames and the
+# already-shipped channel-prefixed Source MatchPattern (see the real
+# shared/native-ab/channels/<product>/tree/usr/lib/sysupdate.d/*.transfer).
+#
+# The publisher validates profile-output-name == "<ImageId>-ab" (refusing to
+# "publish" a *-ab-raw dev fixture by name) as a real safety property, so
+# stage symlinks presenting $PROFILE's build outputs under the $CHANNEL name
+# it expects -- symlinks, not copies, so the multi-gigabyte root/verity/disk
+# artifacts are never duplicated on disk.
 # ---------------------------------------------------------------------------
-n1_layout="$(sfdisk --json "$BUILD_N1_DIR/cayo-ab-raw.raw")"
-n1_root_uuid="$(jq -er --arg label "cayo_${n1_version}_r" '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$n1_layout")"
-n1_verity_uuid="$(jq -er --arg label "cayo_${n1_version}_v" '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$n1_layout")"
-xz -T0 -c "$BUILD_N1_DIR/cayo-ab-raw.cayo_@v.root.raw.raw" > "$WORK_DIR/source/os/cayo_${n1_version}_${n1_root_uuid}.root.raw.xz"
-xz -T0 -c "$BUILD_N1_DIR/cayo-ab-raw.cayo_@v.root-verity.raw.raw" > "$WORK_DIR/source/os/cayo_${n1_version}_${n1_verity_uuid}.root-verity.raw.xz"
-cp "$BUILD_N1_DIR/cayo-ab-raw.efi" "$WORK_DIR/source/os/cayo_${n1_version}.efi"
+for suffix in manifest raw efi "${IMAGE_ID}_@v.root.raw.raw" "${IMAGE_ID}_@v.root-verity.raw.raw"; do
+    ln -s "$BUILD_N1_DIR/$PROFILE.$suffix" "$WORK_DIR/publish-src/$CHANNEL.$suffix"
+done
+"$ROOT_DIR/shared/native-ab/publish/prepare-native-publication.sh" --xz \
+    "$WORK_DIR/publish-src" "$CHANNEL" "$WORK_DIR/publish-out"
+publish_dest="$WORK_DIR/publish-out/$IMAGE_ID/x86-64"
+ln -s "$publish_dest" "$WORK_DIR/source/os"
 
 cat > "$WORK_DIR/definitions/10-root-verity.transfer" <<EOF
 [Transfer]
@@ -234,11 +271,11 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://10.0.2.2:${SOURCE_PORT}/os/
-MatchPattern=cayo_@v_@u.root-verity.raw.xz
+MatchPattern=${CHANNEL}_@v_@u.root-verity.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_v
+MatchPattern=${IMAGE_ID}_@v_v
 MatchPartitionType=root-verity
 PartitionFlags=0
 ReadOnly=yes
@@ -251,11 +288,11 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://10.0.2.2:${SOURCE_PORT}/os/
-MatchPattern=cayo_@v_@u.root.raw.xz
+MatchPattern=${CHANNEL}_@v_@u.root.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_r
+MatchPattern=${IMAGE_ID}_@v_r
 MatchPartitionType=root
 PartitionFlags=0
 ReadOnly=yes
@@ -268,14 +305,14 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://10.0.2.2:${SOURCE_PORT}/os/
-MatchPattern=cayo_@v.efi
+MatchPattern=${CHANNEL}_@v.efi
 [Target]
 Type=regular-file
 Path=/EFI/Linux
 PathRelativeTo=boot
-MatchPattern=cayo_@v+@l-@d.efi
-MatchPattern=cayo_@v+@l.efi
-MatchPattern=cayo_@v.efi
+MatchPattern=${CHANNEL}_@v+@l-@d.efi
+MatchPattern=${CHANNEL}_@v+@l.efi
+MatchPattern=${CHANNEL}_@v.efi
 Mode=0444
 TriesLeft=3
 TriesDone=0
@@ -285,8 +322,11 @@ EOF
 gpg --homedir "$WORK_DIR/gnupg" --batch --passphrase '' --quick-generate-key \
     'snosi native A/B components test <native-ab-components-test@invalid>' ed25519 sign 0
 gpg --homedir "$WORK_DIR/gnupg" --batch --export > "$WORK_DIR/import-pubring.gpg"
-write_sha256sums "$WORK_DIR/source/os"
-sign_manifest "$WORK_DIR/source/os"
+# The publisher already wrote SHA256SUMS scoped exactly to the 5 contract
+# files it produced (unsigned, as documented in its own header) -- only
+# gpg-sign it in place, don't recompute it with write_sha256sums (which
+# would also hash publication-info.json, a file no transfer references).
+sign_manifest "$publish_dest"
 
 # ---------------------------------------------------------------------------
 # Prepare two independently versioned test sysext components (testa, testb)
@@ -347,7 +387,7 @@ EOF
 # ---------------------------------------------------------------------------
 ssh_keygen "$WORK_DIR"
 DISK_IMAGE="$WORK_DIR/disk.raw"
-cp --sparse=always "$BUILD_N_DIR/cayo-ab-raw.raw" "$DISK_IMAGE"
+cp --sparse=always "$BUILD_N_DIR/$PROFILE.raw" "$DISK_IMAGE"
 loop="$(losetup --find --show --partscan "$DISK_IMAGE")"
 mount "${loop}p6" "$WORK_DIR/mnt"
 mkdir -p "$WORK_DIR/mnt/roothome/.ssh"

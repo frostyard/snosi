@@ -11,6 +11,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${SSH_PORT:=2222}"
 : "${SSH_TIMEOUT:=300}"
 
+# Product parameterization (docs/native-ab-contracts.md §1). This script
+# takes prebuilt artifact prefixes on the command line, so PROFILE only
+# feeds the IMAGE_ID default -- set IMAGE_ID/CHANNEL directly to test a
+# different product without a real "*-ab-raw" profile name to strip.
+: "${PROFILE:=cayo-ab-raw}"
+if [[ -z "${IMAGE_ID:-}" ]]; then
+    IMAGE_ID="${PROFILE%-ab-raw}"
+    IMAGE_ID="${IMAGE_ID%-ab}"
+fi
+: "${CHANNEL:=${IMAGE_ID}-ab}"
+
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/ssh.sh"
 # shellcheck disable=SC1091
@@ -54,9 +65,9 @@ write_manifest() {
     for file in "$WORK_DIR/source"/*; do
         name="$(basename "$file")"
         [[ "$name" == SHA256SUMS || "$name" == SHA256SUMS.gpg ]] && continue
-        [[ "$mode" != missing-uki || "$name" != "cayo_${first}.efi" ]] || continue
-        [[ "$mode" != missing-verity || "$name" != cayo_${first}_*.root-verity.raw.xz ]] || continue
-        if [[ "$mode" == bad-root && "$name" == cayo_${first}_*.root.raw.xz ]]; then
+        [[ "$mode" != missing-uki || "$name" != "${CHANNEL}_${first}.efi" ]] || continue
+        [[ "$mode" != missing-verity || "$name" != ${CHANNEL}_${first}_*.root-verity.raw.xz ]] || continue
+        if [[ "$mode" == bad-root && "$name" == ${CHANNEL}_${first}_*.root.raw.xz ]]; then
             hash="$(printf '0%.0s' {1..64})"
         else
             hash="$(sha256sum "$file")"
@@ -76,7 +87,7 @@ assert_not_activated() {
     layout="$(vm_ssh 'lsblk -J -o PARTLABEL')"
     empty_count="$(jq '[.. | objects | select(.partlabel? == "_empty")] | length' <<<"$layout")"
     [[ "$empty_count" -eq 2 ]] || { echo "Error: rejected update committed a partition label" >&2; exit 1; }
-    vm_ssh "test ! -e /boot/EFI/Linux/cayo_${versions[0]}+3-0.efi"
+    vm_ssh "test ! -e /boot/EFI/Linux/${CHANNEL}_${versions[0]}+3-0.efi"
     running="$(guest_version)"
     [[ "$running" == "$expected" ]] || { echo "Error: rejected update changed running version" >&2; exit 1; }
 }
@@ -105,13 +116,13 @@ install_update() {
     echo "Installing update $version"
     vm_ssh "/usr/lib/systemd/systemd-sysupdate --definitions=/var/tmp/native-ab-definitions --verify=$verify update '$version'"
     layout="$(vm_ssh 'lsblk -J -o PATH,PARTLABEL,PARTUUID')"
-    installed_root_uuid="$(jq -r --arg label "cayo_${version}_r" \
+    installed_root_uuid="$(jq -r --arg label "${IMAGE_ID}_${version}_r" \
         '.. | objects | select(.partlabel? == $label) | .partuuid' <<<"$layout")"
-    installed_verity_uuid="$(jq -r --arg label "cayo_${version}_v" \
+    installed_verity_uuid="$(jq -r --arg label "${IMAGE_ID}_${version}_v" \
         '.. | objects | select(.partlabel? == $label) | .partuuid' <<<"$layout")"
     [[ "${installed_root_uuid,,}" == "$root_uuid" ]]
     [[ "${installed_verity_uuid,,}" == "$verity_uuid" ]]
-    vm_ssh "test -e /boot/EFI/Linux/cayo_${version}+3-0.efi"
+    vm_ssh "test -e /boot/EFI/Linux/${CHANNEL}_${version}+3-0.efi"
 }
 
 verify_boot() {
@@ -162,22 +173,22 @@ for prefix in "${prefixes[@]}"; do
     manifest="${prefix}.manifest"
     raw="${prefix}.raw"
     uki="${prefix}.efi"
-    root="${prefix}.cayo_@v.root.raw.raw"
-    verity="${prefix}.cayo_@v.root-verity.raw.raw"
+    root="${prefix}.${IMAGE_ID}_@v.root.raw.raw"
+    verity="${prefix}.${IMAGE_ID}_@v.root-verity.raw.raw"
     for file in "$manifest" "$raw" "$uki" "$root" "$verity"; do
         [[ -f "$file" ]] || { echo "Error: required artifact not found: $file" >&2; exit 1; }
     done
     version="$(jq -er '.config.version' "$manifest")"
     layout="$(sfdisk --json "$raw")"
-    root_uuid="$(jq -er --arg label "cayo_${version}_r" '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$layout")"
-    verity_uuid="$(jq -er --arg label "cayo_${version}_v" '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$layout")"
+    root_uuid="$(jq -er --arg label "${IMAGE_ID}_${version}_r" '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$layout")"
+    verity_uuid="$(jq -er --arg label "${IMAGE_ID}_${version}_v" '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$layout")"
     versions+=("$version")
     root_uuids+=("$root_uuid")
     verity_uuids+=("$verity_uuid")
     echo "Preparing update $version"
-    xz -T0 -c "$root" > "$WORK_DIR/source/cayo_${version}_${root_uuid}.root.raw.xz"
-    xz -T0 -c "$verity" > "$WORK_DIR/source/cayo_${version}_${verity_uuid}.root-verity.raw.xz"
-    cp "$uki" "$WORK_DIR/source/cayo_${version}.efi"
+    xz -T0 -c "$root" > "$WORK_DIR/source/${CHANNEL}_${version}_${root_uuid}.root.raw.xz"
+    xz -T0 -c "$verity" > "$WORK_DIR/source/${CHANNEL}_${version}_${verity_uuid}.root-verity.raw.xz"
+    cp "$uki" "$WORK_DIR/source/${CHANNEL}_${version}.efi"
 done
 
 cat > "$WORK_DIR/definitions/10-root-verity.transfer" <<EOF
@@ -187,11 +198,11 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://10.0.2.2:${SOURCE_PORT}/
-MatchPattern=cayo_@v_@u.root-verity.raw.xz
+MatchPattern=${CHANNEL}_@v_@u.root-verity.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_v
+MatchPattern=${IMAGE_ID}_@v_v
 MatchPartitionType=root-verity
 PartitionFlags=0
 ReadOnly=yes
@@ -204,11 +215,11 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://10.0.2.2:${SOURCE_PORT}/
-MatchPattern=cayo_@v_@u.root.raw.xz
+MatchPattern=${CHANNEL}_@v_@u.root.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_r
+MatchPattern=${IMAGE_ID}_@v_r
 MatchPartitionType=root
 PartitionFlags=0
 ReadOnly=yes
@@ -221,14 +232,14 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://10.0.2.2:${SOURCE_PORT}/
-MatchPattern=cayo_@v.efi
+MatchPattern=${CHANNEL}_@v.efi
 [Target]
 Type=regular-file
 Path=/EFI/Linux
 PathRelativeTo=boot
-MatchPattern=cayo_@v+@l-@d.efi
-MatchPattern=cayo_@v+@l.efi
-MatchPattern=cayo_@v.efi
+MatchPattern=${CHANNEL}_@v+@l-@d.efi
+MatchPattern=${CHANNEL}_@v+@l.efi
+MatchPattern=${CHANNEL}_@v.efi
 Mode=0444
 TriesLeft=3
 TriesDone=0
@@ -258,7 +269,7 @@ vm_start "$DISK_IMAGE"
 wait_for_ssh
 base_version="$(guest_version)"
 initial_uki="$(vm_ssh "find /boot/EFI/Linux -maxdepth 1 -type f -printf '%f\n'" | head -1)"
-base_root_path="$(partition_path "cayo_${base_version}_r")"
+base_root_path="$(partition_path "${IMAGE_ID}_${base_version}_r")"
 vm_ssh "printf '%s\n' var-persist > /var/native-ab-update-test"
 vm_ssh "printf '%s\n' etc-persist > /etc/native-ab-update-test"
 vm_ssh 'mkdir -p /etc/systemd'
@@ -279,7 +290,7 @@ write_manifest valid
 sign_manifest
 
 install_update 0 yes
-hop1_root_path="$(partition_path "cayo_${versions[0]}_r")"
+hop1_root_path="$(partition_path "${IMAGE_ID}_${versions[0]}_r")"
 reboot_guest
 verify_boot "${versions[0]}"
 
@@ -291,15 +302,15 @@ reboot_guest
 verify_boot "${versions[0]}"
 
 install_update 1 yes
-[[ "$(partition_path "cayo_${versions[1]}_r")" == "$base_root_path" ]] || { echo "Error: N+2 did not reuse baseline slot" >&2; exit 1; }
+[[ "$(partition_path "${IMAGE_ID}_${versions[1]}_r")" == "$base_root_path" ]] || { echo "Error: N+2 did not reuse baseline slot" >&2; exit 1; }
 reboot_guest
 verify_boot "${versions[1]}"
 
 install_update 2 yes
-[[ "$(partition_path "cayo_${versions[2]}_r")" == "$hop1_root_path" ]] || { echo "Error: N+3 did not reuse N+1 slot" >&2; exit 1; }
+[[ "$(partition_path "${IMAGE_ID}_${versions[2]}_r")" == "$hop1_root_path" ]] || { echo "Error: N+3 did not reuse N+1 slot" >&2; exit 1; }
 
 echo "Testing boot-count fallback from ${versions[2]} to ${versions[1]}"
-bad_root_path="$(partition_path "cayo_${versions[2]}_r")"
+bad_root_path="$(partition_path "${IMAGE_ID}_${versions[2]}_r")"
 vm_ssh "dd if=/dev/zero of='$bad_root_path' bs=4096 count=1 conv=fsync status=none"
 vm_ssh systemctl reboot || true
 for attempt in 1 2 3; do
@@ -312,6 +323,6 @@ done
 vm_start "$DISK_IMAGE"
 wait_for_ssh
 verify_boot "${versions[1]}"
-vm_ssh "test -e /boot/EFI/Linux/cayo_${versions[2]}+0-3.efi"
+vm_ssh "test -e /boot/EFI/Linux/${CHANNEL}_${versions[2]}+0-3.efi"
 
 echo "Native A/B full spike passed: $base_version -> ${versions[*]} -> fallback ${versions[1]}"

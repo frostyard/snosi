@@ -44,8 +44,17 @@ jobs:
       - name: Validate frozen native A/B contracts
         # docs/native-ab-contracts.md is the source of truth for native A/B
         # naming, paths, and policy; this is its executable form. No root,
-        # no network, no image build.
+        # no network, no image build. Also runs test/native-publish-test.sh
+        # internally (below is a standalone run for clearer CI attribution
+        # if only the publisher's naming drifts).
         run: ./test/native-ab-contracts-test.sh
+
+      - name: Validate native A/B publication naming pipeline
+        # shared/native-ab/publish/prepare-native-publication.sh turns
+        # mkosi's internal split outputs into the frozen public §4 names.
+        # Fixture GPT via truncate+sfdisk script mode -- no root, no
+        # network, no image build.
+        run: ./test/native-publish-test.sh
 
       - name: Validate native A/B publication guard
         # A profile literally named cayo-ab, snow-ab, or snowfield-ab is
