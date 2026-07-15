@@ -7,6 +7,12 @@
 # image /etc sits under the read-only composefs root, shadowed by the
 # writable /etc bind mount. A bind mount of / WITHOUT submounts exposes it.
 #
+# On native A/B images (marker /usr/lib/snosi/native-ab) the root is EROFS
+# and live /etc is an overlay whose lowerdir is /.etc.lower on that same
+# root; the bind-mount trick would expose /.etc.lower AND an empty /etc
+# mountpoint dir at <mnt>/etc, diffing against the wrong tree. Use
+# /.etc.lower directly instead — see resolve_pristine().
+#
 # Classes:
 #   M path   modified locally (content, permissions, or symlink target)
 #   D path   deleted locally (exists in the image, not in live /etc)
@@ -61,10 +67,47 @@ elif [[ ${#PATHS[@]} -gt 0 ]]; then
     [[ $MACHINE -eq 0 && $SHOW_ADDED -eq 0 ]] || usage
 fi
 
-[[ $EUID -eq 0 ]] || { echo "snosi-etc-diff: must run as root (bind-mounts /)" >&2; exit 1; }
+# Test hooks (undocumented in --help): when BOTH are set, detection is
+# bypassed entirely and the root requirement is relaxed so
+# test/snosi-etc-diff-test.sh can drive fixture trees as non-root.
+LIVE_ETC=/etc
+NATIVE_AB_MARKER=/usr/lib/snosi/native-ab
+
+# Resolve the pristine image /etc tree into $PRISTINE. On native A/B images
+# (marker present) the canonical pristine tree is /.etc.lower directly, no
+# mount needed. On bootc/composefs, bind-mount / (without submounts) so the
+# read-only pristine /etc hidden beneath the live /etc mount becomes
+# reachable; this installs an EXIT trap to unmount it.
+resolve_pristine() {
+    if [[ -e "$NATIVE_AB_MARKER" ]]; then
+        if [[ ! -d /.etc.lower ]]; then
+            echo "snosi-etc-diff: native A/B marker present but /.etc.lower is missing or not a directory" >&2
+            exit 1
+        fi
+        PRISTINE=/.etc.lower
+        return
+    fi
+    # NOT `local`: the EXIT trap invokes cleanup() after resolve_pristine()
+    # has already returned, so this must stay reachable as a script-global
+    # for the trap's dynamic scope lookup (a `local` here dies with "mnt:
+    # unbound variable" under set -u on every invocation).
+    mnt=$(mktemp -d /run/snosi-etc-diff.XXXXXX)
+    cleanup() { umount "$mnt" 2>/dev/null || true; rmdir "$mnt" 2>/dev/null || true; }
+    trap cleanup EXIT
+    mount --bind -o ro / "$mnt" 2>/dev/null || mount --bind / "$mnt"
+    PRISTINE="$mnt/etc"
+}
+
+if [[ -n "${SNOSI_ETC_DIFF_LIVE_ETC:-}" && -n "${SNOSI_ETC_DIFF_PRISTINE_ETC:-}" ]]; then
+    LIVE_ETC="$SNOSI_ETC_DIFF_LIVE_ETC"
+    PRISTINE="$SNOSI_ETC_DIFF_PRISTINE_ETC"
+else
+    [[ $EUID -eq 0 ]] || { echo "snosi-etc-diff: must run as root (bind-mounts /)" >&2; exit 1; }
+    resolve_pristine
+fi
 
 IGNORE_PATTERNS=()
-for f in /usr/lib/snosi/etc-diff.ignore /etc/snosi/etc-diff.ignore; do
+for f in /usr/lib/snosi/etc-diff.ignore "$LIVE_ETC/snosi/etc-diff.ignore"; do
     [[ -f "$f" ]] || continue
     while IFS= read -r line; do
         line="${line%%#*}"
@@ -82,12 +125,6 @@ ignored() { # relative path
     return 1
 }
 
-MNT=$(mktemp -d /run/snosi-etc-diff.XXXXXX)
-cleanup() { umount "$MNT" 2>/dev/null || true; rmdir "$MNT" 2>/dev/null || true; }
-trap cleanup EXIT
-mount --bind -o ro / "$MNT" 2>/dev/null || mount --bind / "$MNT"
-PRISTINE="$MNT/etc"
-
 # ---- path mode: show or restore explicitly named paths -------------------
 
 normalize() { # /etc/foo, etc/foo, foo, ./foo -> foo
@@ -100,7 +137,7 @@ normalize() { # /etc/foo, etc/foo, foo, ./foo -> foo
 }
 
 show_path() { # relative path; prints the actual difference
-    local p="$1" a="$PRISTINE/$1" b="/etc/$1"
+    local p="$1" a="$PRISTINE/$1" b="$LIVE_ETC/$1"
     if [[ ! -e "$a" && ! -L "$a" && ! -e "$b" && ! -L "$b" ]]; then
         echo "snosi-etc-diff: /etc/$p: not in the image or the live /etc" >&2
         return 1
@@ -146,7 +183,7 @@ show_path() { # relative path; prints the actual difference
 }
 
 restore_path() { # relative path; copies the pristine version over live /etc
-    local p="$1" a="$PRISTINE/$1" b="/etc/$1"
+    local p="$1" a="$PRISTINE/$1" b="$LIVE_ETC/$1"
     if [[ ! -e "$a" && ! -L "$a" ]]; then
         echo "snosi-etc-diff: /etc/$p: not in the image; remove it by hand if unwanted" >&2
         return 1
@@ -186,7 +223,7 @@ fi
 
 list_paths() { (cd "$1" && find . -mindepth 1 | LC_ALL=C sort | sed 's|^\./||'); }
 pristine_list=$(list_paths "$PRISTINE")
-live_list=$(list_paths /etc)
+live_list=$(list_paths "$LIVE_ETC")
 
 emit() { # class path
     if [[ $MACHINE -eq 1 ]]; then
@@ -218,7 +255,7 @@ fi
 while IFS= read -r p; do
     [[ -n "$p" ]] || continue
     ignored "$p" && continue
-    a="$PRISTINE/$p" b="/etc/$p"
+    a="$PRISTINE/$p" b="$LIVE_ETC/$p"
     if [[ -L "$a" || -L "$b" ]]; then
         [[ "$(readlink "$a" 2>/dev/null)" == "$(readlink "$b" 2>/dev/null)" ]] && continue
     elif [[ -f "$a" && -f "$b" ]]; then

@@ -33,10 +33,14 @@ mkosi configs use `Include=` directives to compose reusable fragments. The compo
 
 - `mkosi.conf` (root) declares base + sysext dependencies
 - `mkosi.images/` contains base image and sysext definitions
-- `mkosi.profiles/` defines desktop and server image variants (snow, snowfield, cayo — the app-bundling "loaded" variants were retired 2026-07 in favor of sysexts)
-- `shared/` contains reusable fragments: kernel configs, package sets, output format, scripts
+- `mkosi.profiles/` defines transport+kernel selector variants (snow, snowfield, cayo — the app-bundling "loaded" variants were retired 2026-07 in favor of sysexts; cayo-ab-raw and cayo-ab-secure are the native A/B prototypes, see below)
+- `shared/` contains reusable fragments: kernel configs, package sets, output format, scripts, and `shared/composition/` (per-product payload fragments, see below)
 
 Each profile composes: package sets + kernel variant + output format + build/postinstall/finalize/postoutput scripts.
+
+**Payload composition (`shared/composition/`):** `shared/composition/cayo/mkosi.conf` and `shared/composition/snow/mkosi.conf` are the single per-product definitions of ExtraTrees, PostInstallationScripts (dracut postinst, then the product postinst.chroot), BuildScripts (brew, plus snow's hotedge/logomenu/bazaar/surface-cert), the manifest PostOutputScript, the image FinalizeScript, and an `[Include]` of the product's package set. Every profile that ships that product's payload — bootc (`cayo`/`snow`/`snowfield`) and native (`cayo-ab-raw`/`cayo-ab-secure`) alike — `Include=`s the fragment instead of restating it, so the two transports cannot drift apart. Profiles themselves reduce to transport+kernel selectors: bootc profiles add `Include=shared/packages/bootc/mkosi.conf` (before the composition include, so `Packages=` accumulates in the same order as before the refactor) and `Include=shared/outformat/image/mkosi.conf`; native profiles never include the bootc packages fragment and instead include `shared/outformat/ab-root/mkosi.conf`. `cayo-ab-secure` keeps its own `disable-nvpcr.chroot` FinalizeScript directly in its `[Content]` section, positioned before its `[Include]` of `shared/composition/cayo/mkosi.conf`, so the resolved FinalizeScripts order stays disable-nvpcr -> image finalize -> ab-root finalize.
+
+**mkosi Include ordering matters for list settings:** mkosi accumulates list-valued settings (`Packages=`, `FinalizeScripts=`, `BuildScripts=`, etc.) across the whole resolved config in the order each `Include=` is textually encountered (recursing into included files at that point), not grouped by which file declared them. When refactoring composition, the arbiter is a byte-level diff of `mkosi cat-config`/`summary` output before and after — not a read of the source files. Two gotchas hit doing this: (1) `History=yes` (base `mkosi.conf`) caches the last-used `--profile` in `.mkosi-private/history/latest.json` (root-owned) and silently overrides `--profile` on every later invocation of read-only verbs like `cat-config` (prints "Ignoring --profile from the CLI"); `summary` has an explicit bypass for `-f`, but `cat-config` does not — `sudo rm -f .mkosi-private/history/latest.json` before capturing config snapshots. (2) `summary` output has three fields that are non-deterministic per invocation and must be normalized out of any diff: `Seed:` (fresh random UUID per run), `Prepare Scripts: /tmp/tmpXXXXXXXX/...mkosi-tools/mkosi.prepare` (random tools-tree extraction tmpdir), and `Image Version:` (defaults to the current wall-clock timestamp when unset) — none are derived from config content.
 
 Root `mkosi.conf` depends on `base` plus all sysexts so `mkosi build`/`just sysexts` produces the sysext publishing set. Profile configs must start with an empty `Dependencies=` assignment followed by `Dependencies=base`; mkosi appends collection settings, so the empty assignment is required to avoid rebuilding every sysext for each profile image build.
 
@@ -61,7 +65,7 @@ Scripts execute in order: **BuildScripts** (in chroot) -> **PostInstallationScri
 
 **Unit files must live in exactly ONE tree.** `shared/snow/tree` and `shared/cayo/tree` once carried byte-identical copies of base units (mount units, nbc-update-download); profile ExtraTrees overwrite base at image assembly, so a fix applied only to the base copy silently did not ship in any profile image (caught 2026-07-06: the nbc composefs gate). Base `mkosi.extra` is authoritative for shared units; profile trees carry only genuinely profile-specific files.
 
-**Drift visibility:** `snosi-etc-diff` (root CLI) diffs live `/etc` against the booted image's pristine `/etc` (bind-mounts `/` to see under the `/etc` mount — no `/usr/etc` exists on composefs), with ignore globs in `/usr/lib/snosi/etc-diff.ignore` (+ optional `/etc/snosi/etc-diff.ignore`) for expected per-machine state. Beyond the M/D/A path listing (which ends with a resolution footer), `snosi-etc-diff /etc/<path>` shows the actual difference (unified diff / symlink targets / permission lines) and `snosi-etc-diff --restore /etc/<path>` reverts a path to the image version (refuses locally-added paths — nothing to restore from). `snosi-etc-drift-report.service` writes M/D entries plus preset-policy removals to `/var/lib/snosi/etc-drift.report` each boot; a hash-gated user service (`snosi-etc-drift-notify`) raises one desktop notification per report *change* (not per boot), and `/etc/update-motd.d/85-snosi-etc-drift` surfaces it on headless logins. Keep the ignore list honest: entries that always drift (daemon-rewritten files) train users to dismiss the report.
+**Drift visibility:** `snosi-etc-diff` (root CLI) diffs live `/etc` against the booted image's pristine `/etc` (bind-mounts `/` to see under the `/etc` mount — no `/usr/etc` exists on composefs), with ignore globs in `/usr/lib/snosi/etc-diff.ignore` (+ optional `/etc/snosi/etc-diff.ignore`) for expected per-machine state. On native A/B images (marker `/usr/lib/snosi/native-ab`), root is EROFS and live `/etc` is an overlay whose lowerdir is `/.etc.lower` on that same root, so the bind-mount trick would expose `/.etc.lower` plus an empty `/etc` mountpoint dir; the script instead uses `/.etc.lower` directly as the pristine tree (no mount needed), and everything downstream — listing, path diff, restore — is identical between the two sources. Beyond the M/D/A path listing (which ends with a resolution footer), `snosi-etc-diff /etc/<path>` shows the actual difference (unified diff / symlink targets / permission lines) and `snosi-etc-diff --restore /etc/<path>` reverts a path to the image version (refuses locally-added paths — nothing to restore from). `snosi-etc-drift-report.service` writes M/D entries plus preset-policy removals to `/var/lib/snosi/etc-drift.report` each boot; a hash-gated user service (`snosi-etc-drift-notify`) raises one desktop notification per report *change* (not per boot), and `/etc/update-motd.d/85-snosi-etc-drift` surfaces it on headless logins. Keep the ignore list honest: entries that always drift (daemon-rewritten files) train users to dismiss the report.
 
 ### OS Update Staging (bootc)
 
@@ -76,6 +80,275 @@ bootc and ostree install as regular APT packages (`bootc`, `libostree-1-1` — t
 - **Runtime libs:** the debs declare only a partial `Depends` list; base `Packages=` keeps the full set of runtime link deps explicit (`libfuse3-4`, `libsoup-3.0-0`, `liblzma5`, etc.) — do not remove them just because apt doesn't demand them.
 - **History:** until 2026-07 these were compiled from source during the base image build (`shared/bootc/build/bootc.chroot` + stub-deb dpkg registration); that machinery is gone.
 
+### Native A/B Prototype
+
+Naming, path, and policy contracts for the eventual production native A/B
+products (`cayo-ab`, `snow-ab`, `snowfield-ab`) are frozen in
+`docs/native-ab-contracts.md` and enforced statically by
+`test/native-ab-contracts-test.sh`. Read that document before adding or
+renaming anything under the native A/B tree — it is the source of truth, not
+this section. Known deviations of the current prototype from the frozen
+contract are tracked in `test/native-ab-contracts-allow.txt`, not silently
+carried forward. `check-native-publication-guard.sh` (wired into
+`validate.yml`) is the standalone static gate for the contract's §15
+publication guard: it requires every profile literally named `cayo-ab`,
+`snow-ab`, or `snowfield-ab` to carry shim/Secure Boot/PCR-signing markers,
+an NvPCR-disable finalize reference, the ab-root outformat include, the
+committed update pubring, and no final-root `KernelModules=` filter, and it
+hard-fails if `cayo-ab-raw` ever picks up a publication marker. It passes
+today only because no profile is yet named `cayo-ab`, `snow-ab`, or
+`snowfield-ab` — read the script's header before adding one.
+
+`mkosi.profiles/cayo-ab-raw` (renamed from `cayo-ab` in Phase 1; `Output=`
+changed to match, `ImageId=cayo` unchanged) is an isolated experimental disk
+profile, a permanent, never-published dev fixture per
+`docs/native-ab-contracts.md` §1 — the name `cayo-ab` is reserved for the
+eventual secure production posture. Its initrd
+must mount persistent `var` and overlay `/etc` before switch-root; never add a
+host system-service fallback. The image ships `machine-id=uninitialized`, and
+first boot commits a unique ID into the overlay upperdir. The installer grows
+only the final ext4 `var` partition. OS transfers are mandatory, UUID-bearing,
+and `Verify=yes`; do not enable `systemd-sysupdate.timer` until a dedicated
+`/usr/lib/systemd/import-pubring.gpg` and signed publication pipeline exist.
+Partition payloads must use XZ: Debian's systemd 257 `systemd-pull` does not
+decode Zstandard URL payloads and writes them compressed into the target slot.
+Partition transfers must reset `PartitionFlags=0` before applying `ReadOnly=yes`.
+The kernel postinstall exports its dracut archive to
+`$ARTIFACTDIR/io.mkosi.initrd`; `Initrds=` and `KernelModulesInitrd=no` prevent
+mkosi from silently embedding an unrelated default initrd instead. The custom
+dracut module depends on `systemd-veritysetup` so the UKI `roothash` creates the
+verified root before the overlay service runs. Until signed publication is
+available, the image finalizer masks both sysupdate timers in `/etc`: initrd PID
+1 starts before real-root preset policy is visible, so a preset alone cannot
+reliably prevent first-boot timer enablement. Manual sysupdate remains available.
+GPT partition labels for the dynamic root/verity slots are `<ImageId>_<version>_r`
+and `<ImageId>_<version>_v` (`docs/native-ab-contracts.md` §3; shortened from the
+prototype's original `_root`/`_root_verity` suffixes in Phase 1 to stay under the
+30-code-unit ceiling at the frozen 14-digit version length) — set in
+`shared/outformat/ab-root/mkosi.repart/{10-root-verity,11-root}.conf` and matched
+by the `Target MatchPattern=` in the corresponding `*.transfer` files. Native
+images must never run the legacy bootc or nbc update machinery: the base image
+ships `bootc-update-stage.timer`/`.service`, `nbc-update-download.timer`/`.service`,
+and the user-scope `bootc-update-notify.path`/`.service` unconditionally (shared
+with the bootc profiles), so `shared/outformat/ab-root/tree/usr/lib/systemd/{system,user}/`
+masks each one with a same-named `/dev/null` symlink — the same mechanism used for
+`systemd-growfs-root.service`. Upstream's own `bootc-fetch-apply-updates.*` ships
+inside the `bootc` deb itself, which native profiles never install, so those two
+units need no mask. `test/native-ab-static-test.sh` asserts every mask exists.
+`test/native-ab-update-test.sh` validates N to N+1 to N+2 to N+3 with four real
+mkosi builds: signed-manifest acceptance/rejection, missing UKI/verity and bad
+checksum rejection, inactive-slot reuse, dm-verity boot, explicit rollback,
+boot-count fallback from a corrupted unblessed update, and `/var` plus `/etc`
+persistence.
+
+`test/native-ab-components-test.sh` is the Phase 1 exit-criterion QEMU test: it
+builds two real `cayo-ab-raw` versions itself, boots N, and asserts no failed
+systemd units and the bootc/nbc/systemd-sysupdate masks from above; that
+`/usr/lib/sysupdate.d/` contains only the three OS transfers (no `.feature`
+files) while `systemd-sysupdate components` enumerates all 17 shipped sysext
+components; that two independently versioned ad hoc test components
+(`testa`/`testb`, created under `/etc/sysupdate.<name>.d/`) update via
+`--component=` without touching OS partitions, the ESP, or each other's
+version; that an unqualified N to N+1 OS update succeeds with both test
+components still enabled and `/var/lib/extensions.d` untouched; and that
+`snosi-etc-diff`/`snosi-etc-drift-report.service` correctly report, diff, and
+restore live `/etc` drift against `/.etc.lower` with no leftover bind mounts.
+It caught a real bug: the `KernelModules=` allowlist below excluded
+`nf_tables`/`nfnetlink`, so the base image's unconditionally-shipped,
+preset-enabled `nftables.service` failed on every native A/B boot
+("Unable to initialize Netlink socket: Protocol not supported") — fixed by
+adding both modules to the allowlist.
+
+`mkosi.profiles/cayo-ab-secure` is the security spike. Standard Secure Boot
+uses Debian's Microsoft-signed shim and MOK-signed systemd-boot; generated snosi
+UKIs are signed by `mkosi.key`/`mkosi.crt` and require one-time enrollment of
+that certificate through shim's MokManager. GRUB is unsuitable because its
+generated configuration hard-codes the build-time UKI and ignores sysupdate's
+Type #2 entries and boot counters. Never use mkosi Secure Boot auto-enroll,
+UEFI setup mode, or custom firmware db keys for this path. The installer creates
+LUKS2 `/var` per machine after expanding the final partition; never publish a
+pre-encrypted `/var`, which would clone LUKS metadata and key material. Always
+retain a recovery passphrase outside the installed disk. TPM enrollment uses
+the signed PCR 11 policy key with an empty raw-PCR set and explicitly disables
+automatic pcrlock policy selection. Do not bind PCR 7 in the
+installer: its Debian-signed boot authority differs from the installed
+MOK-signed UKI, so the value changes before first boot. A raw PCR 11 value would
+break each A/B update. The initrd explicitly detects LUKS and invokes
+`systemd-cryptsetup attach`; GPT auto-discovery does not unlock `var` during this
+dracut phase. Raw ext4 remains only for the baseline spike. LUKS2 creation,
+MOK enrollment, enforced Secure Boot, TPM auto-unlock, TPM replacement failure,
+recovery unlock, and PCR signing-key rotation are validated in Incus. Update,
+rollback, and boot-count fallback are also validated end to end with the sole
+new-key TPM token. The secure profile upgrades the complete systemd family to
+Forky 261+ through a profile-only, low-priority APT source; never expose that
+source to the base or normal profiles, and keep all exact-version systemd
+libraries and companion packages qualified together.
+Do not implement signing-key overlap as two independent TPM tokens. A controlled
+systemd 261.1 test continued from a raw-PCR-mismatched token 0 to token 1, but a
+real signed-policy key mismatch returned `ENXIO` and stopped before token 1. The
+validated rotation sequence uses a transition UKI whose PCR 11 policies are
+signed by both keys while `.pcrpkey` contains the new key. Archive the old private
+key under `.snosi-private/history/`, make the new key active, and set
+`PCR_SIGNING_KEY_PREVIOUS` to the old key's filename for transition builds. Keep
+the old TPM token until every supported rollback UKI contains the new signature;
+then remove it and verify the same transition UKI unlocks with the new token.
+Validate each secure build with
+`test/native-ab-secure-artifact-test.sh`, which checks root-package coherence,
+the initrd's private systemd library and TPM token plugin, and UKI PCR sections.
+When given the old certificate and new public key, it also requires eight PCR
+signatures: four policies signed once by each key, with the new key in `.pcrpkey`.
+`test/native-ab-secure-artifact-negative-test.sh` mutates those sections and
+requires rejection. `test/native-ab-secure-rotation-test.sh` is the destructive
+runtime proof for an already MOK-enrolled disposable VM. It requires `--yes`, an
+exact machine ID, a working external recovery key, and root SSH. It uses
+guest-local `systemd-sysupdate` with a verified ephemeral signed manifest,
+establishes old-only and new-only TPM states, and requires two unattended boots
+of the identical transition UKI. Never point it at a production host. It
+intentionally does not automate MokManager or VM creation, and N-through-N+3
+rollback/fallback is validated separately by
+`test/native-ab-secure-update-test.sh`. That destructive harness requires
+N+1/N+2 dual-signed artifacts, an N+3 new-only artifact, exact machine and Incus
+instance identities, and the external recovery key. It verifies alternating
+slots, sole-new-key unlock, explicit rollback, re-arms the successfully tested
+N+3 entry as `+3-0`, corrupts its root, observes three emergency boots, and
+requires automatic N+2 fallback plus the exhausted `+0-3` entry.
+A clean secure-profile build is
+validated: its ESP contains Debian-signed shim, MokManager, and MOK-signed
+systemd-boot, and its MOK-signed UKI contains `.pcrpkey` and `.pcrsig`. In pinned mkosi,
+`UnifiedKernelImages=unsigned` means build locally; `SecureBoot=yes` still signs
+the result. Setting it to `signed` incorrectly requests a distro-prebuilt UKI.
+Never store durable keys or retained test artifacts under `.mkosi-private`:
+mkosi owns that directory and `mkosi clean -ff` removes it. Use the gitignored
+`.snosi-private` directory.
+
+Systemd 261 NvPCR anchor credentials embed the PCR signing public key and have
+no supported migration operation. A dual-signed transition can read an old
+anchor, but a new-only UKI then fails `systemd-tpm2-setup`, `systemd-pcrproduct`,
+and `systemd-pcrlogin` with `ENXIO`. The secure profile does not consume NvPCR
+attestation, so `shared/cayo-ab-secure/finalize/disable-nvpcr.chroot` masks every
+shipped NvPCR definition plus the product/login writers. Keep TPM SRK setup and
+the signed-PCR-11 LUKS path enabled. Do not delete/recreate the anchor or TPM NV
+indexes as a key-rotation shortcut; that changes the attestation baseline.
+
+**Accepted risk — unsigned sysexts on native installs:** native production
+candidates (`cayo-ab`, `snow-ab`, `snowfield-ab`) ship every sysext transfer
+with `Verify=false` and every sysext `.feature` defaulting to `Enabled=false`.
+Unlike the three OS transfers (`Verify=yes`, signed-manifest enforced), sysext
+downloads are not currently signature-verified. This is an explicit accepted
+risk until signed per-component metadata ships for sysexts — do not flip any
+sysext `.feature` to `Enabled=true` by default on a native production
+candidate before that lands.
+
+**Release-ordering constraint (sysext component migration):** as of the
+migration that split the shared `/usr/lib/sysupdate.d/` target into
+per-sysext `/usr/lib/sysupdate.<name>.d/` components (see "Sysext
+Constraints" below), base images built from this tree must not be
+merged/published until a `frostyard-updex` release with component discovery
+(`feat/sysupdate-components`) is published to the Frostyard APT repo — an
+older updex binary cannot discover component-scoped sysexts, silently
+dropping every sysext from update offers.
+
+### Native `/var` Factory State
+
+The native installer creates a fresh per-machine `/var`; nothing written to
+image `/var` at build time survives an install (see the disk-layout note in
+"Native A/B Prototype" above). This applies just as much to `cayo`/`snow`/
+`snowfield` bootc images: repart's `11-root.conf`/`21-root-empty.conf`
+(`ExcludeFilesTarget=/var/`) and `30-var.conf` (no `CopyFiles=`) mean the
+disk image's `var` partition ships EMPTY from the build itself — the
+installer doesn't need to wipe anything, there is nothing there to begin
+with. Two build-time mechanisms cover this:
+
+**A. The `/var` inventory audit** (`shared/composition/var-audit.finalize`,
+a non-chroot `FinalizeScript` — it runs on the host and reads `$BUILDROOT`,
+`$SRCDIR`, `$IMAGE_ID` directly, no `mkosi-chroot` needed) walks every file,
+symlink, and EMPTY directory under `$BUILDROOT/var` at the end of the
+build (non-empty directories are represented by their contents, not
+themselves) and classifies each against a per-product outcome map:
+`shared/composition/cayo/var-outcomes.txt` (used by `cayo` bootc AND
+`cayo-ab-raw`/`cayo-ab-secure` native, since they share
+`shared/composition/cayo/mkosi.conf`) and `shared/composition/
+snow/var-outcomes.txt` (used by `snow` and `snowfield`, both bootc — no
+native snow/snowfield profile exists yet). Map format: `<glob><TAB><outcome>`
+per line, `#` comments, outcome one of:
+
+- `image-metadata` — belongs to the immutable root (the dpkg database is
+  the only current example; see B below).
+- `tmpfiles` — a shipped `/usr/lib/tmpfiles.d/*.conf` rule recreates this
+  path (directory or symlink) on every boot.
+- `discard` — build residue, deliberately lost (caches, logs, machine
+  state, dpkg/apt/ucf/deb-systemd-helper bookkeeping, package-trigger
+  scratch state).
+- `installer-seed` — written by the installer after `mkfs` (none yet).
+
+The audit FAILS the build on any unclassified path (with the full list) or
+any map glob that matched nothing in that build ("stale" — keeps the map
+from silently drifting from reality), and on success writes `usr/share/
+snosi/var-inventory.txt` (`<outcome>\t/var/<path>`, sorted) into the image.
+Wired as the LAST `FinalizeScripts=` entry in
+`shared/composition/{cayo,snow}/mkosi.conf`, after the shared image
+finalize (`shared/outformat/image/finalize/mkosi.finalize.chroot`, which
+does the dpkg relocation below) — verified via `mkosi --profile <p>
+summary` that this resolves to `[image finalize.chroot, var-audit.finalize,
+ab-root finalize.chroot]` for native profiles; `shared/outformat/ab-root/
+finalize/mkosi.finalize.chroot` runs after the audit but never touches
+`/var` (only `/etc`), so the ordering is safe.
+
+**Updating a map when a package adds new `/var` state:** a build failure
+lists every unclassified path. Classify each: if a shipped tmpfiles rule
+already creates it (check the actually-built image's `/usr/lib/tmpfiles.d/`,
+not just this repo's hand-authored overlay — most of a Trixie desktop's
+tmpfiles rules are package-shipped, e.g. `dbus.conf`, `colord.conf`),
+outcome is `tmpfiles`; otherwise default to `discard` with a one-line
+comment UNLESS a booted system plainly needs it (chase it to a tmpfiles fix
+or flag it, don't silently discard). List more specific globs before
+broader ones matching the same subtree — the audit classifies by the FIRST
+matching glob, top to bottom, and only that glob counts as "used" for the
+stale check. A path that can appear in two structurally different shapes
+across builds (see the dpkg example below) needs ONE glob with a bare `*`
+covering both shapes, not two separate globs — with two globs, whichever
+shape didn't occur in a given build makes the other glob spuriously
+"stale" and fails that build. **Known flagged gap, not yet fixed:**
+`/var/lib/aspell/*.rws` (compiled English dictionaries) are generated by
+the `aspell-autobuildhash` dpkg trigger at package-configure time, are NOT
+dpkg-tracked (confirmed via `dpkg -L aspell-en`), and are currently
+classified `discard` — spell-checking silently loses its dictionaries on a
+native install. Needs the same relocate-at-build-time treatment as B below,
+or a first-boot regeneration unit.
+
+**B. dpkg database relocation (native only).** The native-gated block in
+`shared/outformat/image/finalize/mkosi.finalize.chroot` (guarded by the
+same `/usr/lib/snosi/native-ab` marker as the sysupdate-timer masking
+above) moves `/var/lib/dpkg` to `/usr/lib/sysimage/dpkg` and leaves a
+RELATIVE symlink (`../../usr/lib/sysimage/dpkg`) in its place, BEFORE the
+audit runs. `mkosi`'s own package-manifest generation
+(`manifest.record_packages()` → `dpkg-query --admindir=$BUILDROOT/var/lib/
+dpkg`) runs earlier in the build, before any `FinalizeScripts` execute, so
+the relocation never affects the generated package manifest. A matching
+native-only tmpfiles rule, `shared/outformat/ab-root/tree/usr/lib/
+tmpfiles.d/00-snosi-dpkg.conf`, recreates the same symlink on a fresh
+installer-created `/var`. **The `00-` filename prefix is load-bearing**:
+apt's own shipped tmpfiles rule (`apt.conf`) also creates `/var/lib/dpkg` as
+a plain directory, and `tmpfiles.d(5)` resolves same-path conflicts across
+files by lexicographic filename order (earliest-named file's line wins,
+the rest are logged as harmless "duplicate" errors, not a boot failure —
+verified locally with `systemd-tmpfiles --create --root=<scratch>`);
+renaming this file changes which one wins. bootc images (`cayo`, `snow`,
+`snowfield`) are unaffected: the relocation only runs when
+`/usr/lib/snosi/native-ab` exists, so their real `/var/lib/dpkg` ships
+unchanged, same as before this change — verified directly on a built
+`snow` image (`var/lib/dpkg` is a real, populated directory there, not a
+symlink). This is also why the outcome maps need a single `lib/dpkg*`
+glob rather than separate exact/subtree globs: the SAME map file classifies
+both the native relocation-symlink shape and the bootc real-directory
+shape, in different builds.
+
+`test/native-ab-components-test.sh`'s "Step 1.5: factory /var" block
+verifies all of this on a booted native image: the dpkg symlink's exact
+target, `dpkg-query -W systemd`/`dpkg-query -W 'linux-image-*'` both
+resolving, `usr/share/snosi/var-inventory.txt` present with at least one
+`image-metadata` line, and no new failed units.
+
 ### Sysext Constraints
 
 Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var` at runtime. Configs needed in `/etc` must be:
@@ -83,7 +356,7 @@ Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var`
 1. Captured to `/usr/share/factory/etc` during build (via `mkosi.finalize`) — capture ONLY the specific paths the sysext's tmpfiles rules reference, never all of `/etc` (the buildroot `/etc` is the merged base view; a full capture ships `/etc/shadow` and SSH host keys in the published sysext)
 2. Injected at boot via systemd-tmpfiles
 
-Every sysext must have matching `<name>.transfer` and `<name>.feature` files in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`. The `.transfer` file defines how systemd-sysupdate downloads the sysext; the `.feature` file provides metadata and defaults to `Enabled=false`. Use existing files as templates.
+Every sysext must have matching `<name>.transfer` and `<name>.feature` files in their own component directory, `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/`. The `.transfer` file defines how systemd-sysupdate downloads the sysext; the `.feature` file provides metadata and defaults to `Enabled=false`. Use an existing component directory as a template. **Do not add sysext transfer/feature files to the shared `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/` target** — that directory is reserved for native-profile OS transfers only (see "Native A/B Prototype" below); systemd-sysupdate version-locks every enabled transfer sharing one definitions directory, so mixing sysext package versions into the OS transfer's directory would corrupt OS version resolution. **Release-ordering constraint:** this per-component layout requires component discovery support in `frostyard-updex` (landed upstream on branch `feat/sysupdate-components`); do not publish base images built after this migration until a frostyard-updex release with component discovery is available in the Frostyard APT repo — an older updex cannot discover component-scoped sysexts and every sysext update would silently stop being offered.
 
 **Service activation in sysexts:** Do NOT rely on `WantedBy=multi-user.target` + preset alone. At boot, the sysext is not yet merged when PID 1 scans units — the `.wants/` symlink is dangling and silently dropped. Always ship a `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` drop-in inside the sysext with `[Unit]\nUpholds=<name>.service`. This drop-in is new to systemd after the post-merge daemon-reload, so activation fires correctly. The preset is still required for enabled state; the drop-in handles timing.
 
@@ -127,7 +400,7 @@ The target (e.g. `gnome-session.target`) comes from the service's `WantedBy=` in
 - `build-images.yml` - Matrix build of 3 profiles (2 desktop + 1 server), resetting mkosi dependencies to `base` so sysexts are not rebuilt per profile. Pushes OCI to ghcr.io, generates SBOMs (Syft), attaches via ORAS, signs with Cosign (public key committed at `cosign.pub`; `test-install.yml` verifies it before tests). A non-blocking `release` job runs after the matrix on main-branch pushes and creates a GitHub Release whose body is a changelog generated by `frostyard/changelog-generator` diffing the new `snow` image against the previously published one.
 - `check-dependencies.yml` - Weekly check for external dependency updates, creates PRs with updated checksums. Version-based checks are downgrade-guarded (`ver_gt`, sort -V strictly-newer) — coder deliberately tracks its stable channel (GitHub "latest"), whose version numbers run behind mainline
 - `check-packages.yml` - Daily check for APT package version updates, creates PRs
-- `validate.yml` - shellcheck + runtime-/etc-guard (`check-runtime-etc-guard.sh`) + mkosi summary validation on PRs
+- `validate.yml` - shellcheck + runtime-/etc-guard (`check-runtime-etc-guard.sh`) + native A/B static/contracts/publication-guard checks + mkosi summary validation on PRs
 - `test-install.yml` - Manual bootc installation test in QEMU/KVM
 - `scorecard.yml` - Weekly OpenSSF supply-chain security analysis
 ## Documentation

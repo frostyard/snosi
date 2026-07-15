@@ -38,6 +38,28 @@ jobs:
             git ls-files | xargs awk 'FNR==1 && /^#!\/(usr\/)?bin\/(env )?(ba)?sh/ {print FILENAME} {nextfile}' 2>/dev/null
           } | grep -v '^saved-unused/' | sort -u | xargs -r shellcheck -S warning -x
 
+      - name: Validate native A/B invariants
+        run: ./test/native-ab-static-test.sh
+
+      - name: Validate frozen native A/B contracts
+        # docs/native-ab-contracts.md is the source of truth for native A/B
+        # naming, paths, and policy; this is its executable form. No root,
+        # no network, no image build.
+        run: ./test/native-ab-contracts-test.sh
+
+      - name: Validate native A/B publication guard
+        # A profile literally named cayo-ab, snow-ab, or snowfield-ab is
+        # production-facing (docs/native-ab-contracts.md §15) and must never
+        # be publishable without shim/Secure Boot/PCR signing/NvPCR/pubring
+        # markers; the raw dev fixture must never gain them either.
+        run: ./check-native-publication-guard.sh
+
+      - name: Validate snosi-etc-diff drift tooling
+        # Static, non-root regression test driving the real script against
+        # fixture trees via its SNOSI_ETC_DIFF_LIVE_ETC/PRISTINE_ETC test
+        # hooks. No root, no bind mount, no image build.
+        run: ./test/snosi-etc-diff-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:

@@ -1,0 +1,14 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+set -euo pipefail
+
+# systemd 261 cannot migrate its NvPCR anchor credential between PCR signing
+# keys. The secure profile does not consume NvPCR attestation, so keep SRK and
+# signed-PCR LUKS support while disabling the stale-anchor consumers.
+mkdir -p /etc/nvpcr /etc/systemd/system
+for definition in /usr/lib/nvpcr/*.nvpcr; do
+    [[ -e "$definition" ]] || continue
+    ln -sfn /dev/null "/etc/nvpcr/${definition##*/}"
+done
+ln -sfn /dev/null /etc/systemd/system/systemd-pcrproduct.service
+ln -sfn /dev/null /etc/systemd/system/systemd-pcrlogin@.service

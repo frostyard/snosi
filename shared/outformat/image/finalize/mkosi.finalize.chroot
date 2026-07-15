@@ -5,19 +5,13 @@ set -euo pipefail
 echo "::group::Executing finalize"
 trap 'echo "::endgroup::"' EXIT
 
-# Clean folders for bootc — this runs chrooted into the image being built,
-# not on a host; deleting these top-level dirs is the point.
-# shellcheck disable=SC2114
-rm -rf \
-  /boot \
-  /home \
-  /root \
-  /srv
-
-mkdir /boot
-mkdir /root
-mkdir /home
-mkdir /srv
+# Directory-image outputs are cleaned before bootc packaging. Native disk
+# images preserve the ESP staging tree and their repart-owned mountpoints.
+if [[ ! -e /usr/lib/snosi/native-ab ]]; then
+  # shellcheck disable=SC2114
+  rm -rf /boot /home /root /srv
+  mkdir /boot /root /home /srv
+fi
 mkdir /sysroot
 
 # Create /nix as an empty mountpoint for the nix sysext bind-mount
@@ -31,6 +25,37 @@ mkdir -p /nix
 # missing machine-id is "uninitialized" too; the old `touch` overrode it).
 rm -f /etc/machine-id
 echo "uninitialized" > /etc/machine-id
+
+# Native A/B publication is not signed yet. Keep unattended sysupdate masked
+# even on first boot, where initrd PID 1 may apply presets before the real-root
+# preset policy is visible. Administrators can still run systemd-sysupdate
+# manually, or explicitly unmask the timers in the persistent /etc overlay.
+if [[ -e /usr/lib/snosi/native-ab ]]; then
+  ln -sf /dev/null /etc/systemd/system/systemd-sysupdate.timer
+  ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-reboot.timer
+fi
+
+# Native /var factory state: the installer creates a fresh per-machine /var,
+# so nothing written to image /var at build time survives (see CLAUDE.md
+# "Native A/B Prototype" and docs/plans/2026-07-14-.../"Native /var Factory
+# State"). Package identity (the dpkg database) belongs to the immutable
+# root instead: relocate it to /usr/lib/sysimage/dpkg and leave a RELATIVE
+# symlink at /var/lib/dpkg so `dpkg-query`/`dpkg -l` keep working against
+# the currently booted image (and naturally change across A/B roots). The
+# symlink is relative (not absolute) so out-of-chroot consumers that resolve
+# it against a different root prefix (e.g. mkosi's own manifest generation,
+# which runs `dpkg-query --admindir=$BUILDROOT/var/lib/dpkg` from the host
+# BEFORE finalize scripts run, so it is unaffected by this move) still
+# resolve correctly if ever read relative to a prefix other than /.
+# bootc images are explicitly unchanged: real /var/lib/dpkg ships as today,
+# since bootc's ostree-managed /var is not wiped fresh on every install the
+# way the native installer's /var is.
+if [[ -e /usr/lib/snosi/native-ab ]]; then
+  mkdir -p /usr/lib/sysimage
+  rm -rf /usr/lib/sysimage/dpkg
+  mv /var/lib/dpkg /usr/lib/sysimage/dpkg
+  ln -sf ../../usr/lib/sysimage/dpkg /var/lib/dpkg
+fi
 
 # Ship no unit enablement symlinks in /etc. mkosi ran `systemctl preset-all`
 # (and `--global preset-all`) just before this script; PID 1 re-applies the
@@ -122,6 +147,9 @@ if command -v dconf >/dev/null 2>&1; then
     dconf update
 fi
 
+# Compute chunkah metadata only for directory-image outputs.
+if [[ ! -e /usr/lib/snosi/native-ab ]]; then
+
 # Compute an update-interval bucket for a deb package from its changelog.
 # Prints one of: daily, weekly, biweekly, monthly, quarterly, yearly.
 get_update_bucket() {
@@ -209,3 +237,5 @@ dpkg-query -W -f='${Package}\n' | while read -r pkgname; do
     fi
   done
 done
+
+fi

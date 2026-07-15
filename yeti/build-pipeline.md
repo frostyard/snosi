@@ -8,6 +8,14 @@ Each image build runs four phases of scripts sequentially:
 
 Download and install items not available as Debian packages. These run inside the chroot with network access.
 
+Per-product BuildScripts/PostInstallationScripts/FinalizeScripts/PostOutputScripts
+live in `shared/composition/<product>/mkosi.conf` (`shared/composition/cayo`,
+`shared/composition/snow`) and are `Include=`d by every profile that ships that
+product's payload — the bootc profile (`cayo`/`snow`/`snowfield`) and the native
+A/B prototypes (`cayo-ab-raw`, `cayo-ab-secure`) alike — so the two transports
+cannot drift apart. See CLAUDE.md "Configuration Composition" for the ordering
+rules that apply when editing these fragments.
+
 **All profiles (shared):**
 
 | Script | Location | Purpose |
@@ -32,7 +40,7 @@ bootc and ostree install as regular APT packages from the Frostyard repository (
 - **Runtime lib pinning:** the debs declare only a partial `Depends` list; base `Packages=` keeps the full set of runtime link deps explicit (`libfuse3-4`, `libsoup-3.0-0`, `liblzma5`, `libzstd1`, `libmount1`, `libselinux1`, `libcom-err2`, `libext2fs2t64`, plus the declared ones). Do not remove them from `Packages=` just because apt does not demand them.
 - **History (until 2026-07):** both were compiled from source during the base image build via `shared/bootc/build/bootc.chroot` (BuildScript + `BuildPackages=` overlay deps + rustup toolchain + ostree double-install + stub-deb dpkg registration in `shared/bootc/postinst/bootc-register.chroot`). All of that machinery was removed when the deb path landed; see git history if the in-tree build ever needs resurrecting.
 
-**Server profile (cayo):** Only `brew.chroot` (no desktop build scripts).
+**Server payload (cayo, cayo-ab-raw, cayo-ab-secure):** Only `brew.chroot` (no desktop build scripts) — all three consume it via `shared/composition/cayo/mkosi.conf`.
 
 ### 2. PostInstallationScripts (after packages)
 
@@ -197,6 +205,10 @@ Config sanity check used by `validate.yml`. It runs `mkosi -f --profile <profile
 
 Runtime payload guard used by `validate.yml`. It scans tracked files in `mkosi.extra/` and `shared/**/tree/` for guest-side service enablement mutations (`systemctl enable/disable/revert/unmask/preset`, `deb-systemd-helper`) and deletion/rename patterns targeting `/etc`. Build-time scripts are intentionally outside the scan because build-time enablement is the correct way to define image service state.
 
+### check-native-publication-guard.sh
+
+Static publication guard used by `validate.yml`, enforcing `docs/native-ab-contracts.md` §15. For every `mkosi.profiles/<name>` directory literally named `cayo-ab`, `snow-ab`, or `snowfield-ab` (the production native profile names), it requires the profile's `mkosi.conf` (plus `shared/native-ab-secure/**` content, if the conf references that path) to carry `ShimBootloader=signed`, `SecureBoot=yes`, `SignExpectedPcr=yes`, a reference to the NvPCR-disable finalize script, an include of the ab-root outformat fragment, and the committed update pubring at `shared/native-ab/keys/import-pubring.gpg`; it also requires the profile's own conf to carry no `KernelModules=` final-root filter. If no profile with a production name exists yet, it exits 0 with a note. Independently, it hard-fails if `mkosi.profiles/cayo-ab-raw` — the permanent, never-published raw dev fixture — ever picks up any of the Shim/SecureBoot/SignExpectedPcr markers, since that would make it indistinguishable from a production profile.
+
 **CI usage in build.yml:**
 ```bash
 ./check-duplicate-packages.sh    # Validate
@@ -338,7 +350,7 @@ Server configuration overlay:
 
 ## /etc Drift Tooling and Preset Reconciliation (base mkosi.extra)
 
-- `usr/bin/snosi-etc-diff` — root CLI; bind-mounts `/` (submount-free) to reach the pristine composefs image `/etc` under the writable `/etc` bind mount, then reports `M`(odified)/`D`(eleted) — and `A`(dded) with `--added` — relative to it. `--machine` emits tab-separated lines. With explicit `PATH...` arguments it shows the *actual* difference (unified diff for regular files, symlink targets, permission/ownership lines; ignore globs do not apply), and `--restore PATH...` copies the pristine image version back over the live `/etc` (content+perms+ownership; refuses paths the image doesn't ship and live-dir/image-file type mismatches). The human list mode ends with a resolution footer (inspect / accept-via-ignore / revert) so the report is actionable, not just a path list. Ignore globs: `usr/lib/snosi/etc-diff.ignore` (image defaults, tuned against a live install) plus optional `/etc/snosi/etc-diff.ignore`.
+- `usr/bin/snosi-etc-diff` — root CLI; resolves the pristine image `/etc` tree via `resolve_pristine()`, which branches on the native A/B marker `/usr/lib/snosi/native-ab`: on bootc/composefs it bind-mounts `/` (submount-free) to reach the pristine image `/etc` hidden under the writable `/etc` bind mount; on native A/B it uses `/.etc.lower` directly (the EROFS root's canonical pristine tree — live `/etc` there is an overlay whose lowerdir *is* `/.etc.lower`, so the bind-mount trick would instead expose `/.etc.lower` plus an empty `/etc` mountpoint dir and misreport the entire lower tree as drift; fails loudly if the marker is present but `/.etc.lower` is missing/not-a-directory). Everything downstream — list/diff/restore — reads from `$PRISTINE` and is identical between the two sources. Then reports `M`(odified)/`D`(eleted) — and `A`(dded) with `--added` — relative to it. `--machine` emits tab-separated lines. With explicit `PATH...` arguments it shows the *actual* difference (unified diff for regular files, symlink targets, permission/ownership lines; ignore globs do not apply), and `--restore PATH...` copies the pristine image version back over the live `/etc` (content+perms+ownership; refuses paths the image doesn't ship and live-dir/image-file type mismatches). The human list mode ends with a resolution footer (inspect / accept-via-ignore / revert) so the report is actionable, not just a path list. Ignore globs: `usr/lib/snosi/etc-diff.ignore` (image defaults, tuned against a live install) plus optional `/etc/snosi/etc-diff.ignore` (this optional path is read as `$LIVE_ETC/snosi/etc-diff.ignore`, so it resolves correctly under test hooks too); reviewed for native A/B (2026-07-14) — no composefs-specific globs exist to remove, and the overlay's upper/work dirs live under `/var/lib/snosi/etc-overlay`, not `/etc`, so nothing new needs ignoring. `SNOSI_ETC_DIFF_LIVE_ETC`/`SNOSI_ETC_DIFF_PRISTINE_ETC` (undocumented in `--help`) are test hooks: setting BOTH bypasses detection entirely and relaxes the `EUID==0` requirement, letting `test/snosi-etc-diff-test.sh` drive fixture trees non-root, no bind mount, no image build.
 - `preset-reconcile.service` → `usr/libexec/preset-reconcile` — closes the "new image preset policy never reaches existing installs" gap: diffs the image's enablement manifest against `/var/lib/snosi/enablement-manifest.applied`; entries ADDED to policy are preset (creates-only; masked units skipped, so admin masks win; admin disables of pre-existing policy are never re-applied), entries REMOVED are written to `/var/lib/snosi/preset-removals` for the drift report (never auto-disabled), then the applied snapshot is updated. Gated on the enablement marker so first boot/migration initialize the model first. Newly enabled units take effect at the next boot (runs after the boot transaction on purpose).
 - `snosi-etc-drift-report.service` → `usr/libexec/snosi-etc-drift-report` — per boot, writes `M`/`D` diff entries plus `P`(olicy removal) lines to `/var/lib/snosi/etc-drift.report` with a sha256 in `etc-drift.hash`; removes both when clean.
 - `snosi-etc-drift-notify.service` (user scope, `graphical-session.target`) → one `notify-send` per report *change*, gated by comparing the report hash against `$XDG_STATE_HOME/snosi/etc-drift.ack`.

@@ -1,0 +1,12 @@
+[Unit]
+Description=Mount persistent snosi /etc before switch-root
+DefaultDependencies=no
+After=sysroot.mount cryptsetup.target
+Wants=cryptsetup.target
+Before=initrd-root-fs.target initrd-switch-root.target
+
+[Service]
+Type=oneshot
+Environment=NEWROOT=/sysroot
+ExecStart=/usr/libexec/snosi-etc-overlay-initrd
+RemainAfterExit=yes

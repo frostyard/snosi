@@ -1,0 +1,17 @@
+[Transfer]
+ProtectVersion=%A
+Verify=yes
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/os/cayo/%a/
+MatchPattern=cayo_@v_@u.root-verity.raw.xz
+
+[Target]
+Type=partition
+Path=auto
+MatchPattern=cayo_@v_v
+MatchPartitionType=root-verity
+PartitionFlags=0
+ReadOnly=yes
+InstancesMax=2

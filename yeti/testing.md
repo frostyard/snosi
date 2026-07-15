@@ -2,7 +2,10 @@
 
 ## Overview
 
-The `test/` directory contains bootc lifecycle test frameworks. The install path validates OCI load → bootc install → QEMU boot → SSH-based test suite. The update path validates `bootc switch` hops, deployment slot continuity, persistence across updates, and optional rollback.
+The `test/` directory contains bootc lifecycle tests and the experimental native
+A/B validation harnesses. The install path validates OCI load → bootc install →
+QEMU boot → SSH-based test suite. The update paths validate bootc or sysupdate
+hops, deployment continuity, persistence, rollback, and failure handling.
 
 ## Architecture
 
@@ -10,6 +13,14 @@ The `test/` directory contains bootc lifecycle test frameworks. The install path
 test/
 ├── bootc-install-test.sh      # Orchestrator script (headless, for CI)
 ├── bootc-update-test.sh       # Update/rollback orchestrator (headless)
+├── native-ab-update-test.sh   # Native A/B N through N+3 QEMU test
+├── native-ab-components-test.sh # Phase 1 exit-criterion QEMU test (masks, components, etc drift)
+├── native-ab-static-test.sh   # Cheap A/B configuration invariants
+├── native-ab-secure-artifact-test.sh # Secure package/initrd/PCR metadata
+├── native-ab-secure-artifact-negative-test.sh # Rejection mutations
+├── native-ab-secure-rotation-test.sh # Destructive enrolled-VM rotation proof
+├── native-ab-secure-update-test.sh # Destructive secure rollback/fallback proof
+├── cayo-ab-install-spike.sh   # Guarded native A/B disk installer
 ├── run-qemu.sh                # Interactive QEMU runner (GTK display)
 ├── lib/
 │   ├── helpers.sh             # Shared test helpers: check(), counters, summary
@@ -95,6 +106,95 @@ The production base image uses the same containers-storage staging strategy in `
 
 `update-tests/persistence-verify.sh` runs after each hop and optional rollback. It checks that `/var` data persists, `/etc` local changes carry into new deployments, deleted shipped files remain deleted, hostname and NetworkManager profile persist, SSH host keys and machine-id are stable, and the journal contains prior boots.
 
+## Native A/B Tests
+
+`native-ab-update-test.sh` uses four real `cayo-ab-raw` builds to exercise signed
+manifest rejection, N through N+3 updates, slot reuse, rollback, and boot-count
+fallback in QEMU.
+
+`native-ab-components-test.sh` is the Phase 1 exit-criterion QEMU test
+(`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`, "Phase 1: Fix
+Current Prototype Safety"). It is self-contained: it builds two real
+`cayo-ab-raw` versions itself (mirroring the Justfile's `ensure-mkosi`
+bootstrap plus `mkosi clean -ff` + `mkosi --profile cayo-ab-raw build` --
+`SKIP_BUILD=1 BUILD_N_DIR=... BUILD_N1_DIR=...` lets it reuse two already-built
+`cayo-ab-raw` output directories for fast iteration instead of paying the
+~15-25 min clean-build cost, which includes a full mkosi ToolsTree rebuild,
+twice per run), boots N, and asserts in order: (1) no failed systemd units and
+bootc/nbc/systemd-sysupdate auto-update timers and services report `masked`,
+including the user-scope `bootc-update-notify` mask symlinks;
+(1.5, added phase 2, see OVERVIEW.md "Native /var Factory State") the dpkg
+database relocation and per-product `/var` audit inventory survive a real
+install: `/var/lib/dpkg` is a symlink to `../../usr/lib/sysimage/dpkg`,
+`dpkg-query -W systemd`/`dpkg-query -W 'linux-image-*'` both resolve,
+`usr/share/snosi/var-inventory.txt` exists with at least one
+`image-metadata` line, and no unit failures were introduced; (2)
+`/usr/lib/sysupdate.d/` contains only the three OS transfers (no `.feature`
+files) and `systemd-sysupdate components` enumerates all 17 shipped sysext
+components; (3) two ad hoc test components (`testa`, `testb`, independently
+versioned) created under `/etc/sysupdate.<name>.d/` update independently via
+`--component=`, leave the GPT partition table and ESP `/EFI/Linux` listing
+byte-identical, and enumerate correctly; (4) an unqualified N -> N+1 OS update
+(via a `--definitions=` override pointing at a guest-local HTTP fixture, same
+pattern as `native-ab-update-test.sh`) succeeds with both test components still
+enabled, leaves `/var/lib/extensions.d` untouched, and both components still
+list correctly after reboot; (5) `snosi-etc-diff` and
+`snosi-etc-drift-report.service` correctly report, diff, and restore a live
+`/etc/issue` modification against the native A/B `/.etc.lower` tree, and leave
+no bind mounts behind. It found and fixed a real bug: the ab-root profile's
+`KernelModules=` allowlist excluded `nf_tables`/`nfnetlink`, so
+`nftables.service` (shipped and preset-enabled unconditionally by the base
+image) failed on every native A/B boot with "Unable to initialize Netlink
+socket: Protocol not supported" -- fixed by adding both modules to
+`shared/outformat/ab-root/mkosi.conf`.
+
+`native-ab-secure-artifact-test.sh` checks the secure build's
+coherent systemd package set, TPM-capable initrd, `.pcrpkey`, and `.pcrsig`.
+Passing an old PCR certificate and new public key enables the eight-signature
+transition checks. `native-ab-secure-artifact-negative-test.sh` requires the
+validator to reject an unpaired old/new PCR policy and a transition that
+publishes the old key.
+
+`native-ab-secure-rotation-test.sh` is a destructive manual integration test for
+an already MOK-enrolled disposable VM with a persistent vTPM. It requires
+`--yes`, root SSH, the exact guest machine ID, and a tested external recovery
+key. It stages local split artifacts inside the guest and uses
+`systemd-sysupdate` against a guest-local HTTP source. The harness creates an
+ephemeral OpenPGP key, signs `SHA256SUMS`, temporarily installs that public
+keyring, and requires `Verify=yes`. It then:
+
+1. Ensures the transition UKI is installed before changing TPM metadata.
+2. Enrolls the old signed-PCR key and removes the new token, leaving old-only.
+3. Requires an unattended Secure Boot of the transition UKI.
+4. Enrolls the new key and removes the old token by discovered fingerprint and keyslot.
+5. Requires a second unattended boot of the byte-identical UKI with new-only.
+
+The harness verifies boot-ID changes, Secure Boot, lockdown, measured UKI state,
+roothash, UKI hash, LUKS2 `/var`, empty raw-PCR policy, PCR 11 signed policy, and
+system health. The UKI hash is read from the entry that `bootctl` reports as
+currently running. It does not create the VM, automate MokManager, or cover N
+through N+3 rollback and fallback; `native-ab-secure-update-test.sh` covers that
+separate destructive sequence. `SSH_PORT`, `SSH_TIMEOUT`, `SOURCE_PORT`, and
+`KEEP_REMOTE` are optional environment knobs.
+
+`native-ab-secure-update-test.sh` requires `--yes`, exact guest machine and Incus
+instance identities, N+1/N+2 dual-signed artifacts, N+3 signed only by the new
+key, the external recovery key, and root SSH. It verifies all three artifacts,
+serves N+2/N+3 from a verified guest-local signed manifest, and restarts that
+transient source after the N+2 reboot. Starting from N+1 with only the new TPM
+token, it checks N+2/N+3 slot reuse and unattended boots, explicit rollback to
+N+2, and return to N+3. It then renames the blessed N+3 UKI to `+3-0`, corrupts
+the N+3 root, requires a new N+3 roothash plus emergency marker for each of three
+Incus-driven boot attempts, and accepts only an automatic N+2 fallback with the
+N+3 UKI at `+0-3`. Successful boots must not leave TPM setup or NvPCR units
+failed.
+
+Durable test keys belong under `.snosi-private`, not `.mkosi-private`; mkosi
+removes the latter during `clean -ff`. The secure profile masks systemd 261's
+unused NvPCR definitions and product/login writers because its anchor credential
+cannot migrate between PCR signing keys. Signed-PCR LUKS unlock and TPM SRK setup
+remain enabled.
+
 ## Test Tiers
 
 ### Tier 1 — Installation Validation (01-installation.sh)
@@ -124,7 +224,7 @@ Validates the sysext infrastructure:
 
 - `systemd-sysext` binary is available
 - `systemd-sysext list` command succeeds
-- sysupdate config directory (`/usr/lib/sysupdate.d/`) exists and has entries
+- sysupdate component directories (`/usr/lib/sysupdate.<name>.d/`, one per sysext) exist and have entries
 - Lists currently active extensions
 
 ### Tier 4 — Smoke Tests (04-smoke.sh)
@@ -181,6 +281,11 @@ Shared test harness sourced by all four test scripts. Provides:
 `bootc-update-test.sh` sources `vm.sh` after setting `DISK_SIZE=20G`; keep that ordering if refactoring because `vm.sh` snapshots the disk size at source time.
 
 ## CI Integration
+
+`validate.yml` runs `native-ab-static-test.sh` on pull requests and main-branch
+pushes. The destructive rotation test and build-dependent artifact tests remain
+manual because CI does not provision MOK, a persistent vTPM, signing material,
+or the four large secure artifacts.
 
 The `test-install.yml` workflow runs these tests on manual dispatch:
 1. Sets up KVM-enabled runner
