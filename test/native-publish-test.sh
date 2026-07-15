@@ -55,6 +55,30 @@ assert_file_absent() { # description path
     fi
 }
 
+assert_contains() { # description haystack needle
+    if [[ "$2" == *"$3"* ]]; then
+        pass "$1"
+    else
+        fail "$1" "expected to find: $3"
+    fi
+}
+
+# assert_no_tmp_leftovers description dir -- fails if any *.tmp temp file
+# from the publisher's atomic-write scheme is still present under dir.
+assert_no_tmp_leftovers() { # description dir
+    local desc="$1" dir="$2" leftovers
+    if [[ ! -d "$dir" ]]; then
+        pass "$desc"
+        return
+    fi
+    leftovers="$(find "$dir" -name '*.tmp' 2>/dev/null)"
+    if [[ -z "$leftovers" ]]; then
+        pass "$desc"
+    else
+        fail "$desc" "leftover temp files: $leftovers"
+    fi
+}
+
 cleanup() {
     [[ -z "$WORK_DIR" || ! -d "$WORK_DIR" ]] || rm -rf "$WORK_DIR"
 }
@@ -93,6 +117,39 @@ unit: sectors
 
 start=34, size=100, type=L, name="${product}_${version}_r"
 start=200, size=100, type=L, name="${product}_${version}_v"
+EOF
+    sfdisk "$dir/$profile_output_name.raw" < "$dir/sfdisk-script.txt" >/dev/null
+}
+
+# build_fixture_dup_label - like build_fixture, but the disk's GPT has TWO
+# partitions sharing the root label (exercises the finding-1 regression: two
+# GPT partitions matching the same versioned label must not concatenate
+# their PARTUUIDs into the output filename -- the publisher must fail
+# loudly instead).
+#
+# Usage: build_fixture_dup_label <dir> <product> <profile-output-name> <version>
+build_fixture_dup_label() {
+    local dir="$1" product="$2" profile_output_name="$3" version="$4"
+    mkdir -p "$dir"
+
+    python3 - "$dir/$profile_output_name.manifest" "$product" "$version" <<'PYEOF'
+import json, sys
+path, product, version = sys.argv[1], sys.argv[2], sys.argv[3]
+json.dump({"config": {"name": product, "version": version}}, open(path, "w"))
+PYEOF
+
+    printf 'root payload\n' > "$dir/$profile_output_name.${product}_@v.root.raw.raw"
+    printf 'verity payload\n' > "$dir/$profile_output_name.${product}_@v.root-verity.raw.raw"
+    printf 'efi payload\n' > "$dir/$profile_output_name.efi"
+    truncate -s 2M "$dir/$profile_output_name.raw"
+
+    cat > "$dir/sfdisk-script.txt" <<EOF
+label: gpt
+unit: sectors
+
+start=34, size=50, type=L, name="${product}_${version}_r"
+start=100, size=50, type=L, name="${product}_${version}_r"
+start=200, size=50, type=L, name="${product}_${version}_v"
 EOF
     sfdisk "$dir/$profile_output_name.raw" < "$dir/sfdisk-script.txt" >/dev/null
 }
@@ -250,26 +307,153 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Negative: missing required split artifact
+# 5. Negative: missing required artifact, one case per artifact class (root
+#    split, verity split, disk raw, .efi, manifest) -- not just .efi.
 # ---------------------------------------------------------------------------
 
-fixture_missing="$WORK_DIR/fixture-missing"
-build_fixture "$fixture_missing" cayo cayo-ab 20260714150001
-rm -f "$fixture_missing/cayo-ab.efi"
-dest5="$WORK_DIR/dest5"
+missing_artifact_cases=(
+    "efi|cayo-ab.efi"
+    "root split|cayo-ab.cayo_@v.root.raw.raw"
+    "verity split|cayo-ab.cayo_@v.root-verity.raw.raw"
+    "disk raw|cayo-ab.raw"
+    "manifest|cayo-ab.manifest"
+)
+
+missing_case_n=0
+for case_entry in "${missing_artifact_cases[@]}"; do
+    missing_case_n=$((missing_case_n + 1))
+    case_desc="${case_entry%%|*}"
+    case_relpath="${case_entry#*|}"
+
+    fixture_dir="$WORK_DIR/fixture-missing-$missing_case_n"
+    build_fixture "$fixture_dir" cayo cayo-ab "2026071415000${missing_case_n}"
+    rm -f "$fixture_dir/$case_relpath"
+    dest_dir="$WORK_DIR/dest-missing-$missing_case_n"
+
+    set +e
+    out="$("$PUBLISHER" "$fixture_dir" cayo-ab "$dest_dir" 2>&1)"
+    rc=$?
+    set -e
+    echo "$out"
+    if [[ $rc -ne 0 ]]; then
+        pass "missing $case_desc artifact ($case_relpath) is rejected"
+    else
+        fail "missing $case_desc artifact ($case_relpath) is rejected" "publisher exited 0"
+    fi
+    assert_file_absent "missing $case_desc artifact: nothing published" "$dest_dir/cayo"
+done
+
+# ---------------------------------------------------------------------------
+# 6. Negative: two GPT partitions sharing the same root label must be
+#    rejected, not silently concatenated into the output filename (finding 1
+#    regression coverage -- see require_single_partition() in the publisher).
+# ---------------------------------------------------------------------------
+
+fixture_duplabel="$WORK_DIR/fixture-duplabel"
+build_fixture_dup_label "$fixture_duplabel" cayo cayo-ab 20260714150010
+dest_duplabel="$WORK_DIR/dest-duplabel"
 set +e
-out5="$("$PUBLISHER" "$fixture_missing" cayo-ab "$dest5" 2>&1)"
-rc5=$?
+out_duplabel="$("$PUBLISHER" "$fixture_duplabel" cayo-ab "$dest_duplabel" 2>&1)"
+rc_duplabel=$?
 set -e
-echo "$out5"
-if [[ $rc5 -ne 0 ]]; then
-    pass "missing .efi artifact is rejected"
+echo "$out_duplabel"
+if [[ $rc_duplabel -ne 0 ]]; then
+    pass "two GPT partitions sharing the root label are rejected"
 else
-    fail "missing .efi artifact is rejected" "publisher exited 0"
+    fail "two GPT partitions sharing the root label are rejected" "publisher exited 0"
+fi
+assert_contains "duplicate-label error names the exact match count" "$out_duplabel" "expected exactly 1 partition"
+assert_file_absent "duplicate-label fixture: nothing published" "$dest_duplabel/cayo"
+
+# ---------------------------------------------------------------------------
+# 7. Negative: interrupted write leaves no final-named partial file (finding
+#    2 regression coverage). A fake, deliberately slow `xz` stand-in is put
+#    ahead of the real one on PATH: it writes a partial payload, signals
+#    readiness via a sentinel file, then blocks. The harness waits for the
+#    sentinel (i.e. waits until the publisher is genuinely mid-compression),
+#    kills the fake-xz process directly -- the same failure shape as an
+#    OOM-kill or ENOSPC mid-write, and the only way to actually interrupt a
+#    foreground child, since bash defers a script's own trapped signals
+#    until the current foreground command finishes -- and asserts the
+#    publisher's atomic-write scheme left neither a truncated file under the
+#    final public name nor a leftover temp file.
+# ---------------------------------------------------------------------------
+
+fixture_interrupt="$WORK_DIR/fixture-interrupt"
+build_fixture "$fixture_interrupt" cayo cayo-ab 20260714150020
+dest_interrupt="$WORK_DIR/dest-interrupt"
+
+fakebin="$WORK_DIR/fakebin"
+mkdir -p "$fakebin"
+sentinel="$WORK_DIR/xz-sentinel"
+cat > "$fakebin/xz" <<'EOF'
+#!/bin/bash
+# Fake slow xz stand-in for the interrupted-write test. The no-op EXIT trap
+# below disables bash's "exec into last command" tail-call optimization, so
+# this process keeps running as THIS script (matchable via `pgrep -f` by
+# path) instead of being silently replaced in place by /usr/bin/sleep before
+# the harness can find and kill it.
+trap ':' EXIT
+printf 'PARTIAL-DATA-NOT-REAL-XZ\n'
+: > "${FAKE_XZ_SENTINEL:?}"
+sleep 30
+EOF
+chmod +x "$fakebin/xz"
+rm -f "$sentinel"
+
+(
+    PATH="$fakebin:$PATH"
+    export PATH
+    FAKE_XZ_SENTINEL="$sentinel"
+    export FAKE_XZ_SENTINEL
+    "$PUBLISHER" --xz "$fixture_interrupt" cayo-ab "$dest_interrupt" >"$WORK_DIR/interrupt-publisher.log" 2>&1
+) &
+interrupt_pid=$!
+
+sentinel_ready=0
+for _ in $(seq 1 100); do
+    [[ -e "$sentinel" ]] && { sentinel_ready=1; break; }
+    sleep 0.1
+done
+
+if [[ "$sentinel_ready" == 1 ]]; then
+    pass "interrupted-write: fake xz reached the sentinel (mid-compression)"
+else
+    fail "interrupted-write: fake xz reached the sentinel (mid-compression)" "sentinel never appeared"
 fi
 
+fake_xz_pid="$(pgrep -f "$fakebin/xz" | head -1)"
+if [[ -n "$fake_xz_pid" ]]; then
+    kill -TERM "$fake_xz_pid"
+    pass "interrupted-write: sent TERM to the in-flight fake xz process"
+else
+    fail "interrupted-write: sent TERM to the in-flight fake xz process" "could not find fake xz pid"
+fi
+
+set +e
+wait "$interrupt_pid"
+interrupt_rc=$?
+set -e
+cat "$WORK_DIR/interrupt-publisher.log"
+if [[ $interrupt_rc -ne 0 ]]; then
+    pass "interrupted-write: publisher exits non-zero when the compressor is killed"
+else
+    fail "interrupted-write: publisher exits non-zero when the compressor is killed" "publisher exited 0"
+fi
+
+# The root artifact is first in the write order, so it is the one caught
+# mid-write. Compute the exact final name the same way the publisher does
+# (same fixture, same GPT) so this is an exact-path check, not a glob that
+# would trivially "pass" against a literal asterisk in the filename.
+pub_dir_interrupt="$dest_interrupt/cayo/x86-64"
+interrupt_root_uuid="$(jq -er '.partitiontable.partitions[] | select(.name == "cayo_20260714150020_r") | .uuid | ascii_downcase' \
+    <(sfdisk --json "$fixture_interrupt/cayo-ab.raw"))"
+assert_file_absent "interrupted-write: no final-named root artifact left behind" \
+    "$pub_dir_interrupt/cayo-ab_20260714150020_${interrupt_root_uuid}.root.raw.xz"
+assert_no_tmp_leftovers "interrupted-write: no leftover *.tmp files under dest" "$dest_interrupt"
+
 # ---------------------------------------------------------------------------
-# 6. Negative: usage errors
+# 8. Negative: usage errors
 # ---------------------------------------------------------------------------
 
 set +e

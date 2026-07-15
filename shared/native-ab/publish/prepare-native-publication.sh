@@ -46,6 +46,19 @@
 # automatic per-build invocation was rejected even though every individual
 # permission concern (sfdisk root, OUTPUTDIR contents) checks out.
 #
+# Contract gap: docs/native-ab-contracts.md §4 lists
+# <channel>_<version>.sbom.spdx.json as part of the frozen public artifact
+# set. This script does NOT generate it -- SBOM generation is not yet wired
+# into this pipeline (see the contract's own callout of this gap). Any
+# consumer of this script's output must not assume the SBOM is present.
+#
+# Every artifact this script DOES produce is written atomically: each output
+# is created under a per-run temp name in the destination directory and
+# renamed into place only after it is fully written, with an EXIT/INT/TERM
+# trap that deletes any temp file still outstanding if the script fails or
+# is interrupted. A partially-written file is therefore never visible under
+# a final public name.
+#
 # Why this is not wired into PostOutputScripts=
 # -----------------------------------------------
 # docs/native-ab-contracts.md's own compression/copy step is meant to run
@@ -92,6 +105,47 @@ fi
 
 [[ -d "$OUTPUT_DIR" ]] || { echo "Error: mkosi output dir not found: $OUTPUT_DIR" >&2; exit 1; }
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
+
+# ---------------------------------------------------------------------------
+# Atomic writes. Every artifact below is written to a temp file in the
+# destination directory (same filesystem, so the final `mv` is a rename, not
+# a copy) and only renamed to its public name once fully written. Temp files
+# still outstanding when the script exits for any reason (error, Ctrl-C,
+# kill) are removed by the trap below, so an interrupted run never leaves a
+# truncated file under a final public name.
+# ---------------------------------------------------------------------------
+
+declare -a PENDING_TMPFILES=()
+
+cleanup_tmpfiles() {
+    local f
+    for f in "${PENDING_TMPFILES[@]+"${PENDING_TMPFILES[@]}"}"; do
+        [[ -n "$f" && -e "$f" ]] && rm -f "$f"
+    done
+}
+trap cleanup_tmpfiles EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# new_tmpfile dst -- creates+registers a temp file next to dst, result in
+# $NEW_TMPFILE. Deliberately NOT invoked via command substitution ($(...)):
+# that would run this function's body, including the PENDING_TMPFILES
+# append, inside a subshell, so the append would vanish the instant the
+# subshell exits and the cleanup trap would never see the file.
+new_tmpfile() {
+    local dst="$1"
+    NEW_TMPFILE="$(mktemp --suffix=.tmp "${dst}.XXXXXX")"
+    PENDING_TMPFILES+=("$NEW_TMPFILE")
+}
+
+# commit_tmpfile tmp dst -- rename tmp into place and stop tracking it
+commit_tmpfile() {
+    local tmp="$1" dst="$2" i
+    mv -f "$tmp" "$dst"
+    for i in "${!PENDING_TMPFILES[@]}"; do
+        [[ "${PENDING_TMPFILES[$i]}" == "$tmp" ]] && unset 'PENDING_TMPFILES[i]'
+    done
+}
 
 manifest_file="$OUTPUT_DIR/$PROFILE_OUTPUT_NAME.manifest"
 [[ -f "$manifest_file" ]] || { echo "Error: manifest not found: $manifest_file" >&2; exit 1; }
@@ -145,12 +199,28 @@ gpt_json="$(sfdisk --json "$disk_raw")"
 root_label="${product}_${version}_r"
 verity_label="${product}_${version}_v"
 
+# require_single_partition label -- fails loudly unless exactly one GPT
+# partition matches $label. Two partitions sharing a label would otherwise
+# have their PARTUUIDs concatenated into the output filename by jq -r's
+# newline-joined multi-value output, silently producing a malformed name
+# instead of failing.
+require_single_partition() {
+    local label="$1" count
+    count="$(jq -er --arg label "$label" \
+        '[.partitiontable.partitions[] | select(.name == $label)] | length' <<<"$gpt_json")"
+    [[ "$count" == 1 ]] || {
+        echo "Error: expected exactly 1 partition named '$label' in $disk_raw GPT, found $count" >&2
+        exit 1
+    }
+}
+
+require_single_partition "$root_label"
+require_single_partition "$verity_label"
+
 root_partuuid="$(jq -er --arg label "$root_label" \
-    '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$gpt_json")" ||
-    { echo "Error: no partition named '$root_label' found in $disk_raw GPT" >&2; exit 1; }
+    '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$gpt_json")"
 verity_partuuid="$(jq -er --arg label "$verity_label" \
-    '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$gpt_json")" ||
-    { echo "Error: no partition named '$verity_label' found in $disk_raw GPT" >&2; exit 1; }
+    '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<<"$gpt_json")"
 
 echo "root PARTUUID: $root_partuuid  verity PARTUUID: $verity_partuuid"
 
@@ -170,13 +240,18 @@ efi_name="${channel}_${version}.efi"
 disk_name="${channel}_${version}.disk.raw${xz_suffix}"
 manifest_name="${channel}_${version}.manifest.json"
 
-copy_or_compress() { # src dest
-    local src="$1" dst="$2"
+# copy_or_compress src dst -- writes to a temp file next to dst and renames
+# into place only once the copy/compress has fully succeeded.
+copy_or_compress() {
+    local src="$1" dst="$2" tmp
+    new_tmpfile "$dst"
+    tmp="$NEW_TMPFILE"
     if [[ "$xz_enabled" == 1 ]]; then
-        xz -T0 -c "$src" > "$dst"
+        xz -T0 -c "$src" > "$tmp"
     else
-        cp --sparse=always "$src" "$dst"
+        cp --sparse=always "$src" "$tmp"
     fi
+    commit_tmpfile "$tmp" "$dst"
 }
 
 echo "Writing $dest/$root_name"
@@ -187,9 +262,16 @@ echo "Writing $dest/$disk_name"
 copy_or_compress "$disk_raw" "$dest/$disk_name"
 
 echo "Writing $dest/$efi_name"
-cp --sparse=always "$efi_file" "$dest/$efi_name"
+new_tmpfile "$dest/$efi_name"
+efi_tmp="$NEW_TMPFILE"
+cp --sparse=always "$efi_file" "$efi_tmp"
+commit_tmpfile "$efi_tmp" "$dest/$efi_name"
+
 echo "Writing $dest/$manifest_name"
-cp "$manifest_file" "$dest/$manifest_name"
+new_tmpfile "$dest/$manifest_name"
+manifest_tmp="$NEW_TMPFILE"
+cp "$manifest_file" "$manifest_tmp"
+commit_tmpfile "$manifest_tmp" "$dest/$manifest_name"
 
 # ---------------------------------------------------------------------------
 # SHA256SUMS -- unsigned. Signing (SHA256SUMS.gpg) is the Phase 7 protected
@@ -198,10 +280,13 @@ cp "$manifest_file" "$dest/$manifest_name"
 # ---------------------------------------------------------------------------
 
 sums_file="$dest/SHA256SUMS"
-: > "$sums_file"
+new_tmpfile "$sums_file"
+sums_tmp="$NEW_TMPFILE"
+: > "$sums_tmp"
 for name in "$root_name" "$verity_name" "$disk_name" "$efi_name" "$manifest_name"; do
-    (cd "$dest" && sha256sum "$name") >> "$sums_file"
+    (cd "$dest" && sha256sum "$name") >> "$sums_tmp"
 done
+commit_tmpfile "$sums_tmp" "$sums_file"
 echo "Writing $sums_file (unsigned; signing is the Phase 7 promotion step)"
 
 # ---------------------------------------------------------------------------
@@ -212,7 +297,9 @@ source_commit="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse HEAD 2>/dev/n
 generated_at="$(date -u +%FT%TZ)"
 
 info_file="$dest/publication-info.json"
-python3 - "$info_file" <<PYEOF
+new_tmpfile "$info_file"
+info_tmp="$NEW_TMPFILE"
+python3 - "$info_tmp" <<PYEOF
 import json, os, sys
 
 info_file = sys.argv[1]
@@ -245,6 +332,7 @@ with open(info_file, "w") as f:
     json.dump(data, f, indent=2, sort_keys=True)
     f.write("\n")
 PYEOF
+commit_tmpfile "$info_tmp" "$info_file"
 echo "Writing $info_file"
 
 echo "Native publication prepared: $dest"

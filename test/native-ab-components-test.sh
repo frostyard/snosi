@@ -261,7 +261,26 @@ for suffix in manifest raw efi "${IMAGE_ID}_@v.root.raw.raw" "${IMAGE_ID}_@v.roo
 done
 "$ROOT_DIR/shared/native-ab/publish/prepare-native-publication.sh" --xz \
     "$WORK_DIR/publish-src" "$CHANNEL" "$WORK_DIR/publish-out"
-publish_dest="$WORK_DIR/publish-out/$IMAGE_ID/x86-64"
+
+# Read the publisher's actual output location from its own
+# publication-info.json (product field) rather than re-deriving
+# "$WORK_DIR/publish-out/$IMAGE_ID/x86-64" from $IMAGE_ID -- the publisher's
+# real product/dest derivation lives entirely in
+# shared/native-ab/publish/prepare-native-publication.sh (manifest
+# .config.name), and this test should consume that output, not assume it
+# agrees with this script's own $IMAGE_ID parsing of $PROFILE.
+mapfile -t publish_info_files < <(find "$WORK_DIR/publish-out" -name publication-info.json)
+[[ ${#publish_info_files[@]} -eq 1 ]] || {
+    echo "Error: expected exactly 1 publication-info.json under $WORK_DIR/publish-out, found ${#publish_info_files[@]}" >&2
+    exit 1
+}
+publish_info_file="${publish_info_files[0]}"
+publish_product="$(jq -er '.product' "$publish_info_file")"
+[[ "$publish_product" == "$IMAGE_ID" ]] || {
+    echo "Error: publisher product '$publish_product' (from $publish_info_file) does not match this test's IMAGE_ID '$IMAGE_ID'" >&2
+    exit 1
+}
+publish_dest="$(dirname "$publish_info_file")"
 ln -s "$publish_dest" "$WORK_DIR/source/os"
 
 cat > "$WORK_DIR/definitions/10-root-verity.transfer" <<EOF
