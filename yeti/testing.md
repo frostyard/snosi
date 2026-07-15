@@ -204,13 +204,22 @@ rather than silently no-opping as "nothing newer"), signs a valid SHA256SUMS
 for it, then truncates `SHA256SUMS.gpg` to break the signature -- the stager
 must fail closed: `outcome=failed`, no semaphore, no new partition, running
 version unchanged. The four steps between them exercise all three of the
-stager's decision paths live: step 1 hits the not-newer-than-running guard
-(`check-new` re-offers the running version on a fresh install because the
-build-time ESP UKI name, `<ImageId>-<kver>-<roothash>.efi`, does not match
-the channel transfer pattern -- see CLAUDE.md "Native A/B Update UX"), step
-3 hits the rc!=0 + index-probe-passes "current" path, and step 4 hits the
-rc!=0 + probe-fails fail-closed path. First full run: 51/51 assertions
-passed (2026-07-15, N=20260715003309 -> N+1=20260715003624).
+stager's decision paths live: step 1 now asserts two additional
+factory-UKI properties before ever invoking the stager -- the ESP UKI is
+named `<channel>_<version>.efi` (the channel transfer's own Target
+`MatchPattern=`, fixed from mkosi's former `<ImageId>-<kver>-<roothash>.efi`
+default -- see CLAUDE.md "Native A/B Update UX") and `systemd-sysupdate
+list` already reports N as installed -- then hits the SAME rc!=0 +
+index-probe-passes "current" path as step 3 (`check-new` legitimately
+finds nothing newer once the origin only promotes N); step 3 hits that
+same path again after reboot into N+1; step 4 hits the rc!=0 + probe-fails
+fail-closed path. (Step 2's manual stage of N+1 is the sole rc==0 "found
+something newer" path.) The stager's separate not-newer-than-running
+guard -- `check-new` sideways re-offering the already-running version,
+needed only under the pre-fix naming gap step 1 used to exercise -- is no
+longer reachable by this scenario and remains untested belt-and-suspenders.
+First full run: 53/53 assertions passed (2026-07-15,
+N=20260715003309 -> N+1=20260715003624).
 
 `native-publish-test.sh` is a static, non-root regression test for
 `shared/native-ab/publish/prepare-native-publication.sh` (Phase 3), the script

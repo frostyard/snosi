@@ -219,7 +219,7 @@ matching_uki_entry() {
             MATCHING_UKI_ENTRY=${path##*/}
             matches=$((matches + 1))
         fi
-    done < <(guest "find /boot/EFI/Linux -maxdepth 1 -type f -name 'cayo_${versions[index]}*.efi' -exec sha256sum {} +")
+    done < <(guest "find /boot/EFI/Linux -maxdepth 1 -type f -name 'cayo-ab_${versions[index]}*.efi' -exec sha256sum {} +")
     [[ $matches -eq 1 ]] || {
         echo "Error: found $matches installed UKIs for ${versions[index]} with the expected hash" >&2
         return 1
@@ -245,7 +245,7 @@ verify_boot() {
         hash=$(sha256sum "/boot/EFI/Linux/$entry")
         printf "%s %s\n" "$entry" "${hash%% *}"
     ')
-    [[ $running_entry == cayo_${versions[index]}*.efi && $running_hash == "${uki_hashes[index]}" ]] || {
+    [[ $running_entry == cayo-ab_${versions[index]}*.efi && $running_hash == "${uki_hashes[index]}" ]] || {
         echo "Error: running UKI $running_entry has unexpected identity" >&2
         return 1
     }
@@ -418,7 +418,7 @@ for index in 1 2; do
         "$workdir/source/cayo_${versions[index]}_${root_uuids[index]}.root.raw.xz"
     xz -T0 -c "${prefix}.cayo_@v.root-verity.raw.raw" > \
         "$workdir/source/cayo_${versions[index]}_${verity_uuids[index]}.root-verity.raw.xz"
-    cp "${prefix}.efi" "$workdir/source/cayo_${versions[index]}.efi"
+    cp "${prefix}.efi" "$workdir/source/cayo-ab_${versions[index]}.efi"
 done
 for file in "$workdir/source"/*; do
     name=${file##*/}
@@ -472,14 +472,14 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://127.0.0.1:$SOURCE_PORT/
-MatchPattern=cayo_@v.efi
+MatchPattern=cayo-ab_@v.efi
 [Target]
 Type=regular-file
 Path=/EFI/Linux
 PathRelativeTo=boot
-MatchPattern=cayo_@v+@l-@d.efi
-MatchPattern=cayo_@v+@l.efi
-MatchPattern=cayo_@v.efi
+MatchPattern=cayo-ab_@v+@l-@d.efi
+MatchPattern=cayo-ab_@v+@l.efi
+MatchPattern=cayo-ab_@v.efi
 Mode=0444
 TriesLeft=3
 TriesDone=0
@@ -527,11 +527,11 @@ verify_boot 2
 echo "Testing boot-count fallback from corrupt ${versions[2]} to ${versions[1]}"
 bad_root_path=$(partition_path "cayo_${versions[2]}_r")
 matching_uki_entry 2
-[[ $MATCHING_UKI_ENTRY == "cayo_${versions[2]}.efi" ]] || {
+[[ $MATCHING_UKI_ENTRY == "cayo-ab_${versions[2]}.efi" ]] || {
     echo "Error: N+3 was not blessed before boot-count re-arming: $MATCHING_UKI_ENTRY" >&2
     exit 1
 }
-rearmed_entry="cayo_${versions[2]}+3-0.efi"
+rearmed_entry="cayo-ab_${versions[2]}+3-0.efi"
 guest "mv '/boot/EFI/Linux/$MATCHING_UKI_ENTRY' '/boot/EFI/Linux/$rearmed_entry'; sync -f /boot; bootctl set-default '$rearmed_entry'; test -e '/boot/EFI/Linux/$rearmed_entry'"
 guest "dd if=/dev/zero of='$bad_root_path' bs=4096 count=1 conv=fsync status=none"
 
@@ -553,6 +553,6 @@ force_stop
 start_instance
 wait_for_guest
 verify_boot 1
-guest "test -e /boot/EFI/Linux/cayo_${versions[2]}+0-3.efi"
+guest "test -e /boot/EFI/Linux/cayo-ab_${versions[2]}+0-3.efi"
 
 echo "Native A/B secure update passed: ${versions[0]} -> ${versions[1]} -> ${versions[2]} -> rollback/fallback ${versions[1]}"

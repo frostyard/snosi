@@ -145,7 +145,7 @@ matching_uki_entry() {
             MATCHING_UKI_ENTRY=${path##*/}
             matches=$((matches + 1))
         fi
-    done < <(guest "find /boot/EFI/Linux -maxdepth 1 -type f -name 'cayo_${version}*.efi' -exec sha256sum {} +")
+    done < <(guest "find /boot/EFI/Linux -maxdepth 1 -type f -name 'cayo-ab_${version}*.efi' -exec sha256sum {} +")
     [[ $matches -gt 0 ]] || return 1
     [[ $matches -eq 1 ]] || {
         echo "Error: found $matches installed transition UKIs with hash $uki_hash" >&2
@@ -346,7 +346,7 @@ verify_transition_boot() {
         hash=$(sha256sum "/boot/EFI/Linux/$entry")
         printf "%s %s\n" "$entry" "${hash%% *}"
     ')
-    [[ $running_entry == cayo_${version}*.efi && $running_hash == "$uki_hash" ]] || {
+    [[ $running_entry == cayo-ab_${version}*.efi && $running_hash == "$uki_hash" ]] || {
         echo "Error: running UKI $running_entry has hash $running_hash, expected $uki_hash" >&2
         return 1
     }
@@ -414,7 +414,7 @@ guest_with_input "$recovery_key" \
 echo "Preparing transition update $version"
 xz -T0 -c "$root" > "$workdir/source/cayo_${version}_${root_uuid}.root.raw.xz"
 xz -T0 -c "$verity" > "$workdir/source/cayo_${version}_${verity_uuid}.root-verity.raw.xz"
-cp "$uki" "$workdir/source/cayo_${version}.efi"
+cp "$uki" "$workdir/source/cayo-ab_${version}.efi"
 for file in "$workdir/source"/*; do
     name=${file##*/}
     hash=$(sha256sum "$file")
@@ -469,14 +469,14 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://127.0.0.1:$SOURCE_PORT/
-MatchPattern=cayo_@v.efi
+MatchPattern=cayo-ab_@v.efi
 [Target]
 Type=regular-file
 Path=/EFI/Linux
 PathRelativeTo=boot
-MatchPattern=cayo_@v+@l-@d.efi
-MatchPattern=cayo_@v+@l.efi
-MatchPattern=cayo_@v.efi
+MatchPattern=cayo-ab_@v+@l-@d.efi
+MatchPattern=cayo-ab_@v+@l.efi
+MatchPattern=cayo-ab_@v.efi
 Mode=0444
 TriesLeft=3
 TriesDone=0
