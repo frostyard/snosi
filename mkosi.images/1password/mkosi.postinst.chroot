@@ -54,8 +54,8 @@ groupmod -g 1936 onepassword
 groupmod -g 1938 onepassword-mcp
 if chgrp onepassword /usr/lib/1Password/1Password-BrowserSupport 2>/dev/null; then
     chmod g+s /usr/lib/1Password/1Password-BrowserSupport
-    chgrp onepassword-mcp /usr/lib/1Password/onepassword-mcp
-    chmod g+s /usr/lib/1Password/onepassword-mcp
+    chgrp onepassword-mcp /usr/lib/1Password/1password-mcp
+    chmod g+s /usr/lib/1Password/1password-mcp
 else
     echo "WARNING: chgrp to pinned GIDs failed (rootless build?);" \
          "helper binaries ship without setgid group hardening" >&2
