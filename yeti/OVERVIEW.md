@@ -430,6 +430,16 @@ post-stage verification -- re-fetches `SHA256SUMS` and checks the newly
 labeled partitions' PARTUUIDs against the embedded UUIDs, and checks the
 matching UKI exists in the ESP (transfer numbering 10/20/90 stands in for
 ordering). Never reboots; fails loudly (`outcome=failed`) on any mismatch.
+The PARTUUID read is retried (`udevadm settle` + bounded re-read loop):
+`lsblk` reads udev's property db, which refreshes ASYNCHRONOUSLY after
+sysupdate's GPT writes, and reading immediately after `update` returns can
+see a mixed stale view -- observed live 2026-07-15 (full-window QEMU run):
+the reused root slot showed its NEW label with the OLD pre-vacuum PARTUUID
+even though the on-disk GPT was provably correct (the next boot and the next
+hop's identical verification both passed). `udevadm settle` alone is not
+sufficient (it returns early when udev's watch event has not yet been
+synthesized), hence the retry loop; a real mismatch still fails with the
+same error after retries are exhausted.
 
 It speaks the exact same `/run/snosi/update-check`/`/run/snosi/update-staged`
 state-file language as the bootc stager, with one schema extension: the

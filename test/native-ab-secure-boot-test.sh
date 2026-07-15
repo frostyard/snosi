@@ -131,11 +131,18 @@
 #        enforced Secure Boot with unattended TPM unlock and /var+/etc
 #        state intact; the exhausted N+3 entry must remain on the ESP named
 #        `+0-3` (never deleted, never silently retried again).
-#    Throughout 8-11: no NvPCR journal failures on any boot (same check as
-#    step 3, re-run after the window completes). Step 7's recovery-keyslot
-#    check runs at the very end regardless of --full-window, so it is a
-#    true "does recovery still work after everything above" check in
-#    --full-window mode, not merely a post-step-6 checkpoint.
+#    NvPCR journal coverage: assert_nvpcr_journal_clean runs after EVERY
+#    boot that reaches SSH -- first boot (step 3), the TPM-enrollment
+#    reboot (step 4b), the N->N+1 hop (step 6b), and, via the shared
+#    assert_post_update_common helper, every --full-window hop (steps 9-10),
+#    both explicit-rollback boots (step 10b), and the boot-count-fallback
+#    recovery boot (step 11) -- not merely re-checked once after the window
+#    completes, since journalctl -b only ever sees the CURRENT boot and an
+#    end-of-run check alone would silently miss failures on every earlier
+#    boot. Step 7's recovery-keyslot check runs at the very end regardless
+#    of --full-window, so it is a true "does recovery still work after
+#    everything above" check in --full-window mode, not merely a
+#    post-step-6 checkpoint.
 #
 # Usage: sudo ./test/native-ab-secure-boot-test.sh [--full-window]
 # Env overrides: PROFILE (default snow-ab; also accepts cayo-ab),
@@ -274,6 +281,23 @@ assert_contains() { # description haystack needle
     else
         fail "$1" "expected to find: $3 -- got: $2"
     fi
+}
+
+# assert_nvpcr_journal_clean description -- fails if the boot currently
+# reachable via SSH logged any NvPCR-related error. journalctl -b only ever
+# sees the CURRENT boot's journal, so this must be called once per boot,
+# right after SSH comes back, to actually cover every boot in the flow -- a
+# single check re-run only after the LAST boot of a multi-reboot sequence
+# would silently miss NvPCR failures on every earlier boot (root-caused in
+# review: only 3 of ~9 boots were checked before this helper existed).
+# journalctl itself prints a literal "-- No entries --" banner (not empty
+# stdout) when --grep finds nothing (confirmed live) -- assert the absence
+# of the substring, not an exact-empty match against journalctl's own
+# human-readable "nothing found" banner.
+assert_nvpcr_journal_clean() { # description
+    local desc="$1" nvpcr_journal
+    nvpcr_journal="$(vm_ssh "journalctl -b -p err --grep=nvpcr --no-pager" 2>/dev/null || true)"
+    assert_false "$desc" bash -c "grep -qi nvpcr <<<'$nvpcr_journal'"
 }
 
 print_summary() {
@@ -756,6 +780,7 @@ assert_post_update_common() { # expected_version description_prefix
         bash -c "[[ '$health' == running || '$health' == degraded ]]"
     prompt_count="$(grep -c 'typed recovery passphrase' "$WORK_DIR/console.log" || true)"
     assert_eq "$prefix: still no passphrase prompt (signed PCR 11 policy held)" "$prompt_count" "1"
+    assert_nvpcr_journal_clean "$prefix: no NvPCR-related journal errors"
 }
 
 # ---------------------------------------------------------------------------
@@ -904,13 +929,7 @@ assert_eq "/etc is an overlay mount" "$etc_source" "overlay"
 failed_units="$(vm_ssh 'systemctl --failed --no-legend' || true)"
 assert_eq "no failed systemd units on first boot" "$failed_units" ""
 
-nvpcr_journal="$(vm_ssh "journalctl -b -p err --grep=nvpcr --no-pager" 2>/dev/null || true)"
-# journalctl itself prints a literal "-- No entries --" banner (not empty
-# stdout) when --grep finds nothing (confirmed live) -- assert the absence
-# of the substring, not an exact-empty match against journalctl's own
-# human-readable "nothing found" banner.
-assert_false "no NvPCR-related journal errors on first boot" \
-    bash -c "grep -qi nvpcr <<<'$nvpcr_journal'"
+assert_nvpcr_journal_clean "no NvPCR-related journal errors on first boot"
 assert_eq "systemd-pcrproduct.service is masked" \
     "$(vm_ssh 'systemctl is-enabled systemd-pcrproduct.service' || true)" "masked"
 
@@ -1022,6 +1041,7 @@ prompt_count_after_enroll="$(grep -c 'typed recovery passphrase' "$WORK_DIR/cons
 assert_eq "console pump never had to type a passphrase again after TPM enrollment" "$prompt_count_after_enroll" "1"
 var_source="$(vm_ssh 'findmnt -no SOURCE /var' || true)"
 assert_eq "/var is still mounted from the LUKS mapper after unattended TPM unlock" "$var_source" "/dev/mapper/var"
+assert_nvpcr_journal_clean "no NvPCR-related journal errors after the TPM-enrolled reboot"
 
 # ===========================================================================
 # Step 5: post-TPM-unlock assertions. tmpfiles ownership and dpkg-query are
@@ -1261,6 +1281,7 @@ bootctl_status="$(vm_ssh 'bootctl --no-pager status' || true)"
 assert_contains "N+1: Measured UKI: yes (new MOK-signed UKI actually loaded)" "$bootctl_status" "Measured UKI: yes"
 var_source="$(vm_ssh 'findmnt -no SOURCE /var' || true)"
 assert_eq "N+1: /var still auto-unlocked via the TPM mapper" "$var_source" "/dev/mapper/var"
+assert_nvpcr_journal_clean "no NvPCR-related journal errors after the N+1 update reboot"
 
 luks_dump="$(vm_ssh "cryptsetup luksDump --dump-json-metadata '$var_device'")"
 tpm_token_count="$(jq '[.tokens[] | select(.type == "systemd-tpm2")] | length' <<<"$luks_dump")"
@@ -1355,10 +1376,8 @@ if [[ "$FULL_WINDOW" == 1 ]]; then
     assert_root_slot_versions "N+2->N+3: root slots are exactly {N+2, N+3}" "$n2_version" "$n3_version"
     n3_root_path="$(partition_path "${IMAGE_ID}_${n3_version}_r")"
     assert_eq "N+3 physically reused N+1's freed root slot (InstancesMax=2 vacuum)" "$n3_root_path" "$n1_root_path"
-
-    nvpcr_journal="$(vm_ssh "journalctl -b -p err --grep=nvpcr --no-pager" 2>/dev/null || true)"
-    assert_false "no NvPCR-related journal errors after reaching N+3" \
-        bash -c "grep -qi nvpcr <<<'$nvpcr_journal'"
+    # (no separate NvPCR check here: assert_post_update_common above already
+    # checked this boot's journal via assert_nvpcr_journal_clean)
 
     echo ""
     echo "=== Step 10b: explicit rollback N+3 -> N+2, then back to N+3 ==="
@@ -1385,7 +1404,15 @@ if [[ "$FULL_WINDOW" == 1 ]]; then
     host_corrupt_root_partition "$n3_version"
     host_inspect_esp "ESP shows N+3 re-armed at +3-0 before any failed boot attempt" "${CHANNEL}_${n3_version}+3-0.efi"
 
-    emergency_count=0
+    # Seed the baseline from the ACTUAL pre-existing count in the cumulative
+    # console.log, not a hardcoded 0: console_pump has been appending to the
+    # same log file since the very first boot (step 3), across every reboot
+    # in the run so far, so an unrelated "Entering emergency mode" earlier
+    # in the run (e.g. a transient dracut hiccup on a prior boot that still
+    # went on to reach SSH) would otherwise be silently double-counted as
+    # this loop's own first match. Mirrors wait_for_emergency's own counting
+    # expression.
+    emergency_count="$(grep -c 'Entering emergency mode' "$WORK_DIR/console.log" 2>/dev/null || true)"
     for attempt in 1 2 3; do
         echo "Boot-count fallback attempt $attempt/3: power-cycling into corrupted N+3..."
         vm_boot "$DISK_IMAGE" "$WORK_DIR"
@@ -1415,10 +1442,8 @@ if [[ "$FULL_WINDOW" == 1 ]]; then
     echo "ESP listing after fallback: $esp_listing_after_fallback"
     assert_contains "N+3's exhausted entry ends at +0-3 after automatic fallback" \
         "$esp_listing_after_fallback" "${CHANNEL}_${n3_version}+0-3.efi"
-
-    nvpcr_journal="$(vm_ssh "journalctl -b -p err --grep=nvpcr --no-pager" 2>/dev/null || true)"
-    assert_false "no NvPCR-related journal errors on the fallback boot" \
-        bash -c "grep -qi nvpcr <<<'$nvpcr_journal'"
+    # (no separate NvPCR check here: assert_post_update_common above already
+    # checked this boot's journal via assert_nvpcr_journal_clean)
 fi
 
 # ===========================================================================

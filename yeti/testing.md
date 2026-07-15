@@ -372,9 +372,18 @@ proving the signed PCR 11 policy survives a REAL UKI change (the entire point
 of signed-vs-raw PCR policy), that `/var` and `/etc`-overlay persistence
 markers survive, and that the N rollback entry is still present
 (`InstancesMax=2`). Finishes with a non-destructive recovery-keyslot check
-(`cryptsetup open --test-passphrase`), never a destructive token wipe. First
-full run: 56/56 assertions passed (2026-07-15, `snow-ab`
-N=20260715021239 → N+1=20260715021816). Requires `swtpm`/`swtpm-tools` and
+(`cryptsetup open --test-passphrase`), never a destructive token wipe.
+**NvPCR journal errors are asserted per boot** via a shared
+`assert_nvpcr_journal_clean` helper called after EVERY boot that reaches SSH
+(first boot, the TPM-enrollment reboot, each update hop, and — in
+`--full-window`, via `assert_post_update_common` — both explicit-rollback
+boots and the boot-count-fallback recovery boot): `journalctl -b` only ever
+sees the CURRENT boot, so the previous end-of-sequence checks silently
+missed every earlier boot (review finding fixed 2026-07-15; this raised the
+default-mode total from 56 to 58 and the full-window total from 120 to 125).
+First full run: 56/56 assertions passed (2026-07-15, `snow-ab`
+N=20260715021239 → N+1=20260715021816; the default-mode total is 58 after
+the per-boot NvPCR change). Requires `swtpm`/`swtpm-tools` and
 `virt-fw-vars` (`virt-firmware`); see CLAUDE.md for how those were installed
 on a snosi dev host itself (read-only `/usr`, no `apt-get install`) and the
 `$SUDO_USER`-home-resolution fix needed because plain `sudo` resets `$HOME`.
@@ -400,7 +409,11 @@ FROM THE HOST while the VM is fully powered off (`losetup` + `dd` over the
 labeled partition — deliberately different from the SB-off prior art in
 `native-ab-update-test.sh`/`native-ab-secure-update-test.sh`, which corrupt
 guest-side while running) and power-cycles: each of three failed attempts
-must produce a NEW "Entering emergency mode" console marker, and between
+must produce a NEW "Entering emergency mode" console marker (the baseline
+count is seeded from whatever already exists in the cumulative console log
+at that point — one log spans the whole run — not a hardcoded 0, so an
+unrelated earlier emergency line cannot be double-counted as this loop's
+first match), and between
 cycles the ESP is loop-mounted read-only from the host (VM off, so nothing
 races a live QEMU) to assert the counting suffix decremented exactly
 (`+2-1`, `+1-2`, `+0-3`); the fourth power-cycle must boot N+2 automatically
@@ -416,7 +429,15 @@ rollback all passed before the first power-cycle exposed it. Phase 5 exit
 evidence: 120/120 assertions, 2026-07-15, `snow-ab` N=20260715042306 →
 N+1=20260715042712 → N+2=20260715043757 → N+3=20260715044206, explicit
 rollback to N+2 and back, boot-count fallback to N+2, ~41 min wall (warm
-caches, ~4 min per build).
+caches, ~4 min per build). Re-validated green after the per-boot NvPCR
+coverage fix: 125/125 assertions, 2026-07-15, `snow-ab` N=20260715074012 →
+N+1=20260715074417 → N+2=20260715075510 → N+3=20260715075918, same window
+shape. The re-run's first attempt (124/125) also caught a REAL race in
+`snosi-sysupdate-stage`'s post-stage verification: an immediate `lsblk`
+after `systemd-sysupdate update` can read a mixed stale udev view (new
+PARTLABEL, old pre-vacuum PARTUUID) on the reused slot even though the
+on-disk GPT is correct — fixed with `udevadm settle` + a bounded re-read
+retry in the stager (see yeti/OVERVIEW.md "Native A/B Update UX (phase 4)").
 
 ## Test Tiers
 

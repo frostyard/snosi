@@ -283,11 +283,34 @@ verity_name="$(grep -oE "${channel}_${remote_version}_[0-9a-fA-F-]+\.root-verity
 expected_root_uuid="$(sed -E "s/^${channel}_${remote_version}_([0-9a-fA-F-]+)\.root\.raw\.xz\$/\\1/" <<<"$root_name")"
 expected_verity_uuid="$(sed -E "s/^${channel}_${remote_version}_([0-9a-fA-F-]+)\.root-verity\.raw\.xz\$/\\1/" <<<"$verity_name")"
 
-layout="$(lsblk -J -o PATH,PARTLABEL,PARTUUID)"
-installed_root_uuid="$(jq -r --arg label "${image_id}_${remote_version}_r" \
-    '.. | objects | select(.partlabel? == $label) | .partuuid' <<<"$layout")"
-installed_verity_uuid="$(jq -r --arg label "${image_id}_${remote_version}_v" \
-    '.. | objects | select(.partlabel? == $label) | .partuuid' <<<"$layout")"
+# lsblk reads PARTLABEL/PARTUUID from the udev property database, which is
+# refreshed ASYNCHRONOUSLY after sysupdate's GPT writes (udev's inotify
+# watch on the whole-disk node synthesizes change events that udevd then
+# processes). Reading immediately after `update` returns can therefore see
+# a MIXED stale view -- observed live (2026-07-15, full-window QEMU run):
+# the reused root slot showed its NEW label with the OLD pre-vacuum
+# PARTUUID, failing this check even though the on-disk GPT was provably
+# correct (the very next boot and the next hop's identical verification
+# both passed). `udevadm settle` alone is not sufficient: it returns early
+# when the watch event has not yet been SYNTHESIZED (empty queue !=
+# events-all-delivered), so retry the read a few times before failing hard.
+# The assertions themselves are unchanged -- a real mismatch still fails
+# with the same errors after the retries are exhausted.
+installed_root_uuid=""
+installed_verity_uuid=""
+for _ in 1 2 3 4 5; do
+    udevadm settle 2>/dev/null || true
+    layout="$(lsblk -J -o PATH,PARTLABEL,PARTUUID)"
+    installed_root_uuid="$(jq -r --arg label "${image_id}_${remote_version}_r" \
+        '.. | objects | select(.partlabel? == $label) | .partuuid' <<<"$layout")"
+    installed_verity_uuid="$(jq -r --arg label "${image_id}_${remote_version}_v" \
+        '.. | objects | select(.partlabel? == $label) | .partuuid' <<<"$layout")"
+    if [[ "${installed_root_uuid,,}" == "${expected_root_uuid,,}" \
+        && "${installed_verity_uuid,,}" == "${expected_verity_uuid,,}" ]]; then
+        break
+    fi
+    sleep 1
+done
 
 if [[ -z "$installed_root_uuid" || -z "$installed_verity_uuid" ]]; then
     echo "ERROR: post-stage verification failed: expected partitions labeled ${image_id}_${remote_version}_r/_v not found" >&2
