@@ -752,6 +752,62 @@ stdlib's `SimpleHTTPRequestHandler` has no Range support at all (confirmed
 against the Python 3.13 stdlib source), which would make `verify-remote.sh`'s
 mandatory range-GET check silently meaningless.
 
+### Installer ISO (Phase 8)
+
+`mkosi.profiles/native-installer/` is a payload-free network-installer image
+(no Snow/Snowfield/Cayo content, `Dependencies=`/`BaseTrees=` both reset to
+empty so it never inherits the shared bootc/sysext base). `Bootable=no`:
+mkosi's own UKI/systemd-boot signing is unused entirely. mkosi has no ISO/El
+Torito output format at all, so `shared/native-installer/tools/build-iso.sh`
+assembles the actual bootable ISO OUTSIDE mkosi (same pattern as
+`shared/outformat/image/buildah-package.sh`), pulling docs/native-ab-contracts.md
+§8's Debian-trusted chain (shim-signed, grub-efi-amd64-signed,
+shim-helpers-amd64-signed for MokManager, linux-image-amd64 -- all
+Debian-signed packages, not anything this repo signs) straight out of the
+built rootfs. The installer userspace is the ENTIRE built rootfs packed as
+the kernel's own initramfs (cpio+zstd, no dracut, no switch_root — a
+top-level `/init -> usr/lib/systemd/systemd` symlink means systemd just
+boots directly as PID 1 with the packed tree as final root).
+
+Three boot-chain gotchas, all root-caused live by bisection (full detail:
+`yeti/OVERVIEW.md` "Installer ISO"): (1) `grub-efi-amd64-signed`'s prefix is
+baked in at `/EFI/debian` — `grub.cfg` must live there, AND ALSO be
+duplicated into the plain ISO9660 tree (not just the appended FAT ESP
+partition), since GRUB's prefix search resolves against the ISO9660 volume
+specifically when booted through real El Torito/CD-ROM emulation. (2)
+`fbx64.efi` (the shim fallback/NVRAM-registration loader) must NEVER be
+shipped in `EFI/BOOT/` alongside shim — its mere presence makes OVMF reset
+the machine instantly with zero diagnostic output, before shim even
+attempts to load GRUB; `mmx64.efi` (MokManager, the thing actually needed)
+is unaffected and ships normally. (3) The kernel command line must be
+`console=ttyS0,115200n8` ONLY — adding a second `console=tty0` hangs PID 1
+completely silently, but only when Secure Boot is enforced against a
+POPULATED varstore (real Microsoft PK/KEK/db) with no GPU device attached;
+this looks exactly like a kernel/systemd deadlock (ruled out systemd-pstore,
+systemd-udev-trigger, systemd-journal-flush, and the audit subsystem
+individually before finding it) until traced to that one kernel argument.
+Separately, `Locale=`/`Keymap=`/`Timezone=`/`Hostname=`/`RootPassword=hashed:`
+must all be set explicitly (mkosi runs `systemd-firstboot` at build time),
+or `systemd-firstboot.service` blocks the whole boot forever on an
+interactive prompt with no TTY to answer it — same silent-hang shape as (3),
+different root cause.
+
+`test/native-installer-iso-test.sh` validates: ESP structural checks
+(signed-binary issuer strings via `sbverify`, packed-initramfs content,
+systemd-family version), a QEMU positive boot with Secure Boot ENFORCED
+against a freshly-copied, NEVER-enrolled `OVMF_VARS_4M.ms.fd` (must reach
+SSH with `mokutil --sb-state` reporting enabled), and a negative proof on
+the SAME never-enrolled varstore — grub's own unsigned monolithic EFI image,
+signed with the project's real `mkosi.key`/`mkosi.crt` in place of the
+trusted GRUB, must be rejected by shim itself ("Security Violation"),
+proving the positive boot is a genuine enforcement result and not an
+accidentally-permissive OVMF config. `check-native-publication-guard.sh`
+already excludes `native-installer` (it only matches `cayo-ab`/`snow-ab`/
+`snowfield-ab` by literal name) — no code change was needed there. The CLI
+installer is a placeholder for now: `test/cayo-ab-install-spike.sh` shipped
+verbatim at `/usr/libexec/snosi-install-spike`, generalized into the real
+product-aware installer in a later task.
+
 ### Native `/var` Factory State
 
 The native installer creates a fresh per-machine `/var`; nothing written to

@@ -37,6 +37,9 @@ snow-ab: ensure-mkosi
 snowfield-ab: ensure-mkosi
     sudo PATH="$PATH" {{just}} _snowfield-ab
 
+native-installer-iso: ensure-mkosi
+    sudo PATH="$PATH" {{just}} _native-installer-iso
+
 test-install image="output/snow":
     sudo PATH="$PATH" {{just}} _test-install {{image}}
 
@@ -93,6 +96,11 @@ _snow-ab: _clean
 [private]
 _snowfield-ab: _clean
     {{mkosi}} --profile snowfield-ab build
+
+[private]
+_native-installer-iso: _clean
+    {{mkosi}} --profile native-installer build
+    ./shared/native-installer/tools/build-iso.sh output/native-installer output/native-installer.iso
 
 [private]
 _test-install image="output/snow":

@@ -1,0 +1,28 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Post-package customizations for the native-installer image (runs inside the
+# image chroot, after package installation -- see
+# shared/native-installer/mkosi.conf).
+set -euo pipefail
+
+# The ISO's initramfs IS the final root (shared/native-installer/tools/build-
+# iso.sh packs this whole tree as the kernel's initramfs, no switch_root):
+# the kernel only tries "/init" in the unpacked initramfs, never "/sbin/init"
+# unless the initramfs has no /init at all -- and if it doesn't find one, it
+# falls back to mounting a "real" root device, which does not exist here.
+# systemd only enters "initrd mode" (expecting a later switch_root) when
+# /etc/initrd-release exists; this tree has none (it's a normal package
+# install, not a dracut initrd), so systemd boots straight to normal targets.
+ln -sf usr/lib/systemd/systemd /init
+
+# CLI installer placeholder (Task 8.2 generalizes this into the real
+# product-aware installer -- docs/plans/2026-07-14-bootc-native-ab-
+# coexistence-plan.md "First-Round CLI Installer"). Ship the current spike
+# script verbatim so there is exactly one copy in the tree (no drift).
+[[ -f "$CHROOT_SRCDIR/test/cayo-ab-install-spike.sh" ]] || {
+    echo "ERROR: test/cayo-ab-install-spike.sh not found at \$CHROOT_SRCDIR" >&2
+    exit 1
+}
+install -D -m 0755 "$CHROOT_SRCDIR/test/cayo-ab-install-spike.sh" \
+    /usr/libexec/snosi-install-spike

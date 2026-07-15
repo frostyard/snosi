@@ -655,6 +655,97 @@ preset-reconcile machinery. See `yeti/testing.md` for the full assertion
 sequence including the ack-gated notification and tampered-signature
 fail-closed cases.
 
+### Installer ISO (phase 8)
+
+`mkosi.profiles/native-installer/` (Include=`shared/native-installer/mkosi.conf`)
+is a payload-free network-installer image: no Snow/Snowfield/Cayo content, no
+`Dependencies=`, `BaseTrees=` reset to empty (cancels the root `mkosi.conf`'s
+`BaseTrees=%O/base` -- this profile must never inherit the shared bootc/
+sysext base). `Format=directory`, `Bootable=no`: mkosi's own UKI/systemd-boot/
+signing pipeline is not used at all. docs/native-ab-contracts.md §8's boot
+chain -- Microsoft firmware db -> Debian-signed shim -> Debian-signed GRUB ->
+Debian-signed stock kernel -> installer initrd/userspace -- is assembled
+entirely OUTSIDE mkosi by `shared/native-installer/tools/build-iso.sh`
+(mkosi has no ISO/El Torito output format at all -- checked the pinned man
+page's `Format=` enumeration). That script pulls the signed boot chain
+material straight out of the built rootfs (packages, not anything mkosi
+signs): `shim-signed`, `grub-efi-amd64-signed`, `shim-helpers-amd64-signed`
+(ships MokManager `mmx64.efi` -- NOT shipped by `shim-signed` itself), and
+`linux-image-amd64` (confirmed genuinely Debian-signed via `sbverify`, not
+just conventionally named -- "Debian Secure Boot Signer 2022 - linux" /
+"Debian Secure Boot CA"). These stay on the trixie release; only the
+cryptsetup/TPM/systemd family is pinned `/forky` (reusing
+`shared/native-ab-secure/package-manager`'s `SandboxTrees=` verbatim, per
+contract §8's "coherent Forky systemd 261" requirement even though the boot
+KERNEL is stock trixie).
+
+The installer userspace is the ENTIRE built rootfs packed as the kernel's
+initramfs (cpio+zstd, `find`+`cpio` must run in the SAME subshell as the
+`cd` that scopes them -- a `cd` in a subshell that is only the first stage
+of a pipe does not affect the next pipeline stage). A top-level
+`/init -> usr/lib/systemd/systemd` symlink (added by
+`shared/native-installer/postinst/mkosi.postinst.chroot`) means there is no
+`switch_root`: systemd boots directly as PID 1 with the packed tree as final
+root (no `/etc/initrd-release`, so systemd never enters "initrd mode").
+`Locale=`/`Keymap=`/`Timezone=`/`Hostname=`/`RootPassword=hashed:` are all
+set explicitly in `shared/native-installer/mkosi.conf` so `systemd-firstboot`
+has nothing left to prompt for -- root-caused live: left unset,
+`systemd-firstboot.service` blocks the ENTIRE boot indefinitely on an
+interactive timezone prompt with no TTY to answer it, which looks exactly
+like a silent kernel/systemd deadlock (traced via `rdinit=/bin/bash`,
+`systemd.mask=`, and QEMU monitor `info registers` showing the vCPU
+genuinely halted, not spinning, before finding the real cause).
+
+ESP layout gotchas, both confirmed live by bisecting a working boot down to
+individual files/kernel args: (1) `grub-efi-amd64-signed`'s monolithic image
+has its prefix baked in at `/EFI/debian` (`strings ... | grep '^/EFI'`), so
+`grub.cfg` must exist at that literal path -- AND, separately, booting
+through real El Torito/CD-ROM emulation resolves GRUB's prefix search
+against the ISO9660 volume, not the appended GPT/FAT partition, so
+`build-iso.sh` places a copy of `grub.cfg` directly in the ISO9660 tree too
+(the large kernel/initramfs stay ESP-only; `grub.cfg`'s `search --file`
+re-targets `$root` to wherever they actually are). Shim's compiled-in
+second-stage/MokManager names have no directory component (confirmed via a
+UTF-16LE string dump of `shimx64.efi.signed`: `\\grubx64.efi`, `\mmx64.efi`)
+-- it looks in ITS OWN directory, so copies of grub/mmx64 live in
+`EFI/BOOT/` (required anyway for El Torito's `/EFI/BOOT/BOOTX64.EFI`
+fallback path). (2) `fbx64.efi` (the shim-helpers-amd64-signed fallback/
+NVRAM-registration loader) is deliberately never shipped, even though the
+package provides it: with it present in `EFI/BOOT/` alongside shim, OVMF
+resets the machine instantly with ZERO diagnostic output, before shim even
+attempts to load `grubx64.efi` -- isolated by bisecting file-by-file on a
+minimal FAT image; removing only `fbx64.efi` (keeping `mmx64.efi` and
+everything else) boots normally. (3) The kernel command line is
+`console=ttyS0,115200n8` ONLY -- no second `console=tty0`. With Secure Boot
+enforced against a POPULATED varstore (real Microsoft PK/KEK/db, i.e. the
+exact fixture the boot-chain proof itself requires) and no GPU device,
+adding `console=tty0` hangs PID 1 completely silently; single-console boots,
+and dual-console boots against a non-SB or empty/setup-mode varstore, are
+unaffected -- reads as an OVMF GOP/console-negotiation interaction specific
+to enforced SB with a populated varstore, not a defect in this image's own
+init handling.
+
+`test/native-installer-iso-test.sh` is the exit-criterion validation:
+structural checks against the built ESP (loop-mounted, no boot needed --
+signed-binary issuer/subject assertions via `sbverify`, packed-initramfs
+content via `cpio -t`, systemd-family version via the manifest), a QEMU
+positive boot with Secure Boot ENFORCED against a freshly-copied, NEVER
+enrolled `OVMF_VARS_4M.ms.fd` (proving the pre-enrollment chain reaches SSH
+and `mokutil --sb-state` reports enabled), and a negative proof on the SAME
+never-enrolled varstore: grub's own UNSIGNED monolithic EFI image, signed
+with the project's real `mkosi.key`/`mkosi.crt` (the same key
+`shared/native-ab-secure/mkosi.conf` uses for every production native
+profile) in place of the trusted GRUB, is rejected by shim itself
+("Verification failed: (0x1A) Security Violation") -- proving the positive
+boot is a genuine Secure Boot enforcement result, not an accidentally-
+permissive OVMF configuration. `check-native-publication-guard.sh`'s
+production-name matching (`cayo-ab`/`snow-ab`/`snowfield-ab` only) already
+excludes `native-installer` with no code change needed. The CLI installer
+itself is a placeholder: `test/cayo-ab-install-spike.sh` shipped verbatim at
+`/usr/libexec/snosi-install-spike` (single source of truth, copied at build
+time by the postinst chroot script via `$CHROOT_SRCDIR`); Task 8.2
+generalizes it into the real product-aware installer.
+
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
 1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, lemonade, nix, podman, tailscale, vscode
