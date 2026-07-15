@@ -25,9 +25,9 @@
     "version": "4.128.0"
   },
   "coder": {
-    "url": "https://github.com/coder/coder/releases/download/v2.34.5/coder_2.34.5_linux_amd64.deb",
-    "sha256": "15aea185f3491e8e922902d5585d95a3214ab7eb92557a62dc5e67f850097c7b",
-    "version": "2.34.5"
+    "url": "https://github.com/coder/coder/releases/download/v2.34.6/coder_2.34.6_linux_amd64.deb",
+    "sha256": "809e4b044c221aa0d13a542257ed3600d017b0d64e1b777a3411ed582aed6bf9",
+    "version": "2.34.6"
   },
   "lemonade": {
     "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v10.10.0/lemonade-server_10.10.0-debian13_amd64.deb",

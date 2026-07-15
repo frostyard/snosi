@@ -57,6 +57,30 @@ if [[ -e /usr/lib/snosi/native-ab ]]; then
   ln -sf ../../usr/lib/sysimage/dpkg /var/lib/dpkg
 fi
 
+# Compiled aspell dictionaries are the same problem in miniature: the
+# aspell-autobuildhash dpkg trigger generates /var/lib/aspell/*.rws at
+# package-configure time (NOT dpkg-tracked — `dpkg -L aspell-en` lists only
+# the static /usr/lib/aspell/*.alias files) and leaves ABSOLUTE symlinks
+# /usr/lib/aspell/<dict>.rws -> /var/lib/aspell/<dict>.rws in aspell's
+# dict-dir. On a fresh installer-created /var those symlinks dangle and
+# spell-checking silently has no dictionaries. The trigger only ever reruns
+# at package-configure time — never on a booted immutable image — so the
+# compiled dictionaries belong to the immutable root: relocate exactly like
+# dpkg above, leaving the same relative symlink so the whole lookup chain
+# (dict-dir symlink -> /var/lib/aspell -> relocated file) keeps resolving.
+# 00-snosi-aspell.conf (ab-root tree) recreates the /var/lib/aspell symlink
+# on a fresh /var. Every image has the directory (base ships the aspell.conf
+# tmpfiles rule) but only images with aspell-en installed (snow/snowfield)
+# have content in it; relocating cayo's empty directory too keeps one shape
+# per output format across all products, so the shared tmpfiles rule never
+# dangles and each map classifies one shape per format.
+if [[ -e /usr/lib/snosi/native-ab ]]; then
+  mkdir -p /var/lib/aspell /usr/lib/sysimage
+  rm -rf /usr/lib/sysimage/aspell
+  mv /var/lib/aspell /usr/lib/sysimage/aspell
+  ln -sf ../../usr/lib/sysimage/aspell /var/lib/aspell
+fi
+
 # Ship no unit enablement symlinks in /etc. mkosi ran `systemctl preset-all`
 # (and `--global preset-all`) just before this script; PID 1 re-applies the
 # same preset policy at first boot (real first boot, see machine-id above)
