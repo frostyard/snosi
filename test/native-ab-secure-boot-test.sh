@@ -1,17 +1,25 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Phase 5 QEMU validation: fully automated Secure Boot + TPM (+ desktop, when
-# the payload has one) validation for a native A/B product (default
-# snow-ab; also accepts cayo-ab and snowfield-ab). Step 5's
+# Phase 5/6 QEMU validation: fully automated Secure Boot + TPM (+ desktop,
+# when the payload has one; + Surface module-trust, when the kernel is
+# Surface) validation for a native A/B product (default snow-ab; also
+# accepts cayo-ab and snowfield-ab). Step 5's
 # desktop assertions (graphical.target, gdm.service, notify-send, the
 # hicolor icon-cache sysext fixture) are gated on HAS_DESKTOP, derived from
 # IMAGE_ID: snow and snowfield compose the GNOME desktop payload, cayo does
 # not and skips Step 5 entirely -- see the HAS_DESKTOP derivation below and
 # docs/native-ab-contracts.md / CLAUDE.md's per-profile package-set mapping.
-# Every OTHER step (Secure Boot chain, TPM enrollment/auto-unlock, first-boot
+# Step 3c (Surface module-trust under lockdown -- signed in-tree module
+# loads, unsigned out-of-tree module is rejected) is gated on
+# IMAGE_ID == snowfield specifically (Phase 6,
+# docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md "Snowfield
+# Native A/B"); test/snowfield-artifact-test.sh (Surface kernel/module/
+# firmware/initrd static checks) likewise only runs for snowfield-ab. Every
+# OTHER step (Secure Boot chain, TPM enrollment/auto-unlock, first-boot
 # preset parity, secure update hop, recovery unlock) is profile-neutral and
-# runs unconditionally. Coverage note: only the snow-ab (desktop) path has
-# actually been run end-to-end through this QEMU harness; the cayo-ab
+# runs unconditionally. Coverage note: only the snow-ab (desktop) path had
+# been run end-to-end through this QEMU harness as of Phase 5; Phase 6 adds
+# the first snowfield-ab (desktop + Surface kernel) run. The cayo-ab
 # (server, no-desktop) path is exercised today by
 # test/native-ab-static-test.sh (build-time assertions) and
 # test/native-ab-secure-artifact-test.sh (artifact/UKI/PCR checks) rather
@@ -838,6 +846,19 @@ OUTPUT_NAME="$PROFILE" "$SCRIPT_DIR/native-ab-secure-artifact-test.sh" \
     "$ROOT_DIR/.snosi-private/pcr-signing.pub" single
 pass "N artifact passes the secure-artifact single-signature contract"
 
+# Surface-specific artifact checks (Phase 6, snowfield-ab only -- manifest
+# kernel/firmware package identity, UKI-embedded kernel version, module dir,
+# firmware completeness, initrd content; see test/snowfield-artifact-test.sh).
+if [[ "$IMAGE_ID" == snowfield ]]; then
+    echo ""
+    echo "=== Static artifact validation (test/snowfield-artifact-test.sh) ==="
+    snowfield_root_raw="$BUILD_N_DIR/$PROFILE.${IMAGE_ID}_@v.root.raw.raw"
+    OUTPUT_NAME="$PROFILE" IMAGE_ID="$IMAGE_ID" "$SCRIPT_DIR/snowfield-artifact-test.sh" \
+        "$BUILD_N_DIR/$PROFILE.manifest" "$BUILD_N_DIR/$PROFILE.efi" \
+        "$snowfield_root_raw"
+    pass "N artifact passes the Surface-specific artifact contract"
+fi
+
 # ===========================================================================
 # Step 1-2: install N to a raw disk FILE with an encrypted /var, no
 # --mok-certificate (see the header comment on why)
@@ -932,6 +953,98 @@ assert_eq "no failed systemd units on first boot" "$failed_units" ""
 assert_nvpcr_journal_clean "no NvPCR-related journal errors on first boot"
 assert_eq "systemd-pcrproduct.service is masked" \
     "$(vm_ssh 'systemctl is-enabled systemd-pcrproduct.service' || true)" "masked"
+
+# ===========================================================================
+# Step 3c (snowfield-ab only): empirical Surface module-trust decision under
+# enforced lockdown (Phase 6,
+# docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md "Snowfield
+# Native A/B" -- "First inspect the packaged kernel configuration, module
+# signatures, and signer trust under lockdown ... Re-sign only modules that
+# actually fail trust validation or are out-of-tree"). Runs on first boot:
+# lockdown is already confirmed active immediately above, and this needs no
+# TPM enrollment/update state, only a root shell. See
+# docs/native-ab-contracts.md §7 for where the resulting decision is
+# recorded.
+# ===========================================================================
+if [[ "$IMAGE_ID" == snowfield ]]; then
+    echo ""
+    echo "=== Step 3c: Surface module-trust validation (lockdown) ==="
+
+    builtin_keys="$(vm_ssh 'keyctl show %:.builtin_trusted_keys' || true)"
+    echo "builtin_trusted_keys:"
+    echo "$builtin_keys"
+    assert_contains "guest builtin trusted keyring holds an asymmetric (module-signing) key" \
+        "$builtin_keys" "asymmetric"
+
+    kver="$(vm_ssh 'uname -r')"
+    echo "booted kernel: $kver"
+
+    # (a) A signed in-tree module that needs no hardware to load
+    # successfully: isofs registers a filesystem type at module_init time
+    # and never probes hardware, so insmod succeeds unconditionally (no
+    # CD-ROM device required) -- the brief's own "filesystem module from the
+    # surface kernel tree" example.
+    isofs_signer="$(vm_ssh 'modinfo -F signer isofs' || true)"
+    echo "isofs.ko signer: $isofs_signer"
+    assert_eq "isofs.ko is signed by the kernel's own build-time key" \
+        "$isofs_signer" "Build time autogenerated kernel key"
+
+    vm_ssh 'modprobe -v isofs' >/dev/null 2>&1
+    lsmod_after_isofs="$(vm_ssh 'lsmod' || true)"
+    assert_true "a signed in-tree module (isofs) loads successfully under lockdown" \
+        bash -c "grep -qE '^isofs[[:space:]]' <<<'$lsmod_after_isofs'"
+    vm_ssh 'rmmod isofs' >/dev/null 2>&1 || true
+
+    # (b) A genuine Surface in-tree module -- confirm it carries the SAME
+    # build-time signer as the profile-neutral isofs check above (the real
+    # question this step answers: are Surface modules signed by a
+    # kernel-trusted key, or would they need re-signing with the Snosi MOK).
+    surface_signer="$(vm_ssh 'modinfo -F signer surface_aggregator' || true)"
+    echo "surface_aggregator.ko signer: $surface_signer"
+    assert_eq "surface_aggregator.ko is signed by the SAME kernel build-time key as isofs.ko" \
+        "$surface_signer" "$isofs_signer"
+
+    # (c) A deliberately UNSIGNED trivial out-of-tree module, built in-guest
+    # against the exact running kernel's headers (gcc/make/linux-headers-
+    # surface are all present in the built image -- confirmed during Phase
+    # 6 authoring). No module-signing private key exists in the guest, so
+    # this module can never be anything but unsigned -- proves signature
+    # enforcement is actually active, not merely configured.
+    vm_ssh 'rm -rf /root/trivial-mod && mkdir -p /root/trivial-mod'
+    vm_ssh "cat > /root/trivial-mod/trivial.c" <<'EOF'
+#include <linux/module.h>
+#include <linux/kernel.h>
+MODULE_LICENSE("GPL");
+static int __init trivial_init(void) { return 0; }
+static void __exit trivial_exit(void) { }
+module_init(trivial_init);
+module_exit(trivial_exit);
+EOF
+    vm_ssh "printf 'obj-m += trivial.o\nall:\n\t\$(MAKE) -C /lib/modules/%s/build M=\$(PWD) modules\n' '$kver' > /root/trivial-mod/Makefile"
+
+    build_out=""
+    build_rc=0
+    build_out="$(vm_ssh 'cd /root/trivial-mod && make 2>&1')" || build_rc=$?
+    echo "$build_out"
+    assert_eq "trivial out-of-tree module builds successfully against linux-headers-surface" "$build_rc" "0"
+
+    unsigned_signer="$(vm_ssh 'modinfo -F signer /root/trivial-mod/trivial.ko' || true)"
+    echo "trivial.ko signer: '$unsigned_signer'"
+    assert_eq "the freshly built module is genuinely unsigned (no signer field)" "$unsigned_signer" ""
+
+    insmod_out=""
+    insmod_rc=0
+    insmod_out="$(vm_ssh 'insmod /root/trivial-mod/trivial.ko 2>&1')" || insmod_rc=$?
+    echo "insmod trivial.ko: rc=$insmod_rc: $insmod_out"
+    assert_true "loading the unsigned module is REJECTED under enforced lockdown" \
+        bash -c "[[ $insmod_rc -ne 0 ]]"
+
+    dmesg_reject="$(vm_ssh 'dmesg | tail -20' || true)"
+    echo "dmesg tail after rejected insmod:"
+    echo "$dmesg_reject"
+
+    assert_nvpcr_journal_clean "no NvPCR-related journal errors after the module-trust check"
+fi
 
 # --- snow-linux-live-setup.service: corrected live-media gate ---
 if [[ "$IMAGE_ID" == snow ]]; then

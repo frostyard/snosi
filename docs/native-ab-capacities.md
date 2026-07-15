@@ -151,7 +151,7 @@ two ~258 MiB snow UKIs (the rollback pair) plus shim/MokManager/systemd-boot
 with room to spare throughout the window. Snow's capacity numbers are fully
 validated — nothing about snow remains provisional.
 
-## snowfield (validated, 2026-07-14, real `snowfield-ab` production build)
+## snowfield (PROVISIONAL-pending-hardware; static/QEMU-validated 2026-07-14/2026-07-15, real `snowfield-ab` production builds)
 
 Measured on a real `mkosi --profile snowfield-ab build` (Task 3.2), the
 Surface-kernel channel — the first build to actually exercise
@@ -177,6 +177,36 @@ No repart change was needed. This measurement independently confirms the
 Phase 3 module-policy sizing decision below (UKI far under the 40% ESP
 threshold) held for the Surface kernel too, as flagged as a re-check item
 at the time.
+
+**Re-measured, 2026-07-15 (Phase 6, real `snowfield-ab` production build
+after the `shared/native-ab-secure/mkosi.conf` `lockdown=integrity` fix —
+see CLAUDE.md / `docs/native-ab-contracts.md` §7):** root content
+1479171 blocks * 4096 = 6058684416 B (~5.64 GiB), headroom
+(8589934592 - 6058684416) / 8589934592 = ~29.5% — statistically identical
+to the Task 3.2 measurement above (the 86-block/~336 KiB delta is
+build-metadata noise, not the added `lockdown=integrity` kernel command
+line parameter, which lives in the UKI's `.cmdline` PE section, not the
+root filesystem). UKI (`snowfield-ab.efi`) measured byte-identical at
+254607696 B — the ~17-character command-line addition did not cross a PE
+section alignment boundary. No capacity change from the module-trust-driven
+fix.
+
+**PROVISIONAL-pending-hardware:** unlike snow (Phase 5, fully validated
+end to end including `--full-window`), snowfield's numbers above are
+confirmed only under QEMU (install, first boot, Secure Boot + TPM
+enrollment/auto-unlock, a real N→N+1 secure update hop — Phase 6,
+`test/native-ab-secure-boot-test.sh PROFILE=snowfield-ab`, default mode,
+64→65/65 assertions after the lockdown fix; see CLAUDE.md). QEMU has no
+Surface-specific hardware (touch, pen, keyboard/cover, Surface storage/
+network controllers), so this slot sizing is NOT yet proven against a real
+Surface device's actual firmware/driver activation footprint at runtime
+(only its static on-disk size, which is hardware-independent). `--full-window`
+(the complete N..N+3 + rollback + boot-count-fallback window) was
+deliberately NOT run for snowfield in Phase 6 — the representative-hardware
+gate below will re-run everything anyway, so a second QEMU-only
+`--full-window` pass would not retire any additional risk before then. Keep
+this section PROVISIONAL until the pending human hardware gate (CLAUDE.md
+"Native A/B Prototype") passes.
 
 ## Module-policy / dracut sizing decision (Phase 3)
 
