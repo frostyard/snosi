@@ -123,15 +123,19 @@ not replace, the generic fragment's. `mkosi.profiles/cayo-ab-raw` and
 `cayo-ab-secure` both `Include=` the `cayo` channel today; `snow`/`snowfield`
 channels exist and are validated statically (repart shape, ESP size, labels,
 SplitNames, frozen URL) but have no consuming profile yet — that lands with
-Task 3.2. snow/snowfield root+verity slot sizes are PROVISIONAL: 7 GiB
+Task 3.2. snow/snowfield root+verity slot sizes are PROVISIONAL: 8 GiB
 root / 256 MiB verity, from an `mkfs.erofs` measurement of the existing
 `snow` bootc directory build (`output/snow`, full production module set,
-`/var` excluded) at 6047731712 bytes (~5.63 GiB, ~24% headroom), with the
-verity size scaled from cayo's verity:root ratio (128M:4G = 1/32). That
-measurement overestimates snow-ab slightly (it still includes
+`/var` excluded) at 6047731712 bytes (~5.63 GiB, ~29.6% headroom under the
+spare/total-slot headroom rule, §12), with the verity size scaled from the
+verity:root ratio (1/32 of slot, rounded up to a power-of-two MiB value).
+That measurement overestimates snow-ab slightly (it still includes
 bootc/ostree/grub tooling the native profile never installs), which is
 conservative, not exact — finalized in Phase 5/6 from a real native-profile
-measurement. See `docs/native-ab-capacities.md` for full measured numbers.
+measurement. cayo's root slot is 5 GiB / 256 MiB verity (measured
+2026-07-14 under the full module/firmware policy, ~23.8% headroom; no
+longer "4 GiB (validated)"). See `docs/native-ab-capacities.md` for full
+measured numbers and the headroom definition.
 
 **Module policy (Phase 3):** release native profiles ship the complete
 packaged kernel module/firmware set — no final-root `KernelModules=` pruning

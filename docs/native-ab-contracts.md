@@ -268,7 +268,7 @@ in a commit separate from any payload change.
 
 | Product | ESP | Root slot |
 |---|---|---|
-| cayo | 1 GiB | 4 GiB (validated) |
+| cayo | 1 GiB | 5 GiB (measured 2026-07-14, full module/firmware policy; see docs/native-ab-capacities.md) |
 | snow | 1 GiB | frozen per-product in Phase 5, from measurement with the production module policy |
 | snowfield | 1 GiB | frozen per-product in Phase 6, from measurement with the production module policy |
 
@@ -276,10 +276,17 @@ in a commit separate from any payload change.
 this is deliberately conservative because an undersized ESP cannot be
 repaired in place after installation.
 
-Publication requires at least 20% root-slot headroom and every artifact
-within its fixed partition/ESP budget. Capacity numbers live in per-product
-channel fragments (`shared/native-ab/channels/<product>/`), not in the
-generic outformat.
+**Headroom definition (authoritative):** root-slot headroom is
+`(slot size - measured content size) / slot size` — spare capacity as a
+fraction of the TOTAL slot, not of the measured content. Do not compute it
+as spare/used; that formula overstates the safety margin (a slot that is
+80% full by this definition looks like "25% headroom" under spare/used,
+when only 20% of the slot is actually free). Publication requires at least
+20% root-slot headroom by this spare/total-slot definition, and every
+artifact within its fixed partition/ESP budget. Capacity numbers live in
+per-product channel fragments (`shared/native-ab/channels/<product>/`), not
+in the generic outformat. See docs/native-ab-capacities.md's Method section
+for the full sizing procedure, including the verity:root ratio rule.
 
 ## 13. Retention
 

@@ -55,11 +55,13 @@ fixture permitted to carry it; `cayo-ab-secure` builds with the full set.
 Measured against cayo-ab-secure: the full module set barely changes UKI
 size (dracut's own non-hostonly selection logic bounds it, not the
 mkosi-level module filter) but grows `/usr/lib/firmware`
-from 21 MiB to 1019 MiB, leaving cayo's contract-frozen 4 GiB root slot
-under 5% headroom instead of the required 20% — flagged as an open
-capacity concern for whichever phase creates the real production `cayo-ab`
-profile, not fixed here (§12 marks cayo's slot "validated", not
-provisional).
+from 21 MiB to 1019 MiB, which left cayo's then-frozen 4 GiB root slot
+under 5% headroom instead of the required 20% (spare/total-slot
+definition, §12). Fixed in a Phase 3 follow-up: cayo's root slot is now
+5 GiB (~23.8% headroom against the same measured content), with the
+verity slot scaled in step from 128 MiB to 256 MiB per the verity:root
+ratio rule. See `docs/native-ab-capacities.md` for the full measurement
+and headroom-definition writeup.
 
 `mkosi.profiles/cayo-ab-raw` (renamed from `cayo-ab` in Phase 1; the name
 `cayo-ab` is reserved for the eventual secure production posture and
