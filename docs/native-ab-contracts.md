@@ -20,7 +20,8 @@ allowlist entry names the phase that removes it.
 |---|---|
 | bootc profiles (unchanged) | `cayo`, `snow`, `snowfield` |
 | Production native profiles | `cayo-ab`, `snow-ab`, `snowfield-ab` (secure posture only) |
-| Development fixtures | `cayo-ab-raw` (Phase 1 rename of today's `cayo-ab`; never published), `cayo-ab-secure` (folded into production `cayo-ab` later) |
+| Development fixtures | `cayo-ab-raw` (Phase 1 rename of today's `cayo-ab`; never published) |
+| Shared secure posture fragment | `shared/native-ab-secure/mkosi.conf` (Phase 3 generalization of the retired `cayo-ab-secure` spike profile; `Include=`d by all three production native profiles) |
 
 A profile literally named `cayo-ab`, `snow-ab`, or `snowfield-ab` is
 production-facing and MUST satisfy the publication guard (§15). It must never
@@ -165,8 +166,10 @@ Rotation:
 
 The public update key is committed in-repo at
 `shared/native-ab/keys/import-pubring.gpg` and shipped at
-`/usr/lib/systemd/import-pubring.gpg`. (This path does not exist yet as of
-Phase 0; it is created when the protected signing pipeline lands, Phase 7.)
+`/usr/lib/systemd/import-pubring.gpg`. (This path was created in Phase 3 as a
+DEV-only key — see `shared/native-ab/keys/README.md` — to unblock the
+publication guard ahead of schedule; the protected signing pipeline that
+replaces it with the real production key lands in Phase 7.)
 
 ### Protected signing architecture
 
@@ -269,8 +272,8 @@ in a commit separate from any payload change.
 | Product | ESP | Root slot |
 |---|---|---|
 | cayo | 1 GiB | 5 GiB (measured 2026-07-14, full module/firmware policy; see docs/native-ab-capacities.md) |
-| snow | 1 GiB | frozen per-product in Phase 5, from measurement with the production module policy |
-| snowfield | 1 GiB | frozen per-product in Phase 6, from measurement with the production module policy |
+| snow | 1 GiB | 8 GiB (measured 2026-07-14 against the real `snow-ab` production build; see docs/native-ab-capacities.md) |
+| snowfield | 1 GiB | 8 GiB (measured 2026-07-14 against the real `snowfield-ab` production build; see docs/native-ab-capacities.md) |
 
 1 GiB ESP applies to all three products from the first installable layout —
 this is deliberately conservative because an undersized ESP cannot be
@@ -313,8 +316,7 @@ pulls in) satisfies, at minimum:
 - `SecureBoot=yes`
 - `SignExpectedPcr=yes`
 - The update pubring is in-tree (§7).
-- NvPCR disable finalize is wired (`shared/cayo-ab-secure/finalize/disable-nvpcr.chroot`
-  or its successor).
+- NvPCR disable finalize is wired (`shared/native-ab-secure/finalize/disable-nvpcr.chroot`).
 - Native updater isolation: bootc and nbc timers masked (§ Native Runtime
   Isolation in the plan).
 - The secure `/var` mount contract (§10, secure row).

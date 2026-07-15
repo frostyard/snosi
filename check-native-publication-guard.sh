@@ -23,8 +23,8 @@
 #   - SecureBoot=yes
 #   - SignExpectedPcr=yes
 #   - A reference to the NvPCR disable finalize script
-#     (shared/cayo-ab-secure/finalize/disable-nvpcr.chroot, or its eventual
-#     successor path under shared/native-ab-secure/).
+#     (shared/native-ab-secure/finalize/disable-nvpcr.chroot -- the Phase 3
+#     successor to the former shared/cayo-ab-secure/ spike path).
 #   - Inclusion of the ab-root outformat fragment
 #     (shared/outformat/ab-root/mkosi.conf).
 #   - The committed update pubring exists in-tree at

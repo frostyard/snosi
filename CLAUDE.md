@@ -33,12 +33,12 @@ mkosi configs use `Include=` directives to compose reusable fragments. The compo
 
 - `mkosi.conf` (root) declares base + sysext dependencies
 - `mkosi.images/` contains base image and sysext definitions
-- `mkosi.profiles/` defines transport+kernel selector variants (snow, snowfield, cayo — the app-bundling "loaded" variants were retired 2026-07 in favor of sysexts; cayo-ab-raw and cayo-ab-secure are the native A/B prototypes, see below)
+- `mkosi.profiles/` defines transport+kernel selector variants (snow, snowfield, cayo — the app-bundling "loaded" variants were retired 2026-07 in favor of sysexts; cayo-ab-raw is the permanent, never-published native A/B dev fixture, and cayo-ab/snow-ab/snowfield-ab are the production native A/B profiles, see below)
 - `shared/` contains reusable fragments: kernel configs, package sets, output format, scripts, and `shared/composition/` (per-product payload fragments, see below)
 
 Each profile composes: package sets + kernel variant + output format + build/postinstall/finalize/postoutput scripts.
 
-**Payload composition (`shared/composition/`):** `shared/composition/cayo/mkosi.conf` and `shared/composition/snow/mkosi.conf` are the single per-product definitions of ExtraTrees, PostInstallationScripts (dracut postinst, then the product postinst.chroot), BuildScripts (brew, plus snow's hotedge/logomenu/bazaar/surface-cert), the manifest PostOutputScript, the image FinalizeScript, and an `[Include]` of the product's package set. Every profile that ships that product's payload — bootc (`cayo`/`snow`/`snowfield`) and native (`cayo-ab-raw`/`cayo-ab-secure`) alike — `Include=`s the fragment instead of restating it, so the two transports cannot drift apart. Profiles themselves reduce to transport+kernel selectors: bootc profiles add `Include=shared/packages/bootc/mkosi.conf` (before the composition include, so `Packages=` accumulates in the same order as before the refactor) and `Include=shared/outformat/image/mkosi.conf`; native profiles never include the bootc packages fragment and instead include `shared/outformat/ab-root/mkosi.conf`. `cayo-ab-secure` keeps its own `disable-nvpcr.chroot` FinalizeScript directly in its `[Content]` section, positioned before its `[Include]` of `shared/composition/cayo/mkosi.conf`, so the resolved FinalizeScripts order stays disable-nvpcr -> image finalize -> ab-root finalize.
+**Payload composition (`shared/composition/`):** `shared/composition/cayo/mkosi.conf` and `shared/composition/snow/mkosi.conf` are the single per-product definitions of ExtraTrees, PostInstallationScripts (dracut postinst, then the product postinst.chroot), BuildScripts (brew, plus snow's hotedge/logomenu/bazaar/surface-cert), the manifest PostOutputScript, the image FinalizeScript, and an `[Include]` of the product's package set. Every profile that ships that product's payload — bootc (`cayo`/`snow`/`snowfield`) and native (`cayo-ab-raw`, `cayo-ab`, `snow-ab`, `snowfield-ab`) alike — `Include=`s the fragment instead of restating it, so the two transports cannot drift apart. Profiles themselves reduce to transport+kernel selectors: bootc profiles add `Include=shared/packages/bootc/mkosi.conf` (before the composition include, so `Packages=` accumulates in the same order as before the refactor) and `Include=shared/outformat/image/mkosi.conf`; native profiles never include the bootc packages fragment and instead include `shared/outformat/ab-root/mkosi.conf`. The three production native profiles (`cayo-ab`, `snow-ab`, `snowfield-ab`) reduce to `[Config]`/`[Output]`/`[Include]` only (Phase 3) — every setting, including the secure posture, lives in `[Include]`d fragments: `Include=%D/shared/native-ab-secure/mkosi.conf` is listed FIRST, before the composition include, so its `FinalizeScripts=disable-nvpcr.chroot` resolves before the composition fragment's image finalize (mkosi accumulates list settings in `Include=` encounter order across the whole resolved config) — the resolved FinalizeScripts order stays disable-nvpcr -> image finalize -> var-audit.finalize -> ab-root finalize, verified via `mkosi --profile <p> summary`.
 
 **mkosi Include ordering matters for list settings:** mkosi accumulates list-valued settings (`Packages=`, `FinalizeScripts=`, `BuildScripts=`, etc.) across the whole resolved config in the order each `Include=` is textually encountered (recursing into included files at that point), not grouped by which file declared them. When refactoring composition, the arbiter is a byte-level diff of `mkosi cat-config`/`summary` output before and after — not a read of the source files. Two gotchas hit doing this: (1) `History=yes` (base `mkosi.conf`) caches the last-used `--profile` in `.mkosi-private/history/latest.json` (root-owned) and silently overrides `--profile` on every later invocation of read-only verbs like `cat-config` (prints "Ignoring --profile from the CLI"); `summary` has an explicit bypass for `-f`, but `cat-config` does not — `sudo rm -f .mkosi-private/history/latest.json` before capturing config snapshots. (2) `summary` output has three fields that are non-deterministic per invocation and must be normalized out of any diff: `Seed:` (fresh random UUID per run), `Prepare Scripts: /tmp/tmpXXXXXXXX/...mkosi-tools/mkosi.prepare` (random tools-tree extraction tmpdir), and `Image Version:` (defaults to the current wall-clock timestamp when unset) — none are derived from config content.
 
@@ -82,8 +82,8 @@ bootc and ostree install as regular APT packages (`bootc`, `libostree-1-1` — t
 
 ### Native A/B Prototype
 
-Naming, path, and policy contracts for the eventual production native A/B
-products (`cayo-ab`, `snow-ab`, `snowfield-ab`) are frozen in
+Naming, path, and policy contracts for the production native A/B products
+(`cayo-ab`, `snow-ab`, `snowfield-ab`) are frozen in
 `docs/native-ab-contracts.md` and enforced statically by
 `test/native-ab-contracts-test.sh`. Read that document before adding or
 renaming anything under the native A/B tree — it is the source of truth, not
@@ -95,9 +95,12 @@ publication guard: it requires every profile literally named `cayo-ab`,
 `snow-ab`, or `snowfield-ab` to carry shim/Secure Boot/PCR-signing markers,
 an NvPCR-disable finalize reference, the ab-root outformat include, the
 committed update pubring, and no final-root `KernelModules=` filter, and it
-hard-fails if `cayo-ab-raw` ever picks up a publication marker. It passes
-today only because no profile is yet named `cayo-ab`, `snow-ab`, or
-`snowfield-ab` — read the script's header before adding one.
+hard-fails if `cayo-ab-raw` ever picks up a publication marker. Since Phase 3
+all three production profiles exist and pass the guard: the check follows a
+profile's `[Include]=shared/native-ab-secure` line as a plain textual
+reachability check (not a general `Include=` resolver — only this one
+documented fragment) so the markers can live in the shared fragment instead
+of being restated per profile.
 
 **Generic output + per-product channels (Phase 3):** `shared/outformat/ab-root/`
 carries ONLY product-neutral disk/boot mechanics — `Format=disk`,
@@ -119,23 +122,20 @@ they never change when a new channel starts publishing). A profile consumes
 native A/B output by `Include=`ing BOTH the generic `shared/outformat/ab-root/mkosi.conf`
 fragment AND exactly one channel's `mkosi.conf`; mkosi's list-setting
 accumulation means the channel's `ExtraTrees=`/`RepartDirectories=` add to,
-not replace, the generic fragment's. `mkosi.profiles/cayo-ab-raw` and
-`cayo-ab-secure` both `Include=` the `cayo` channel today; `snow`/`snowfield`
-channels exist and are validated statically (repart shape, ESP size, labels,
-SplitNames, frozen URL) but have no consuming profile yet — that lands with
-Task 3.2. snow/snowfield root+verity slot sizes are PROVISIONAL: 8 GiB
-root / 256 MiB verity, from an `mkfs.erofs` measurement of the existing
-`snow` bootc directory build (`output/snow`, full production module set,
-`/var` excluded) at 6047731712 bytes (~5.63 GiB, ~29.6% headroom under the
-spare/total-slot headroom rule, §12), with the verity size scaled from the
-verity:root ratio (1/32 of slot, rounded up to a power-of-two MiB value).
-That measurement overestimates snow-ab slightly (it still includes
-bootc/ostree/grub tooling the native profile never installs), which is
-conservative, not exact — finalized in Phase 5/6 from a real native-profile
-measurement. cayo's root slot is 5 GiB / 256 MiB verity (measured
-2026-07-14 under the full module/firmware policy, ~23.8% headroom; no
-longer "4 GiB (validated)"). See `docs/native-ab-capacities.md` for full
-measured numbers and the headroom definition.
+not replace, the generic fragment's. `mkosi.profiles/cayo-ab-raw` and the
+production `cayo-ab` both `Include=` the `cayo` channel; `snow-ab` and
+`snowfield-ab` (Task 3.2) `Include=` the `snow`/`snowfield` channels
+respectively. All root+verity slot sizes are now VALIDATED against real
+native builds, not provisional: cayo is 5 GiB root / 256 MiB verity
+(~23.8% headroom); snow is 8 GiB root / 256 MiB verity (~33.8% headroom,
+measured content ~5.29 GiB — smaller than the earlier bootc-derived
+provisional estimate, which conservatively over-counted bootc/ostree/grub
+tooling that native profiles never install); snowfield reuses the same
+8 GiB / 256 MiB slot (~29.5% headroom, measured content ~5.64 GiB — the
+Surface kernel's larger driver/firmware set costs about 374 MiB more than
+snow's backports kernel, still comfortably inside the slot). See
+`docs/native-ab-capacities.md` for full measured numbers and the headroom
+definition.
 
 **Module policy (Phase 3):** release native profiles ship the complete
 packaged kernel module/firmware set — no final-root `KernelModules=` pruning
@@ -144,7 +144,8 @@ in the shared `ab-root` fragment moved into `mkosi.profiles/cayo-ab-raw/mkosi.co
 directly (the one dev fixture permitted to carry it — a QEMU-only
 restriction to keep dracut's `--no-hostonly` initrd self-contained and avoid
 mkosi's dependency sweep failing on unresolved Debian module aliases);
-`cayo-ab-secure` builds with the full module set. The generic tree's
+the three production profiles (`cayo-ab`, `snow-ab`, `snowfield-ab`) build
+with the full module set. The generic tree's
 `usr/lib/dracut/dracut.conf.d/30-bootc-standard.conf` is a DELIBERATE
 same-named override: `ExtraTrees=` composition overwrites files at
 identical relative paths, so this file replaces (not supplements) the base
@@ -154,6 +155,31 @@ surviving into the same `dracut.conf.d` directory — the filename match is
 load-bearing and `test/native-ab-static-test.sh` asserts it holds by finding
 whichever base file adds the `bootc` dracut module and checking ab-root's
 tree shadows it at the identical relative path.
+
+**The `ExtraTrees=` shadow alone is not early enough for every kernel package
+(Task 3.2 root cause, `dracut[E]: Module 'bootc' cannot be found`):** mkosi's
+build order is `install_skeleton_trees()` -> `install_distribution()`
+(installs `Packages=`) -> `install_extra_trees()` (confirmed in
+`.mkosi/mkosi/__init__.py` `build_image()`), so the `ExtraTrees=` shadow of
+`30-bootc-standard.conf` above only lands AFTER packages — including the
+kernel — are installed. Debian's own `linux-image-amd64` (cayo-ab/snow-ab)
+defers its kernel-postinst dracut regeneration via a dpkg trigger and never
+hits this window, but the linux-surface kernel package (`snowfield-ab`) runs
+`/etc/kernel/postinst.d/dracut` SYNCHRONOUSLY as part of its own postinst,
+at which point the base image's un-shadowed copy (requesting the `bootc`
+module, which native profiles never install) is still in effect, and the
+build hard-fails. Fixed by ALSO pulling the identical canonical file in via
+`SkeletonTrees=%D/shared/outformat/ab-root/tree/usr/lib/dracut/dracut.conf.d/
+30-bootc-standard.conf:/usr/lib/dracut/dracut.conf.d/30-bootc-standard.conf`
+in `shared/outformat/ab-root/mkosi.conf` — SkeletonTrees run BEFORE package
+installation, so the shadow is in effect from the very start of the
+buildroot regardless of which kernel's postinst hook happens to run
+synchronously. No file duplication: same source path, two composition
+mechanisms. The `ExtraTrees=` copy is still required (it is what
+`test/native-ab-static-test.sh` checks, and it is the one that would win if
+a future kernel ever overwrote this path mid-install). Verified harmless for
+cayo-ab/snow-ab (rebuilt with the fix, artifact tests still pass, root
+content size unchanged to within build-metadata noise).
 
 `mkosi.profiles/cayo-ab-raw` (renamed from `cayo-ab` in Phase 1; `Output=`
 changed to match, `ImageId=cayo` unchanged) is an isolated experimental disk
@@ -218,7 +244,23 @@ the base image's unconditionally-shipped, preset-enabled `nftables.service`
 failed on every native A/B boot ("Unable to initialize Netlink socket:
 Protocol not supported") — fixed by adding both modules to the allowlist.
 
-`mkosi.profiles/cayo-ab-secure` is the security spike. Standard Secure Boot
+**Shared secure posture fragment (`shared/native-ab-secure/`, Phase 3):**
+until Phase 3 the secure posture lived directly in the standalone
+`mkosi.profiles/cayo-ab-secure` spike profile. That profile is retired
+(`git rm`); its content moved almost verbatim into
+`shared/native-ab-secure/mkosi.conf`, an includable fragment carrying
+everything except identity (the `[Output]` block: `ImageId=`/`Output=` differ
+per product) and the payload/kernel/channel `[Include]=`s (also per-profile).
+`mkosi.profiles/{cayo-ab,snow-ab,snowfield-ab}/mkosi.conf` are now the
+production posture: each is ONLY `[Config]` (the `Dependencies=` header),
+`[Output]` (identity), and `[Include]` — `Include=%D/shared/native-ab-secure/mkosi.conf`
+listed FIRST (see "Payload composition" above for why the ordering matters),
+then the product's `shared/composition/<cayo|snow>/mkosi.conf`,
+`shared/kernel/<backports|surface>/mkosi.conf`,
+`shared/outformat/ab-root/mkosi.conf`, and
+`shared/native-ab/channels/<cayo|snow|snowfield>/mkosi.conf`. `just cayo-ab`,
+`just snow-ab`, `just snowfield-ab` build them (mirroring the bootc profile
+targets). Standard Secure Boot
 uses Debian's Microsoft-signed shim and MOK-signed systemd-boot; generated snosi
 UKIs are signed by `mkosi.key`/`mkosi.crt` and require one-time enrollment of
 that certificate through shim's MokManager. GRUB is unsuitable because its
@@ -234,12 +276,13 @@ installer: its Debian-signed boot authority differs from the installed
 MOK-signed UKI, so the value changes before first boot. A raw PCR 11 value would
 break each A/B update. The initrd explicitly detects LUKS and invokes
 `systemd-cryptsetup attach`; GPT auto-discovery does not unlock `var` during this
-dracut phase. Raw ext4 remains only for the baseline spike. LUKS2 creation,
+dracut phase. Raw ext4 remains only for `cayo-ab-raw`, the never-published dev
+fixture. LUKS2 creation,
 MOK enrollment, enforced Secure Boot, TPM auto-unlock, TPM replacement failure,
 recovery unlock, and PCR signing-key rotation are validated in Incus. Update,
 rollback, and boot-count fallback are also validated end to end with the sole
-new-key TPM token. The secure profile upgrades the complete systemd family to
-Forky 261+ through a profile-only, low-priority APT source; never expose that
+new-key TPM token. The three production profiles upgrade the complete systemd family to
+Forky 261+ through the shared fragment's profile-only, low-priority APT source; never expose that
 source to the base or normal profiles, and keep all exact-version systemd
 libraries and companion packages qualified together.
 Do not implement signing-key overlap as two independent TPM tokens. A controlled
@@ -251,8 +294,10 @@ key under `.snosi-private/history/`, make the new key active, and set
 `PCR_SIGNING_KEY_PREVIOUS` to the old key's filename for transition builds. Keep
 the old TPM token until every supported rollback UKI contains the new signature;
 then remove it and verify the same transition UKI unlocks with the new token.
-Validate each secure build with
-`test/native-ab-secure-artifact-test.sh`, which checks root-package coherence,
+Validate each production build with
+`test/native-ab-secure-artifact-test.sh` (`OUTPUT_NAME` env var, or explicit
+`output/<name>.manifest output/<name>.efi` args, selects which profile's
+artifacts to check; defaults to `cayo-ab`), which checks root-package coherence,
 the initrd's private systemd library and TPM token plugin, and UKI PCR sections.
 When given the old certificate and new public key, it also requires eight PCR
 signatures: four policies signed once by each key, with the new key in `.pcrpkey`.
@@ -271,7 +316,7 @@ instance identities, and the external recovery key. It verifies alternating
 slots, sole-new-key unlock, explicit rollback, re-arms the successfully tested
 N+3 entry as `+3-0`, corrupts its root, observes three emergency boots, and
 requires automatic N+2 fallback plus the exhausted `+0-3` entry.
-A clean secure-profile build is
+A clean production-profile build is
 validated: its ESP contains Debian-signed shim, MokManager, and MOK-signed
 systemd-boot, and its MOK-signed UKI contains `.pcrpkey` and `.pcrsig`. In pinned mkosi,
 `UnifiedKernelImages=unsigned` means build locally; `SecureBoot=yes` still signs
@@ -283,11 +328,29 @@ mkosi owns that directory and `mkosi clean -ff` removes it. Use the gitignored
 Systemd 261 NvPCR anchor credentials embed the PCR signing public key and have
 no supported migration operation. A dual-signed transition can read an old
 anchor, but a new-only UKI then fails `systemd-tpm2-setup`, `systemd-pcrproduct`,
-and `systemd-pcrlogin` with `ENXIO`. The secure profile does not consume NvPCR
-attestation, so `shared/cayo-ab-secure/finalize/disable-nvpcr.chroot` masks every
+and `systemd-pcrlogin` with `ENXIO`. None of the three production profiles consume NvPCR
+attestation, so `shared/native-ab-secure/finalize/disable-nvpcr.chroot` (`FinalizeScripts=`
+in the shared fragment, run before every consumer's image finalize) masks every
 shipped NvPCR definition plus the product/login writers. Keep TPM SRK setup and
 the signed-PCR-11 LUKS path enabled. Do not delete/recreate the anchor or TPM NV
 indexes as a key-rotation shortcut; that changes the attestation baseline.
+
+**Dev update signing pubring (Phase 3):** every native image (including
+`cayo-ab-raw`) ships `/usr/lib/systemd/import-pubring.gpg` via a `file:target`
+`ExtraTrees=` pair in `shared/outformat/ab-root/mkosi.conf` (the pinned
+mkosi's `install_tree()` copies a single file when a target is given, not
+only directories/tar archives — confirmed in `.mkosi/mkosi/__init__.py`).
+The committed public keyring is a DEV-only ed25519 key
+(`shared/native-ab/keys/import-pubring.gpg`, see
+`shared/native-ab/keys/README.md`); its private half is
+`.snosi-private/os-update-signing.key` (gitignored, never committed, never
+printed — nothing in-repo signs with it yet, since dev/local `SHA256SUMS`
+stay unsigned per `docs/native-ab-contracts.md` §7). This satisfies
+`check-native-publication-guard.sh`'s pubring-committed check ahead of the
+real Phase 7 signing pipeline; QEMU update tests generate their own
+ephemeral keys and are unaffected. **Rotate this key before first production
+publication** — see the README and contract §7 for the real key-ceremony
+procedure.
 
 **Accepted risk — unsigned sysexts on native installs:** native production
 candidates (`cayo-ab`, `snow-ab`, `snowfield-ab`) ship every sysext transfer
@@ -325,10 +388,11 @@ symlink, and EMPTY directory under `$BUILDROOT/var` at the end of the
 build (non-empty directories are represented by their contents, not
 themselves) and classifies each against a per-product outcome map:
 `shared/composition/cayo/var-outcomes.txt` (used by `cayo` bootc AND
-`cayo-ab-raw`/`cayo-ab-secure` native, since they share
+`cayo-ab-raw`/`cayo-ab` native, since they share
 `shared/composition/cayo/mkosi.conf`) and `shared/composition/
-snow/var-outcomes.txt` (used by `snow` and `snowfield`, both bootc — no
-native snow/snowfield profile exists yet). Map format: `<glob><TAB><outcome>`
+snow/var-outcomes.txt` (used by `snow`/`snowfield` bootc AND `snow-ab`/
+`snowfield-ab` native, since they share `shared/composition/snow/mkosi.conf`).
+Map format: `<glob><TAB><outcome>`
 per line, `#` comments, outcome one of:
 
 - `image-metadata` — belongs to the immutable root (the dpkg database and

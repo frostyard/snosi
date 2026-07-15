@@ -28,6 +28,15 @@ snowfield: ensure-mkosi
 cayo: ensure-mkosi
     sudo PATH="$PATH" {{just}} _cayo
 
+cayo-ab: ensure-mkosi
+    sudo PATH="$PATH" {{just}} _cayo-ab
+
+snow-ab: ensure-mkosi
+    sudo PATH="$PATH" {{just}} _snow-ab
+
+snowfield-ab: ensure-mkosi
+    sudo PATH="$PATH" {{just}} _snowfield-ab
+
 test-install image="output/snow":
     sudo PATH="$PATH" {{just}} _test-install {{image}}
 
@@ -74,6 +83,18 @@ _snowfield: _clean
 [private]
 _cayo: _clean
     {{mkosi}} --profile cayo build
+
+[private]
+_cayo-ab: _clean
+    {{mkosi}} --profile cayo-ab build
+
+[private]
+_snow-ab: _clean
+    {{mkosi}} --profile snow-ab build
+
+[private]
+_snowfield-ab: _clean
+    {{mkosi}} --profile snowfield-ab build
 
 [private]
 _test-install image="output/snow":

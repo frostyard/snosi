@@ -2,8 +2,12 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 set -euo pipefail
 
-manifest=${1:-output/cayo-ab-secure.manifest}
-uki=${2:-output/cayo-ab-secure.efi}
+# OUTPUT_NAME selects which built profile's artifacts to validate (e.g.
+# cayo-ab, snow-ab, snowfield-ab); defaults to cayo-ab, the successor to the
+# retired cayo-ab-secure spike profile.
+output_name=${OUTPUT_NAME:-cayo-ab}
+manifest=${1:-output/$output_name.manifest}
+uki=${2:-output/$output_name.efi}
 previous_certificate=${3:-}
 primary_public_key=${4:-.snosi-private/pcr-signing.pub}
 signature_mode=${5:-}

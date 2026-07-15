@@ -26,6 +26,26 @@ fi
 # keeps working there too.
 grep -q '^[[:space:]]*dm_crypt$' "$root/mkosi.profiles/cayo-ab-raw/mkosi.conf"
 
+# Update signing pubring (docs/native-ab-contracts.md §7): one canonical
+# committed copy, wired into every native image (including cayo-ab-raw) via
+# a file:target ExtraTrees= pair in the generic ab-root fragment.
+pubring="$root/shared/native-ab/keys/import-pubring.gpg"
+[[ -s "$pubring" ]]
+grep -q '^ExtraTrees=%D/shared/native-ab/keys/import-pubring.gpg:/usr/lib/systemd/import-pubring.gpg$' \
+    "$ab/mkosi.conf"
+[[ -f "$root/shared/native-ab/keys/README.md" ]]
+
+# Regression guard (Task 3.2): the ExtraTrees= shadow of 30-bootc-standard.conf
+# above only takes effect AFTER package installation (mkosi build order:
+# install_skeleton_trees -> install_distribution -> install_extra_trees). A
+# kernel package whose postinst runs dracut synchronously (linux-surface, used
+# by snowfield-ab) hits the base image's un-shadowed copy first and fails with
+# "dracut[E]: Module 'bootc' cannot be found". A SkeletonTrees= pull of the
+# SAME canonical file must also be present so the shadow is in effect from the
+# very start of the buildroot, before any package installs.
+grep -q '^SkeletonTrees=%D/shared/outformat/ab-root/tree/usr/lib/dracut/dracut.conf.d/30-bootc-standard.conf:/usr/lib/dracut/dracut.conf.d/30-bootc-standard.conf$' \
+    "$ab/mkosi.conf"
+
 # The native ab-root override of the base image's bootc dracut.conf.d file
 # only works because ExtraTrees= composition overwrites files at IDENTICAL
 # relative paths (last ExtraTrees= wins) -- find whichever base file adds
@@ -74,20 +94,27 @@ grep -q 'blkid -p -s TYPE -o value' \
 grep -q '^After=sysroot.mount cryptsetup.target$' \
     "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/snosi-etc-overlay-initrd.service"
 
-secure="$root/mkosi.profiles/cayo-ab-secure/mkosi.conf"
-forky_tree="$root/shared/cayo-ab-secure/package-manager/etc/apt"
+# Phase 3: the security posture that used to live directly in the
+# cayo-ab-secure spike profile is now a shared, includable fragment
+# (shared/native-ab-secure/mkosi.conf), consumed by the three production
+# profiles (cayo-ab, snow-ab, snowfield-ab). Assert the markers on the
+# fragment itself, then assert each production profile actually reaches it
+# via [Include] (and does not restate the markers itself -- restating them
+# would let a profile drift from the shared fragment undetected).
+secure="$root/shared/native-ab-secure/mkosi.conf"
+forky_tree="$root/shared/native-ab-secure/package-manager/etc/apt"
 grep -q '^Bootloader=systemd-boot$' "$secure"
 grep -q '^ShimBootloader=signed$' "$secure"
 grep -q '^UnifiedKernelImages=unsigned$' "$secure"
 grep -q '^SecureBoot=yes$' "$secure"
 grep -q '^SecureBootAutoEnroll=no$' "$secure"
 grep -q '^SignExpectedPcr=yes$' "$secure"
-grep -q '^SandboxTrees=%D/shared/cayo-ab-secure/package-manager$' "$secure"
-grep -q '^ExtraSearchPaths=%D/shared/cayo-ab-secure/tools$' "$secure"
+grep -q '^SandboxTrees=%D/shared/native-ab-secure/package-manager$' "$secure"
+grep -q '^ExtraSearchPaths=%D/shared/native-ab-secure/tools$' "$secure"
 grep -q '^SandboxTrees=%D/.snosi-private/history:/usr/lib/snosi-pcr-history$' "$secure"
 grep -q '^Environment=PCR_SIGNING_KEY_PREVIOUS$' "$secure"
-[[ -x "$root/shared/cayo-ab-secure/tools/ukify" ]]
-grep -q 'PCR_SIGNING_KEY_PREVIOUS' "$root/shared/cayo-ab-secure/tools/ukify"
+[[ -x "$root/shared/native-ab-secure/tools/ukify" ]]
+grep -q 'PCR_SIGNING_KEY_PREVIOUS' "$root/shared/native-ab-secure/tools/ukify"
 grep -q '^Suites: forky$' "$forky_tree/sources.list.d/forky.sources"
 grep -q '^Pin: release n=forky$' "$forky_tree/preferences.d/forky"
 grep -q '^Pin-Priority: 50$' "$forky_tree/preferences.d/forky"
@@ -102,9 +129,41 @@ if grep -q 'grub-efi-amd64-signed' "$secure"; then
     exit 1
 fi
 grep -q '^[[:space:]]*shim-signed$' "$secure"
+
+# Forky isolation: the fragment itself legitimately pins forky, but nothing
+# outside its own tree, the three production profiles' OWN mkosi.conf (they
+# must reach forky only through the [Include], never restate it), the base
+# tree, mkosi.images, the raw dev fixture, or the sandbox may reference it.
+declare -A production_composition=([cayo-ab]=cayo [snow-ab]=snow [snowfield-ab]=snow)
+declare -A production_kernel=([cayo-ab]=backports [snow-ab]=backports [snowfield-ab]=surface)
+declare -A production_imageid=([cayo-ab]=cayo [snow-ab]=snow [snowfield-ab]=snowfield)
+production_profiles=(cayo-ab snow-ab snowfield-ab)
+for name in "${production_profiles[@]}"; do
+    conf="$root/mkosi.profiles/$name/mkosi.conf"
+    [[ -f "$conf" ]] || { echo "Missing production profile: $conf" >&2; exit 1; }
+    grep -q '^Include=%D/shared/native-ab-secure/mkosi.conf$' "$conf"
+    if grep -qiE '^(Bootloader|ShimBootloader|UnifiedKernelImages|SecureBoot|SecureBootAutoEnroll|SignExpectedPcr)=' "$conf"; then
+        echo "$conf must not restate secure-fragment markers directly -- it must only Include= shared/native-ab-secure/mkosi.conf" >&2
+        exit 1
+    fi
+    if grep -qi forky "$conf"; then
+        echo "$conf must reach forky only through the native-ab-secure [Include], not directly" >&2
+        exit 1
+    fi
+    imageid="${production_imageid[$name]}"
+    grep -q "^ImageId=$imageid\$" "$conf"
+    grep -q "^Include=%D/shared/composition/${production_composition[$name]}/mkosi.conf\$" "$conf"
+    grep -q "^Include=%D/shared/kernel/${production_kernel[$name]}/mkosi.conf\$" "$conf"
+    grep -q '^Include=%D/shared/outformat/ab-root/mkosi.conf$' "$conf"
+    grep -q "^Include=%D/shared/native-ab/channels/$imageid/mkosi.conf\$" "$conf"
+    if grep -qE '^(Include=%D/shared/packages/bootc/mkosi.conf|Include=%D/shared/outformat/image/mkosi.conf)$' "$conf"; then
+        echo "$conf must never include the bootc packages or image-output fragments" >&2
+        exit 1
+    fi
+done
 if grep -Rqi forky "$root/mkosi.conf" "$root/mkosi.images" \
     "$root/mkosi.profiles/cayo-ab-raw" "$root/mkosi.sandbox"; then
-    echo "Forky must remain isolated to cayo-ab-secure" >&2
+    echo "Forky must remain isolated to shared/native-ab-secure and its production consumers" >&2
     exit 1
 fi
 
@@ -119,12 +178,12 @@ grep -q -- '--tpm2-public-key-pcrs=11' "$installer"
 grep -q 'mokutil --import' "$installer"
 grep -q 'cryptsetup luksFormat --type luks2' "$installer"
 
-nvpcr_finalize="$root/shared/cayo-ab-secure/finalize/disable-nvpcr.chroot"
+nvpcr_finalize="$root/shared/native-ab-secure/finalize/disable-nvpcr.chroot"
 [[ -x "$nvpcr_finalize" ]]
 grep -q '/usr/lib/nvpcr/\*\.nvpcr' "$nvpcr_finalize"
 grep -q '/etc/systemd/system/systemd-pcrproduct.service' "$nvpcr_finalize"
 grep -q '/etc/systemd/system/systemd-pcrlogin@\.service' "$nvpcr_finalize"
-grep -q 'FinalizeScripts=%D/shared/cayo-ab-secure/finalize/disable-nvpcr.chroot' "$secure"
+grep -q 'FinalizeScripts=%D/shared/native-ab-secure/finalize/disable-nvpcr.chroot' "$secure"
 
 rotation_test="$root/test/native-ab-secure-rotation-test.sh"
 secure_update_test="$root/test/native-ab-secure-update-test.sh"
@@ -159,25 +218,29 @@ grep -q '\.sha256\[0\]\.pol = \.sha256\[1\]\.pol' "$negative_test"
 grep -q -- '--update-section.*\.pcrpkey' "$negative_test"
 
 # The 3 OS transfers moved from the generic ab-root tree to the per-product
-# channel fragment (Phase 3, docs/native-ab-contracts.md §5); cayo is the
-# channel exercised by both cayo-ab-raw and cayo-ab-secure.
-channel="$root/shared/native-ab/channels/cayo"
-for transfer in 10-root-verity 20-root 90-uki; do
-    file="$channel/tree/usr/lib/sysupdate.d/$transfer.transfer"
-    [[ -f "$file" ]]
-    grep -q '^Verify=yes$' "$file"
-    grep -q '^ProtectVersion=%A$' "$file"
-    grep -q '^InstancesMax=2$' "$file"
-done
-grep -q '^PartitionFlags=0$' "$channel/tree/usr/lib/sysupdate.d/10-root-verity.transfer"
-grep -q '^PartitionFlags=0$' "$channel/tree/usr/lib/sysupdate.d/20-root.transfer"
+# channel fragment (Phase 3, docs/native-ab-contracts.md §5). Task 3.2 gave
+# every channel a real consuming profile (cayo-ab-raw + cayo-ab both use
+# cayo; snow-ab uses snow; snowfield-ab uses snowfield), so check all three.
+for product in cayo snow snowfield; do
+    channel="$root/shared/native-ab/channels/$product"
+    for transfer in 10-root-verity 20-root 90-uki; do
+        file="$channel/tree/usr/lib/sysupdate.d/$transfer.transfer"
+        [[ -f "$file" ]]
+        grep -q '^Verify=yes$' "$file"
+        grep -q '^ProtectVersion=%A$' "$file"
+        grep -q '^InstancesMax=2$' "$file"
+    done
+    grep -q '^PartitionFlags=0$' "$channel/tree/usr/lib/sysupdate.d/10-root-verity.transfer"
+    grep -q '^PartitionFlags=0$' "$channel/tree/usr/lib/sysupdate.d/20-root.transfer"
 
-grep -q 'MatchPattern=cayo-ab_@v_@u.root-verity.raw.xz' \
-    "$channel/tree/usr/lib/sysupdate.d/10-root-verity.transfer"
-grep -q 'MatchPattern=cayo-ab_@v_@u.root.raw.xz' \
-    "$channel/tree/usr/lib/sysupdate.d/20-root.transfer"
-grep -q '^TriesLeft=3$' "$channel/tree/usr/lib/sysupdate.d/90-uki.transfer"
-grep -q '^Path=/EFI/Linux$' "$channel/tree/usr/lib/sysupdate.d/90-uki.transfer"
+    grep -q "MatchPattern=$product-ab_@v_@u.root-verity.raw.xz" \
+        "$channel/tree/usr/lib/sysupdate.d/10-root-verity.transfer"
+    grep -q "MatchPattern=$product-ab_@v_@u.root.raw.xz" \
+        "$channel/tree/usr/lib/sysupdate.d/20-root.transfer"
+    grep -q '^TriesLeft=3$' "$channel/tree/usr/lib/sysupdate.d/90-uki.transfer"
+    grep -q '^Path=/EFI/Linux$' "$channel/tree/usr/lib/sysupdate.d/90-uki.transfer"
+done
+channel="$root/shared/native-ab/channels/cayo"
 grep -q '^disable systemd-sysupdate.timer$' \
     "$ab/tree/usr/lib/systemd/system-preset/00-native-ab.preset"
 grep -q '^disable systemd-sysupdate-reboot.timer$' \

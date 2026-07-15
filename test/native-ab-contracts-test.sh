@@ -287,10 +287,21 @@ done
 for name in cayo-ab snow-ab snowfield-ab; do
     conf="mkosi.profiles/$name/mkosi.conf"
     [[ -f "$conf" ]] || continue
+    # Phase 3: the config markers live in the shared, includable
+    # shared/native-ab-secure/mkosi.conf fragment, not restated in each
+    # profile's own file (see check-native-publication-guard.sh, which
+    # follows the same reachability rule: this is a plain textual
+    # reachability check on this one documented fragment, not a general
+    # Include= resolver).
+    combined="$(cat "$conf")"
+    if grep -q 'shared/native-ab-secure' "$conf"; then
+        combined+=$'\n'
+        combined+="$(find "$root/shared/native-ab-secure" -type f -exec cat {} + 2>/dev/null || true)"
+    fi
     ok=1
-    grep -q '^SecureBoot=yes$' "$conf" || ok=0
-    grep -q '^ShimBootloader=signed$' "$conf" || ok=0
-    grep -q '^SignExpectedPcr=yes$' "$conf" || ok=0
+    grep -q '^SecureBoot=yes$' <<<"$combined" || ok=0
+    grep -q '^ShimBootloader=signed$' <<<"$combined" || ok=0
+    grep -q '^SignExpectedPcr=yes$' <<<"$combined" || ok=0
     if ((ok)); then
         pass "profile publishability: $conf satisfies the config-marker subset of the guard"
     else

@@ -1,14 +1,15 @@
-# Native A/B Capacity Measurements (Phase 3)
+# Native A/B Capacity Measurements (Phase 3 / Task 3.2)
 
 This document records the measurements behind the per-product channel
 partition sizes in `shared/native-ab/channels/<product>/mkosi.repart/`. It
 is the AI-facing companion to `docs/native-ab-contracts.md` §12 (which
 freezes the *policy*: 1 GiB ESP for every product, >=20% root-slot headroom
 at publication, capacity numbers live in channel fragments not the generic
-outformat). Phases 5/6 extend this document as snow/snowfield gain real
-native-profile builds and cayo gets re-measured under the full production
-module set; do not treat any number here as final except where marked
-"validated".
+outformat). As of Task 3.2, all three products (cayo, snow, snowfield) are
+measured against real production native builds (`cayo-ab`, `snow-ab`,
+`snowfield-ab`) and marked "validated" below — none remain provisional.
+Re-measure if a future package-set or module-policy change materially
+changes any product's payload size.
 
 ## Method
 
@@ -50,84 +51,112 @@ module set; do not treat any number here as final except where marked
   which the generic tree's dracut config would need `omit_drivers=`/
   `drivers=` constraints.
 
-## cayo (measured, 2026-07-14)
+## cayo (validated, 2026-07-14, real `cayo-ab` production build)
 
-Measured on `cayo-ab-secure` — the only build with BOTH the full production
-module set (no `KernelModules=` filter anywhere in its Include chain) AND
-the frozen channel structure from this task (rebuilt after the channel
-`ExtraTrees=` wiring fix, so the measured image ships the sysupdate.d
-transfers; `native-ab-secure-artifact-test.sh` passed against this exact
-build).
+Measured on a real `mkosi --profile cayo-ab build` (Task 3.2) — the actual
+production profile (`mkosi.profiles/cayo-ab/mkosi.conf`), not the retired
+`cayo-ab-secure` spike it replaces. Full production module set (no
+`KernelModules=` filter anywhere in its Include chain), the frozen channel
+structure, and the committed update pubring
+(`/usr/lib/systemd/import-pubring.gpg`, confirmed present via
+`dump.erofs --cat`, sha256 matches the committed
+`shared/native-ab/keys/import-pubring.gpg` byte-for-byte).
+`test/native-ab-secure-artifact-test.sh` passed against this exact build
+(systemd 261.1-2).
 
 | Artifact | Measured | Budget | Headroom (spare/total-slot) |
 |---|---|---|---|
-| Root (EROFS, erofs blocks) | 999267 blocks * 4096 = 4092997632 B (~3.81 GiB) | 5 GiB (5368709120 B) | (5368709120 - 4092997632) / 5368709120 = 1275711488 / 5368709120 = ~23.8% |
-| Verity | 1/32 of 5 GiB slot = 160 MiB, rounded up to next power-of-two MiB | 256 MiB | n/a (not independently re-measured; sized by the ratio rule) |
-| UKI (`cayo-ab-secure.efi`) | 120397648 B (~114.8 MiB) | ESP 1 GiB | UKI is ~11.2% of ESP (well under the 40% dracut-constraint threshold) |
+| Root (EROFS, erofs blocks, `dump.erofs -s`) | 999364 blocks * 4096 = 4093394944 B (~3.81 GiB) | 5 GiB (5368709120 B) | (5368709120 - 4093394944) / 5368709120 = 1275314176 / 5368709120 = ~23.8% |
+| Verity | 268435456 B (256 MiB, exact partition size) | 256 MiB | n/a (fixed by the ratio rule; partition ships at its full budget) |
+| UKI (`cayo-ab.efi`) | 120397648 B (~114.8 MiB) | ESP 1 GiB | UKI is ~11.2% of ESP (well under the 40% dracut-constraint threshold) |
 | ESP (ESP partition itself) | 1073741824 B (1 GiB, exact) | 1 GiB | n/a (fixed) |
 
-**Fixed by this task (phase 3, follow-up):** cayo's root slot was frozen in
-`docs/native-ab-contracts.md` §12 as "4 GiB (validated)" from a measurement
-made against the OLD virtio-only `KernelModules=` filter (~2.77 GiB used,
-comfortable headroom). With Phase 3's module-policy change (no filter in
-production channels), the SAME cayo payload measures ~3.81 GiB against that
-4 GiB slot — `(4294967296 - 4092997632) / 4294967296 = ~4.7%` headroom under
-the spare/total-slot definition (§12), below the required 20%. Root-caused
-via a mounted-erofs comparison: `/usr/lib/firmware` grew from 21 MiB
-(virtio-filtered) to 1019 MiB (full set); `/usr/lib/modules` grew from
-106 MiB to 264 MiB. That ~1.1 GiB delta is the entire gap. This measurement
-comes from `cayo-ab-secure` (Forky systemd 261 spike, not the eventual
-production `cayo-ab`), so it is not a clean production number, but the
-growth is attributable to firmware/modules, not the Forky package set (the
-delta matches the mounted-filesystem `du` breakdown almost exactly).
-**Resolution:** the root slot is bumped to 5 GiB (`shared/native-ab/channels/
-cayo/mkosi.repart/11-root.conf` and its paired `_empty` slot,
-`21-root-empty.conf`), giving ~23.8% headroom against the SAME 4092997632 B
-measured content — see the table above. The verity slot is bumped in step
-with the ratio rule (see Method) from 128 MiB to 256 MiB
-(`10-root-verity.conf` / `20-root-verity-empty.conf`). `docs/native-ab-
-contracts.md` §12's cayo row is updated to "5 GiB (measured 2026-07-14, full
-module/firmware policy; see docs/native-ab-capacities.md)" — no longer
-carrying the stale "validated" 4 GiB figure. This remains a
-`cayo-ab-secure` (Forky) measurement, not a clean production `cayo-ab`
-number; re-measure when the real production profile exists.
+**Validated, no change needed:** this real production measurement
+(999364 blocks, from the final build including the `SkeletonTrees=` fix
+below) is essentially identical to the prior `cayo-ab-secure` spike
+measurement that drove the Phase 3 slot bump (999267 blocks) and an
+intermediate `cayo-ab` build without the fix (999302 blocks) — the
+few-hundred-block deltas are profile-identity/manifest metadata, not
+payload — confirming the 5 GiB root / 256 MiB verity sizing already in
+`shared/native-ab/channels/cayo/mkosi.repart/{11-root,21-root-empty,
+10-root-verity,20-root-verity-empty}.conf` and `docs/native-ab-contracts.md`
+§12 remains correct for the real `cayo-ab` production profile. No repart
+changes were needed this task; this section replaces the prior
+`cayo-ab-secure`-sourced numbers with the real `cayo-ab` ones for the
+record.
 
-## snow / snowfield (PROVISIONAL, 2026-07-14)
+**Real artifact problem found and fixed (Task 3.2):** the first `snowfield-ab`
+build failed outright — `dracut[E]: Module 'bootc' cannot be found`,
+triggered synchronously by the linux-surface kernel package's own postinst
+hook (`run-parts: /etc/kernel/postinst.d/dracut exited with return code 1`)
+during package installation, before `ExtraTrees=` composition has run.
+Debian's own `linux-image-amd64` (used by `cayo-ab`/`snow-ab`) defers its
+equivalent hook via a dpkg trigger and never hit this in either cayo-ab
+build; the surface kernel's postinst runs the hook immediately instead. At
+that point the base image's `usr/lib/dracut/dracut.conf.d/
+30-bootc-standard.conf` (which requests the `bootc` dracut module) is still
+in effect for every native profile — its `ExtraTrees=`-based shadow, which
+requests `lvm crypt etc-overlay` instead, only lands after packages are
+installed. Fixed generally (not surface-specific) in
+`shared/outformat/ab-root/mkosi.conf`: the SAME canonical shadow file is now
+also pulled in via `SkeletonTrees=` (copied into the OS tree BEFORE the
+package manager runs, per mkosi's `install_skeleton_trees()` ->
+`install_distribution()` -> `install_extra_trees()` build order), so the
+`bootc` module request is neutralized from the very start of the buildroot
+regardless of which kernel package's postinst happens to run synchronously.
+Reconfirmed harmless for `cayo-ab`: rebuilding it with the fix in place
+produced the 999364-block measurement above (vs. 999302 without the fix) —
+a negligible, metadata-level difference, not a functional regression.
 
-No native profile consumes the `snow`/`snowfield` channels yet (that lands
-in Task 3.2), so there is no real native build to measure. Per the Phase 3
-brief, sized from `mkfs.erofs` of the existing **bootc** `snow` directory
-build (`output/snow`, built via `mkosi --profile snow build`,
-IMAGE_VERSION 20260714205112), `/var` excluded:
+## snow (validated, 2026-07-14, real `snow-ab` production build)
 
-```
-Filesystem total blocks: 1476497 (of 4096-byte blocks)
-= 6047731712 bytes (~5.63 GiB)
-```
+Measured on a real `mkosi --profile snow-ab build` (Task 3.2). Full
+production module set, frozen channel structure, committed update pubring
+confirmed present (sha256 match). `test/native-ab-secure-artifact-test.sh`
+passed (`OUTPUT_NAME=snow-ab`, systemd 261.1-2).
 
-- Root slot: under the spare/total-slot headroom definition (§12,
-  `docs/native-ab-contracts.md`), a 7 GiB slot gives
-  `(7516192768 - 6047731712) / 7516192768 = 1468461056 / 7516192768 =
-  ~19.5%` headroom — BELOW the required 20%. (The old spare/used
-  arithmetic, `1468461056 / 6047731712 = ~24.3%`, made 7 GiB look
-  sufficient; it was not, under the authoritative definition.) Bumped to
-  **8 GiB**: `(8589934592 - 6047731712) / 8589934592 = 2542202880 /
-  8589934592 = ~29.6%` headroom.
-- Verity slot: ratio rule (1/32 of slot, rounded up to next power-of-two
-  MiB) against 8 GiB = 8192 MiB: `8192/32 = 256 MiB`, already a power of
-  two — unchanged from the prior 7 GiB-derived value.
-- Reused verbatim for `snowfield` (no Surface-kernel-specific measurement
-  taken; the brief explicitly allows reusing the snow measurement for
-  both channels at this phase).
+| Artifact | Measured | Budget | Headroom (spare/total-slot) |
+|---|---|---|---|
+| Root (EROFS, erofs blocks) | 1387959 blocks * 4096 = 5685080064 B (~5.29 GiB) | 8 GiB (8589934592 B) | (8589934592 - 5685080064) / 8589934592 = 2904854528 / 8589934592 = ~33.8% |
+| Verity | 268435456 B (256 MiB, exact partition size) | 256 MiB | n/a (fixed by the ratio rule) |
+| UKI (`snow-ab.efi`) | 270077776 B (~257.6 MiB) | ESP 1 GiB | UKI is ~25.2% of ESP (under the 40% dracut-constraint threshold) |
+| ESP | 1073741824 B (1 GiB, exact) | 1 GiB | n/a (fixed) |
 
-This measurement is a conservative OVER-estimate for the eventual
-`snow-ab`/`snowfield-ab` native payload: the bootc `snow` build includes
-`bootc`, `libostree`, GRUB tooling, and other transport-specific packages
-that native profiles never install (`shared/packages/bootc/mkosi.conf` is
-never `Include=`d by a native profile). It has NOT been checked against a
-real snow/snowfield UKI or ESP budget, since no native profile builds a
-snow/snowfield UKI yet. Finalized in Phase 5 (snow) / Phase 6 (snowfield)
-from measurements of the actual native profile once it exists.
+**Validated, no change needed:** the prior PROVISIONAL estimate (sized from
+a bootc `snow` directory build, ~5.63 GiB, ~29.6% headroom against 8 GiB)
+was a conservative OVER-estimate as predicted — it included `bootc`,
+`libostree`, and GRUB tooling that native profiles never install. The real
+native `snow-ab` measurement (~5.29 GiB) is smaller still, giving MORE
+headroom (~33.8%) than the provisional estimate implied. The 8 GiB root /
+256 MiB verity sizing already in `shared/native-ab/channels/snow/mkosi.repart/`
+is confirmed correct; no repart change was needed.
+
+## snowfield (validated, 2026-07-14, real `snowfield-ab` production build)
+
+Measured on a real `mkosi --profile snowfield-ab build` (Task 3.2), the
+Surface-kernel channel — the first build to actually exercise
+`linux-image-surface` under this fragment structure, and the build that
+surfaced the real `dracut[E]: Module 'bootc' cannot be found` artifact
+problem described above (now fixed). Full production module set, frozen
+channel structure, committed update pubring confirmed present (sha256
+match). `test/native-ab-secure-artifact-test.sh` passed
+(`OUTPUT_NAME=snowfield-ab`, systemd 261.1-2).
+
+| Artifact | Measured | Budget | Headroom (spare/total-slot) |
+|---|---|---|---|
+| Root (EROFS, erofs blocks) | 1479257 blocks * 4096 = 6059036672 B (~5.64 GiB) | 8 GiB (8589934592 B) | (8589934592 - 6059036672) / 8589934592 = 2530897920 / 8589934592 = ~29.5% |
+| Verity | 268435456 B (256 MiB, exact partition size) | 256 MiB | n/a (fixed by the ratio rule) |
+| UKI (`snowfield-ab.efi`) | 254607696 B (~242.8 MiB) | ESP 1 GiB | UKI is ~23.7% of ESP (under the 40% dracut-constraint threshold) |
+| ESP | 1073741824 B (1 GiB, exact) | 1 GiB | n/a (fixed) |
+
+**Validated, no change needed:** the Surface kernel's larger driver/firmware
+set (`linux-image-surface`, `linux-headers-surface`, `libwacom-surface`,
+`iptsd`) makes snowfield's root content ~374 MiB larger than snow's, but the
+8 GiB slot still clears the 20% headroom requirement comfortably (~29.5%).
+No repart change was needed. This measurement independently confirms the
+Phase 3 module-policy sizing decision below (UKI far under the 40% ESP
+threshold) held for the Surface kernel too, as flagged as a re-check item
+at the time.
 
 ## Module-policy / dracut sizing decision (Phase 3)
 
@@ -145,7 +174,12 @@ selection logic already keeps the initrd bounded regardless of how many
 kernel modules exist on disk under `/usr/lib/modules`; the size growth from
 removing the mkosi-level `KernelModules=` filter lands almost entirely in
 the final-root `/usr/lib/modules`+`/usr/lib/firmware` tree (see the cayo
-headroom fix above), not in the dracut-generated initrd/UKI. This
-should be re-checked if snow/snowfield's kernels (backports, Surface) pull
-in meaningfully different driver sets once a real native profile builds
-their UKI.
+headroom fix above), not in the dracut-generated initrd/UKI.
+
+**Re-checked with real snow-ab/snowfield-ab builds (Task 3.2):** confirmed
+for both the backports kernel (`snow-ab.efi`, ~257.6 MiB, ~25.2% of ESP) and
+the Surface kernel (`snowfield-ab.efi`, ~242.8 MiB, ~23.7% of ESP) — both
+comfortably under the 40% threshold despite snow/snowfield's much larger
+package set (desktop + Surface-specific drivers) than cayo's headless
+server payload. No dracut driver-list constraint is needed for any of the
+three production profiles.

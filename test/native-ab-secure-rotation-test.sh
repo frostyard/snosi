@@ -12,7 +12,7 @@ usage() {
     cat >&2 <<EOF
 Usage: $0 --yes ARTIFACT_PREFIX OLD_PCR_CERT NEW_PCR_PUB RECOVERY_KEY SSH_TARGET SSH_KEY EXPECTED_MACHINE_ID
 
-The target must already boot cayo-ab-secure with its MOK enrolled and a working
+The target must already boot cayo-ab (or another production native profile) with its MOK enrolled and a working
 vTPM. This destructive test installs ARTIFACT_PREFIX with systemd-sysupdate,
 normalizes the LUKS TPM tokens to old-only, reboots, then normalizes to new-only
 and reboots the identical UKI. It never submits the recovery key during boot.

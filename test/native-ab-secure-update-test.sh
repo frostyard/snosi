@@ -14,7 +14,7 @@ usage() {
     cat >&2 <<EOF
 Usage: $0 --yes CURRENT_PREFIX DUAL_PREFIX NEW_PREFIX OLD_PCR_CERT NEW_PCR_PUB RECOVERY_KEY SSH_TARGET SSH_KEY EXPECTED_MACHINE_ID INCUS_INSTANCE
 
-The target must be a disposable, MOK-enrolled cayo-ab-secure Incus VM already
+The target must be a disposable, MOK-enrolled cayo-ab (or another production native profile) Incus VM already
 running CURRENT_PREFIX with only the new TPM token. The destructive test installs
 dual-signed DUAL_PREFIX and new-only NEW_PREFIX, verifies explicit rollback,
 corrupts NEW_PREFIX, and force-restarts INCUS_INSTANCE until boot counting falls

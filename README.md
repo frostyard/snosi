@@ -17,6 +17,9 @@ The project produces:
 | **snowfield**       | snow with linux-surface kernel for Surface devices              | directory → OCI (buildah/chunkah) |
 | **cayo**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
 | **cayo-ab-raw**     | Experimental native A/B server image (dev fixture, never published) | GPT disk (EROFS + dm-verity) |
+| **cayo-ab**         | Production native A/B server image (Secure Boot + TPM/LUKS `/var`) | GPT disk (EROFS + dm-verity) |
+| **snow-ab**          | Production native A/B GNOME desktop, backports kernel           | GPT disk (EROFS + dm-verity) |
+| **snowfield-ab**     | Production native A/B GNOME desktop, linux-surface kernel       | GPT disk (EROFS + dm-verity) |
 | **1password**       | 1Password desktop application                                   | sysext        |
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
 | **azurevpn**        | Microsoft Azure VPN client                                      | sysext        |
@@ -45,7 +48,7 @@ statically by `test/native-ab-contracts-test.sh`; see
 plan that freeze unblocks.
 
 The isolated `cayo-ab-raw` profile (renamed from `cayo-ab` in Phase 1; `cayo-ab`
-is reserved for the eventual secure production posture and, until it exists,
+now names the production secure posture — see below — and
 `check-native-publication-guard.sh` hard-fails if `cayo-ab-raw` ever picks up a
 publication marker) is an experimental development spike for native
 systemd-repart/systemd-sysupdate A/B roots. Its raw image and installer boot in
@@ -63,8 +66,12 @@ installer spike lives at `test/cayo-ab-install-spike.sh`. Its UKI uses the
 profile's dracut archive rather than mkosi's independently generated default
 initrd so the pre-pivot persistent `/etc` service is present at boot.
 
-`cayo-ab-secure` extends the spike with standard Secure Boot through Debian's
-Microsoft-signed shim and MOK-signed systemd-boot. Snosi UKIs are locally signed, so
+The shared `shared/native-ab-secure/mkosi.conf` fragment extends the raw spike
+with standard Secure Boot through Debian's
+Microsoft-signed shim and MOK-signed systemd-boot; it is `Include=`d by the three
+production profiles (`cayo-ab`, `snow-ab`, `snowfield-ab` — the former
+standalone `cayo-ab-secure` spike profile was retired once this fragment
+generalized its content). Snosi UKIs are locally signed, so
 their certificate must be enrolled once through shim's MokManager; this does
 not require UEFI setup mode or custom firmware keys. The installer can replace
 the image's disposable ext4 `/var` with per-machine LUKS2, retain an external
@@ -77,7 +84,7 @@ validated, including signed shim and MOK-signed systemd-boot on the ESP and a
 signed UKI carrying `.pcrpkey`/`.pcrsig`. MOK boot, virtual-TPM unlock, and PCR
 signing-key rotation, signed updates, rollback, and boot-count fallback are
 validated in Incus. Systemd 261's optional NvPCR measurements are disabled in
-this profile: their anchor credential cannot migrate between PCR signing keys,
+these profiles: their anchor credential cannot migrate between PCR signing keys,
 and they are not used by the signed-PCR LUKS policy.
 
 PCR signing-key overlap must use a transition UKI signed by both old and new
@@ -87,14 +94,16 @@ lower-numbered token. Place the old private key in `.snosi-private/history/`,
 make the new key active, and opt into a transition build with
 `PCR_SIGNING_KEY_PREVIOUS=<old-key-filename>`. The UKI keeps the new key in
 `.pcrpkey` and carries each PCR 11 policy signed by both keys. Retain the old
-token until every supported rollback UKI contains the new signature. The secure
-profile carries a coherent Forky 261+ systemd family through an isolated,
+token until every supported rollback UKI contains the new signature. Each production native
+profile carries a coherent Forky 261+ systemd family through the shared
+fragment's isolated,
 low-priority APT source; normal Trixie profiles remain unchanged. Validate a
-transition artifact with:
+transition artifact with (`OUTPUT_NAME` selects `cayo-ab`/`snow-ab`/
+`snowfield-ab`; defaults to `cayo-ab`):
 
 ```bash
-test/native-ab-secure-artifact-test.sh \
-  output/cayo-ab-secure.manifest output/cayo-ab-secure.efi \
+OUTPUT_NAME=cayo-ab test/native-ab-secure-artifact-test.sh \
+  output/cayo-ab.manifest output/cayo-ab.efi \
   .snosi-private/history/<old-key-certificate> \
   .snosi-private/pcr-signing.pub
 ```
@@ -106,7 +115,7 @@ key and run:
 
 ```bash
 test/native-ab-secure-rotation-test.sh --yes \
-  output/cayo-ab-secure \
+  output/cayo-ab \
   .snosi-private/history/<old-key-certificate> \
   .snosi-private/pcr-signing.pub /path/to/recovery.key \
   root@<vm-address> /path/to/ssh-key <expected-machine-id>
@@ -128,9 +137,9 @@ same disposable Incus VM with three preserved builds:
 
 ```bash
 test/native-ab-secure-update-test.sh --yes \
-  /path/to/N+1/cayo-ab-secure \
-  /path/to/N+2/cayo-ab-secure \
-  /path/to/N+3/cayo-ab-secure \
+  /path/to/N+1/cayo-ab \
+  /path/to/N+2/cayo-ab \
+  /path/to/N+3/cayo-ab \
   .snosi-private/history/<old-key-certificate> \
   .snosi-private/pcr-signing.pub /path/to/recovery.key \
   root@<vm-address> /path/to/ssh-key <expected-machine-id> <incus-instance>
