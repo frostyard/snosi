@@ -115,8 +115,9 @@ on every single `mkosi build` — every local dev iteration and every profile
 in the `build-images.yml` matrix — which would silently double per-build
 disk consumption on every build regardless of whether it is ever published,
 the same failure shape as the recorded "CI Disk Exhaustion" incident. Kept
-manual, intended for the (not yet built, Phase 7) protected promotion job
-that controls its own disk budget deliberately. `test/native-publish-test.sh`
+manual, intended for the `build-*` jobs in `.github/workflows/build-native-
+images.yml` (Phase 7), which control their own disk budget deliberately (see
+"Native build/publish workflow (Phase 7)" below). `test/native-publish-test.sh`
 exercises the naming/derivation logic against a synthetic fixture (`truncate`
 + `sfdisk` script mode for a fake GPT, no root, no image build);
 `test/native-ab-contracts-test.sh` also runs it so a naming drift fails that
@@ -239,6 +240,62 @@ static logic (candidate/verify/promote/withdraw against a synthetic
 fixture, no image build, no real R2) is a separate, fast, CI-wired script:
 `test/native-publication-pipeline-test.sh`, run from the same `shell-lint`
 job in `validate.yml` as `test/native-publish-test.sh`.
+
+**Native build/publish workflow (Phase 7).**
+`.github/workflows/build-native-images.yml` automates the whole procedure
+above against real GitHub Actions runners. It is deliberately a thin
+caller -- every real step is a call into one of the scripts above,
+`shared/native-ab/ci/bootstrap-mkosi.sh` (below), or `test/native-ab-secure-
+artifact-test.sh` / `test/snowfield-artifact-test.sh`; no build/publish
+logic lives directly in the YAML. Jobs: `pin-check` (governance gate, see
+below) -> `prepare` (assigns one version/revision shared by every product
+this run, mirroring `build-images.yml`'s own version tag) -> `build-cayo` /
+`build-snow` / `build-snowfield` (independent jobs, not a matrix, each
+gated on the `native-build` protected GitHub environment which holds the
+Secure Boot/MOK and PCR signing private keys as environment secrets --
+written to `mkosi.key`/`mkosi.crt`/`.snosi-private/pcr-signing.{key,crt}`
+immediately before the one `mkosi build` step that needs them, removed by
+an `if: always()` cleanup step right after) -> `test-public-origin` (one
+matrix job, `verify-remote.sh` against the REAL public URL, not the write
+path) -> `promote-cayo` / `promote-snow` / `promote-snowfield` (independent
+jobs gated on the `native-promotion` protected environment, which holds the
+OpenPGP update-signing key; runs `promote.sh`) -> `release-notes`
+(non-blocking). Only small pipeline records (`publication-info.json`,
+`SHA256SUMS`, tiny marker files) ever cross job boundaries as Actions
+artifacts -- the multi-gigabyte payload objects go straight from a
+`build-*` job's runner to R2 via `rclone` and are re-verified over HTTP by
+later jobs, never re-uploaded as Actions artifacts. Each `test-public-
+origin` matrix leg and each `promote-*` job independently downloads its own
+product's upstream artifact with `continue-on-error: true` and no-ops
+(does not fail) when it is absent, so one product's build/verify failure
+never blocks another's promotion -- the same pattern `build-images.yml`'s
+own `release` job already uses for its `snow-tag` artifact. Trigger is
+`workflow_dispatch` + main-branch `push` ONLY (interim protected-builder
+rule, `docs/native-ab-publication.md` "Interim protected-builder
+constraints": until mkosi supports split final assembly from signing, the
+`build-*` jobs themselves ARE the protected builder). A single
+`concurrency` group with `cancel-in-progress: false` prevents two runs from
+interleaving `promote.sh` invocations. **Production R2 upload has not been
+exercised through this workflow** -- see `docs/native-ab-publication.md`'s
+"CI publication flow" / "First production publication checklist" sections
+for the full secret inventory and what remains before the first real run.
+
+`shared/native-ab/ci/bootstrap-mkosi.sh` and `shared/native-ab/ci/check-
+mkosi-pin.sh` implement "Mkosi Pin Governance" (the plan: "CI must derive
+local and workflow mkosi from the same commit and fail if they diverge").
+`bootstrap-mkosi.sh <target-dir>` is now the ONE implementation of "fetch
+mkosi at the commit build.yml's `systemd/mkosi@<sha>` action pins" --
+Justfile's `ensure-mkosi` recipe delegates to it instead of carrying its
+own copy of the same six lines, and `build-native-images.yml`'s `build-*`
+jobs call it directly (no `uses: systemd/mkosi@<sha>` action, so there is
+no second literal pin that could drift from build.yml's). `check-mkosi-
+pin.sh` is the explicit regression guard: it asserts build.yml's pin is a
+full 40-character commit SHA, that `build-native-images.yml` carries no
+conflicting `systemd/mkosi@<sha>` literal of its own, and (when a `.mkosi/`
+checkout is present) that its HEAD matches the pin exactly. Both scripts
+are dry-runnable with no network/build required for the no-checkout-yet
+case; `pin-check` runs `check-mkosi-pin.sh` before any build job starts,
+and each `build-*` job re-runs it right after its own bootstrap step.
 
 `mkosi.profiles/cayo-ab-raw` (renamed from `cayo-ab` in Phase 1; the name
 `cayo-ab` now names the production secure posture — see below — and
@@ -862,7 +919,7 @@ Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GP
 - `compare-images.sh` — diffoscope-style comparison of two OCI images (extracts layers, handles whiteouts, reports file-level differences); dev tool, not used by CI
 - `packagediff.sh` — diffs the build manifest against the running system's package list (`/usr/share/frostyard/<id>.packages.txt`)
 - `check-duplicate-packages.sh` / `check-profile-dependencies.sh` — config sanity checks, run by CI
-- `check-native-publication-guard.sh` — static gate for `docs/native-ab-contracts.md` §15: requires any profile literally named `cayo-ab`/`snow-ab`/`snowfield-ab` to carry shim/Secure Boot/PCR-signing/NvPCR/pubring markers and no `KernelModules=` filter, and hard-fails `cayo-ab-raw` if it ever gains a publication marker; run by CI, exits 0 with a note today (no production-named profile exists yet)
+- `check-native-publication-guard.sh` — static gate for `docs/native-ab-contracts.md` §15: requires any profile literally named `cayo-ab`/`snow-ab`/`snowfield-ab` to carry shim/Secure Boot/PCR-signing/NvPCR/pubring markers and no `KernelModules=` filter, and hard-fails `cayo-ab-raw` if it ever gains a publication marker; run by CI. Since Phase 3 all three production profiles exist and pass the guard for real; `cayo-ab-raw` continues to pass the "must stay unpublishable" side of the check
 
 ## CI/CD
 
@@ -870,6 +927,7 @@ Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GP
 |----------|---------|---------|
 | `build.yml` | Push/PR/dispatch | Build base + sysexts, publish to R2 |
 | `build-images.yml` | Push/PR/repository_dispatch/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, generate SBOMs, sign with Cosign |
+| `build-native-images.yml` | Push to main / dispatch ONLY (no PR, no fork) | Native A/B (`cayo-ab`/`snow-ab`/`snowfield-ab`) build, candidate publish, public-origin verify, protected promote (Phase 7) |
 | `check-dependencies.yml` | Weekly (Mon 9am UTC) | Check external download updates, create PRs |
 | `check-packages.yml` | Daily (8am UTC) | Check APT package version updates, create PRs |
 | `validate.yml` | PR/push/dispatch | shellcheck + mkosi summary validation + profile dependency guard |

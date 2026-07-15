@@ -275,6 +275,171 @@ real key:
    this document's procedure (see `docs/native-ab-secure-*` material for
    those).
 
+## CI publication flow
+
+`.github/workflows/build-native-images.yml` automates the procedure above.
+It is a **thin caller**: every build/publish/verify/promote step is a call
+into one of the scripts documented above (or `test/native-ab-secure-
+artifact-test.sh` / `test/snowfield-artifact-test.sh`) -- the only logic
+that lives directly in the workflow YAML is orchestration glue (job
+ordering, secret-file plumbing, disk-space mitigation) that has no
+meaningful existence outside a GitHub Actions runner. If you find yourself
+adding a `jq`/`sha256sum`/`curl` pipeline directly in a `run:` block instead
+of extending one of the in-repo scripts, that is a defect -- scripts are
+testable locally (see "Local rehearsal" below and `shared/native-ab/ci/`);
+raw YAML steps are not.
+
+### Trigger
+
+`workflow_dispatch` and pushes to `main` **only** -- never `pull_request`,
+never a fork-originated trigger, never an untrusted `repository_dispatch`.
+This is the "interim protected-builder constraints" rule below applied at
+the trigger level: a build job that will handle the Secure Boot/MOK and PCR
+signing private keys must never run against untrusted code. A single
+`concurrency` group (`build-native-images`, `cancel-in-progress: false`)
+ensures two runs can never interleave `promote.sh` invocations against the
+same product's live `SHA256SUMS`/`SHA256SUMS.gpg`.
+
+### Jobs
+
+| Job | Runs | Gated by |
+|---|---|---|
+| `pin-check` | `shared/native-ab/ci/check-mkosi-pin.sh` (no build) | -- |
+| `prepare` | Assigns one version/revision shared by every product this run | -- |
+| `build-cayo` / `build-snow` / `build-snowfield` | Bootstraps pinned mkosi, builds the profile, runs the static artifact test(s), `prepare-native-publication.sh --xz`, `publish-candidate.sh` | `native-build` environment |
+| `test-public-origin` | `verify-remote.sh` against the real public URL, one matrix leg per product | -- (read-only, no secrets) |
+| `promote-cayo` / `promote-snow` / `promote-snowfield` | `promote.sh` | `native-promotion` environment |
+| `release-notes` | Non-blocking GitHub Release summarizing whichever products actually promoted | -- |
+
+Each `build-*`/`promote-*` triple is three independent jobs, not a matrix,
+so one product's failure (a build error, a rejected signature, a network
+blip) never blocks another's -- `test-public-origin` and each `promote-*`
+job independently check for their own product's upstream artifact via a
+`continue-on-error: true` download and simply no-op (not fail) when it is
+absent, the same "did the artifact actually appear" pattern
+`build-images.yml`'s own `release` job already uses for its `snow-tag`
+artifact.
+
+Only small pipeline records (`publication-info.json`, `SHA256SUMS`, and tiny
+marker files) ever pass between jobs as GitHub Actions artifacts. The
+multi-gigabyte payload objects themselves are uploaded directly from the
+`build-*` job's runner to R2 via `rclone` and never touch Actions artifact
+storage -- `verify-remote.sh` and `promote.sh` re-download the actual bytes
+over HTTP from the public origin in later jobs, exactly as a real client
+would, per the "never trust local disk" property described above.
+
+### Secret inventory
+
+| Secret | Environment | Consumed by | Written to | Scope / rotation |
+|---|---|---|---|---|
+| `NATIVE_SECURE_BOOT_KEY` | `native-build` | mkosi build step only | `mkosi.key` | Secure Boot/MOK private key. See CLAUDE.md "MOK Rotation" / `docs/native-ab-contracts.md` SS7. |
+| `NATIVE_SECURE_BOOT_CERTIFICATE` | `native-build` | mkosi build step only | `mkosi.crt` | Public half of the above; also needs MOK enrollment on every installed machine before rotation. |
+| `NATIVE_PCR_SIGNING_KEY` | `native-build` | mkosi build step only | `.snosi-private/pcr-signing.key` | PCR 11 signing key. Rotation: dual-signed transition UKIs, `PCR_SIGNING_KEY_PREVIOUS` -- see CLAUDE.md "Native A/B Prototype" rotation rules. |
+| `NATIVE_PCR_SIGNING_CERTIFICATE` | `native-build` | mkosi build step only | `.snosi-private/pcr-signing.crt` | Public half of the above. |
+| `NATIVE_R2_ACCOUNT_ID` | (repo-level) | `publish-candidate.sh`, `promote.sh` (via `rclone`) | `RCLONE_CONFIG_R2_ENDPOINT` env var | Upload authorization only -- never a substitute for the OpenPGP signature (`docs/native-ab-contracts.md` SS7). |
+| `NATIVE_R2_ACCESS_KEY_ID` | (repo-level) | same | `RCLONE_CONFIG_R2_ACCESS_KEY_ID` env var | Same scope. Use a dedicated R2 API token scoped only to the native publication bucket/prefix -- do not reuse the `R2_ACCESS_KEY_ID` token `build.yml`/`build-images.yml` already use for sysexts/manifests. |
+| `NATIVE_R2_SECRET_ACCESS_KEY` | (repo-level) | same | `RCLONE_CONFIG_R2_SECRET_ACCESS_KEY` env var | Same scope. |
+| `NATIVE_R2_BUCKET` | (repo-level) | same | `rclone:r2:<bucket>` dest argument | Bucket name behind `repository.frostyard.org`; not itself sensitive, kept as a secret only to avoid hardcoding it in the workflow before the bucket is finalized. |
+| `NATIVE_UPDATE_SIGNING_KEY` | `native-promotion` | `promote.sh --signing-key` only | `/var/tmp/native-promote-secrets/os-update-signing.key` | OpenPGP update-signing private key. Never leaves this environment. Rotation: overlap window, both keys in the shipped pubring -- see "Production key ceremony" above. |
+
+Every secret-consuming step writes key material to a runner-local file
+immediately before the one command that needs it, `chmod 600`s it, never
+echoes it, and removes it in a dedicated `if: always()` (or
+`if: !cancelled()`) cleanup step in addition to each script's own internal
+trap-based cleanup (`promote.sh`'s ephemeral `GNUPGHOME`, in particular).
+Plaintext key files are never GitHub Actions artifacts.
+
+### Interim protected-builder constraints, applied
+
+Until mkosi supports split final assembly from signing
+(`docs/native-ab-contracts.md` SS7 "Protected signing architecture"), the
+`build-*` jobs are themselves the accepted interim "protected builder"
+described above: main-branch-only trigger, no pull-request/fork path,
+ephemeral key files scoped to a protected `native-build` environment, and
+key material present only for the single `mkosi build` step. This is not
+the final custody model -- once mkosi can assemble a signed UKI/ESP from an
+already-built unsigned root without needing the private keys present for
+the whole build, the Secure Boot/MOK and PCR signing steps should move to
+their own protected signer job, mirroring how `promote-*` already isolates
+the OpenPGP key to the smallest possible step.
+
+### What has NOT been exercised
+
+**Production R2 upload through this workflow has not been exercised.** The
+exercised path is: (1) the local rehearsal below (`test/native-ab-
+publication-test.sh`, `test/native-publication-pipeline-test.sh`), which
+proves every script's logic against a local directory `dest` and a local
+HTTP origin, and (2) this workflow's *structure* -- job graph, environment
+gating, secret plumbing, disk mitigation -- validated with `actionlint` and
+by hand-tracing every `run:` step's script references (no GitHub Actions
+run is possible without pushing, and pushing was out of scope for the
+change that introduced this workflow). Before the first real run against
+`repository.frostyard.org`, walk the "First production publication
+checklist" below.
+
+## First production publication checklist
+
+Everything above this point can be rehearsed locally. This is what remains
+before `build-native-images.yml` is allowed to touch the real
+`repository.frostyard.org` origin:
+
+1. **Production key ceremony.** Complete "Production key ceremony" above
+   for the OpenPGP update-signing key: generate offline, export the public
+   half into `shared/native-ab/keys/import-pubring.gpg` (replacing or
+   overlap-extending the committed DEV key), rebuild every native profile so
+   the new pubring ships, and store the private half only as the
+   `NATIVE_UPDATE_SIGNING_KEY` secret in the `native-promotion` GitHub
+   environment -- never anywhere else.
+2. **Secure Boot/MOK and PCR signing keys.** Generate (or carry over from an
+   already-validated `cayo-ab-secure`-style spike) production Secure
+   Boot/MOK and PCR signing key pairs. Store them as the `native-build`
+   environment's `NATIVE_SECURE_BOOT_KEY`/`NATIVE_SECURE_BOOT_CERTIFICATE`/
+   `NATIVE_PCR_SIGNING_KEY`/`NATIVE_PCR_SIGNING_CERTIFICATE` secrets. Confirm
+   the MOK certificate is enrollable via MokManager on real hardware before
+   any machine is expected to trust images built with it (see
+   `docs/native-ab-contracts.md` SS7's MOK Rotation section for the
+   enrollment-overlap procedure).
+3. **R2 credentials.** Create a dedicated R2 API token scoped only to the
+   native publication bucket/prefix (upload authorization only, per
+   `docs/native-ab-contracts.md` SS7 -- do not reuse the sysext/manifest
+   token `build.yml`/`build-images.yml` already use). Store
+   `NATIVE_R2_ACCOUNT_ID`/`NATIVE_R2_ACCESS_KEY_ID`/
+   `NATIVE_R2_SECRET_ACCESS_KEY`/`NATIVE_R2_BUCKET` as repository secrets.
+4. **Protected environments.** Create the `native-build` and
+   `native-promotion` GitHub environments with required-reviewer protection
+   restricted to the `main` branch, and add the secrets above to the correct
+   environment (never as plain repository secrets for the signing keys).
+5. **First run: staging prefix, not production.** Point `NATIVE_R2_BUCKET`
+   (or a temporary override) at a **non-production** prefix first (e.g.
+   `<bucket>/staging-test`) and manually verify a disposable VM can install
+   and update from it end to end -- the same check "Production key ceremony"
+   step 5 above describes -- before ever letting the workflow write to the
+   real `os/native/v1/<product>/` paths.
+6. **`SNOSI_NATIVE_AUTOSTAGE`.** Native A/B images ship with autostage
+   disabled by default (Phase 4's mechanism, `shared/outformat/ab-root/
+   mkosi.conf` forwards `SNOSI_NATIVE_AUTOSTAGE` via `Environment=`, gating
+   the static `snosi-sysupdate-stage.timer` enablement link). Only set
+   `SNOSI_NATIVE_AUTOSTAGE=1` for the profile build once the first real
+   promoted release has been manually verified reachable and installable --
+   do not enable unattended staging before a single real release has been
+   proven end to end.
+7. **Cloudflare cache rule.** Before the first promotion, add the exact-name
+   cache-bypass rule for `SHA256SUMS`/`SHA256SUMS.gpg` under every product's
+   `x86-64/` path (see "Cache-Control and cache-bypass rules" above) --
+   `promote.sh` sets the right origin headers regardless, but the edge cache
+   rule is what makes the "purge" step below actually matter.
+8. **Purge-hook wiring.** Write the Cloudflare purge wrapper script (see the
+   "14-15: Cloudflare purge" example above), store `CF_ZONE_ID`/
+   `CF_API_TOKEN` as secrets in the `native-promotion` environment, and pass
+   `--purge-hook /path/to/cloudflare-purge.sh` to `promote.sh` in each
+   `promote-*` job. The workflow as introduced does **not** pass
+   `--purge-hook` -- wire it in as part of this checklist, not before.
+9. **Re-verify after the first real promotion.** `curl -I` the two metadata
+   URLs from a network path outside the promotion environment, confirm a
+   second region sees the matching pair, and only then consider
+   `build-native-images.yml` production-ready for unattended pushes to
+   `main`.
+
 ## Local rehearsal (no real R2/Cloudflare)
 
 `test/native-ab-publication-test.sh` runs this entire procedure against a

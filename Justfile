@@ -4,9 +4,9 @@ just := `which just`
 
 # mkosi runs from a repo-local checkout pinned to the same commit as the
 # systemd/mkosi action in CI (single source of truth: build.yml, which the
-# other workflows mirror). Delete .mkosi/ to discard it, or override with
+# other workflows mirror; shared/native-ab/ci/bootstrap-mkosi.sh derives the
+# pin itself from build.yml). Delete .mkosi/ to discard it, or override with
 # `just mkosi=/usr/bin/mkosi <target>` to use a system install.
-mkosi_commit := `grep -m1 -oE 'systemd/mkosi@[0-9a-f]+' .github/workflows/build.yml | cut -d@ -f2`
 mkosi_dir := justfile_directory() / ".mkosi"
 mkosi := mkosi_dir / "bin" / "mkosi"
 
@@ -45,6 +45,12 @@ run-qemu image="output/snow":
 
 # Fetch mkosi into .mkosi/ when missing or not at the CI-pinned commit.
 # Runs as the invoking user (before sudo) so the checkout is not root-owned.
+# Delegates to shared/native-ab/ci/bootstrap-mkosi.sh, the single
+# implementation of "how mkosi gets bootstrapped from build.yml's pin" also
+# used by .github/workflows/build-native-images.yml's build jobs -- see that
+# script's header and shared/native-ab/ci/check-mkosi-pin.sh ("Mkosi Pin
+# Governance": "CI must derive local and workflow mkosi from the same
+# commit and fail if they diverge").
 [private]
 ensure-mkosi:
     #!/usr/bin/env bash
@@ -52,15 +58,7 @@ ensure-mkosi:
     if [ "{{mkosi}}" != "{{mkosi_dir}}/bin/mkosi" ]; then
         exit 0  # mkosi was overridden on the command line; use it as-is
     fi
-    if [ -x "{{mkosi}}" ] && [ "$(git -C "{{mkosi_dir}}" rev-parse HEAD 2>/dev/null)" = "{{mkosi_commit}}" ]; then
-        exit 0
-    fi
-    command -v python3 >/dev/null || { echo "error: python3 is required to run mkosi" >&2; exit 1; }
-    echo "Installing mkosi @ {{mkosi_commit}} (CI pin) into {{mkosi_dir}}"
-    rm -rf "{{mkosi_dir}}"
-    git init -q "{{mkosi_dir}}"
-    git -C "{{mkosi_dir}}" fetch -q --depth=1 https://github.com/systemd/mkosi.git "{{mkosi_commit}}"
-    git -C "{{mkosi_dir}}" checkout -q --detach FETCH_HEAD
+    "{{justfile_directory()}}/shared/native-ab/ci/bootstrap-mkosi.sh" "{{mkosi_dir}}"
 
 # Private targets (run as root via sudo)
 
