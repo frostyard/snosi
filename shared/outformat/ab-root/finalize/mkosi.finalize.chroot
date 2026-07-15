@@ -14,3 +14,28 @@ if grep -qr 'add_dracutmodules.*\bbootc\b' /usr/lib/dracut/dracut.conf.d; then
     echo "bootc dracut configuration leaked into the native A/B image" >&2
     exit 1
 fi
+
+# Activation policy (docs/plans/2026-07-14-bootc-native-ab-coexistence-
+# plan.md, "Activation policy", Phase 4): the native stager timer
+# (usr/lib/systemd/system/snosi-sysupdate-stage.timer, this tree) ships with
+# NO [Install] section -- it is INERT by default in every publication-
+# disabled build (today, always). Flip it on with a STATIC
+# /usr/lib/systemd/system/timers.target.wants/ link, never a preset: an
+# already-installed image whose first boot predates a publication-enabled
+# release would never pick up a brand new preset-only enablement (preset
+# policy is only consulted at first boot / preset-reconcile time), but a
+# static /usr link ships correctly with the very update that introduces it
+# (see CLAUDE.md's static-wants infra-unit rule). The first publication-
+# enabled release sets SNOSI_NATIVE_AUTOSTAGE=1 in CI; until then every
+# local and CI build stays disabled, and this block is a no-op.
+#
+# Independent of this knob, systemd-sysupdate.timer/-reboot.timer stay
+# masked in /etc unconditionally (shared/outformat/image/finalize/
+# mkosi.finalize.chroot, native-ab branch) -- our stager replaces them, and
+# upstream's own auto-reboot timers must never activate even once
+# publication goes live.
+if [[ "${SNOSI_NATIVE_AUTOSTAGE:-}" == "1" ]]; then
+    mkdir -p /usr/lib/systemd/system/timers.target.wants
+    ln -sf ../snosi-sysupdate-stage.timer \
+        /usr/lib/systemd/system/timers.target.wants/snosi-sysupdate-stage.timer
+fi

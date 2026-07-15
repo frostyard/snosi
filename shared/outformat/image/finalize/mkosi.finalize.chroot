@@ -26,10 +26,16 @@ mkdir -p /nix
 rm -f /etc/machine-id
 echo "uninitialized" > /etc/machine-id
 
-# Native A/B publication is not signed yet. Keep unattended sysupdate masked
-# even on first boot, where initrd PID 1 may apply presets before the real-root
-# preset policy is visible. Administrators can still run systemd-sysupdate
-# manually, or explicitly unmask the timers in the persistent /etc overlay.
+# Keep unattended UPSTREAM sysupdate masked even on first boot, where initrd
+# PID 1 may apply presets before the real-root preset policy is visible.
+# Administrators can still run systemd-sysupdate manually, or explicitly
+# unmask the timers in the persistent /etc overlay. Unlike the
+# snosi-sysupdate-stage.timer static-link activation knob (Phase 4,
+# shared/outformat/ab-root/finalize/mkosi.finalize.chroot,
+# SNOSI_NATIVE_AUTOSTAGE=1), these two masks are NEVER conditional on that
+# knob: our own stager (usr/libexec/snosi-sysupdate-stage) replaces upstream's
+# fetch+apply+immediate-reboot behavior permanently, on every native image,
+# publication-enabled or not.
 if [[ -e /usr/lib/snosi/native-ab ]]; then
   ln -sf /dev/null /etc/systemd/system/systemd-sysupdate.timer
   ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-reboot.timer

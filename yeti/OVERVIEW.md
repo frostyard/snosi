@@ -419,6 +419,65 @@ surface it. Fixed by reading the real `Output=` value from `$MKOSI_CONFIG`
 `PostOutputScripts`) via `python3` instead of assuming it equals
 `$IMAGE_ID`.
 
+### Native A/B Update UX (phase 4)
+
+Native images never run bootc/nbc. `/usr/libexec/snosi-sysupdate-stage`
+(`shared/outformat/ab-root/tree`, system service+timer) is the native analog
+of `bootc-update-stage`: `systemd-sysupdate check-new` against the DEFAULT
+sysupdate target (no `--definitions=`), then `systemd-sysupdate update
+<version>` if newer (installs into the inactive slots only), then its OWN
+post-stage verification -- re-fetches `SHA256SUMS` and checks the newly
+labeled partitions' PARTUUIDs against the embedded UUIDs, and checks the
+matching UKI exists in the ESP (transfer numbering 10/20/90 stands in for
+ordering). Never reboots; fails loudly (`outcome=failed`) on any mismatch.
+
+It speaks the exact same `/run/snosi/update-check`/`/run/snosi/update-staged`
+state-file language as the bootc stager, with one schema extension: the
+semaphore carries `version=<14-digit>` on native instead of bootc's
+`digest=sha256:...` (never both). The three shared consumers --
+`/etc/update-motd.d/86-bootc-update-staged` (ships once, in base, never
+forked), `/usr/libexec/bootc-update-notify` (ditto), and
+`usr/bin/snosi-update-status` -- all key off whichever field is present, and
+`snosi-update-status` additionally dispatches its ENTIRE backend
+(`native_status()` vs `bootc_status()`) on `/usr/lib/snosi/native-ab` before
+ever calling the `bootc` CLI, which isn't installed on native images at all.
+
+No native `held-rollback`: `systemd-sysupdate`'s `InstancesMax=2` accounting
+treats both on-disk root slots as "installed" when deciding what's newer, so
+a version already sitting in either slot -- including one the admin just
+rolled away from -- is never re-offered by `check-new` in the first place;
+bootc's separate rollback-deployment pointer (the thing that can collide with
+an unchanged registry pull) has no sysupdate equivalent to collide with. The
+one real adjacent case handled explicitly: a version already downloaded into
+the inactive slot by an earlier run this boot, waiting for reboot, is
+detected (remote_version equals the other slot's version) and re-asserts the
+semaphore instead of re-downloading.
+
+Desktop notification: native-named user units `snosi-update-notify.path`/
+`.service` (parallel to the masked bootc-named pair, same tree) both
+`ExecStart=` the SAME `/usr/libexec/bootc-update-notify` script -- no
+duplicated notification logic between transports -- with an unconditional
+static `graphical-session.target.wants/` link (a passive path watcher is
+harmless even when nothing is ever staged).
+
+Activation policy is inert by default: `snosi-sysupdate-stage.timer` ships
+with no `[Install]` section, and no build creates a wants-link for it unless
+`SNOSI_NATIVE_AUTOSTAGE=1` was set in the build environment (forwarded into
+the ab-root finalize `.chroot` script via `Environment=SNOSI_NATIVE_AUTOSTAGE`
+under `shared/outformat/ab-root/mkosi.conf`'s new `[Build]` section). A
+static `/usr/lib/systemd/system/timers.target.wants/` link, created by that
+finalize script, not a preset -- an already-installed image whose first boot
+predates a publication-enabled release would never pick up a brand-new
+preset-only enablement, but the static link ships correctly with the very
+update that introduces it. `test/native-ab-updateux-test.sh` is the Phase 4
+exit-criterion QEMU test: it boots a publication-disabled N, stages a
+publication-enabled N+1 (built with `SNOSI_NATIVE_AUTOSTAGE=1`), reboots, and
+asserts `snosi-sysupdate-stage.timer` is ACTIVE post-reboot -- proving the
+static link travels with the image itself, not with any first-boot or
+preset-reconcile machinery. See `yeti/testing.md` for the full assertion
+sequence including the ack-gated notification and tampered-signature
+fail-closed cases.
+
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
 1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, lemonade, nix, podman, tailscale, vscode

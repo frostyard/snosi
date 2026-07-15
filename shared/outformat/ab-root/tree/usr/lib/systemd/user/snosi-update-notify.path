@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Native-A/B-named twin of mkosi.images/base/mkosi.extra/usr/lib/systemd/
+# user/bootc-update-notify.path (masked on native images -- see
+# test/native-ab-static-test.sh). Same trigger shape, same shared
+# ExecStart= script (usr/libexec/bootc-update-notify, genuinely transport-
+# neutral: it keys off /run/snosi/update-staged's digest= OR version=,
+# whichever is present), different unit NAME so a native system's `systemctl
+# --user status` reads sensibly instead of naming a transport it doesn't
+# use. Fire the staged-update notification when the semaphore appears
+# (update staged mid-session) or changes (a newer staged version replaced an
+# older one). PathExists= also triggers immediately if the file is already
+# present when the session starts, so login-while-pending is covered too.
+[Unit]
+Description=Watch for a staged native A/B update
+# The stager writes the semaphore in several syscalls, so one staging emits
+# multiple PathModified events in a burst; combined with the login-time
+# PathExists trigger this can exceed systemd's default start-rate limit
+# (5/10s) and leave this unit in a permanent 'unit-start-limit-hit' failure
+# that stops watching. Disable the limit -- the triggered service is
+# ack-gated, so repeat triggers for the same staged version are harmless
+# no-ops.
+StartLimitIntervalSec=0
+
+[Path]
+PathExists=/run/snosi/update-staged
+PathModified=/run/snosi/update-staged
+
+# No [Install]: static /usr wants activation (graphical-session.target.wants/).

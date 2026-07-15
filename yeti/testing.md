@@ -171,6 +171,47 @@ image) failed on every native A/B boot with "Unable to initialize Netlink
 socket: Protocol not supported" -- fixed by adding both modules to the
 allowlist.
 
+`native-ab-updateux-test.sh` is the Phase 4 exit-criterion QEMU test
+(`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`, "Phase 4: Build
+Native Update UX"). Mirrors `native-ab-components-test.sh`'s build/publish/boot
+scaffolding, but builds N and N+1 with DIFFERENT build environments: N
+ordinary (publication-disabled), N+1 with `SNOSI_NATIVE_AUTOSTAGE=1` (the
+Phase 4 activation-policy knob). Both are published through the real
+`prepare-native-publication.sh --xz` pipeline to a local HTTP fixture origin,
+signed with an ephemeral GPG key installed at `/etc/systemd/import-pubring.gpg`
+(overrides the shipped DEV pubring by ordinary systemd config precedence,
+without touching the shipped default) and served via 3 whole-file
+`/etc/sysupdate.d/*.transfer` overrides (see CLAUDE.md's "Native A/B Update UX"
+section for why this, not `--definitions=`, is the only mechanism
+`sysupdate.d(5)` actually supports). Sequence: (1) boot N, assert no bootc/nbc/
+upstream-sysupdate activity, `snosi-sysupdate-stage.timer` present but
+`is-enabled=static` with no wants link, and a manual stager run against an
+origin that only promotes N reports `outcome=current` (motd agrees); (2)
+publish N+1, run the stager manually -- it stages, its own post-stage
+partition/UKI checks pass, `update-check`/semaphore/motd/`snosi-update-status`
+all agree, the native notify unit files + static wants link are present, and
+running the shared `bootc-update-notify` script directly (stubbed
+`notify-send` on `$PATH`) proves ack-gating: first run notifies, second run
+for the same staged version is a silent no-op; (3) reboot into N+1 and assert
+`snosi-sysupdate-stage.timer` is ACTIVE -- the static wants link arrived WITH
+the image, the actual Phase 4 exit criterion -- semaphore is gone (fresh
+`/run`), a fresh manual stager run reports `outcome=current` again, and no
+bootc/nbc/upstream-sysupdate activity reappeared (exactly one update stack);
+(4) tamper case: fabricates a filename set claiming a version newer than N+1 by
+hardlinking N+1's own already-published bytes under new names (no 3rd mkosi
+build, and guarantees `systemd-sysupdate` actually attempts to trust the index
+rather than silently no-opping as "nothing newer"), signs a valid SHA256SUMS
+for it, then truncates `SHA256SUMS.gpg` to break the signature -- the stager
+must fail closed: `outcome=failed`, no semaphore, no new partition, running
+version unchanged. The four steps between them exercise all three of the
+stager's decision paths live: step 1 hits the not-newer-than-running guard
+(`check-new` re-offers the running version on a fresh install because the
+build-time ESP UKI name, `<ImageId>-<kver>-<roothash>.efi`, does not match
+the channel transfer pattern -- see CLAUDE.md "Native A/B Update UX"), step
+3 hits the rc!=0 + index-probe-passes "current" path, and step 4 hits the
+rc!=0 + probe-fails fail-closed path. First full run: 51/51 assertions
+passed (2026-07-15, N=20260715003309 -> N+1=20260715003624).
+
 `native-publish-test.sh` is a static, non-root regression test for
 `shared/native-ab/publish/prepare-native-publication.sh` (Phase 3), the script
 that turns mkosi's internal split outputs (double-`.raw` filenames with a

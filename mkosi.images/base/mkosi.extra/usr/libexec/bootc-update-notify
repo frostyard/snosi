@@ -1,10 +1,21 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Desktop notification for a staged OS update (user scope). Fires once per
-# staged DIGEST, gated by comparing against the per-user acknowledged digest
-# — never once per login or per path-unit trigger. The ack lives in state
-# (not runtime) but stays correct: the semaphore in /run disappears at the
-# reboot that applies the update, and a different staged digest re-notifies.
+# Desktop notification for a staged OS update (user scope). Transport-
+# neutral: shared verbatim by both bootc-update-notify.path/.service (OCI
+# transport) and snosi-update-notify.path/.service (native A/B transport,
+# shared/outformat/ab-root/tree) -- exactly one pair is unmasked on a given
+# image (test/native-ab-static-test.sh asserts the bootc-named pair is
+# masked on native images). Fires once per staged UPDATE IDENTITY, gated by
+# comparing against the per-user acknowledged identity — never once per
+# login or per path-unit trigger. The ack lives in state (not runtime) but
+# stays correct: the semaphore in /run disappears at the reboot that applies
+# the update, and a different staged identity re-notifies.
+#
+# /run/snosi/update-staged carries EITHER digest= (bootc: sha256:... image
+# digest) OR version= (native: 14-digit version, docs/native-ab-contracts.md
+# §2) -- see bootc-update-stage and snosi-sysupdate-stage's headers for the
+# full field contract. Exactly one is ever present on a given image; this
+# script keys off whichever it finds.
 set -euo pipefail
 
 SEM=/run/snosi/update-staged
@@ -13,15 +24,21 @@ ACK="$STATE_DIR/update-staged.ack"
 
 [[ -s "$SEM" ]] || exit 0
 digest=$(sed -n 's/^digest=//p' "$SEM")
-[[ -n "$digest" ]] || exit 0
-[[ "$digest" == "$(cat "$ACK" 2>/dev/null || true)" ]] && exit 0
+version=$(sed -n 's/^version=//p' "$SEM")
+id="${digest:-$version}"
+[[ -n "$id" ]] || exit 0
+[[ "$id" == "$(cat "$ACK" 2>/dev/null || true)" ]] && exit 0
 
 command -v notify-send >/dev/null || exit 0
 
-short="${digest#sha256:}"
+if [[ -n "$digest" ]]; then
+    short="${digest#sha256:}"
+    body="An update (${short:0:12}) is staged and will apply the next time you reboot."
+else
+    body="An update (${version}) is staged and will apply the next time you reboot."
+fi
 notify-send --app-name="Snow Linux" --icon=software-update-available \
-    "System update ready" \
-    "An update (${short:0:12}) is staged and will apply the next time you reboot."
+    "System update ready" "$body"
 
 mkdir -p "$STATE_DIR"
-echo "$digest" > "$ACK"
+echo "$id" > "$ACK"

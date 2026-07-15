@@ -477,6 +477,105 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 9. Phase 4 native update UX: stager + notify units present in the ab-root
+#    tree, and the inert-by-default activation rule (no committed
+#    timers.target.wants/ link -- only the build-time SNOSI_NATIVE_AUTOSTAGE=1
+#    finalize branch may ever create one, never a file checked into git).
+# ---------------------------------------------------------------------------
+
+ab="$root/shared/outformat/ab-root"
+
+for f in tree/usr/libexec/snosi-sysupdate-stage \
+    tree/usr/lib/systemd/system/snosi-sysupdate-stage.service \
+    tree/usr/lib/systemd/system/snosi-sysupdate-stage.timer \
+    tree/usr/lib/systemd/user/snosi-update-notify.path \
+    tree/usr/lib/systemd/user/snosi-update-notify.service; do
+    if [[ -f "$ab/$f" ]]; then
+        pass "phase 4: $f exists in the ab-root tree"
+    else
+        fail_check "phase 4: missing $f in the ab-root tree"
+    fi
+done
+
+if [[ -x "$ab/tree/usr/libexec/snosi-sysupdate-stage" ]]; then
+    pass "phase 4: snosi-sysupdate-stage is executable"
+else
+    fail_check "phase 4: snosi-sysupdate-stage is not executable"
+fi
+
+# The stager's own timer ships with NO [Install] section: activation is
+# static-link-only (see the finalize script), never preset-driven.
+if grep -q '^\[Install\]' "$ab/tree/usr/lib/systemd/system/snosi-sysupdate-stage.timer" 2>/dev/null; then
+    fail_check "phase 4: snosi-sysupdate-stage.timer must not carry an [Install] section (static-link activation only)"
+else
+    pass "phase 4: snosi-sysupdate-stage.timer carries no [Install] section"
+fi
+
+# Inert-by-default: no committed timers.target.wants/ link for the stager
+# timer anywhere in the repo. The ONLY place that may ever create one is the
+# SNOSI_NATIVE_AUTOSTAGE=1-gated branch of the finalize .chroot script,
+# which runs at build time and never leaves a trace in the git tree.
+if find "$root" -path '*/timers.target.wants/snosi-sysupdate-stage.timer' 2>/dev/null | grep -q .; then
+    fail_check "phase 4: a timers.target.wants/snosi-sysupdate-stage.timer link is committed to the repo -- activation must be build-time-only (SNOSI_NATIVE_AUTOSTAGE=1), never shipped in git"
+else
+    pass "phase 4: no committed timers.target.wants/snosi-sysupdate-stage.timer link (inert by default)"
+fi
+
+if grep -q 'SNOSI_NATIVE_AUTOSTAGE' "$ab/mkosi.conf" 2>/dev/null; then
+    pass "phase 4: $ab/mkosi.conf forwards SNOSI_NATIVE_AUTOSTAGE via Environment="
+else
+    fail_check "phase 4: $ab/mkosi.conf does not forward SNOSI_NATIVE_AUTOSTAGE (Environment=)"
+fi
+
+grep -q 'SNOSI_NATIVE_AUTOSTAGE' "$ab/finalize/mkosi.finalize.chroot" && \
+    pass "phase 4: the ab-root finalize script gates static-link creation on SNOSI_NATIVE_AUTOSTAGE" || \
+    fail_check "phase 4: the ab-root finalize script does not reference SNOSI_NATIVE_AUTOSTAGE"
+
+# The static wants link for the desktop notification path unit IS committed
+# (unconditional, unlike the stager timer -- it is a passive watcher that
+# does nothing until /run/snosi/update-staged exists).
+notify_link="$ab/tree/usr/lib/systemd/user/graphical-session.target.wants/snosi-update-notify.path"
+if [[ -L "$notify_link" ]]; then
+    pass "phase 4: snosi-update-notify.path has a static graphical-session.target.wants/ link"
+else
+    fail_check "phase 4: missing static wants link: $notify_link"
+fi
+
+# Both native-named notify units must share the bootc script's executable
+# (no duplicated notification logic between transports).
+for f in tree/usr/lib/systemd/user/snosi-update-notify.path \
+    tree/usr/lib/systemd/user/snosi-update-notify.service; do
+    if grep -q 'usr/libexec/bootc-update-notify\|ExecStart=/usr/libexec/bootc-update-notify' "$ab/$f" 2>/dev/null; then
+        pass "phase 4: $f reuses the shared bootc-update-notify script"
+    fi
+done
+grep -q '^ExecStart=/usr/libexec/bootc-update-notify$' "$ab/tree/usr/lib/systemd/user/snosi-update-notify.service" && \
+    pass "phase 4: snosi-update-notify.service ExecStart= is the shared script" || \
+    fail_check "phase 4: snosi-update-notify.service does not ExecStart= the shared bootc-update-notify script"
+
+# Transport-neutral shared consumers: the base motd hook and notify script
+# key off version= (native) as well as digest= (bootc).
+motd_hook="$root/mkosi.images/base/mkosi.extra/etc/update-motd.d/86-bootc-update-staged"
+notify_script="$root/mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-notify"
+grep -q "sed -n 's/^version=//p'" "$motd_hook" && \
+    pass "phase 4: the shared motd hook reads version= as well as digest=" || \
+    fail_check "phase 4: the shared motd hook does not read version= (not transport-neutral)"
+grep -q "sed -n 's/^version=//p'" "$notify_script" && \
+    pass "phase 4: the shared notify script reads version= as well as digest=" || \
+    fail_check "phase 4: the shared notify script does not read version= (not transport-neutral)"
+
+# snosi-update-status dispatches on the native marker before ever touching
+# bootc (calling the bootc CLI on a native image, which never installs it,
+# would hard-fail the whole command).
+status_cli="$root/mkosi.images/base/mkosi.extra/usr/bin/snosi-update-status"
+grep -q 'MARKER=/usr/lib/snosi/native-ab' "$status_cli" && \
+    pass "phase 4: snosi-update-status dispatches on the native marker" || \
+    fail_check "phase 4: snosi-update-status does not reference the native marker"
+grep -q '^native_status()' "$status_cli" && grep -q '^bootc_status()' "$status_cli" && \
+    pass "phase 4: snosi-update-status carries separate native/bootc backends" || \
+    fail_check "phase 4: snosi-update-status is missing one of native_status()/bootc_status()"
+
+# ---------------------------------------------------------------------------
 # Reconcile actual violations against the allowlist
 # ---------------------------------------------------------------------------
 

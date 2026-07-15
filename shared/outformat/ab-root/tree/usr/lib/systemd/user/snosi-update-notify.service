@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Native-A/B-named twin of bootc-update-notify.service (masked on native --
+# see snosi-update-notify.path). Per-user desktop notification for a staged
+# native A/B update, pending reboot. Ack-gated per staged version (the
+# shared usr/libexec/bootc-update-notify script keys off /run/snosi/
+# update-staged's version= field on native, digest= on bootc): notifies
+# once per staged version, not per login or path trigger.
+[Unit]
+Description=Notify about a staged native A/B update pending reboot
+After=graphical-session.target
+ConditionPathExists=/run/snosi/update-staged
+# See snosi-update-notify.path: one staging can trigger this several times
+# in a burst. Repeat runs no-op via the per-version ack but still count as
+# starts, so disable the default start-rate limit to avoid a spurious
+# start-limit failure.
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/bootc-update-notify
+
+# No [Install]: triggered solely by snosi-update-notify.path (whose
+# PathExists= also fires at session start when the semaphore already exists).
