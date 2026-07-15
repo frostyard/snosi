@@ -405,6 +405,33 @@ check_user_mask_symlink bootc-update-notify.path
 check_user_mask_symlink bootc-update-notify.service
 
 # ===========================================================================
+# Step 1.5: factory /var (native dpkg relocation + per-product audit)
+# ===========================================================================
+echo ""
+echo "=== Step 1.5: factory /var ==="
+
+dpkg_link_target="$(vm_ssh 'readlink /var/lib/dpkg' || true)"
+assert_eq "/var/lib/dpkg is a symlink with the exact relative relocation target" \
+    "$dpkg_link_target" "../../usr/lib/sysimage/dpkg"
+
+systemd_version="$(vm_ssh "dpkg-query -W -f='\${Version}' systemd" || true)"
+assert_true "dpkg-query -W systemd prints a version" bash -c "[[ -n '$systemd_version' ]]"
+echo "systemd: $systemd_version"
+
+kernel_version="$(vm_ssh "dpkg-query -W -f='\${Package} \${Version}\n' 'linux-image-*'" || true)"
+assert_true "dpkg-query -W 'linux-image-*' prints a version" bash -c "[[ -n '$kernel_version' ]]"
+echo "linux-image-*: $kernel_version"
+
+assert_true "/usr/share/snosi/var-inventory.txt exists" \
+    vm_ssh 'test -f /usr/share/snosi/var-inventory.txt'
+inventory_metadata_lines="$(vm_ssh "grep -c '^image-metadata' /usr/share/snosi/var-inventory.txt" || true)"
+assert_true "var-inventory.txt contains at least one image-metadata line" \
+    bash -c "[[ '${inventory_metadata_lines:-0}' -ge 1 ]]"
+
+failed_units_after_var_checks="$(vm_ssh 'systemctl --failed --no-legend' || true)"
+assert_eq "no failed systemd units after factory /var checks" "$failed_units_after_var_checks" ""
+
+# ===========================================================================
 # Step 2: component topology in the real image
 # ===========================================================================
 echo ""

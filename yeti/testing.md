@@ -122,7 +122,13 @@ bootstrap plus `mkosi clean -ff` + `mkosi --profile cayo-ab-raw build` --
 ~15-25 min clean-build cost, which includes a full mkosi ToolsTree rebuild,
 twice per run), boots N, and asserts in order: (1) no failed systemd units and
 bootc/nbc/systemd-sysupdate auto-update timers and services report `masked`,
-including the user-scope `bootc-update-notify` mask symlinks; (2)
+including the user-scope `bootc-update-notify` mask symlinks;
+(1.5, added phase 2, see OVERVIEW.md "Native /var Factory State") the dpkg
+database relocation and per-product `/var` audit inventory survive a real
+install: `/var/lib/dpkg` is a symlink to `../../usr/lib/sysimage/dpkg`,
+`dpkg-query -W systemd`/`dpkg-query -W 'linux-image-*'` both resolve,
+`usr/share/snosi/var-inventory.txt` exists with at least one
+`image-metadata` line, and no unit failures were introduced; (2)
 `/usr/lib/sysupdate.d/` contains only the three OS transfers (no `.feature`
 files) and `systemd-sysupdate components` enumerates all 17 shipped sysext
 components; (3) two ad hoc test components (`testa`, `testb`, independently

@@ -35,6 +35,28 @@ if [[ -e /usr/lib/snosi/native-ab ]]; then
   ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-reboot.timer
 fi
 
+# Native /var factory state: the installer creates a fresh per-machine /var,
+# so nothing written to image /var at build time survives (see CLAUDE.md
+# "Native A/B Prototype" and docs/plans/2026-07-14-.../"Native /var Factory
+# State"). Package identity (the dpkg database) belongs to the immutable
+# root instead: relocate it to /usr/lib/sysimage/dpkg and leave a RELATIVE
+# symlink at /var/lib/dpkg so `dpkg-query`/`dpkg -l` keep working against
+# the currently booted image (and naturally change across A/B roots). The
+# symlink is relative (not absolute) so out-of-chroot consumers that resolve
+# it against a different root prefix (e.g. mkosi's own manifest generation,
+# which runs `dpkg-query --admindir=$BUILDROOT/var/lib/dpkg` from the host
+# BEFORE finalize scripts run, so it is unaffected by this move) still
+# resolve correctly if ever read relative to a prefix other than /.
+# bootc images are explicitly unchanged: real /var/lib/dpkg ships as today,
+# since bootc's ostree-managed /var is not wiped fresh on every install the
+# way the native installer's /var is.
+if [[ -e /usr/lib/snosi/native-ab ]]; then
+  mkdir -p /usr/lib/sysimage
+  rm -rf /usr/lib/sysimage/dpkg
+  mv /var/lib/dpkg /usr/lib/sysimage/dpkg
+  ln -sf ../../usr/lib/sysimage/dpkg /var/lib/dpkg
+fi
+
 # Ship no unit enablement symlinks in /etc. mkosi ran `systemctl preset-all`
 # (and `--global preset-all`) just before this script; PID 1 re-applies the
 # same preset policy at first boot (real first boot, see machine-id above)

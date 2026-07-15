@@ -1,9 +1,21 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 set -euo pipefail
-# find the first file in the output directory that matches the pattern "$IMAGE_ID.manifest"
-MANIFEST_FILE=$(find "$OUTPUTDIR" -maxdepth 1 -type f -name "$IMAGE_ID.manifest" | head -n 1)
+# mkosi names the manifest file it writes after Output= (mkosi's own
+# save_manifest(), see "Saving manifest <Output>.manifest" in build logs),
+# not ImageId=. Those are usually the same value, but native A/B profiles
+# deliberately keep ImageId=cayo/snow/snowfield (branding, sysext
+# compatibility) while setting a distinct Output= (e.g. cayo-ab-raw) --
+# see CLAUDE.md "Native A/B Prototype". Matching on "$IMAGE_ID.manifest"
+# then finds nothing and this script fails the whole build post-output
+# step (caught 2026-07-14 running a real cayo-ab-raw build for the phase 2
+# /var-audit task). Read the actual Output= value from $MKOSI_CONFIG (a
+# JSON summary of the current image's settings, available to
+# PostOutputScripts) instead of assuming it matches $IMAGE_ID.
+OUTPUT_NAME=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["Output"])' "$MKOSI_CONFIG")
+MANIFEST_FILE=$(find "$OUTPUTDIR" -maxdepth 1 -type f -name "$OUTPUT_NAME.manifest" | head -n 1)
 echo "Found manifest file: $MANIFEST_FILE"
+echo "Output: $OUTPUT_NAME"
 echo "Image ID: $IMAGE_ID"
 echo "Image Version: $IMAGE_VERSION"
 
@@ -11,6 +23,13 @@ echo "Image Version: $IMAGE_VERSION"
 if [ -z "$IMAGE_VERSION" ]; then
     echo "IMAGE_VERSION is empty, skipping manifest copy."
     exit 0
+fi
+
+# Fail loudly (instead of the old silent `cp ''`) if the Output= naming
+# assumption above ever breaks again.
+if [ -z "$MANIFEST_FILE" ]; then
+    echo "No manifest file matching $OUTPUT_NAME.manifest found in $OUTPUTDIR" >&2
+    exit 1
 fi
 
 cp "$MANIFEST_FILE" "$OUTPUTDIR/$IMAGE_ID.$IMAGE_VERSION.manifest.json"
