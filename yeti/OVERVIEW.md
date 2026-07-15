@@ -130,6 +130,116 @@ channel check would otherwise reject the never-published `-raw` profile
 name) through the publisher with `--xz`, so that leg of the test exercises
 the real public contract end to end instead of hand-rolled fixture naming.
 
+**Publication and signing pipeline (Phase 7).** `shared/native-ab/publish/`
+gained four more scripts on top of `prepare-native-publication.sh`:
+`publish-candidate.sh`, `verify-remote.sh`, `promote.sh`, `withdraw.sh`, plus
+a shared `publish-lib.sh` and `generate-sbom.sh`. All are `--help`'d,
+`set -euo pipefail`, shellcheck-clean, and share one `dest`-addressing
+convention (`publish-lib.sh`'s header): a plain local directory for
+rehearsal, or `rclone:<remote>:<bucket>[/prefix]` for a real remote — every
+script appends the frozen `os/native/v1/<product>/x86-64/` path itself, so
+`dest` is always the bucket/origin root. `verify-remote.sh`/`promote.sh`
+additionally take an HTTP `base-url` (the public read path) separate from
+`dest` (the write path) — writes go through `rclone`, verification/signing
+read back over the same HTTP path a real client would use. Local-rehearsal
+writes are atomic (temp file + rename, same pattern as
+`prepare-native-publication.sh`) and record Cache-Control *intent* as a
+`<name>.meta.json` sidecar (a plain directory/http.server origin can't be
+told to emit custom headers); real-remote uploads set the header directly
+via `rclone --header-upload`.
+
+`generate-sbom.sh` closes the `docs/native-ab-contracts.md` §4 gap
+(`<channel>_<version>.sbom.spdx.json` was previously never produced):
+rather than shelling out to `syft` (which was investigated and rejected —
+see the script's own header — mkosi's package manifest.json already has
+everything needed, syft would need root/a mounted tree to scan a raw disk
+image and isn't installed on build hosts by default), it generates a real
+SPDX 2.3 JSON document directly from the same manifest.json
+`prepare-native-publication.sh` already reads, with one root "operating
+system" package CONTAINS-related to every installed deb package (purl
+references, SPDXID charset-sanitized package names). No network, no root,
+no external tool. `prepare-native-publication.sh` now writes the SBOM
+unconditionally and lists it as a 6th `SHA256SUMS` entry / `artifacts.sbom`
+publication-info.json field.
+
+`publish-candidate.sh` uploads to a per-version candidate sub-path
+(`.candidate/<version>/`, this repo's own convention, never a final name).
+`verify-remote.sh` independently re-checks every candidate object over HTTP:
+size, full-GET SHA-256, and >=2 byte-range GETs compared against the same
+range read locally — this is what caught that plain `python3 -m
+http.server`'s `SimpleHTTPRequestHandler` has **no Range support at all**
+(confirmed against the Python 3.13 stdlib source: every ranged GET silently
+returns the full 200 body), which would have made the range check
+meaningless. `test/lib/range-http-server.py` is a ~100-line stdlib-only
+substitute that actually honors `Range:` (206 Partial Content, streamed, not
+loaded into memory — matters at multi-gigabyte artifact sizes) and is what
+both `verify-remote.sh`'s own local rehearsal and
+`test/native-ab-publication-test.sh` serve the origin with.
+
+`promote.sh` is the one script that touches the private signing key
+(`--signing-key <file>`, imported into an ephemeral 0700 `GNUPGHOME` removed
+on exit, or `--gnupghome <existing homedir>` — never a hardcoded path). It
+copies verified candidates to final names, then **re-downloads every final
+object over HTTP and hashes the downloaded bytes** to build the new
+`SHA256SUMS` (never trusts local disk or the copy step, per the plan's
+"Generate SHA256SUMS over the exact bytes served" step — this would catch a
+copy that silently truncated/corrupted on the storage backend). Before
+overwriting an existing signed index, it archives the outgoing pair to
+`.history/<version>/` (this repo's own retention mechanism, not part of the
+frozen public contract) — this is what `withdraw.sh` restores from later.
+Upload order is hardcoded: `SHA256SUMS.gpg` first, `SHA256SUMS` last, both
+`Cache-Control: no-store` — verified live via nanosecond `stat -c %y`
+comparison in both the logic-level smoke test and the QEMU rehearsal (plain
+`%Y` integer-second mtimes were too coarse to observe the ordering on a fast
+local run). `--purge-hook <cmd>` is the documented Cloudflare-purge
+extension point, a no-op locally.
+
+`withdraw.sh` `gpgv`-verifies an archived `.history/<version>/` pair against
+the pubring **before touching anything live**, and refuses outright (exit 1,
+nothing written) on a missing pair or a cryptographic mismatch — it never
+creates a new signature, only replays an already-signed one, per the plan's
+"restore ... using the same signature-first, manifest-last sequence".
+
+`test/native-ab-publication-test.sh` is the full local end-to-end rehearsal:
+two real `cayo-ab-raw` builds (N, N+1) published under the real `cayo-ab`
+channel name (the by-now-established "stage build outputs under
+`$CHANNEL`-named symlinks" trick, since `prepare-native-publication.sh`
+validates its channel *argument*, not which mkosi profile physically
+produced the bytes — see `test/native-ab-updateux-test.sh`'s header for the
+same pattern). Deliberately uses `cayo-ab-raw` (no Secure Boot/MOK) rather
+than the secure `cayo-ab` profile: `shared/native-ab/keys/README.md`
+documents that the DEV pubring ships at `/usr/lib/systemd/import-pubring.gpg`
+on **every** native A/B image via the shared `shared/outformat/ab-root/
+mkosi.conf` fragment, `cayo-ab-raw` included, so booting it and never
+touching `/etc/systemd/import-pubring.gpg` exercises exactly the same
+"verify a promotion signature against the stock shipped pubring" trust path
+a secure production profile would, without paying for OVMF Secure Boot + MOK
+enrollment (orthogonal Phase 6 machinery). The QEMU leg: boot N, `/etc/
+sysupdate.d` origin override (same documented whole-file-replacement
+mechanism as `native-ab-updateux-test.sh`) pointed at the local rehearsal
+origin, stage promoted N+1 via `snosi-sysupdate-stage`, reboot, assert N+1.
+Then three fail-closed tamper cases, each built from a fabricated
+higher-version filename set hardlinked to N+1's own real, already-verified
+bytes (no 3rd multi-gigabyte build — the same trick `native-ab-updateux-
+test.sh`'s tamper case uses) run through the *real* candidate/verify/promote
+pipeline before being corrupted in the one specific way each case names: (a)
+a payload byte flipped in the already-promoted final object (signature and
+manifest still match each other, just not the actual bytes on disk); (b) the
+manifest rolled back to N+1's own real (just-archived) `SHA256SUMS` content
+while the just-uploaded signature for the fake version stays — a signature
+that covers different bytes than what `SHA256SUMS` now contains, i.e. `gpgv`
+itself rejects the pair even before any guest is involved; (c) a full
+promotion signed with a throwaway, never-imported-anywhere key. All three
+leave the guest on N+1 (`outcome=failed`, no staged semaphore, no partition
+labeled with the fake version). The test finishes by withdrawing back to
+N+1's own archived pair and confirming the guest's stager reports
+`outcome=current`. Not wired into `validate.yml` (same reason none of the
+other QEMU harnesses are — it needs sudo, KVM, and builds real images). The
+static logic (candidate/verify/promote/withdraw against a synthetic
+fixture, no image build, no real R2) is a separate, fast, CI-wired script:
+`test/native-publication-pipeline-test.sh`, run from the same `shell-lint`
+job in `validate.yml` as `test/native-publish-test.sh`.
+
 `mkosi.profiles/cayo-ab-raw` (renamed from `cayo-ab` in Phase 1; the name
 `cayo-ab` now names the production secure posture — see below — and
 `check-native-publication-guard.sh` hard-fails if `cayo-ab-raw` ever grows a

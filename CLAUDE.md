@@ -713,6 +713,45 @@ checklist for the user to run on real Surface hardware:
    section and flip it from "PROVISIONAL-pending-hardware" once every item
    passes.
 
+**Publication and signing pipeline (Phase 7).** `shared/native-ab/publish/`
+has, on top of `prepare-native-publication.sh`: `publish-candidate.sh`,
+`verify-remote.sh`, `promote.sh`, `withdraw.sh`, a shared `publish-lib.sh`,
+and `generate-sbom.sh` (closes the old `docs/native-ab-contracts.md` §4
+`.sbom.spdx.json` gap by generating a real SPDX 2.3 JSON document directly
+from mkosi's own package manifest — no `syft`, no network, no root; see the
+script's header for why `syft` was investigated and rejected). Every script
+takes a `dest` (`/local/dir` for rehearsal, or `rclone:<remote>:<bucket>
+[/prefix]` for a real remote — see `publish-lib.sh`'s header) and, for
+`verify-remote.sh`/`promote.sh`, a separate HTTP `base-url` (the public read
+path — writes go through `rclone`, verification/re-signing reads back over
+HTTP). `promote.sh` is the only script touching the private key
+(`--signing-key <file>` imported into an ephemeral GNUPGHOME, or
+`--gnupghome <existing homedir>` — never hardcoded); it re-downloads every
+final object over HTTP to hash before regenerating `SHA256SUMS` (never
+trusts local disk), archives the outgoing signed pair to
+`.history/<version>/` before overwriting it (**only if that outgoing pair
+itself still verifies against `--pubring`** — an already-broken outgoing
+index is skipped rather than clobbering a good archive from an earlier
+promotion; root-caused live during the Phase 7 rehearsal's own tamper-case
+sequencing, see `docs/native-ab-publication.md`/the Phase 7 task report),
+and publishes `SHA256SUMS.gpg` strictly before `SHA256SUMS`, both
+`Cache-Control: no-store`. `withdraw.sh` `gpgv`-verifies an archived pair
+against the pubring before touching anything live and refuses outright on a
+missing or mismatched pair. Full operational runbook (key ceremony,
+candidate->verify->promote->purge with real `rclone`/Cloudflare commands,
+retention, interim protected-builder constraints):
+`docs/native-ab-publication.md`. Local rehearsal, no real R2/Cloudflare:
+`test/native-ab-publication-test.sh` (QEMU, needs root/KVM, builds real
+`cayo-ab-raw` images — deliberately NOT `cayo-ab`, since the DEV pubring
+ships on every native A/B image regardless of Secure Boot posture and this
+test is about the update-signature trust path, not the boot-chain trust
+path) and `test/native-publication-pipeline-test.sh` (fast, synthetic
+fixture, wired into `validate.yml`). Both serve their local HTTP origin with
+`test/lib/range-http-server.py`, not plain `python3 -m http.server` — the
+stdlib's `SimpleHTTPRequestHandler` has no Range support at all (confirmed
+against the Python 3.13 stdlib source), which would make `verify-remote.sh`'s
+mandatory range-GET check silently meaningless.
+
 ### Native `/var` Factory State
 
 The native installer creates a fresh per-machine `/var`; nothing written to

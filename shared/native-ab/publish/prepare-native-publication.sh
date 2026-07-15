@@ -46,11 +46,12 @@
 # automatic per-build invocation was rejected even though every individual
 # permission concern (sfdisk root, OUTPUTDIR contents) checks out.
 #
-# Contract gap: docs/native-ab-contracts.md §4 lists
-# <channel>_<version>.sbom.spdx.json as part of the frozen public artifact
-# set. This script does NOT generate it -- SBOM generation is not yet wired
-# into this pipeline (see the contract's own callout of this gap). Any
-# consumer of this script's output must not assume the SBOM is present.
+# SBOM: docs/native-ab-contracts.md §4 lists <channel>_<version>.sbom.spdx.json
+# as part of the frozen public artifact set. This script generates it via
+# generate-sbom.sh, which derives a real SPDX 2.3 JSON document directly from
+# the mkosi package manifest already produced by this same build (no external
+# scanner tool, no network access, no root) -- see that script's header for
+# why this was chosen over shelling out to syft. This closes the §4 gap.
 #
 # Every artifact this script DOES produce is written atomically: each output
 # is created under a per-run temp name in the destination directory and
@@ -274,6 +275,18 @@ cp "$manifest_file" "$manifest_tmp"
 commit_tmpfile "$manifest_tmp" "$dest/$manifest_name"
 
 # ---------------------------------------------------------------------------
+# SBOM -- generated directly from the same manifest (see generate-sbom.sh's
+# header for why this doesn't shell out to an external scanner).
+# ---------------------------------------------------------------------------
+
+sbom_name="${channel}_${version}.sbom.spdx.json"
+echo "Writing $dest/$sbom_name"
+new_tmpfile "$dest/$sbom_name"
+sbom_tmp="$NEW_TMPFILE"
+"$(dirname "${BASH_SOURCE[0]}")/generate-sbom.sh" "$manifest_file" "$sbom_tmp" "$channel" "$version"
+commit_tmpfile "$sbom_tmp" "$dest/$sbom_name"
+
+# ---------------------------------------------------------------------------
 # SHA256SUMS -- unsigned. Signing (SHA256SUMS.gpg) is the Phase 7 protected
 # promotion step (docs/native-ab-contracts.md §4, §7); this script only
 # prepares candidate bytes.
@@ -283,7 +296,7 @@ sums_file="$dest/SHA256SUMS"
 new_tmpfile "$sums_file"
 sums_tmp="$NEW_TMPFILE"
 : > "$sums_tmp"
-for name in "$root_name" "$verity_name" "$disk_name" "$efi_name" "$manifest_name"; do
+for name in "$root_name" "$verity_name" "$disk_name" "$efi_name" "$manifest_name" "$sbom_name"; do
     (cd "$dest" && sha256sum "$name") >> "$sums_tmp"
 done
 commit_tmpfile "$sums_tmp" "$sums_file"
@@ -323,6 +336,7 @@ data = {
         "disk": {"name": "$disk_name", "size": size("$disk_name")},
         "efi": {"name": "$efi_name", "size": size("$efi_name")},
         "manifest": {"name": "$manifest_name", "size": size("$manifest_name")},
+        "sbom": {"name": "$sbom_name", "size": size("$sbom_name")},
     },
     "source_commit": "$source_commit",
     "generated_at": "$generated_at",

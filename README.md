@@ -59,8 +59,14 @@ incomplete/tampered update sets, explicit rollback, and boot-count fallback.
 failed legacy updaters, independently versioned sysext components updating
 without touching OS partitions or each other, an OS update succeeding with
 those components enabled, and native `/etc` drift reporting.
-Production key management, publication integration, and hardware soak remain.
-It does not replace the supported bootc images. See
+Production key management (the offline ceremony, in
+[`docs/native-ab-publication.md`](docs/native-ab-publication.md)) and
+hardware soak remain; the publication/signing pipeline itself
+(`shared/native-ab/publish/{publish-candidate,verify-remote,promote,
+withdraw}.sh`) is built and rehearsed end to end locally — see that same
+runbook doc for the candidate/verify/promote/withdraw procedure and
+`test/native-ab-publication-test.sh` for the local rehearsal. It does not
+replace the supported bootc images. See
 `docs/plans/2026-07-13-mkosi-native-ab-root-design.md`; the destructive raw-disk
 installer spike lives at `test/cayo-ab-install-spike.sh`. Its UKI uses the
 profile's dracut archive rather than mkosi's independently generated default

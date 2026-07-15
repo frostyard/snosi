@@ -56,6 +56,17 @@ jobs:
         # network, no image build.
         run: ./test/native-publish-test.sh
 
+      - name: Validate native A/B publication and signing pipeline
+        # shared/native-ab/publish/{publish-candidate,verify-remote,promote,
+        # withdraw}.sh (Phase 7) against a synthetic fixture, a local
+        # directory dest, and a local HTTP origin (test/lib/range-http-
+        # server.py). Uses the committed DEV signing key/pubring (dev-only,
+        # never production material). No root, no network beyond localhost,
+        # no image build. The real-build QEMU rehearsal (test/native-ab-
+        # publication-test.sh) needs root/KVM and is intentionally not run
+        # in CI, matching every other QEMU harness in this repo.
+        run: ./test/native-publication-pipeline-test.sh
+
       - name: Validate native A/B publication guard
         # A profile literally named cayo-ab, snow-ab, or snowfield-ab is
         # production-facing (docs/native-ab-contracts.md §15) and must never
