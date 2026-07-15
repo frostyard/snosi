@@ -379,6 +379,45 @@ N=20260715021239 → N+1=20260715021816). Requires `swtpm`/`swtpm-tools` and
 on a snosi dev host itself (read-only `/usr`, no `apt-get install`) and the
 `$SUDO_USER`-home-resolution fix needed because plain `sudo` resets `$HOME`.
 
+`--full-window` extends the same harness into the **Phase 5 exit-criterion
+run** ("Snow completes installation, N through N+3, rollback, and fallback in
+QEMU or Incus with Secure Boot and TPM unlock"). Default mode is byte-for-byte
+unchanged when the flag is absent. After the N→N+1 hop it builds N+2 and N+3
+(four real builds total) and publishes each through the same
+ephemeral-signed-origin pipeline ONE VERSION AT A TIME (the origin's
+`SHA256SUMS` advertises a single version, matching the production
+channel-pointer contract), staging each hop via
+`/usr/libexec/snosi-sysupdate-stage` and rebooting with zero serial input.
+Beyond the per-hop secure invariants (enforced SB, `Measured UKI: yes`,
+unattended TPM unlock, exactly one `systemd-tpm2` token, `/var` + `/etc`
+markers), it asserts `InstancesMax=2` slot accounting EXACTLY: after N+2 the
+root-slot label set must be exactly `{N+1, N+2}` (N vacuumed) with N+2
+physically occupying N's freed GPT slot; after N+3, exactly `{N+2, N+3}` with
+N+3 in N+1's freed slot. Explicit rollback is `bootctl set-oneshot` to the
+N+2 entry, then a plain reboot back to the persistent N+3 default. Boot-count
+fallback re-arms the blessed N+3 UKI to `+3-0`, then corrupts N+3's root
+FROM THE HOST while the VM is fully powered off (`losetup` + `dd` over the
+labeled partition — deliberately different from the SB-off prior art in
+`native-ab-update-test.sh`/`native-ab-secure-update-test.sh`, which corrupt
+guest-side while running) and power-cycles: each of three failed attempts
+must produce a NEW "Entering emergency mode" console marker, and between
+cycles the ESP is loop-mounted read-only from the host (VM off, so nothing
+races a live QEMU) to assert the counting suffix decremented exactly
+(`+2-1`, `+1-2`, `+0-3`); the fourth power-cycle must boot N+2 automatically
+with TPM unlock intact and leave the exhausted entry at `+0-3`. **swtpm
+lifecycle gotcha (root-caused live in the first full-window run, after 113
+green assertions):** swtpm terminates when its QEMU client exits (QEMU shuts
+the daemon down over the ctrl channel), so every HOST-side power-cycle must
+re-arm swtpm before the next QEMU launch — against the SAME persistent
+`--tpmstate` directory, never reinitialized (the sealed state behind the
+enrolled LUKS token lives there). Guest-initiated reboots keep one QEMU
+process alive and never hit this, which is why the N..N+3 hops and explicit
+rollback all passed before the first power-cycle exposed it. Phase 5 exit
+evidence: 120/120 assertions, 2026-07-15, `snow-ab` N=20260715042306 →
+N+1=20260715042712 → N+2=20260715043757 → N+3=20260715044206, explicit
+rollback to N+2 and back, boot-count fallback to N+2, ~41 min wall (warm
+caches, ~4 min per build).
+
 ## Test Tiers
 
 ### Tier 1 — Installation Validation (01-installation.sh)

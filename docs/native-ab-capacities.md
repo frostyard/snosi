@@ -139,6 +139,18 @@ a full GNOME desktop session (`graphical.target`, `gdm.service`), and a real
 signed N→N+1 update hop all completed successfully within the current slot
 sizes, 56/56 assertions passed. No capacity change needed.
 
+**Full-window runtime-confirmed, 2026-07-15 (Phase 5 exit,
+`test/native-ab-secure-boot-test.sh --full-window`):** the same slot sizes
+carried the complete N→N+1→N+2→N+3 secure update window (four distinct real
+`snow-ab` production builds cycling through the two 8 GiB root slots via
+`InstancesMax=2` vacuum — the harness asserts each new version physically
+reuses the freed slot), plus explicit rollback and boot-count fallback, all
+under enforced Secure Boot with unattended TPM unlock: 120/120 assertions
+(N=20260715042306 → N+3=20260715044206). The 1 GiB ESP simultaneously held
+two ~258 MiB snow UKIs (the rollback pair) plus shim/MokManager/systemd-boot
+with room to spare throughout the window. Snow's capacity numbers are fully
+validated — nothing about snow remains provisional.
+
 ## snowfield (validated, 2026-07-14, real `snowfield-ab` production build)
 
 Measured on a real `mkosi --profile snowfield-ab build` (Task 3.2), the

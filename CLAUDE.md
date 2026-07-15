@@ -455,7 +455,21 @@ own comments). Requires `swtpm`/`swtpm-tools` and `virt-fw-vars`
 sysext overlay, no `apt-get install`), install both via Homebrew/`pip3
 install --user`, and resolve `$SUDO_USER`'s real home for `PATH`/`HOME` since
 plain `sudo` resets `$HOME` to `/root` (breaks `pip --user` site-packages
-resolution).
+resolution). **`--full-window` is the Phase 5 exit-criterion mode** (default
+mode unchanged without the flag): four real builds, N→N+1→N+2→N+3 secure
+hops with exact `InstancesMax=2` slot accounting (root-label set exactly
+{N+1,N+2} then {N+2,N+3}, each new version physically reusing the vacuumed
+slot), explicit rollback via `bootctl set-oneshot` and return to default,
+and boot-count fallback: N+3 re-armed to `+3-0`, its root corrupted from
+the HOST while the VM is off, three power-cycles observed decrementing
+`+2-1`/`+1-2`/`+0-3` via host-side read-only ESP loop-mounts between
+cycles, fourth boot auto-selects N+2 under SB with TPM unlock and intact
+state. swtpm terminates whenever its QEMU client exits, so each host-side
+power-cycle re-arms swtpm against the SAME persistent `--tpmstate` dir
+(never reinitialize it — the enrolled token's sealed state lives there);
+guest-initiated reboots never hit this because QEMU stays alive. Phase 5
+exit evidence: 120/120 assertions green (2026-07-15, snow-ab,
+N=20260715042306 → N+3=20260715044206, fallback to N+2).
 
 **`snow-linux-live-setup.service` native-boot decision:** this unit's only
 gate used to be a negative run-once marker

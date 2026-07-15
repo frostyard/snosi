@@ -283,7 +283,7 @@ in a commit separate from any payload change.
 | Product | ESP | Root slot |
 |---|---|---|
 | cayo | 1 GiB | 5 GiB (measured 2026-07-14, full module/firmware policy; see docs/native-ab-capacities.md) |
-| snow | 1 GiB | 8 GiB (measured 2026-07-14 against the real `snow-ab` production build; see docs/native-ab-capacities.md) |
+| snow | 1 GiB | 8 GiB (measured 2026-07-14 against the real `snow-ab` production build; runtime-confirmed 2026-07-15 across the full N..N+3 secure update window, Phase 5 exit — see docs/native-ab-capacities.md) |
 | snowfield | 1 GiB | 8 GiB (measured 2026-07-14 against the real `snowfield-ab` production build; see docs/native-ab-capacities.md) |
 
 1 GiB ESP applies to all three products from the first installable layout —

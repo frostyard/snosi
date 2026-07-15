@@ -91,16 +91,77 @@
 #   7. Recovery unlock check (non-destructive): the recovery keyslot still
 #      opens the volume via `cryptsetup open --test-passphrase`.
 #
-# Usage: sudo ./test/native-ab-secure-boot-test.sh
+#   --full-window (Phase 5 exit criterion; default OFF, default-mode
+#   behavior above is completely unchanged when omitted) extends steps 6-7
+#   with the rest of the N..N+3 update window, still under enforced Secure
+#   Boot + TPM auto-unlock throughout, mirroring the SB-off prior art in
+#   test/native-ab-update-test.sh and test/native-ab-secure-update-test.sh
+#   (Incus-based) but with host-side corruption/inspection instead of
+#   guest-side, and this script's own custom QEMU/swtpm/serial plumbing:
+#     8. Build N+2 and N+3 (two more real builds -- four total for the
+#        whole run) and secure-update-hop N+1 -> N+2 the same way step 6 did
+#        N -> N+1: publish, stage via snosi-sysupdate-stage, reboot with
+#        zero serial input. Asserts the usual post-update invariants (SB
+#        enforced, measured UKI, TPM auto-unlock, single TPM token,
+#        /var+/etc persistence) plus InstancesMax=2 slot accounting: N is
+#        vacuumed (root partition labels are exactly {N+1, N+2} afterward)
+#        and N+2 physically reuses the GPT slot N occupied.
+#     9. Secure-update-hop N+2 -> N+3 identically: labels become exactly
+#        {N+2, N+3}, N+1 is vacuumed, and N+3 reuses N+1's freed slot.
+#    10. Explicit rollback: from N+3, `bootctl set-oneshot` the N+2 UKI
+#        entry (whatever its current on-disk name is -- blessed or not),
+#        reboot with zero serial input, assert N+2 boots with TPM unlock
+#        still working, then a second zero-input reboot returns to the
+#        persistent default (N+3 again, no second oneshot needed).
+#    11. Boot-count fallback: re-arm N+3's ESP entry to the counting name
+#        `<channel>_<N+3>+3-0.efi` (systemd-boot boot-counting convention,
+#        docs/native-ab-contracts.md), then corrupt N+3's root partition
+#        FROM THE HOST while the VM is fully powered off (a host-side
+#        losetup + `dd` over the first 4096 bytes of the GPT slot, not the
+#        guest-side write the SB-off prior art uses -- the guest is down
+#        for this). Power-cycle three times (a guest stuck in dracut's
+#        emergency shell never reboots itself): each cycle boots, is polled
+#        for a NEW "Entering emergency mode" console marker, is forced back
+#        off, and is inspected via a second host-side loop-mount of the ESP
+#        (FAT) partition to confirm the counting suffix decremented exactly
+#        as expected (+2-1, +1-2, +0-3) -- all while the VM is off, so this
+#        never races a live QEMU writer. The fourth power-cycle boots to
+#        completion: systemd-boot's own tries-exhausted logic must select
+#        N+2 automatically (no oneshot, no operator action), still under
+#        enforced Secure Boot with unattended TPM unlock and /var+/etc
+#        state intact; the exhausted N+3 entry must remain on the ESP named
+#        `+0-3` (never deleted, never silently retried again).
+#    Throughout 8-11: no NvPCR journal failures on any boot (same check as
+#    step 3, re-run after the window completes). Step 7's recovery-keyslot
+#    check runs at the very end regardless of --full-window, so it is a
+#    true "does recovery still work after everything above" check in
+#    --full-window mode, not merely a post-step-6 checkpoint.
+#
+# Usage: sudo ./test/native-ab-secure-boot-test.sh [--full-window]
 # Env overrides: PROFILE (default snow-ab; also accepts cayo-ab),
 # IMAGE_ID/CHANNEL (derived from PROFILE by default), SSH_PORT (2225),
 # SOURCE_PORT (18095), SSH_TIMEOUT/BOOT_TIMEOUT (300s), VM_MEMORY (4096),
 # VM_CPUS (4), KEEP_VM (0), SKIP_BUILD/BUILD_N_DIR/BUILD_N1_DIR (reuse
-# prebuilt artifacts, same contract as test/native-ab-updateux-test.sh).
+# prebuilt artifacts, same contract as test/native-ab-updateux-test.sh),
+# BUILD_N2_DIR/BUILD_N3_DIR (same SKIP_BUILD=1 reuse contract, only
+# consulted with --full-window).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+FULL_WINDOW=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --full-window) FULL_WINDOW=1; shift ;;
+        *)
+            echo "Error: unknown argument: $1" >&2
+            echo "Usage: $0 [--full-window]" >&2
+            exit 2
+            ;;
+    esac
+done
+
 : "${KEEP_VM:=0}"
 : "${SOURCE_PORT:=18095}"
 : "${SSH_PORT:=2225}"
@@ -111,6 +172,8 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 : "${SKIP_BUILD:=0}"
 : "${BUILD_N_DIR:=}"
 : "${BUILD_N1_DIR:=}"
+: "${BUILD_N2_DIR:=}"
+: "${BUILD_N3_DIR:=}"
 
 : "${PROFILE:=snow-ab}"
 if [[ -z "${IMAGE_ID:-}" ]]; then
@@ -294,6 +357,38 @@ guest_version() {
     vm_ssh ". /usr/lib/os-release; echo \"\$IMAGE_VERSION\""
 }
 
+# partition_path label -- host-visible-from-guest /dev path of the GPT
+# partition with the given PARTLABEL, via the guest's own lsblk (mirrors
+# test/native-ab-update-test.sh's helper of the same name). Used by
+# --full-window to prove physical slot reuse across InstancesMax=2 vacuum.
+partition_path() { # label
+    local label="$1"
+    vm_ssh "lsblk -J -o PATH,PARTLABEL" | jq -er --arg label "$label" \
+        '.. | objects | select(.partlabel? == $label) | .path'
+}
+
+# root_labels_now -- sorted list of "<version>" tokens for every currently
+# present "${IMAGE_ID}_<version>_r" partition (the dynamic root slots, §3).
+root_labels_now() {
+    vm_ssh "lsblk -J -o PARTLABEL" | jq -r --arg prefix "${IMAGE_ID}_" '
+        .. | objects | select(.partlabel? != null)
+        | select(.partlabel | startswith($prefix))
+        | select(.partlabel | endswith("_r"))
+        | .partlabel' | sed -E "s/^${IMAGE_ID}_(.*)_r\$/\\1/" | LC_ALL=C sort
+}
+
+# assert_root_slot_versions description expected_version... -- asserts the
+# currently-present root slots are EXACTLY the given version set (InstancesMax=2
+# vacuum accounting), not merely a superset or subset.
+assert_root_slot_versions() { # description expected_version...
+    local desc="$1"
+    shift
+    local expected actual
+    expected="$(printf '%s\n' "$@" | LC_ALL=C sort)"
+    actual="$(root_labels_now)"
+    assert_eq "$desc" "$actual" "$expected"
+}
+
 # ---------------------------------------------------------------------------
 # OVMF + MOK pre-enrollment + swtpm + QEMU (custom -- NOT test/lib/vm.sh:
 # that library has no TPM/Secure-Boot/interactive-serial support)
@@ -320,6 +415,13 @@ vm_prepare_ovmf() { # workdir mok_cert -> writes workdir/OVMF_CODE.fd, workdir/O
 vm_prepare_swtpm() { # workdir -> sets TPM_SOCK, starts swtpm in background
     local wd="$1"
     mkdir -p "$wd/tpm"
+    # (Re)startable: --tpmstate keeps ALL TPM state (including the sealed
+    # data behind the enrolled LUKS token) in $wd/tpm across swtpm restarts,
+    # so this function must NEVER wipe that directory -- only remove the
+    # stale control socket/pidfile a previous (now dead) swtpm left behind,
+    # so the socket-appearance wait below observes the NEW daemon, not a
+    # leftover socket inode from the old one.
+    rm -f "$wd/tpm/swtpm-ctrl.sock" "$wd/tpm/swtpm.pid"
     # QEMU's "-tpmdev emulator,chardev=..." integration expects the chardev
     # to point at swtpm's CONTROL channel (--ctrl): swtpm negotiates the
     # actual TPM command channel over that connection itself (an fd handoff
@@ -342,17 +444,42 @@ vm_prepare_swtpm() { # workdir -> sets TPM_SOCK, starts swtpm in background
     echo "swtpm running (PID $SWTPM_PID, control socket $TPM_SOCK)"
 }
 
-# vm_start_secure disk workdir mok_cert -- boots $disk under enforced Secure
-# Boot with the pre-enrolled MOK, an attached swtpm, and a virtio-gpu device
-# (GDM needs a GPU node to bind to even with -display none). The serial
-# console is a bidirectional UNIX socket (not test/lib/vm.sh's file-backed
-# chardev) so console_pump (below) can both log and type into it.
-vm_start_secure() { # disk workdir mok_cert
-    local disk="$1" wd="$2" cert="$3"
-    vm_prepare_ovmf "$wd" "$cert"
-    vm_prepare_swtpm "$wd"
+# vm_boot disk workdir -- (re)starts the QEMU process against an EXISTING
+# $wd/OVMF_CODE.fd / $wd/OVMF_VARS.fd (the MOK pre-enrollment and any
+# LoaderEntryOneShot/LoaderEntryDefault NVRAM state MUST persist across a
+# power-cycle, so this never re-copies from the pristine OVMF source -- only
+# vm_prepare_ovmf does that, once, at the very first boot). Used both for
+# the very first boot (via vm_start_secure below) and, in --full-window
+# mode, to power-cycle a stopped VM for each boot-count fallback attempt --
+# a virtio-gpu device is attached (GDM needs a GPU node to bind to even
+# with -display none). The serial console is a bidirectional UNIX socket
+# (not test/lib/vm.sh's file-backed chardev) so console_pump (below) can
+# both log and type into it; each call creates a FRESH socket (the previous
+# QEMU process, if any, must already be gone -- see vm_force_stop).
+#
+# swtpm lifecycle (root-caused live in the first --full-window run, after
+# 113 green assertions): swtpm terminates itself when its QEMU client goes
+# away -- QEMU's tpm-emulator backend shuts the daemon down over the ctrl
+# channel on exit, so the moment vm_force_stop kills QEMU the ctrl socket
+# vanishes ("Failed to connect to '.../swtpm-ctrl.sock': No such file or
+# directory" on the next launch, observed on fallback attempt 1/3). Every
+# guest-initiated reboot before that kept ONE long-lived QEMU process
+# alive, which is why the N..N+3 hops and explicit rollback never hit it.
+# Therefore: every vm_boot re-arms swtpm if it is not currently running,
+# against the SAME persistent --tpmstate directory (vm_prepare_swtpm never
+# wipes it), so the TPM's sealed state -- and with it the enrolled LUKS
+# token -- survives every power-cycle. Reinitializing the TPM state here
+# instead would break unattended unlock for the rest of the run.
+vm_boot() { # disk workdir
+    local disk="$1" wd="$2"
+    if [[ -z "$SWTPM_PID" ]] || ! kill -0 "$SWTPM_PID" 2>/dev/null; then
+        echo "swtpm is not running (died with the previous QEMU); re-arming it on the persistent TPM state"
+        vm_prepare_swtpm "$wd"
+    fi
     SERIAL_SOCK="$wd/serial.sock"
+    rm -f "$SERIAL_SOCK"
     local pidfile="$wd/qemu.pid"
+    rm -f "$pidfile"
     # NOTE (netdev below): no hostfwd for $SOURCE_PORT -- QEMU user-mode/
     # slirp networking already lets the guest reach the host's 10.0.2.2
     # gateway on ANY port the host is listening on for GUEST-initiated
@@ -388,7 +515,42 @@ vm_start_secure() { # disk workdir mok_cert
     while [[ ! -S "$SERIAL_SOCK" ]] && (( i++ < 50 )); do sleep 0.2; done
     [[ -S "$SERIAL_SOCK" ]] || { echo "Error: QEMU serial socket did not appear" >&2; exit 1; }
     QEMU_PID="$(cat "$pidfile")"
-    echo "VM started under enforced Secure Boot + swtpm (QEMU PID $QEMU_PID, SSH port $SSH_PORT)"
+    echo "VM (re)started (QEMU PID $QEMU_PID, SSH port $SSH_PORT)"
+}
+
+# vm_start_secure disk workdir mok_cert -- first boot only: prepares a fresh
+# OVMF varstore (MOK pre-enrollment) and a fresh swtpm, then calls vm_boot.
+vm_start_secure() { # disk workdir mok_cert
+    local disk="$1" wd="$2" cert="$3"
+    vm_prepare_ovmf "$wd" "$cert"
+    vm_prepare_swtpm "$wd"
+    vm_boot "$disk" "$wd"
+    echo "VM started under enforced Secure Boot + swtpm"
+}
+
+# vm_force_stop -- power off the guest and fully stop the QEMU process.
+# Used only by --full-window's boot-count fallback loop, which must
+# power-cycle between attempts: a guest stuck in dracut's emergency shell
+# (corrupted root, no network in the initrd) never reboots itself, so a
+# graceful in-guest `systemctl reboot` (reboot_guest, below) is not an
+# option there. Tries a graceful `systemctl poweroff` first (this is the
+# path taken for the one legitimate graceful stop, right before the first
+# corruption); when the guest is unreachable (already hung in the initrd
+# shell) that attempt harmlessly times out via SSH_OPTS' ConnectTimeout and
+# this falls through to a hard kill, exactly like the EXIT trap's cleanup.
+vm_force_stop() {
+    stop_console_pump
+    vm_ssh systemctl poweroff >/dev/null 2>&1 || true
+    local i=0
+    while [[ -n "$QEMU_PID" ]] && kill -0 "$QEMU_PID" 2>/dev/null && (( i++ < 30 )); do sleep 1; done
+    if [[ -n "$QEMU_PID" ]] && kill -0 "$QEMU_PID" 2>/dev/null; then
+        kill "$QEMU_PID" 2>/dev/null || true
+        i=0
+        while kill -0 "$QEMU_PID" 2>/dev/null && (( i++ < 20 )); do sleep 0.5; done
+        kill -9 "$QEMU_PID" 2>/dev/null || true
+    fi
+    QEMU_PID=""
+    rm -f "$WORK_DIR/serial.sock" "$WORK_DIR/qemu.pid"
 }
 
 # start_console_pump workdir recovery_key -- launches a Python process that
@@ -449,11 +611,151 @@ PYEOF
     echo "Console pump started (PID $CONSOLE_PUMP_PID), logging to $wd/console.log"
 }
 
+# stop_console_pump -- kill and reap the current console pump, if any.
+# Needed before every vm_force_stop/vm_boot power-cycle: the pump holds a
+# client connection to the OLD serial socket, which vm_boot immediately
+# unlinks and recreates fresh.
+stop_console_pump() {
+    if [[ -n "$CONSOLE_PUMP_PID" ]]; then
+        kill "$CONSOLE_PUMP_PID" 2>/dev/null || true
+        wait "$CONSOLE_PUMP_PID" 2>/dev/null || true
+    fi
+    CONSOLE_PUMP_PID=""
+}
+
 reboot_guest() { # -- reboot with ZERO serial input; a hang here means the
                   # initrd needed a passphrase it did not get (TPM failed).
     vm_ssh systemctl reboot || true
     sleep 5
     wait_for_ssh
+}
+
+# ---------------------------------------------------------------------------
+# --full-window helpers (N+2/N+3 hops, explicit rollback, boot-count
+# fallback). Defined unconditionally (cheap) but only called when
+# FULL_WINDOW=1.
+# ---------------------------------------------------------------------------
+
+# wait_for_emergency previous_count -- polls the CUMULATIVE console.log
+# (console_pump always appends in "ab" mode, and is restarted-but-not-
+# truncated across every vm_boot in the fallback loop) for a NEW "Entering
+# emergency mode" occurrence beyond $previous_count. Prints the new
+# cumulative count on success (the caller threads it into the next call so
+# each attempt only matches its OWN new occurrence, not a stale one from an
+# earlier attempt). Mirrors test/native-ab-update-test.sh's
+# wait_for_failed_boot, adapted to this script's single growing log file
+# instead of vm.sh's per-process QEMU_CONSOLE_LOG.
+wait_for_emergency() { # previous_count
+    local previous_count="$1" deadline current_count
+    deadline=$((SECONDS + BOOT_TIMEOUT))
+    while (( SECONDS < deadline )); do
+        current_count="$(grep -c 'Entering emergency mode' "$WORK_DIR/console.log" 2>/dev/null || true)"
+        if (( current_count > previous_count )); then
+            echo "$current_count"
+            return 0
+        fi
+        sleep 2
+    done
+    echo "Error: corrupted boot did not reach emergency mode within ${BOOT_TIMEOUT}s" >&2
+    echo "=== console.log tail ===" >&2
+    tail -100 "$WORK_DIR/console.log" >&2 || true
+    return 1
+}
+
+# esp_uki_entry version -- sets ESP_UKI_ENTRY to the sole ESP filename
+# matching "${CHANNEL}_<version>*.efi" (tolerates a bare blessed name or any
+# boot-counting suffix, whatever is actually on disk right now -- mirrors
+# test/native-ab-secure-update-test.sh's matching_uki_entry, minus the
+# content-hash disambiguation that script needs for dual-signed rotation
+# artifacts, which do not exist in this run: every version here has a
+# unique 14-digit timestamp, so a filename-prefix match is unambiguous).
+esp_uki_entry() { # version
+    local version="$1" listing
+    listing="$(vm_ssh "find /boot/EFI/Linux -maxdepth 1 -type f -name '${CHANNEL}_${version}*.efi' -printf '%f\n'")"
+    local -a matches=()
+    mapfile -t matches <<<"$listing"
+    if [[ ${#matches[@]} -ne 1 || -z "${matches[0]}" ]]; then
+        echo "Error: expected exactly one ESP UKI entry for $version, found: $listing" >&2
+        exit 1
+    fi
+    ESP_UKI_ENTRY="${matches[0]}"
+}
+
+# host_inspect_esp description name -- loop-mounts the disk image's ESP
+# (FAT) partition read-only FROM THE HOST (the VM must already be fully
+# powered off -- vm_force_stop) and asserts /EFI/Linux contains exactly the
+# given filename. Used between boot-count fallback attempts to observe the
+# counting suffix decrement without ever touching the guest (which is
+# unreachable while corrupted anyway). Reuses the global `loop` var and
+# $WORK_DIR/mnt exactly like the Step 1-2 install-time mount, so the EXIT
+# trap cleans up a stuck loop device on any failure here too.
+host_inspect_esp() { # description name
+    local desc="$1" name="$2" espdev listing
+    loop="$(losetup --find --show --partscan "$DISK_IMAGE")"
+    udevadm settle
+    espdev="$(lsblk -nrpo NAME,PARTLABEL "$loop" | awk '$2 == "esp" { print $1 }')"
+    [[ -n "$espdev" ]] || { echo "Error: could not locate ESP partition on $loop" >&2; exit 1; }
+    mount -o ro "$espdev" "$WORK_DIR/mnt"
+    listing="$(ls "$WORK_DIR/mnt/EFI/Linux")"
+    umount "$WORK_DIR/mnt"
+    losetup -d "$loop"
+    loop=""
+    echo "Host-side ESP listing ($desc): $listing"
+    assert_contains "$desc" "$listing" "$name"
+}
+
+# host_corrupt_root_partition version -- FROM THE HOST, with the VM fully
+# powered off, zeroes the first 4096 bytes of the GPT partition labeled
+# "${IMAGE_ID}_<version>_r" (matches the corruption test/native-ab-update-
+# test.sh and test/native-ab-secure-update-test.sh use, just applied to the
+# host-visible loop device instead of a guest-visible /dev path, since the
+# guest is not running for this step). Writing straight to the partition
+# node bypasses the dm-verity mapper entirely -- verity only checks reads,
+# never blocks writes to the raw block device underneath it -- which is
+# exactly the corruption boot-count fallback is meant to detect.
+host_corrupt_root_partition() { # version
+    local version="$1" rootdev
+    loop="$(losetup --find --show --partscan "$DISK_IMAGE")"
+    udevadm settle
+    rootdev="$(lsblk -nrpo NAME,PARTLABEL "$loop" | awk -v l="${IMAGE_ID}_${version}_r" '$2 == l { print $1 }')"
+    [[ -n "$rootdev" ]] || { echo "Error: could not locate root partition ${IMAGE_ID}_${version}_r on $loop" >&2; exit 1; }
+    dd if=/dev/zero of="$rootdev" bs=4096 count=1 conv=fsync status=none
+    losetup -d "$loop"
+    loop=""
+    echo "Corrupted root partition for $version on the host ($rootdev, first 4096 bytes zeroed, VM was off)"
+}
+
+# assert_post_update_common expected_version description_prefix -- the
+# invariants every post-hop/rollback/fallback boot in --full-window must
+# satisfy: booted the expected version, Secure Boot still enforced, a
+# MOK-signed UKI was actually measured, /var still auto-unlocked via the
+# TPM mapper with exactly one systemd-tpm2 token, both persistence markers
+# survived, system health is running/degraded, and the console pump never
+# had to type a passphrase again (proves the signed PCR 11 policy survived
+# whichever UKI is now booted). Requires $var_device (set once in Step 4)
+# and the Step 6 persistence markers to already be in place.
+assert_post_update_common() { # expected_version description_prefix
+    local expected="$1" prefix="$2" booted sb bstatus vs dump tcount mv em health prompt_count
+    booted="$(guest_version)"
+    assert_eq "$prefix: booted version is $expected" "$booted" "$expected"
+    sb="$(vm_ssh 'mokutil --sb-state' || true)"
+    assert_contains "$prefix: Secure Boot still enabled" "$sb" "SecureBoot enabled"
+    bstatus="$(vm_ssh 'bootctl --no-pager status' || true)"
+    assert_contains "$prefix: Measured UKI: yes" "$bstatus" "Measured UKI: yes"
+    vs="$(vm_ssh 'findmnt -no SOURCE /var' || true)"
+    assert_eq "$prefix: /var still auto-unlocked via the TPM mapper" "$vs" "/dev/mapper/var"
+    dump="$(vm_ssh "cryptsetup luksDump --dump-json-metadata '$var_device'")"
+    tcount="$(jq '[.tokens[] | select(.type == "systemd-tpm2")] | length' <<<"$dump")"
+    assert_eq "$prefix: still exactly one systemd-tpm2 LUKS token" "$tcount" "1"
+    mv="$(vm_ssh 'cat /var/lib/native-ab-secure-boot-test.marker' || true)"
+    assert_eq "$prefix: /var persistence marker survived" "$mv" "native-ab-secure-boot-test-var-marker"
+    em="$(vm_ssh 'tail -1 /etc/issue' || true)"
+    assert_eq "$prefix: /etc overlay upper marker survived" "$em" "native-ab-secure-boot-test etc marker"
+    health="$(vm_ssh 'systemctl is-system-running --wait' || true)"
+    assert_true "$prefix: system health is running or degraded" \
+        bash -c "[[ '$health' == running || '$health' == degraded ]]"
+    prompt_count="$(grep -c 'typed recovery passphrase' "$WORK_DIR/console.log" || true)"
+    assert_eq "$prefix: still no passphrase prompt (signed PCR 11 policy held)" "$prompt_count" "1"
 }
 
 # ---------------------------------------------------------------------------
@@ -983,6 +1285,143 @@ assert_true "system health is running or degraded after the secure update" \
     bash -c "[[ '$health' == running || '$health' == degraded ]]"
 
 # ===========================================================================
+# Steps 8-11 (--full-window only): N+2, N+3, explicit rollback, boot-count
+# fallback -- see the header comment for the full narrative. Default-mode
+# behavior above this point is completely unchanged; everything below is
+# gated on FULL_WINDOW.
+# ===========================================================================
+if [[ "$FULL_WINDOW" == 1 ]]; then
+    echo ""
+    echo "=== Step 8: build N+2 and N+3 ($PROFILE) ==="
+
+    # N's root slot must be captured NOW -- it is still present (Step 6's
+    # own "N's root partition slot is still present" assertion just above
+    # confirmed it), but InstancesMax=2 vacuums it the moment N+2 installs.
+    n_root_path="$(partition_path "${IMAGE_ID}_${n_version}_r")"
+
+    if [[ "$SKIP_BUILD" == 1 ]]; then
+        [[ -n "$BUILD_N2_DIR" && -n "$BUILD_N3_DIR" ]] || {
+            echo "Error: SKIP_BUILD=1 --full-window requires BUILD_N2_DIR and BUILD_N3_DIR" >&2
+            exit 1
+        }
+        echo "SKIP_BUILD=1: reusing prebuilt artifacts at $BUILD_N2_DIR and $BUILD_N3_DIR"
+    else
+        BUILD_N2_DIR="$WORK_DIR/build-n2"
+        BUILD_N3_DIR="$WORK_DIR/build-n3"
+        build_profile "$BUILD_N2_DIR"
+        build_profile "$BUILD_N3_DIR"
+    fi
+    for f in manifest raw efi "${IMAGE_ID}_@v.root.raw.raw" "${IMAGE_ID}_@v.root-verity.raw.raw"; do
+        [[ -f "$BUILD_N2_DIR/$PROFILE.$f" ]] || { echo "Error: missing N+2 artifact: $f" >&2; exit 1; }
+        [[ -f "$BUILD_N3_DIR/$PROFILE.$f" ]] || { echo "Error: missing N+3 artifact: $f" >&2; exit 1; }
+    done
+    n2_version="$(jq -er '.config.version' "$BUILD_N2_DIR/$PROFILE.manifest")"
+    n3_version="$(jq -er '.config.version' "$BUILD_N3_DIR/$PROFILE.manifest")"
+    echo "N+2=$n2_version  N+3=$n3_version"
+    [[ "$n2_version" > "$n1_version" ]] || { echo "Error: N+2 version is not newer than N+1" >&2; exit 1; }
+    [[ "$n3_version" > "$n2_version" ]] || { echo "Error: N+3 version is not newer than N+2" >&2; exit 1; }
+
+    echo ""
+    echo "=== Step 9: secure update hop N+1 -> N+2 ==="
+    # N+1's slot must be captured before it, in turn, gets vacuumed by N+3.
+    n1_root_path="$(partition_path "${IMAGE_ID}_${n1_version}_r")"
+
+    publish_version "$BUILD_N2_DIR"
+    ln -sfn "$publish_dest" "$WORK_DIR/http-root/os"
+    vm_ssh "curl --fail --silent --show-error 'http://10.0.2.2:${SOURCE_PORT}/os/SHA256SUMS' >/dev/null"
+    stager_out=""
+    stager_rc=0
+    stager_out="$(vm_ssh '/usr/libexec/snosi-sysupdate-stage' 2>&1)" || stager_rc=$?
+    echo "$stager_out"
+    assert_eq "snosi-sysupdate-stage stages N+2" "$stager_rc" "0"
+    reboot_guest
+    assert_post_update_common "$n2_version" "N+1->N+2"
+    assert_root_slot_versions "N+1->N+2: root slots are exactly {N+1, N+2}" "$n1_version" "$n2_version"
+    n2_root_path="$(partition_path "${IMAGE_ID}_${n2_version}_r")"
+    assert_eq "N+2 physically reused N's freed root slot (InstancesMax=2 vacuum)" "$n2_root_path" "$n_root_path"
+
+    echo ""
+    echo "=== Step 10: secure update hop N+2 -> N+3 ==="
+    publish_version "$BUILD_N3_DIR"
+    ln -sfn "$publish_dest" "$WORK_DIR/http-root/os"
+    vm_ssh "curl --fail --silent --show-error 'http://10.0.2.2:${SOURCE_PORT}/os/SHA256SUMS' >/dev/null"
+    stager_out=""
+    stager_rc=0
+    stager_out="$(vm_ssh '/usr/libexec/snosi-sysupdate-stage' 2>&1)" || stager_rc=$?
+    echo "$stager_out"
+    assert_eq "snosi-sysupdate-stage stages N+3" "$stager_rc" "0"
+    reboot_guest
+    assert_post_update_common "$n3_version" "N+2->N+3"
+    assert_root_slot_versions "N+2->N+3: root slots are exactly {N+2, N+3}" "$n2_version" "$n3_version"
+    n3_root_path="$(partition_path "${IMAGE_ID}_${n3_version}_r")"
+    assert_eq "N+3 physically reused N+1's freed root slot (InstancesMax=2 vacuum)" "$n3_root_path" "$n1_root_path"
+
+    nvpcr_journal="$(vm_ssh "journalctl -b -p err --grep=nvpcr --no-pager" 2>/dev/null || true)"
+    assert_false "no NvPCR-related journal errors after reaching N+3" \
+        bash -c "grep -qi nvpcr <<<'$nvpcr_journal'"
+
+    echo ""
+    echo "=== Step 10b: explicit rollback N+3 -> N+2, then back to N+3 ==="
+    esp_uki_entry "$n2_version"
+    n2_uki_entry="$ESP_UKI_ENTRY"
+    vm_ssh "bootctl set-oneshot '$n2_uki_entry'"
+    reboot_guest
+    assert_post_update_common "$n2_version" "explicit rollback N+3->N+2"
+    reboot_guest
+    assert_post_update_common "$n3_version" "rollback: return to persistent default N+3"
+
+    echo ""
+    echo "=== Step 11: boot-count fallback (re-arm N+3, corrupt from the host, 3 failed + 1 recovery boot) ==="
+    esp_uki_entry "$n3_version"
+    [[ "$ESP_UKI_ENTRY" == "${CHANNEL}_${n3_version}.efi" ]] || {
+        echo "Error: N+3 was not blessed (no boot-counting suffix) before re-arming: $ESP_UKI_ENTRY" >&2
+        exit 1
+    }
+    rearmed_entry="${CHANNEL}_${n3_version}+3-0.efi"
+    vm_ssh "mv '/boot/EFI/Linux/$ESP_UKI_ENTRY' '/boot/EFI/Linux/$rearmed_entry'; sync -f /boot; bootctl set-default '$rearmed_entry'; test -e '/boot/EFI/Linux/$rearmed_entry'"
+    pass "N+3 UKI re-armed to +3-0 for boot-count fallback testing"
+
+    vm_force_stop
+    host_corrupt_root_partition "$n3_version"
+    host_inspect_esp "ESP shows N+3 re-armed at +3-0 before any failed boot attempt" "${CHANNEL}_${n3_version}+3-0.efi"
+
+    emergency_count=0
+    for attempt in 1 2 3; do
+        echo "Boot-count fallback attempt $attempt/3: power-cycling into corrupted N+3..."
+        vm_boot "$DISK_IMAGE" "$WORK_DIR"
+        start_console_pump "$WORK_DIR" "$recovery_key"
+        emergency_count="$(wait_for_emergency "$emergency_count")" || {
+            echo "BLOCKED: attempt $attempt did not reach dracut emergency mode" >&2
+            exit 1
+        }
+        pass "boot-count fallback attempt $attempt reached dracut emergency mode (corrupted N+3 root failed verity)"
+        vm_force_stop
+        expected_suffix="+$((3 - attempt))-${attempt}"
+        host_inspect_esp "ESP shows N+3 tries decremented after failed attempt $attempt ($expected_suffix)" \
+            "${CHANNEL}_${n3_version}${expected_suffix}.efi"
+    done
+
+    echo "Fourth power-cycle: tries exhausted, systemd-boot must fall back to N+2 automatically"
+    vm_boot "$DISK_IMAGE" "$WORK_DIR"
+    start_console_pump "$WORK_DIR" "$recovery_key"
+    if ! SSH_TIMEOUT="$BOOT_TIMEOUT" wait_for_ssh; then
+        echo "=== console.log (fallback boot never reached SSH) ===" >&2
+        tail -200 "$WORK_DIR/console.log" >&2 || true
+        echo "BLOCKED: fourth power-cycle never reached SSH -- systemd-boot did not fall back to N+2" >&2
+        exit 1
+    fi
+    assert_post_update_common "$n2_version" "boot-count fallback"
+    esp_listing_after_fallback="$(vm_ssh 'ls /boot/EFI/Linux' || true)"
+    echo "ESP listing after fallback: $esp_listing_after_fallback"
+    assert_contains "N+3's exhausted entry ends at +0-3 after automatic fallback" \
+        "$esp_listing_after_fallback" "${CHANNEL}_${n3_version}+0-3.efi"
+
+    nvpcr_journal="$(vm_ssh "journalctl -b -p err --grep=nvpcr --no-pager" 2>/dev/null || true)"
+    assert_false "no NvPCR-related journal errors on the fallback boot" \
+        bash -c "grep -qi nvpcr <<<'$nvpcr_journal'"
+fi
+
+# ===========================================================================
 # Step 7: recovery unlock check (non-destructive)
 # ===========================================================================
 echo ""
@@ -991,5 +1430,9 @@ guest_with_input "$recovery_key_file" "cryptsetup open --test-passphrase --key-f
 pass "recovery keyslot still opens /var (cryptsetup open --test-passphrase)"
 
 echo ""
-echo "Native A/B secure-boot/TPM/desktop validation: N=$n_version -> N+1=$n1_version ($PROFILE)"
+if [[ "$FULL_WINDOW" == 1 ]]; then
+    echo "Native A/B secure-boot/TPM/desktop full-window validation: N=$n_version -> N+1=$n1_version -> N+2=$n2_version -> N+3=$n3_version, rollback to N+2, boot-count fallback to N+2 ($PROFILE)"
+else
+    echo "Native A/B secure-boot/TPM/desktop validation: N=$n_version -> N+1=$n1_version ($PROFILE)"
+fi
 print_summary
