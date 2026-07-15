@@ -1,12 +1,27 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Phase 5 QEMU validation: fully automated Secure Boot + TPM + desktop
-# validation for a native A/B product (default snow-ab; also accepts
-# cayo-ab). No MokManager interaction: the Snosi MOK is pre-enrolled into an
-# OVMF varstore with `virt-fw-vars --add-mok`, starting from
-# OVMF_VARS_4M.ms.fd (Microsoft keys already enrolled -> Secure Boot
-# enforced), paired with OVMF_CODE_4M.secboot.fd and an attached swtpm TPM2
-# socket device.
+# Phase 5 QEMU validation: fully automated Secure Boot + TPM (+ desktop, when
+# the payload has one) validation for a native A/B product (default
+# snow-ab; also accepts cayo-ab and snowfield-ab). Step 5's
+# desktop assertions (graphical.target, gdm.service, notify-send, the
+# hicolor icon-cache sysext fixture) are gated on HAS_DESKTOP, derived from
+# IMAGE_ID: snow and snowfield compose the GNOME desktop payload, cayo does
+# not and skips Step 5 entirely -- see the HAS_DESKTOP derivation below and
+# docs/native-ab-contracts.md / CLAUDE.md's per-profile package-set mapping.
+# Every OTHER step (Secure Boot chain, TPM enrollment/auto-unlock, first-boot
+# preset parity, secure update hop, recovery unlock) is profile-neutral and
+# runs unconditionally. Coverage note: only the snow-ab (desktop) path has
+# actually been run end-to-end through this QEMU harness; the cayo-ab
+# (server, no-desktop) path is exercised today by
+# test/native-ab-static-test.sh (build-time assertions) and
+# test/native-ab-secure-artifact-test.sh (artifact/UKI/PCR checks) rather
+# than this live-boot harness -- a future cayo-ab run through this script
+# would newly validate only the Step-5-skipped control flow itself, not new
+# server-specific runtime behavior. No MokManager interaction: the Snosi MOK
+# is pre-enrolled into an OVMF varstore with `virt-fw-vars --add-mok`,
+# starting from OVMF_VARS_4M.ms.fd (Microsoft keys already enrolled ->
+# Secure Boot enforced), paired with OVMF_CODE_4M.secboot.fd and an attached
+# swtpm TPM2 socket device.
 #
 # Sequence (docs/native-ab-contracts.md is the frozen naming/policy
 # reference; CLAUDE.md "Native A/B Prototype" / "Native Security Contract"
@@ -43,18 +58,26 @@
 #      comes back inside the normal timeout with ZERO serial input fed --
 #      if the initrd needed a passphrase, the boot would hang at the prompt
 #      and wait_for_ssh would time out.
-#   5. Desktop assertions on the TPM-unlocked boot (this is Snow):
+#   5. Desktop assertions on the TPM-unlocked boot, ONLY when HAS_DESKTOP=1
+#      (IMAGE_ID in snow, snowfield -- see the derivation below; skipped
+#      entirely for cayo, which has no desktop payload):
 #      graphical.target, gdm.service, a logind seat, notify-send, the
 #      fresh-/var tmpfiles targets, dpkg-query, and a minimal ad hoc sysext
 #      (plain-directory form, not a raw disk image -- systemd-sysext(8)
 #      merges directories under /var/lib/extensions/ identically to raw
 #      images; this avoids building and loop-mounting an erofs/squashfs
 #      just to prove the icon-cache contract) exercising the CLAUDE.md
-#      hicolor icon-cache rule. Also asserts snow-linux-live-setup.service's
-#      corrected live-media gate (see the "real bug found and fixed" note
-#      in the report/CLAUDE.md): on a native install with no
-#      snow-linux.live=1 on the command line, the unit must be
-#      ConditionResult=no / inactive, never active and never failed.
+#      hicolor icon-cache rule.
+#      Separately (unconditional, profile-neutral, but its own assertions
+#      are already gated on IMAGE_ID == snow specifically -- snow-linux-live
+#      is a snow-branded live-media concept, not a general desktop one):
+#      snow-linux-live-setup.service's corrected live-media gate (see the
+#      "real bug found and fixed" note in the report/CLAUDE.md) -- on a
+#      native install with no snow-linux.live=1 on the command line, the
+#      unit must be ConditionResult=no / inactive, never active and never
+#      failed. Presets, tmpfiles ownership, dpkg-query-availability-of-the-
+#      relocation-symlink, and the NvPCR journal check all remain
+#      unconditional profile-neutral assertions regardless of HAS_DESKTOP.
 #   6. Secure update hop: publish N+1 through the real publication pipeline
 #      to a local HTTP origin signed with an ephemeral GPG key (the guest
 #      trusts it via the documented /etc/systemd/import-pubring.gpg
@@ -94,6 +117,20 @@ if [[ -z "${IMAGE_ID:-}" ]]; then
     IMAGE_ID="${PROFILE%-ab}"
 fi
 : "${CHANNEL:=${IMAGE_ID}-ab}"
+
+# Step 5's assertions (graphical.target, gdm.service, notify-send, the
+# hicolor icon-cache sysext fixture, ...) are GNOME-desktop-specific. Both
+# snow-ab and snowfield-ab compose the snow desktop payload (see
+# production_composition in test/native-ab-static-test.sh: cayo-ab=cayo,
+# snow-ab=snow, snowfield-ab=snow) -- snowfield only swaps the kernel
+# variant (Surface vs backports), not the package set -- while cayo-ab has
+# no desktop at all. Derive the gate from IMAGE_ID (snow|snowfield) rather
+# than a literal "snow" comparison so a future PROFILE=snowfield-ab run
+# takes Step 5 too; cayo-ab correctly skips it.
+case "$IMAGE_ID" in
+    snow | snowfield) HAS_DESKTOP=1 ;;
+    *) HAS_DESKTOP=0 ;;
+esac
 
 # This dev host is itself an immutable snosi image (read-only /usr sysext
 # overlay); swtpm and virt-firmware cannot be `apt-get install`ed here (see
@@ -628,6 +665,17 @@ assert_eq "05-firstboot-presets.sh's missing set is exactly the three known nati
     "$actual_missing" "$expected_missing"
 assert_eq "05-firstboot-presets.sh reports exactly 1 failure (only the known exceptions)" \
     "$(grep -oE '[0-9]+ failed' <<<"$presets_out" | grep -oE '^[0-9]+')" "1"
+# The run-lock.mount allowlist entry above is a string match against
+# 05-firstboot-presets.sh's MISSING report -- that alone can't distinguish
+# "this Forky systemd genuinely ships no run-lock.mount unit" from "some
+# unrelated preset regression happens to produce the same path string".
+# Re-confirm structurally, in the guest, that the unit file itself is
+# absent from the booted systemd package (not merely un-enabled):
+run_lock_unit_count="$(vm_ssh 'dpkg -L systemd | grep -c "/run-lock\.mount$"' || true)"
+assert_eq "systemd package ships no run-lock.mount unit on this Forky build (structural re-check, not just the MISSING string)" \
+    "$run_lock_unit_count" "0"
+assert_false "run-lock.mount unit file does not exist anywhere under /usr/lib/systemd/system" \
+    vm_ssh 'test -e /usr/lib/systemd/system/run-lock.mount'
 
 # ===========================================================================
 # Step 4: in-guest TPM enrollment mirroring native-ab-secure-rotation-test.sh
@@ -674,26 +722,15 @@ var_source="$(vm_ssh 'findmnt -no SOURCE /var' || true)"
 assert_eq "/var is still mounted from the LUKS mapper after unattended TPM unlock" "$var_source" "/dev/mapper/var"
 
 # ===========================================================================
-# Step 5: desktop assertions (Snow)
+# Step 5: post-TPM-unlock assertions. tmpfiles ownership and dpkg-query are
+# profile-neutral (fresh-/var tmpfiles rules and the /var/lib/dpkg
+# relocation symlink apply to every profile, cayo included) and always run;
+# the GNOME-desktop-specific checks (graphical.target, gdm.service, a
+# logind seat, notify-send, the hicolor-icon-cache sysext fixture) are
+# gated on HAS_DESKTOP below and skipped for cayo-ab.
 # ===========================================================================
 echo ""
-echo "=== Step 5: desktop assertions ==="
-
-# wait_for_ssh only proves the SSH port is open, not that the graphical
-# session has finished starting (GNOME/GDM take longer than sshd on a
-# desktop image) -- settle on system-running (or a bounded wait) before
-# asserting graphical.target, or this races and flakes (observed live: SSH
-# reachable while graphical.target was still activating).
-vm_ssh 'systemctl is-system-running --wait' >/dev/null || true
-
-graphical_state="$(vm_ssh 'systemctl show -P ActiveState graphical.target' || true)"
-assert_eq "graphical.target is active" "$graphical_state" "active"
-gdm_state="$(vm_ssh 'systemctl show -P ActiveState gdm.service' || true)"
-assert_eq "gdm.service is active" "$gdm_state" "active"
-seat_listing="$(vm_ssh 'loginctl list-seats --no-legend' || true)"
-assert_contains "a logind seat exists" "$seat_listing" "seat0"
-assert_true "notify-send is present (libnotify-bin, graphical package set)" \
-    vm_ssh 'command -v notify-send'
+echo "=== Step 5: post-TPM-unlock assertions ==="
 
 var_home_owner="$(vm_ssh "stat -c '%U:%G %a' /var/home" || true)"
 assert_eq "/var/home exists with expected fresh-tmpfiles ownership/mode" "$var_home_owner" "root:root 755"
@@ -705,34 +742,54 @@ assert_eq "/var/opt exists with expected fresh-tmpfiles ownership/mode" "$var_op
 dpkg_link_target="$(vm_ssh 'readlink /var/lib/dpkg' || true)"
 assert_eq "/var/lib/dpkg is the factory dpkg relocation symlink" "$dpkg_link_target" "../../usr/lib/sysimage/dpkg"
 dpkg_query_out="$(vm_ssh "dpkg-query -W -f='\${Package} \${Version}\n' systemd" || true)"
-assert_true "dpkg-query works against the relocated /var/lib/dpkg on snow" \
+assert_true "dpkg-query works against the relocated /var/lib/dpkg" \
     bash -c "[[ -n '$dpkg_query_out' ]]"
 echo "dpkg-query systemd: $dpkg_query_out"
 
-# --- minimal ad hoc sysext fixture: plain-directory form (systemd-sysext(8)
-# merges directories exactly like raw images; no erofs/squashfs build or
-# guest-side loop mount needed to prove the icon-cache contract). ---
-echo ""
-echo "=== Step 5b: ad hoc sysext fixture (hicolor icon-cache contract) ==="
-guest_os_id="$(vm_ssh '. /etc/os-release; echo "$ID"')"
-[[ -n "$guest_os_id" ]] || { echo "Error: could not read guest ID= from os-release" >&2; exit 1; }
-# The image also sets SYSEXT_LEVEL (confirmed live: "SYSEXT_LEVEL=1.0" on
-# this build). Per os-release(5)/extension-release semantics, when the host
-# declares SYSEXT_LEVEL, systemd-sysext requires the extension to declare a
-# matching one too -- ID= alone is not sufficient and the merge silently
-# reports "No suitable extensions found (1 ignored due to incompatible
-# image(s))" (observed live). Real snosi sysexts already set this; mirror
-# it here instead of hardcoding "1.0".
-guest_sysext_level="$(vm_ssh '. /etc/os-release; echo "$SYSEXT_LEVEL"')"
-fixture="$WORK_DIR/sysext-fixture"
-mkdir -p "$fixture/usr/lib/extension-release.d" \
-    "$fixture/usr/share/applications" \
-    "$fixture/usr/share/icons/hicolor/48x48/apps"
-{
-    echo "ID=$guest_os_id"
-    [[ -z "$guest_sysext_level" ]] || echo "SYSEXT_LEVEL=$guest_sysext_level"
-} > "$fixture/usr/lib/extension-release.d/extension-release.native-ab-secure-boot-test"
-cat > "$fixture/usr/share/applications/native-ab-secure-boot-test.desktop" <<'EOF'
+if [[ "$HAS_DESKTOP" -eq 1 ]]; then
+    echo ""
+    echo "=== Step 5a: desktop assertions ==="
+
+    # wait_for_ssh only proves the SSH port is open, not that the graphical
+    # session has finished starting (GNOME/GDM take longer than sshd on a
+    # desktop image) -- settle on system-running (or a bounded wait) before
+    # asserting graphical.target, or this races and flakes (observed live: SSH
+    # reachable while graphical.target was still activating).
+    vm_ssh 'systemctl is-system-running --wait' >/dev/null || true
+
+    graphical_state="$(vm_ssh 'systemctl show -P ActiveState graphical.target' || true)"
+    assert_eq "graphical.target is active" "$graphical_state" "active"
+    gdm_state="$(vm_ssh 'systemctl show -P ActiveState gdm.service' || true)"
+    assert_eq "gdm.service is active" "$gdm_state" "active"
+    seat_listing="$(vm_ssh 'loginctl list-seats --no-legend' || true)"
+    assert_contains "a logind seat exists" "$seat_listing" "seat0"
+    assert_true "notify-send is present (libnotify-bin, graphical package set)" \
+        vm_ssh 'command -v notify-send'
+
+    # --- minimal ad hoc sysext fixture: plain-directory form (systemd-sysext(8)
+    # merges directories exactly like raw images; no erofs/squashfs build or
+    # guest-side loop mount needed to prove the icon-cache contract). ---
+    echo ""
+    echo "=== Step 5b: ad hoc sysext fixture (hicolor icon-cache contract) ==="
+    guest_os_id="$(vm_ssh '. /etc/os-release; echo "$ID"')"
+    [[ -n "$guest_os_id" ]] || { echo "Error: could not read guest ID= from os-release" >&2; exit 1; }
+    # The image also sets SYSEXT_LEVEL (confirmed live: "SYSEXT_LEVEL=1.0" on
+    # this build). Per os-release(5)/extension-release semantics, when the host
+    # declares SYSEXT_LEVEL, systemd-sysext requires the extension to declare a
+    # matching one too -- ID= alone is not sufficient and the merge silently
+    # reports "No suitable extensions found (1 ignored due to incompatible
+    # image(s))" (observed live). Real snosi sysexts already set this; mirror
+    # it here instead of hardcoding "1.0".
+    guest_sysext_level="$(vm_ssh '. /etc/os-release; echo "$SYSEXT_LEVEL"')"
+    fixture="$WORK_DIR/sysext-fixture"
+    mkdir -p "$fixture/usr/lib/extension-release.d" \
+        "$fixture/usr/share/applications" \
+        "$fixture/usr/share/icons/hicolor/48x48/apps"
+    {
+        echo "ID=$guest_os_id"
+        [[ -z "$guest_sysext_level" ]] || echo "SYSEXT_LEVEL=$guest_sysext_level"
+    } > "$fixture/usr/lib/extension-release.d/extension-release.native-ab-secure-boot-test"
+    cat > "$fixture/usr/share/applications/native-ab-secure-boot-test.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
 Name=native-ab-secure-boot-test fixture
@@ -740,39 +797,43 @@ Exec=/bin/true
 Icon=native-ab-secure-boot-test
 NoDisplay=true
 EOF
-# A minimal but syntactically valid 1x1 PNG (hicolor only cares that a file
-# with the right name/path exists to be indexed).
-python3 -c "
+    # A minimal but syntactically valid 1x1 PNG (hicolor only cares that a file
+    # with the right name/path exists to be indexed).
+    python3 -c "
 import base64, pathlib
 png = base64.b64decode(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
 )
 pathlib.Path('$fixture/usr/share/icons/hicolor/48x48/apps/native-ab-secure-boot-test.png').write_bytes(png)
 "
-vm_ssh 'mkdir -p /var/lib/extensions/native-ab-secure-boot-test'
-scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" -r "$fixture/." \
-    root@localhost:/var/lib/extensions/native-ab-secure-boot-test/
+    vm_ssh 'mkdir -p /var/lib/extensions/native-ab-secure-boot-test'
+    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" -r "$fixture/." \
+        root@localhost:/var/lib/extensions/native-ab-secure-boot-test/
 
-merge_out=""
-merge_rc=0
-merge_out="$(vm_ssh 'systemd-sysext merge' 2>&1)" || merge_rc=$?
-echo "$merge_out"
-assert_eq "systemd-sysext merge succeeds with the fixture present" "$merge_rc" "0"
-# `systemd-sysext status` lists, per hierarchy, either "none" (nothing
-# merged) or the merged extension name(s) + a SINCE timestamp -- there is
-# no literal "active" column in its output (confirmed live); the extension
-# name appearing in the /usr row IS the "merged and active" signal.
-sysext_status="$(vm_ssh 'systemd-sysext status --no-pager' || true)"
-assert_contains "systemd-sysext status shows the fixture merged into /usr" "$sysext_status" "native-ab-secure-boot-test"
-assert_false "the /usr hierarchy no longer reports 'none' once merged" \
-    bash -c "grep -qE '^/usr[[:space:]]+none[[:space:]]' <<<'$sysext_status'"
-desktop_listing="$(vm_ssh 'ls /usr/share/applications' || true)"
-assert_contains "fixture .desktop entry visible in merged /usr/share/applications" \
-    "$desktop_listing" "native-ab-secure-boot-test.desktop"
-assert_false "no hicolor icon-theme.cache exists after merge (CLAUDE.md icon-cache rule)" \
-    vm_ssh 'test -e /usr/share/icons/hicolor/icon-theme.cache'
-vm_ssh 'systemd-sysext unmerge'
+    merge_out=""
+    merge_rc=0
+    merge_out="$(vm_ssh 'systemd-sysext merge' 2>&1)" || merge_rc=$?
+    echo "$merge_out"
+    assert_eq "systemd-sysext merge succeeds with the fixture present" "$merge_rc" "0"
+    # `systemd-sysext status` lists, per hierarchy, either "none" (nothing
+    # merged) or the merged extension name(s) + a SINCE timestamp -- there is
+    # no literal "active" column in its output (confirmed live); the extension
+    # name appearing in the /usr row IS the "merged and active" signal.
+    sysext_status="$(vm_ssh 'systemd-sysext status --no-pager' || true)"
+    assert_contains "systemd-sysext status shows the fixture merged into /usr" "$sysext_status" "native-ab-secure-boot-test"
+    assert_false "the /usr hierarchy no longer reports 'none' once merged" \
+        bash -c "grep -qE '^/usr[[:space:]]+none[[:space:]]' <<<'$sysext_status'"
+    desktop_listing="$(vm_ssh 'ls /usr/share/applications' || true)"
+    assert_contains "fixture .desktop entry visible in merged /usr/share/applications" \
+        "$desktop_listing" "native-ab-secure-boot-test.desktop"
+    assert_false "no hicolor icon-theme.cache exists after merge (CLAUDE.md icon-cache rule)" \
+        vm_ssh 'test -e /usr/share/icons/hicolor/icon-theme.cache'
+    vm_ssh 'systemd-sysext unmerge'
 
+else
+    echo ""
+    echo "=== Step 5a/5b: desktop assertions skipped -- IMAGE_ID=$IMAGE_ID has no desktop payload ==="
+fi
 # ===========================================================================
 # Step 6: secure update hop N -> N+1 under enforced Secure Boot
 # ===========================================================================
