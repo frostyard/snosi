@@ -8,6 +8,22 @@ if [[ ! -d /.etc.lower ]]; then
     mkdir /etc
 fi
 
+# Factory UKI naming (see UnifiedKernelImageFormat=&e in
+# shared/outformat/ab-root/mkosi.conf for the full rationale): kernel-install
+# resolves the "&e" entry-token specifier via /etc/kernel/entry-token when
+# present (kernel-install(8), "auto" entry-token mode). mkosi's own
+# install_kernel() -- which builds the actual UKI -- runs strictly AFTER all
+# FinalizeScripts=, so this file only needs to exist on disk by the time this
+# script exits; it is written into the fresh (post-mv) /etc above, not
+# /.etc.lower, since nothing at runtime ever needs it (kernel-install never
+# runs again on a booted dm-verity read-only root). IMAGE_ID/IMAGE_VERSION
+# are exported into FinalizeScripts= by mkosi itself (mkosi.1
+# "Environment="/finalize_environment()).
+: "${IMAGE_ID:?IMAGE_ID not set in FinalizeScripts environment}"
+: "${IMAGE_VERSION:?IMAGE_VERSION not set in FinalizeScripts environment}"
+mkdir -p /etc/kernel
+printf '%s' "${IMAGE_ID}-ab_${IMAGE_VERSION}" > /etc/kernel/entry-token
+
 # The cayo profile's historical tree carries this bootc-only config. The A/B
 # extra tree overwrites it before this point; fail closed if that changes.
 if grep -qr 'add_dracutmodules.*\bbootc\b' /usr/lib/dracut/dracut.conf.d; then

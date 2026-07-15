@@ -409,13 +409,25 @@ echo "=== Step 1: N boot (publication-disabled) ==="
 
 assert_no_update_activity
 
-# Diagnostic only: record the build-time ESP UKI name. mkosi names it after
-# Output= (cayo-ab-raw here), which does NOT match the channel transfer's
-# Target MatchPattern (cayo-ab_@v...), so sysupdate's installed-version
-# accounting can re-offer the running version as "new" -- the stager's
-# not-newer-than-running guard covers it (see its header).
+# Factory UKI naming (docs/native-ab-contracts.md §1, §6,
+# shared/outformat/ab-root/mkosi.conf's UnifiedKernelImageFormat=&e):
+# mkosi's build-time ESP UKI must be named "<channel>_<version>.efi" --
+# exactly the channel transfer's Target MatchPattern -- so systemd-sysupdate
+# sees the factory-installed version as already-installed the moment N
+# boots, without ever running the stager. Before this was fixed, mkosi named
+# it after &e-&k-&h (entry-token-kernelversion-roothash), which never
+# matched, so sysupdate's installed-version accounting never saw the factory
+# UKI and systemd-boot carried it forever as a third, unmanaged menu entry.
 echo "ESP /EFI/Linux listing on N:"
-vm_ssh 'ls -la /boot/EFI/Linux/' || true
+esp_listing_n="$(vm_ssh 'ls -la /boot/EFI/Linux/')"
+echo "$esp_listing_n"
+assert_contains "factory ESP UKI is named <channel>_<version>.efi" \
+    "$esp_listing_n" "${CHANNEL}_${n_version}.efi"
+
+sysupdate_list_n="$(vm_ssh '/usr/lib/systemd/systemd-sysupdate list' 2>&1 || true)"
+echo "$sysupdate_list_n"
+assert_contains "systemd-sysupdate list sees the factory version N as installed" \
+    "$sysupdate_list_n" "$n_version"
 
 stage_status="$(vm_ssh 'systemctl is-enabled snosi-sysupdate-stage.timer' || true)"
 assert_eq "snosi-sysupdate-stage.timer is-enabled=static (inert by default)" "$stage_status" "static"

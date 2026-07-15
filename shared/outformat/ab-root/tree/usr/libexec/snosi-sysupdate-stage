@@ -65,15 +65,11 @@ fi
 
 running_version=""
 image_id=""
+channel=""
 if [[ -r /usr/lib/os-release ]]; then
     running_version=$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
     image_id=$(. /usr/lib/os-release && echo "${IMAGE_ID:-}")
 fi
-if [[ -z "$image_id" ]]; then
-    echo "ERROR: /usr/lib/os-release has no IMAGE_ID; cannot derive the publication channel" >&2
-    exit 1
-fi
-channel="${image_id}-ab"
 
 write_check() { # outcome
     mkdir -p /run/snosi
@@ -82,10 +78,21 @@ write_check() { # outcome
         "${remote_version:-}" >"$CHECK"
 }
 
+# Registered before ANY exit path (including the IMAGE_ID-missing check right
+# below) so every failure mode -- not just ones after $channel is known --
+# writes outcome=failed to $CHECK. $channel is declared empty above so this
+# trap is always safe to fire, even before it's assigned its real value.
+#
 # Any failure below (check-new error, update, post-stage verification)
 # records outcome=failed; a broken/tampered checker must not be
 # indistinguishable from an up-to-date system.
 trap '[[ $? -eq 0 ]] || write_check failed' EXIT
+
+if [[ -z "$image_id" ]]; then
+    echo "ERROR: /usr/lib/os-release has no IMAGE_ID; cannot derive the publication channel" >&2
+    exit 1
+fi
+channel="${image_id}-ab"
 
 write_staged_semaphore() { # version
     mkdir -p /run/snosi
@@ -160,8 +167,8 @@ probe_index() {
     tmpd="$(mktemp -d)"
     # shellcheck disable=SC2064
     trap "rm -rf '$tmpd'" RETURN
-    curl -fsSL "${origin%/}/SHA256SUMS" -o "$tmpd/SHA256SUMS" || return 1
-    curl -fsSL "${origin%/}/SHA256SUMS.gpg" -o "$tmpd/SHA256SUMS.gpg" || return 1
+    curl -fsSL --connect-timeout 10 --max-time 30 "${origin%/}/SHA256SUMS" -o "$tmpd/SHA256SUMS" || return 1
+    curl -fsSL --connect-timeout 10 --max-time 30 "${origin%/}/SHA256SUMS.gpg" -o "$tmpd/SHA256SUMS.gpg" || return 1
     gpgv --keyring "$pubring" "$tmpd/SHA256SUMS.gpg" "$tmpd/SHA256SUMS" 2>/dev/null || return 1
 }
 
@@ -214,14 +221,14 @@ if [[ ! "$remote_version" =~ ^[0-9]{14}$ ]]; then
 fi
 
 if [[ -n "$running_version" && ! "$remote_version" > "$running_version" ]]; then
-    # The candidate is not newer than what is running. This happens on a
-    # fresh install whose index promotes exactly the running version when
-    # sysupdate's installed-version accounting is incomplete (e.g. the
-    # image's build-time ESP UKI name does not match the transfer's Target
-    # MatchPattern, so the running version never counts as fully installed
-    # and check-new keeps re-offering it). Never "update" sideways or
-    # backwards -- report current, exactly like the bootc stager's
-    # pulled==booted branch.
+    # The candidate is not newer than what is running. Kept as
+    # belt-and-suspenders even now that the image's build-time ESP UKI name
+    # matches the transfer's Target MatchPattern (shared/outformat/ab-root/
+    # mkosi.conf's UnifiedKernelImageFormat=&e), so sysupdate's
+    # installed-version accounting correctly counts the running version as
+    # installed and check-new should not re-offer it on a fresh install.
+    # Never "update" sideways or backwards regardless -- report current,
+    # exactly like the bootc stager's pulled==booted branch.
     echo "Newest published version $remote_version is not newer than running ${running_version}; nothing to stage."
     write_check current
     exit 0
@@ -266,7 +273,7 @@ verity_origin="$(source_path_of "$verity_transfer")"
     exit 1
 }
 
-sums="$(curl -fsSL "${root_origin%/}/SHA256SUMS")"
+sums="$(curl -fsSL --connect-timeout 10 --max-time 30 "${root_origin%/}/SHA256SUMS")"
 root_name="$(grep -oE "${channel}_${remote_version}_[0-9a-fA-F-]+\.root\.raw\.xz" <<<"$sums" | head -1)"
 verity_name="$(grep -oE "${channel}_${remote_version}_[0-9a-fA-F-]+\.root-verity\.raw\.xz" <<<"$sums" | head -1)"
 [[ -n "$root_name" && -n "$verity_name" ]] || {

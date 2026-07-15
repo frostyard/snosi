@@ -164,11 +164,11 @@ native_check_live() {
     # shellcheck disable=SC2064
     trap "rm -rf '$tmpd'" RETURN
 
-    if ! curl -fsSL "$base/SHA256SUMS" -o "$tmpd/SHA256SUMS" 2>"$tmpd/curl.err"; then
+    if ! curl -fsSL --connect-timeout 10 --max-time 30 "$base/SHA256SUMS" -o "$tmpd/SHA256SUMS" 2>"$tmpd/curl.err"; then
         echo "Registry:   query failed (network? unpublished channel? $base)"
         return 1
     fi
-    if ! curl -fsSL "$base/SHA256SUMS.gpg" -o "$tmpd/SHA256SUMS.gpg" 2>>"$tmpd/curl.err"; then
+    if ! curl -fsSL --connect-timeout 10 --max-time 30 "$base/SHA256SUMS.gpg" -o "$tmpd/SHA256SUMS.gpg" 2>>"$tmpd/curl.err"; then
         echo "Registry:   query failed (SHA256SUMS.gpg fetch failed)"
         return 1
     fi
@@ -182,7 +182,10 @@ native_check_live() {
         return 1
     fi
 
-    published="$(grep -oE "${channel}_[0-9]{14}\.manifest\.json" "$tmpd/SHA256SUMS" | head -1 | grep -oE '[0-9]{14}')" || true
+    # Multiple manifest entries can appear in one signed index (e.g. during a
+    # rolling publish); take the numeric MAXIMUM version, not the first
+    # match -- SHA256SUMS line order is not guaranteed to be newest-first.
+    published="$(grep -oE "${channel}_[0-9]{14}\.manifest\.json" "$tmpd/SHA256SUMS" | grep -oE '[0-9]{14}' | sort -n | tail -1)" || true
     if [[ -z "$published" ]]; then
         echo "Registry:   query failed (no manifest entry for $channel in the signed index)"
         return 1
