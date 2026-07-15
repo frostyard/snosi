@@ -50,7 +50,7 @@ module set; do not treat any number here as final except where marked
   which the generic tree's dracut config would need `omit_drivers=`/
   `drivers=` constraints.
 
-## cayo (validated, 2026-07-14)
+## cayo (measured, 2026-07-14)
 
 Measured on `cayo-ab-secure` — the only build with BOTH the full production
 module set (no `KernelModules=` filter anywhere in its Include chain) AND
