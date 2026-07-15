@@ -31,6 +31,19 @@
 # separate globs would make one of them spuriously "stale" in every single
 # build depending on which format ran.
 lib/dpkg*	image-metadata
+# aspell's dictionary directory — EMPTY on cayo (aspell/aspell-en are
+# snow-only packages; only the base aspell.conf tmpfiles rule creates the
+# bare directory here), but relocated to /usr/lib/sysimage/aspell by the
+# same native-gated finalize block as dpkg above so every native product
+# ships the same /var/lib/aspell relocation-symlink shape and the shared
+# 00-snosi-aspell.conf tmpfiles rule (shared/outformat/ab-root/tree) never
+# creates a dangling symlink on a fresh /var. Same dual-shape bare-`*`
+# glob as lib/dpkg*: native builds show the relocation symlink, bootc
+# builds the (here empty) real directory. See the snow map's lib/aspell*
+# entry for the populated case this relocation actually fixes (compiled
+# *.rws dictionaries reached via absolute /usr/lib/aspell dict-dir
+# symlinks that would otherwise dangle after a native install).
+lib/aspell*	image-metadata
 
 # --- tmpfiles: directories a shipped tmpfiles.d rule recreates -------------
 backups	tmpfiles
@@ -44,7 +57,6 @@ lib/apache2	tmpfiles
 lib/apt/lists	tmpfiles
 lib/apt/mirrors/partial	tmpfiles
 lib/apt/periodic	tmpfiles
-lib/aspell	tmpfiles
 lib/bluetooth	tmpfiles
 lib/colord/icc	tmpfiles
 lib/dbus/machine-id	tmpfiles

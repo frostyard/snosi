@@ -414,6 +414,18 @@ dpkg_link_target="$(vm_ssh 'readlink /var/lib/dpkg' || true)"
 assert_eq "/var/lib/dpkg is a symlink with the exact relative relocation target" \
     "$dpkg_link_target" "../../usr/lib/sysimage/dpkg"
 
+# aspell dictionary relocation: same shape as dpkg. cayo carries no
+# dictionaries (aspell/aspell-en are snow-only packages), so this verifies
+# the structural half — the relocation symlink, its target existing in the
+# immutable root, and the audit classifying it as image-metadata — which
+# is everything the shared finalize block and 00-snosi-aspell.conf
+# provide; the populated snow case differs only in directory contents.
+aspell_link_target="$(vm_ssh 'readlink /var/lib/aspell' || true)"
+assert_eq "/var/lib/aspell is a symlink with the exact relative relocation target" \
+    "$aspell_link_target" "../../usr/lib/sysimage/aspell"
+assert_true "/usr/lib/sysimage/aspell exists in the immutable root" \
+    vm_ssh 'test -d /usr/lib/sysimage/aspell'
+
 systemd_version="$(vm_ssh "dpkg-query -W -f='\${Version}' systemd" || true)"
 assert_true "dpkg-query -W systemd prints a version" bash -c "[[ -n '$systemd_version' ]]"
 echo "systemd: $systemd_version"
@@ -427,6 +439,8 @@ assert_true "/usr/share/snosi/var-inventory.txt exists" \
 inventory_metadata_lines="$(vm_ssh "grep -c '^image-metadata' /usr/share/snosi/var-inventory.txt" || true)"
 assert_true "var-inventory.txt contains at least one image-metadata line" \
     bash -c "[[ '${inventory_metadata_lines:-0}' -ge 1 ]]"
+assert_true "var-inventory.txt classifies /var/lib/aspell as image-metadata" \
+    vm_ssh "grep -qx 'image-metadata	/var/lib/aspell' /usr/share/snosi/var-inventory.txt"
 
 failed_units_after_var_checks="$(vm_ssh 'systemctl --failed --no-legend' || true)"
 assert_eq "no failed systemd units after factory /var checks" "$failed_units_after_var_checks" ""
