@@ -845,8 +845,13 @@ DEV-only reasoning as `import-pubring.gpg`) ships alongside the pubring via
 parsing/verification, disk-refusal filters, argument validation matrix,
 streamed-verify mismatch handling, restage-mok argument handling) via
 fixtures, wired into `validate.yml`; full disk-write/LUKS/TPM/MOK behavior
-needs a real product build and install target (a later task). Full design
-notes: `yeti/OVERVIEW.md` "snosi-install CLI (Task 8.2)".
+needs a real product build and install target (a later task). Known
+limitation: the installer-medium self-refusal (`disk_is_installer_medium()`)
+detects the ISO's ISO9660 volume ID, so label-rewriting USB writers (Ventoy,
+Rufus in ISO/DD mode) that strip or replace that volume ID when staging the
+image defeat the check, while a raw `dd`/`cp` of the ISO preserves it and is
+correctly detected. Full design notes: `yeti/OVERVIEW.md` "snosi-install CLI
+(Task 8.2)".
 
 The Phase 7 candidate/verify/promote/withdraw publication pipeline
 (`shared/native-ab/publish/`) now also publishes this ISO, under the flat

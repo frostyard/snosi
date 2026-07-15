@@ -7,6 +7,37 @@ usage() {
     exit 2
 }
 
+# reread_partition_table disk -- see snosi-install's rereadpt_settle() (this
+# spike script's GPT-relocate/var-grow logic is intentionally kept in sync
+# with that copy -- see the "fix both copies" note in snosi-install's own
+# header). blockdev --rereadpt issued right after a partition-table-
+# modifying command (sfdisk --relocate, sfdisk -N, or streaming the full
+# disk image) can race systemd-udevd's own re-probe of that same change: the
+# kernel returns BLKRRPART EBUSY ("Device or resource busy") when a
+# partition node the previous probe still has open. This is transient --
+# settling and retrying resolves it -- so only a failure that persists
+# across the retry budget stays fatal. Reproduced ~1/6 runs under
+# test/snosi-install-test.sh's root-gated harness (2026-07-15).
+reread_partition_table() { # disk
+    local disk="$1" attempt out
+    udevadm settle
+    for attempt in 1 2 3 4 5; do
+        if out="$(blockdev --rereadpt "$disk" 2>&1)"; then
+            udevadm settle
+            return 0
+        fi
+        if [[ "$out" == *"busy"* ]]; then
+            udevadm settle
+            sleep 1
+            continue
+        fi
+        echo "Error: blockdev --rereadpt $disk failed: $out" >&2
+        exit 1
+    done
+    echo "Error: blockdev --rereadpt $disk failed after $attempt attempts (device or resource busy): $out" >&2
+    exit 1
+}
+
 allow_file=false
 assume_yes=false
 encrypt_var=false
@@ -121,8 +152,7 @@ fi
 if [[ -b "$target" ]]; then
     wipefs --all "$target"
     dd if="$image" of="$target" bs=16M iflag=fullblock oflag=direct conv=fsync status=progress
-    blockdev --rereadpt "$target"
-    udevadm settle
+    reread_partition_table "$target"
 else
     # Remove stale partition data while preserving the requested virtual size.
     truncate -s 0 "$target"
@@ -161,8 +191,7 @@ fi
 # extra capacity, without changing any partition identity or start sector.
 if (( target_size > image_size )); then
     sfdisk --lock=yes --relocate gpt-bak-std "$disk"
-    blockdev --rereadpt "$disk"
-    udevadm settle
+    reread_partition_table "$disk"
 fi
 
 mapfile -t var_parts < <(lsblk -nrpo NAME,PARTLABEL "$disk" | while read -r node label; do
@@ -197,8 +226,7 @@ if (( target_size > image_size )); then
 
     printf 'start=%s,size=+\n' "$var_start" | \
         sfdisk --lock=yes --no-reread -N "$var_number" "$disk"
-    blockdev --rereadpt "$disk"
-    udevadm settle
+    reread_partition_table "$disk"
     [[ "$(lsblk -dnro START "$var_part")" == "$var_start" ]] || {
         echo "Error: var partition start changed unexpectedly" >&2
         exit 1

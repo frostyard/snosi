@@ -96,6 +96,36 @@ log()  { printf '%s\n' "$*"; }
 warn() { printf 'Warning: %s\n' "$*" >&2; }
 die()  { printf 'Error: %s\n' "$*" >&2; exit 1; }
 
+# rereadpt_settle disk -- tells the kernel to reread disk's partition table
+# (blockdev --rereadpt) and waits for udev to finish processing the
+# resulting partition device nodes (udevadm settle). Issuing --rereadpt
+# immediately after a partition-table-modifying command (sfdisk --relocate,
+# sfdisk -N, or streaming a full disk image onto the target) can race
+# systemd-udevd's own re-probe of that same change: the kernel returns
+# BLKRRPART EBUSY ("Device or resource busy") when a partition node the
+# previous probe still has open. This is transient -- settling and retrying
+# resolves it -- so only a failure that persists across the retry budget is
+# treated as fatal. Reproduced ~1/6 runs under test/snosi-install-test.sh's
+# root-gated harness (2026-07-15); see test/cayo-ab-install-spike.sh's
+# reread_partition_table() for the near-identical spike-script copy.
+rereadpt_settle() { # disk
+    local disk="$1" attempt out
+    udevadm settle
+    for attempt in 1 2 3 4 5; do
+        if out="$(blockdev --rereadpt "$disk" 2>&1)"; then
+            udevadm settle
+            return 0
+        fi
+        if [[ "$out" == *"busy"* ]]; then
+            udevadm settle
+            sleep 1
+            continue
+        fi
+        die "blockdev --rereadpt $disk failed: $out"
+    done
+    die "blockdev --rereadpt $disk failed after $attempt attempts (device or resource busy): $out"
+}
+
 usage() {
     cat >&2 <<'EOF'
 Usage:
@@ -305,6 +335,16 @@ disk_and_partition_nodes() { # disk
 # path -- it works identically whether or not / is backed by a block device,
 # which is what makes it the mechanism that actually fires during an
 # initramfs/ISO boot (see self_boot_device()'s comment above).
+#
+# Known limitation: this is volume-ID detection, not "was this written by
+# build-iso.sh" detection. Label-rewriting USB writers (Ventoy, Rufus in
+# ISO/DD-image mode with its own labeling) can strip or replace the ISO9660
+# volume ID when staging the image, defeating this check; a raw `dd`/`cp` of
+# the ISO to a USB device preserves the volume ID and is correctly detected.
+#
+# Sets INSTALLER_MEDIUM_LABEL to the matched label on success (consumed by
+# disk_refusal_reason() for a precise message); left unchanged on failure.
+INSTALLER_MEDIUM_LABEL=""
 disk_is_installer_medium() { # disk
     local disk="$1" node type label
     while IFS= read -r node; do
@@ -312,7 +352,10 @@ disk_is_installer_medium() { # disk
         type="$(blkid -o value -s TYPE "$node" 2>/dev/null || true)"
         [[ "$type" == "iso9660" ]] || continue
         label="$(blkid -o value -s LABEL "$node" 2>/dev/null || true)"
-        [[ "$label" =~ $INSTALLER_VOLID_PATTERN ]] && return 0
+        if [[ "$label" =~ $INSTALLER_VOLID_PATTERN ]]; then
+            INSTALLER_MEDIUM_LABEL="$label"
+            return 0
+        fi
     done < <(disk_and_partition_nodes "$disk")
     return 1
 }
@@ -331,7 +374,7 @@ disk_refusal_reason() { # disk_json min_bytes self_device
     fi
 
     if [[ -b "$path" ]] && disk_is_installer_medium "$path"; then
-        echo "is the installer's own boot medium ($path carries this installer's ISO9660 volume)"
+        echo "is the installer's own boot medium ($path carries a snosi installer ISO9660 volume, label $INSTALLER_MEDIUM_LABEL)"
         return
     fi
 
@@ -515,7 +558,7 @@ stream_download_verify() { # url expected_sha256 target
 # ---------------------------------------------------------------------------
 
 # validate_disk_image_layout disk -- POST-WRITE sanity check, called from
-# main() right after stream_download_verify() + blockdev --rereadpt, BEFORE
+# main() right after stream_download_verify() + rereadpt_settle(), BEFORE
 # relocate_and_grow_var() does any partition surgery on the disk. `disk` here
 # is the just-written TARGET disk (or --allow-file regular file), not a
 # separate downloaded image file -- sfdisk --json works identically against
@@ -545,8 +588,7 @@ relocate_and_grow_var() { # disk image_size target_size -- prints the var partit
 
     if (( target_size > image_size )); then
         sfdisk --lock=yes --relocate gpt-bak-std "$disk"
-        blockdev --rereadpt "$disk"
-        udevadm settle
+        rereadpt_settle "$disk"
     fi
 
     local -a var_parts
@@ -571,8 +613,7 @@ relocate_and_grow_var() { # disk image_size target_size -- prints the var partit
         (( (fsck_status & ~1) == 0 )) || die "var filesystem check failed with status $fsck_status"
 
         printf 'start=%s,size=+\n' "$var_start" | sfdisk --lock=yes --no-reread -N "$var_number" "$disk"
-        blockdev --rereadpt "$disk"
-        udevadm settle
+        rereadpt_settle "$disk"
         [[ "$(lsblk -dnro START "$var_part")" == "$var_start" ]] || die "var partition start changed unexpectedly"
         resize2fs "$var_part"
     fi
@@ -1054,8 +1095,7 @@ main() {
     [[ "$image_size" =~ ^[0-9]+$ && "$image_size" -gt 0 ]] ||
         die "internal error: could not determine the written image size"
     if [[ -b "$RESOLVED_DISK_PATH" ]]; then
-        blockdev --rereadpt "$RESOLVED_DISK_PATH"
-        udevadm settle
+        rereadpt_settle "$RESOLVED_DISK_PATH"
         target_size="$(blockdev --getsize64 "$RESOLVED_DISK_PATH")"
     else
         target_size="$RESOLVED_DISK_SIZE"
