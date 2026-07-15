@@ -61,7 +61,14 @@
 #                                 document, used instead of actually running
 #                                 lsblk (disk enumeration/refusal tests).
 #   SNOSI_INSTALL_SELF_DEVICE  -- fakes the "installer's own boot medium"
-#                                 device path instead of resolving it live.
+#                                 device path instead of resolving it live
+#                                 (self_boot_device()'s non-initramfs path;
+#                                 see disk_is_installer_medium() below for
+#                                 the ISO/initramfs boot-mode path, which has
+#                                 no fixture override -- it is exercised
+#                                 directly against a real loop-mounted
+#                                 ISO9660 fixture, root-gated, in
+#                                 test/snosi-install-test.sh).
 # --allow-file lets the install target be a regular file instead of a whole
 # block device (test-only, mirrors test/cayo-ab-install-spike.sh's own
 # --allow-file; MOK/TPM enrollment both refuse to run against a --allow-file
@@ -240,6 +247,20 @@ lsblk_json() {
     fi
 }
 
+# self_boot_device() only resolves anything on a NON-initramfs boot, where
+# / is mounted from a real block device (findmnt -no SOURCE / returns it).
+# On the real network-installer ISO (docs/native-ab-contracts.md "Installer
+# ISO", shared/native-installer/tools/build-iso.sh) the installer's whole
+# rootfs IS the kernel's initramfs -- packed as cpio+zstd and unpacked
+# straight into tmpfs, with no switch_root at all (see build-iso.sh's own
+# header comment). `/` is never backed by a block device in that boot mode:
+# findmnt -no SOURCE / returns the pseudo filesystem "rootfs", which fails
+# the `-b` block-special test below, so this function always returns empty
+# there -- silently, with no error -- and the only-self-device refusal path
+# in disk_refusal_reason() never fires. disk_is_installer_medium() below
+# covers that boot mode instead: it does not depend on self_boot_device() at
+# all, and disk_refusal_reason() calls both independently so either boot
+# mode is covered.
 self_boot_device() {
     if [[ -n "${SNOSI_INSTALL_SELF_DEVICE:-}" ]]; then
         printf '%s\n' "$SNOSI_INSTALL_SELF_DEVICE"
@@ -256,6 +277,46 @@ self_boot_device() {
     fi
 }
 
+# INSTALLER_VOLID_PATTERN -- build-iso.sh stamps the ISO's ISO9660 volume ID
+# as "SNOSI_INSTALLER_<14-digit version>" (docs/native-ab-contracts.md §2
+# version format; build-iso.sh's own volid comment). Matched against LABEL,
+# not VOLUME_ID: `blkid` surfaces an ISO9660 primary volume descriptor's
+# volume identifier under the LABEL field.
+INSTALLER_VOLID_PATTERN='^SNOSI_INSTALLER_[0-9]{14}$'
+
+# disk_and_partition_nodes disk -- prints disk, then each partition device
+# node lsblk reports under it. Real lsblk always (no SNOSI_INSTALL_LSBLK_JSON
+# fixture support here): unlike the disk-enumeration path above, this walks
+# actual device nodes to hand to blkid, which has no JSON-fixture equivalent
+# -- disk_is_installer_medium() is instead exercised directly against a real
+# loop-mounted ISO9660 fixture (root-gated) in test/snosi-install-test.sh.
+disk_and_partition_nodes() { # disk
+    local disk="$1"
+    printf '%s\n' "$disk"
+    lsblk -nrpo NAME "$disk" 2>/dev/null | tail -n +2 || true
+}
+
+# disk_is_installer_medium disk -- true if `disk` itself, or any partition
+# under it, carries an ISO9660 filesystem whose LABEL matches
+# INSTALLER_VOLID_PATTERN. xorriso's -appended_part_as_gpt hybrid layout
+# (build-iso.sh) can put the ISO9660 signature directly on the whole-disk
+# node as well as on a partition, so both are probed. This is a property of
+# the CANDIDATE disk itself, not a comparison against a resolved "self"
+# path -- it works identically whether or not / is backed by a block device,
+# which is what makes it the mechanism that actually fires during an
+# initramfs/ISO boot (see self_boot_device()'s comment above).
+disk_is_installer_medium() { # disk
+    local disk="$1" node type label
+    while IFS= read -r node; do
+        [[ -n "$node" ]] || continue
+        type="$(blkid -o value -s TYPE "$node" 2>/dev/null || true)"
+        [[ "$type" == "iso9660" ]] || continue
+        label="$(blkid -o value -s LABEL "$node" 2>/dev/null || true)"
+        [[ "$label" =~ $INSTALLER_VOLID_PATTERN ]] && return 0
+    done < <(disk_and_partition_nodes "$disk")
+    return 1
+}
+
 # disk_refusal_reason disk_json min_bytes self_device -- prints a non-empty
 # human-readable refusal reason, or nothing if the disk is installable.
 disk_refusal_reason() { # disk_json min_bytes self_device
@@ -266,6 +327,11 @@ disk_refusal_reason() { # disk_json min_bytes self_device
 
     if [[ -n "$self_device" && "$self_device" == "$path" ]]; then
         echo "is the installer's own boot medium ($path)"
+        return
+    fi
+
+    if [[ -b "$path" ]] && disk_is_installer_medium "$path"; then
+        echo "is the installer's own boot medium ($path carries this installer's ISO9660 volume)"
         return
     fi
 
@@ -448,7 +514,21 @@ stream_download_verify() { # url expected_sha256 target
 # fix both copies -- they are intentionally near-identical so a diff is easy.
 # ---------------------------------------------------------------------------
 
-validate_disk_image_layout() { # image_path
+# validate_disk_image_layout disk -- POST-WRITE sanity check, called from
+# main() right after stream_download_verify() + blockdev --rereadpt, BEFORE
+# relocate_and_grow_var() does any partition surgery on the disk. `disk` here
+# is the just-written TARGET disk (or --allow-file regular file), not a
+# separate downloaded image file -- sfdisk --json works identically against
+# either. A checksum-verified download (stream_download_verify already
+# confirmed the exact compressed bytes match the signed index) that
+# nonetheless produces the wrong GPT shape on disk means either the index
+# pointed at the wrong artifact for this product/channel or the on-disk
+# partition layout contract itself drifted -- both are bugs worth stopping
+# for loudly, not silently working around. die() aborts here without calling
+# wipe_target(): unlike a download/checksum failure, the disk already holds
+# exactly the bytes that were verified, and there is nothing unsafe about
+# leaving them in place for a human to inspect.
+validate_disk_image_layout() { # disk
     local image="$1" layout
     layout="$(sfdisk --json "$image")"
     local label
@@ -629,6 +709,24 @@ seed_var() { # var_device product channel version arch ssh_key_path(optional)
 # MOK enrollment (plan steps 16-17) + --restage-mok recovery
 # ---------------------------------------------------------------------------
 
+# check_secret_file_perms path label -- refuses a secret input file that is
+# group- or world-readable/writable. A non-interactive --mok-password-file is
+# typically staged ahead of time by orchestration tooling; if it is left
+# group/world-readable, any other local user (or process) could read the
+# one-time MokManager password straight off disk before this script ever
+# gets to it, so refuse rather than silently trusting the caller's umask.
+# Uses the last two digits of `stat -c %a` (group, other) so it is unaffected
+# by a leading setuid/setgid/sticky digit.
+check_secret_file_perms() { # path label
+    local path="$1" label="$2" mode group other
+    mode="$(stat -c '%a' "$path" 2>/dev/null)" || die "could not stat $label: $path"
+    group="${mode: -2:1}"
+    other="${mode: -1}"
+    if [[ "$group" != "0" || "$other" != "0" ]]; then
+        die "$label must not be group- or world-readable/writable (found mode $mode on $path); chmod 600 it"
+    fi
+}
+
 # mok_password_twice -- interactive prompt, validated twice. Sets
 # MOK_PASSWORD. Rejects an empty password and requires both entries to
 # match, retrying rather than silently taking the first entry.
@@ -668,10 +766,17 @@ MOK-signed boot chain will NOT be trusted and will refuse to boot -- run
 EOF
 }
 
-# mok_import cert password -- generates a password hash (mokutil
-# --generate-hash, never prints the plaintext password to a log or process
-# list beyond this function's own arguments) and stages the import request
-# non-interactively via `mokutil --import --hash-file`.
+# mok_import cert password -- generates a password hash and stages the
+# import request non-interactively via `mokutil --import --hash-file`.
+# HONEST NOTE on exposure: `mokutil --generate-hash=<password>` takes the
+# plaintext password as a CLI argument -- mokutil has no stdin/file input for
+# hashing -- so for the brief duration that one mokutil invocation runs, the
+# password IS visible system-wide via /proc/<pid>/cmdline and `ps`, to any
+# other local user or process that looks in time, not just to this function.
+# This is an inherent limitation of mokutil's own interface, not something
+# mitigated here; the follow-on hash file it writes IS kept private (mktemp +
+# chmod 600, removed immediately after use), and the resulting hash itself
+# (not the plaintext) is what mokutil --import stages persistently.
 mok_import() { # cert password
     local cert="$1" password="$2"
     command -v mokutil >/dev/null || die "mokutil is required"
@@ -733,6 +838,7 @@ restage_mok() { # non_interactive mok_cert mok_password_file reboot disk_overrid
     if [[ "$non_interactive" == 1 ]]; then
         [[ -n "$mok_password_file" ]] || die "--non-interactive --restage-mok requires --mok-password-file"
         [[ -f "$mok_password_file" ]] || die "--mok-password-file not found: $mok_password_file"
+        check_secret_file_perms "$mok_password_file" "--mok-password-file"
         password="$(head -1 "$mok_password_file")"
         [[ -n "$password" ]] || die "--mok-password-file is empty"
     fi
@@ -956,6 +1062,12 @@ main() {
     fi
 
     # -----------------------------------------------------------------
+    # Post-write layout sanity check, BEFORE any partition surgery
+    # -----------------------------------------------------------------
+    log "Validating the written disk's partition layout..."
+    validate_disk_image_layout "$RESOLVED_DISK_PATH"
+
+    # -----------------------------------------------------------------
     # Relocate GPT + grow /var (plan steps 10-11)
     # -----------------------------------------------------------------
     log "Growing /var partition..."
@@ -1014,6 +1126,7 @@ main() {
         local password
         if [[ "$non_interactive" == 1 ]]; then
             [[ -f "$mok_password_file" ]] || die "--mok-password-file not found: $mok_password_file"
+            check_secret_file_perms "$mok_password_file" "--mok-password-file"
             password="$(head -1 "$mok_password_file")"
             [[ -n "$password" ]] || die "--mok-password-file is empty"
         else

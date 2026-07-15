@@ -36,6 +36,23 @@ HTTP_PID=""
 PASS=0
 FAIL=0
 
+# Root-gated sections (real loop devices: ISO9660 own-boot-medium detection,
+# relocate_and_grow_var) run only when root or passwordless sudo is
+# available, matching the HAVE_ROOT/SUDO pattern already used by
+# test/snosi-etc-diff-test.sh's own root-gated case -- the bulk of this test
+# file (header: "non-root-safe") deliberately does NOT run under sudo as a
+# whole, since several existing assertions rely on need_root() actually
+# firing ("must run as root") when this script itself is not root.
+HAVE_ROOT=0
+SUDO=()
+if [[ $EUID -eq 0 ]]; then
+    HAVE_ROOT=1
+elif command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    HAVE_ROOT=1
+    SUDO=(sudo -n)
+fi
+ROOT_LOOP_DEVICES=()
+
 pass() { echo "ok - $1"; PASS=$((PASS + 1)); }
 fail() { echo "not ok - $1" >&2; [[ $# -lt 2 ]] || echo "  $2" >&2; FAIL=$((FAIL + 1)); }
 assert_eq() { # description actual expected
@@ -52,6 +69,10 @@ assert_not_contains() { # description haystack needle
 print_summary() { echo ""; echo "# Results: $PASS passed, $FAIL failed, $((PASS + FAIL)) total"; exit "$FAIL"; }
 
 cleanup() {
+    local ld
+    for ld in "${ROOT_LOOP_DEVICES[@]}"; do
+        [[ -z "$ld" ]] || "${SUDO[@]}" losetup -d "$ld" 2>/dev/null || true
+    done
     [[ -z "$HTTP_PID" ]] || kill "$HTTP_PID" 2>/dev/null || true
     [[ -z "$WORK_DIR" || ! -d "$WORK_DIR" ]] || rm -rf "$WORK_DIR"
 }
@@ -72,6 +93,30 @@ call_fn() {
     local fn="$1"
     shift
     bash -c '
+        set -euo pipefail
+        source "$1"; shift
+        source "$1"; shift
+        fn="$1"; shift
+        "$fn" "$@"
+    ' _ "$INSTALLER" "$HELPERS" "$fn" "$@"
+}
+
+# call_fn_root [ENV=val ...] -- fn_name args... -- like call_fn, but runs
+# under "${SUDO[@]}" for root-gated cases (real loop devices: blkid on a
+# device node, sfdisk/mkfs.ext4/mount against it). Any leading NAME=value
+# tokens are passed to `env` INSIDE the sudo'd command line (not exported
+# from this already-running, non-root shell), so a fixture env var like
+# SNOSI_INSTALL_LSBLK_JSON reaches the elevated subprocess regardless of the
+# host's sudoers env_keep/env_reset policy.
+call_fn_root() {
+    local -a env_args=()
+    while [[ "$1" == *=* ]]; do
+        env_args+=("$1")
+        shift
+    done
+    local fn="$1"
+    shift
+    "${SUDO[@]}" env "${env_args[@]}" bash -c '
         set -euo pipefail
         source "$1"; shift
         source "$1"; shift
@@ -111,6 +156,7 @@ BASE_ARGS=(--non-interactive --product cayo-ab --disk /dev/fake-disk-for-test
     --confirm fake-serial --recovery-key-file "$WORK_DIR/recovery.key"
     --acknowledge-recovery-saved --mok-password-file "$WORK_DIR/mok-password.txt")
 echo hunter2 >"$WORK_DIR/mok-password.txt"
+chmod 600 "$WORK_DIR/mok-password.txt"
 
 run_installer() { # args... -- sets RUN_OUT, RUN_RC
     set +e
@@ -199,12 +245,42 @@ assert_true "restage-mok with missing password file: exits non-zero" bash -c "[[
 assert_contains "restage-mok: missing password file error" "$RUN_OUT" "not found"
 
 : >"$WORK_DIR/empty-mok-password.txt"
+chmod 600 "$WORK_DIR/empty-mok-password.txt"
 run_installer --restage-mok --non-interactive --mok-password-file "$WORK_DIR/empty-mok-password.txt"
 assert_true "restage-mok with empty password file: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
 assert_contains "restage-mok: empty password file error" "$RUN_OUT" "is empty"
 
 run_installer --restage-mok --non-interactive --mok-password-file "$WORK_DIR/mok-password.txt"
 assert_contains "restage-mok with a valid password file proceeds to the root check" "$RUN_OUT" "must run as root"
+
+# --mok-password-file permission check: refuse group/world-readable secret
+# input files (finding 4) -- checked before the file is ever read.
+printf 'hunter2\n' >"$WORK_DIR/world-readable-mok-password.txt"
+chmod 644 "$WORK_DIR/world-readable-mok-password.txt"
+run_installer --restage-mok --non-interactive --mok-password-file "$WORK_DIR/world-readable-mok-password.txt"
+assert_true "restage-mok with world-readable password file: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
+assert_contains "restage-mok: world-readable password file is refused" "$RUN_OUT" "group- or world-readable"
+
+printf 'hunter2\n' >"$WORK_DIR/group-readable-mok-password.txt"
+chmod 640 "$WORK_DIR/group-readable-mok-password.txt"
+run_installer --restage-mok --non-interactive --mok-password-file "$WORK_DIR/group-readable-mok-password.txt"
+assert_true "restage-mok with group-readable password file: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
+assert_contains "restage-mok: group-readable password file is refused" "$RUN_OUT" "group- or world-readable"
+
+# check_secret_file_perms() itself, unit-tested directly. (main()'s own call
+# site is deep past need_root()/network fetch/disk resolution, so it is not
+# reachable from this non-root, no-network unit test the way restage_mok()'s
+# call site is -- restage_mok() validates arguments, including this check,
+# BEFORE need_root(), by the same design the header comment calls out for
+# --mok-password-file existence/emptiness above.)
+assert_true "check_secret_file_perms: accepts mode 600" \
+    call_fn check_secret_file_perms "$WORK_DIR/mok-password.txt" "--mok-password-file"
+assert_false "check_secret_file_perms: rejects mode 644" \
+    call_fn check_secret_file_perms "$WORK_DIR/world-readable-mok-password.txt" "--mok-password-file"
+assert_false "check_secret_file_perms: rejects mode 640" \
+    call_fn check_secret_file_perms "$WORK_DIR/group-readable-mok-password.txt" "--mok-password-file"
+assert_false "check_secret_file_perms: a missing file fails closed" \
+    call_fn check_secret_file_perms "$WORK_DIR/does-not-exist.txt" "--mok-password-file"
 
 # ===========================================================================
 # 4. Name derivation: minimum_disk_bytes, human_bytes
@@ -324,6 +400,109 @@ resolved="$(call_fn t_resolve_target_disk "$fixture_file" 0 /dev/sda 1)"
 assert_contains "--allow-file target resolves without touching lsblk" "$resolved" "$fixture_file"
 
 unset SNOSI_INSTALL_LSBLK_JSON
+
+# ===========================================================================
+# 6b. Own-boot-medium detection on an initramfs/ISO boot (finding 1): on the
+#     real network-installer ISO, / is the kernel's own initramfs (no
+#     block-device root at all -- see the installer's self_boot_device()
+#     comment), so the OLD self_boot_device()-only refusal silently never
+#     fired. disk_is_installer_medium() instead probes the CANDIDATE disk's
+#     own ISO9660 LABEL against build-iso.sh's volid pattern
+#     ("SNOSI_INSTALLER_<14-digit version>") via real blkid against a real
+#     loop-mounted ISO9660 fixture -- root-gated (losetup + blkid need
+#     device-node access), graceful skip otherwise.
+# ===========================================================================
+echo "=== own-boot-medium detection: real ISO9660 label (root-gated) ==="
+
+if [[ $HAVE_ROOT -eq 0 ]]; then
+    for t in "disk_is_installer_medium: matching ISO9660 label is detected" \
+             "disk_is_installer_medium: non-matching ISO9660 label is NOT detected" \
+             "disk_is_installer_medium: matching LABEL on a non-ISO9660 filesystem is NOT detected" \
+             "disk_refusal_reason integration: real ISO9660-labeled candidate is refused as own boot medium"; do
+        echo "ok - $t # SKIP no root/passwordless sudo available"
+        PASS=$((PASS + 1))
+    done
+elif ! command -v xorriso >/dev/null 2>&1 && ! command -v mkisofs >/dev/null 2>&1 && ! command -v genisoimage >/dev/null 2>&1; then
+    for t in "disk_is_installer_medium: matching ISO9660 label is detected" \
+             "disk_is_installer_medium: non-matching ISO9660 label is NOT detected" \
+             "disk_is_installer_medium: matching LABEL on a non-ISO9660 filesystem is NOT detected" \
+             "disk_refusal_reason integration: real ISO9660-labeled candidate is refused as own boot medium"; do
+        echo "ok - $t # SKIP no ISO9660 filesystem tool (xorriso/mkisofs/genisoimage) available"
+        PASS=$((PASS + 1))
+    done
+else
+    make_iso_fixture() { # out_path volid
+        local out_path="$1" volid="$2" content_dir
+        content_dir="$(mktemp -d /var/tmp/snosi-install-test-isocontent.XXXXXX)"
+        printf 'snosi installer content marker\n' >"$content_dir/marker.txt"
+        if command -v xorriso >/dev/null 2>&1; then
+            xorriso -as mkisofs -quiet -volid "$volid" -o "$out_path" "$content_dir" >/dev/null 2>&1
+        elif command -v mkisofs >/dev/null 2>&1; then
+            mkisofs -quiet -volid "$volid" -o "$out_path" "$content_dir" >/dev/null 2>&1
+        else
+            genisoimage -quiet -volid "$volid" -o "$out_path" "$content_dir" >/dev/null 2>&1
+        fi
+        rm -rf "$content_dir"
+    }
+
+    # Matches build-iso.sh's own volid format exactly: "SNOSI_INSTALLER_" (16
+    # chars) + a 14-digit version = 30 d-characters (well within the
+    # ISO9660 32-char primary volume-identifier limit).
+    MATCHING_VOLID="SNOSI_INSTALLER_20260714000000"
+    ISO_MATCH="$WORK_DIR/iso-match.iso"
+    make_iso_fixture "$ISO_MATCH" "$MATCHING_VOLID"
+    ISO_MATCH_LOOP="$("${SUDO[@]}" losetup --find --show "$ISO_MATCH")"
+    ROOT_LOOP_DEVICES+=("$ISO_MATCH_LOOP")
+
+    real_label="$("${SUDO[@]}" blkid -o value -s LABEL "$ISO_MATCH_LOOP" 2>/dev/null || true)"
+    assert_eq "ISO9660 fixture volid round-trips through blkid as LABEL" "$real_label" "$MATCHING_VOLID"
+
+    assert_true "disk_is_installer_medium: matching ISO9660 label is detected" \
+        call_fn_root disk_is_installer_medium "$ISO_MATCH_LOOP"
+
+    # Integration: the same fixture, surfaced through disk_refusal_reason()
+    # via resolve_target_disk()/t_resolve_target_disk(), exactly the path
+    # main() actually drives (a loop device is lsblk `type: loop`, not
+    # `disk`, so a fixture JSON is required to present it as a disk
+    # candidate the way a real installer-medium USB/CD would be).
+    FIXTURE_LSBLK_ISO="$WORK_DIR/lsblk-iso-medium.json"
+    jq -n --arg path "$ISO_MATCH_LOOP" '{
+        blockdevices: [{
+            name: ($path | ltrimstr("/dev/")), path: $path, type: "disk",
+            model: "IsoFixture", serial: "ISOFIX01",
+            size: 999999999999, tran: "usb", mountpoint: null, mountpoints: [null]
+        }]
+    }' >"$FIXTURE_LSBLK_ISO"
+
+    resolved_iso="$(call_fn_root "SNOSI_INSTALL_LSBLK_JSON=$FIXTURE_LSBLK_ISO" \
+        t_resolve_target_disk "$ISO_MATCH_LOOP" 1 "" 0)"
+    assert_contains "disk_refusal_reason integration: real ISO9660-labeled candidate is refused as own boot medium" \
+        "$resolved_iso" "own boot medium"
+    assert_contains "disk_refusal_reason integration: refusal names the ISO9660 volume" \
+        "$resolved_iso" "ISO9660"
+
+    # Negative: a genuine ISO9660 filesystem, but a label that does NOT
+    # match the pattern (e.g. some unrelated live-media volume) must NOT be
+    # refused as this installer's own medium.
+    ISO_OTHER="$WORK_DIR/iso-other.iso"
+    make_iso_fixture "$ISO_OTHER" "SOME_OTHER_LIVE_MEDIA"
+    ISO_OTHER_LOOP="$("${SUDO[@]}" losetup --find --show "$ISO_OTHER")"
+    ROOT_LOOP_DEVICES+=("$ISO_OTHER_LOOP")
+    assert_false "disk_is_installer_medium: non-matching ISO9660 label is NOT detected" \
+        call_fn_root disk_is_installer_medium "$ISO_OTHER_LOOP"
+
+    # Negative: a non-ISO9660 filesystem must NOT be detected even if its
+    # own label happens to collide -- the TYPE check must be enforced, not
+    # just LABEL. (ext4 labels are capped at 16 bytes, so this uses a
+    # shorter but still-plausible-looking prefix.)
+    EXT4_COLLIDE="$WORK_DIR/ext4-label-collide.img"
+    truncate -s 16M "$EXT4_COLLIDE"
+    "${SUDO[@]}" mkfs.ext4 -F -L "SNOSI_INST" "$EXT4_COLLIDE" >/dev/null 2>&1
+    EXT4_COLLIDE_LOOP="$("${SUDO[@]}" losetup --find --show "$EXT4_COLLIDE")"
+    ROOT_LOOP_DEVICES+=("$EXT4_COLLIDE_LOOP")
+    assert_false "disk_is_installer_medium: matching LABEL on a non-ISO9660 filesystem is NOT detected" \
+        call_fn_root disk_is_installer_medium "$EXT4_COLLIDE_LOOP"
+fi
 
 # ===========================================================================
 # 7. Index parsing/verification (good/tampered signed SHA256SUMS)
@@ -450,5 +629,143 @@ assert_false "stream_download_verify: a failed fetch (404) fails" \
     call_fn stream_download_verify "http://127.0.0.1:$PORT/os/native/v1/cayo/x86-64/does-not-exist.xz" "$GOOD_SHA256" "$TARGET_404"
 assert_eq "stream_download_verify: failed-fetch also wipes the target" \
     "$(stat -c %s "$TARGET_404")" "0"
+
+# ===========================================================================
+# 9. validate_disk_image_layout (finding 2's wiring target): plain-file GPT
+#    fixtures (sfdisk script mode, no root/loop device needed -- same
+#    technique test/native-publish-test.sh's build_fixture uses) exercising
+#    the accept/reject shape this function is now called with as a
+#    POST-WRITE check in main(), before relocate_and_grow_var().
+# ===========================================================================
+echo "=== validate_disk_image_layout ==="
+
+make_gpt_fixture() { # out_path partition-scripts...
+    local out_path="$1"
+    shift
+    truncate -s 8M "$out_path"
+    {
+        echo "label: gpt"
+        echo "unit: sectors"
+        echo ""
+        printf '%s\n' "$@"
+    } | sfdisk "$out_path" >/dev/null
+}
+
+VALID_LAYOUT="$WORK_DIR/valid-layout.img"
+make_gpt_fixture "$VALID_LAYOUT" \
+    'start=2048, size=2048, name="esp"' \
+    'start=4096, size=2048, name="_empty"' \
+    'start=6144, size=2048, name="_empty"' \
+    'start=8192, size=2048, name="var"'
+assert_true "validate_disk_image_layout: accepts esp/_empty/_empty/var" \
+    call_fn validate_disk_image_layout "$VALID_LAYOUT"
+
+MISSING_VAR="$WORK_DIR/missing-var-layout.img"
+make_gpt_fixture "$MISSING_VAR" \
+    'start=2048, size=2048, name="esp"' \
+    'start=4096, size=2048, name="_empty"' \
+    'start=6144, size=2048, name="_empty"'
+assert_false "validate_disk_image_layout: rejects a missing var label" \
+    call_fn validate_disk_image_layout "$MISSING_VAR"
+missing_var_out="$(call_fn validate_disk_image_layout "$MISSING_VAR" 2>&1 || true)"
+assert_contains "validate_disk_image_layout: missing-label error names it" "$missing_var_out" "missing required GPT label: var"
+
+ONE_EMPTY="$WORK_DIR/one-empty-layout.img"
+make_gpt_fixture "$ONE_EMPTY" \
+    'start=2048, size=2048, name="esp"' \
+    'start=4096, size=2048, name="_empty"' \
+    'start=6144, size=2048, name="var"'
+assert_false "validate_disk_image_layout: rejects only one empty A/B slot" \
+    call_fn validate_disk_image_layout "$ONE_EMPTY"
+one_empty_out="$(call_fn validate_disk_image_layout "$ONE_EMPTY" 2>&1 || true)"
+assert_contains "validate_disk_image_layout: single-empty-slot error is specific" "$one_empty_out" "two empty A/B slots"
+
+# ===========================================================================
+# 10. relocate_and_grow_var real coverage (finding 3): a real loop-device GPT
+#     fixture mirroring what stream_download_verify leaves behind -- a
+#     downloaded image's GPT (dummy1/dummy2/var, var pre-formatted ext4,
+#     matching a real image's shape) written onto a LARGER target device, so
+#     the disk's own backup GPT header is stale (still at the smaller
+#     image's end) exactly the way dd-ing a smaller image onto a bigger disk
+#     leaves it. Asserts: sfdisk --verify goes from "1 error detected" (the
+#     stale backup GPT) to clean, the var partition grows to fill the extra
+#     capacity, and the ext4 filesystem is actually resized to match (not
+#     just the partition table). Root-gated (losetup/mkfs.ext4/sfdisk
+#     against a real block device), graceful skip otherwise.
+# ===========================================================================
+echo "=== relocate_and_grow_var (root-gated) ==="
+
+if [[ $HAVE_ROOT -eq 0 ]]; then
+    echo "ok - relocate_and_grow_var: relocates the backup GPT and grows var+ext4 # SKIP no root/passwordless sudo available"
+    PASS=$((PASS + 1))
+else
+    RELOCATE_IMG="$WORK_DIR/relocate-fixture.img"
+    IMAGE_BYTES=$((32 * 1024 * 1024))
+    TARGET_BYTES=$((64 * 1024 * 1024))
+
+    truncate -s "${IMAGE_BYTES}" "$RELOCATE_IMG"
+    sfdisk "$RELOCATE_IMG" >/dev/null <<'SFDISK_EOF'
+label: gpt
+unit: sectors
+
+start=2048, size=4096, name="dummy1"
+start=6144, size=4096, name="dummy2"
+start=10240, size=+, name="var"
+SFDISK_EOF
+
+    RELOCATE_LOOP="$("${SUDO[@]}" losetup --find --show --partscan "$RELOCATE_IMG")"
+    ROOT_LOOP_DEVICES+=("$RELOCATE_LOOP")
+    "${SUDO[@]}" udevadm settle
+    RELOCATE_VAR_PART="${RELOCATE_LOOP}p3"
+    "${SUDO[@]}" mkfs.ext4 -F -L var "$RELOCATE_VAR_PART" >/dev/null 2>&1
+
+    var_size_before="$("${SUDO[@]}" blockdev --getsize64 "$RELOCATE_VAR_PART")"
+
+    # Grow the backing file + loop device to simulate a smaller image
+    # written onto a larger target disk (main()'s own target_size >
+    # image_size case).
+    truncate -s "${TARGET_BYTES}" "$RELOCATE_IMG"
+    "${SUDO[@]}" losetup --set-capacity "$RELOCATE_LOOP"
+    "${SUDO[@]}" blockdev --rereadpt "$RELOCATE_LOOP" 2>/dev/null || true
+    "${SUDO[@]}" udevadm settle
+
+    verify_before="$("${SUDO[@]}" sfdisk --verify "$RELOCATE_LOOP" 2>&1 || true)"
+    assert_contains "relocate_and_grow_var fixture: stale backup GPT is detected before relocation" \
+        "$verify_before" "backup GPT table is not on the end"
+
+    # relocate_and_grow_var's own dependencies (sfdisk -N, resize2fs, e2fsck)
+    # print their own progress information to stdout, same as they would
+    # under main()'s real, interactive "Growing /var partition..." step --
+    # the function's own var-partition-path output (its documented contract)
+    # is always the LAST line.
+    relocate_out="$(call_fn_root relocate_and_grow_var "$RELOCATE_LOOP" "$IMAGE_BYTES" "$TARGET_BYTES" | tail -n1)"
+    assert_eq "relocate_and_grow_var: prints the var partition device" "$relocate_out" "$RELOCATE_VAR_PART"
+
+    verify_after="$("${SUDO[@]}" sfdisk --verify "$RELOCATE_LOOP" 2>&1 || true)"
+    assert_contains "relocate_and_grow_var: backup GPT is relocated (sfdisk --verify is clean)" \
+        "$verify_after" "No errors detected"
+
+    var_size_after="$("${SUDO[@]}" blockdev --getsize64 "$RELOCATE_VAR_PART")"
+    assert_true "relocate_and_grow_var: var partition grew" \
+        bash -c "[[ $var_size_after -gt $var_size_before ]]"
+
+    fs_block_info="$("${SUDO[@]}" dumpe2fs -h "$RELOCATE_VAR_PART" 2>/dev/null || true)"
+    fs_block_count="$(awk -F': *' '/^Block count:/{print $2}' <<<"$fs_block_info")"
+    fs_block_size="$(awk -F': *' '/^Block size:/{print $2}' <<<"$fs_block_info")"
+    fs_bytes=$(( fs_block_count * fs_block_size ))
+    # The resized ext4 filesystem must be substantially larger than the
+    # PRE-grow var size (proving resize2fs actually ran, not just the
+    # partition table) and no bigger than the grown partition itself, within
+    # a generous block-group-alignment tolerance (ext4 rounds the usable
+    # filesystem size down to a whole block group; resize2fs does not use
+    # every last byte of the new partition) -- i.e. within 4MiB, one typical
+    # block-group's worth, not the exact byte count.
+    assert_true "relocate_and_grow_var: ext4 filesystem grew past its pre-relocation size" \
+        bash -c "(( $fs_bytes > $var_size_before ))"
+    assert_true "relocate_and_grow_var: ext4 filesystem itself was resized to match the grown partition" \
+        bash -c "(( $var_size_after - $fs_bytes < 4 * 1024 * 1024 && $var_size_after - $fs_bytes >= 0 ))"
+
+    "${SUDO[@]}" losetup -d "$RELOCATE_LOOP" 2>/dev/null || true
+fi
 
 print_summary
