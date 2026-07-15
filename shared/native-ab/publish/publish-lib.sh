@@ -266,16 +266,24 @@ local_range_sha256() { # file start end
 # ---------------------------------------------------------------------------
 
 # read_publication_info prepared-dir -- sets PUB_PRODUCT, PUB_CHANNEL,
-# PUB_VERSION from prepared-dir/publication-info.json, for use by the
-# sourcing script (not read within this library itself, hence the disable
-# directive immediately below).
+# PUB_VERSION, PUB_DEST_PATH from prepared-dir/publication-info.json, for use
+# by the sourcing script (not read within this library itself, hence the
+# disable directive immediately below).
+#
+# PUB_DEST_PATH is the DEST-relative directory this publication run belongs
+# under (e.g. "os/native/v1/cayo/x86-64" or "isos/native/v1", docs/native-ab-
+# contracts.md §5) -- both prepare-native-publication.sh (OS artifacts) and
+# prepare-iso-publication.sh (installer ISO) write it explicitly, so
+# publish-candidate.sh/promote.sh never have to special-case which kind of
+# artifact they are handling: they just publish under PUB_DEST_PATH.
 # shellcheck disable=SC2034
 read_publication_info() { # prepared-dir
     local info="$1/publication-info.json"
-    [[ -f "$info" ]] || { echo "Error: publication-info.json not found in $1 (run prepare-native-publication.sh first)" >&2; exit 1; }
+    [[ -f "$info" ]] || { echo "Error: publication-info.json not found in $1 (run prepare-native-publication.sh or prepare-iso-publication.sh first)" >&2; exit 1; }
     PUB_PRODUCT="$(jq -er '.product' "$info")"
     PUB_CHANNEL="$(jq -er '.channel' "$info")"
     PUB_VERSION="$(jq -er '.version' "$info")"
+    PUB_DEST_PATH="$(jq -er '.dest_path' "$info")"
 }
 
 # candidate_object_names prepared-dir -- one filename per line, read from

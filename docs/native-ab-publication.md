@@ -12,6 +12,7 @@ The pipeline scripts live in `shared/native-ab/publish/`:
 | Script | Purpose |
 |---|---|
 | `prepare-native-publication.sh` | Turns one mkosi build's outputs into the frozen public artifact names + unsigned `SHA256SUMS` + `publication-info.json`. Phase 3. |
+| `prepare-iso-publication.sh` | Sibling of the above for the network-installer ISO (Task 8.2): stages `shared/native-installer/tools/build-iso.sh`'s already-version-stamped-and-named output plus an unsigned `SHA256SUMS` + `publication-info.json` whose `dest_path` is the flat `isos/native/v1` namespace (no per-product/x86-64 subpath). |
 | `generate-sbom.sh` | Generates `<channel>_<version>.sbom.spdx.json` directly from the mkosi package manifest. Called by `prepare-native-publication.sh`; not normally invoked standalone. |
 | `publish-candidate.sh` | Uploads immutable versioned objects to a per-version candidate staging path. |
 | `verify-remote.sh` | Independently re-verifies every candidate object over HTTP (size, full SHA-256, range GETs) before anything is promoted. |
@@ -210,6 +211,53 @@ requested version. After withdrawal, re-run the purge step manually (the
 same Cloudflare-purge wrapper, or `withdraw.sh --purge-hook <cmd>`) and
 confirm the previous version is what a fresh `verify-remote.sh`-style check
 sees.
+
+## Installer ISO publication
+
+The network-installer ISO (`docs/native-ab-contracts.md` "Installer ISO",
+§5's flat `isos/native/v1/` namespace -- no per-product/x86-64 subpath, since
+there is exactly one installer, not one per product) goes through the
+*same* candidate -> verify -> promote -> withdraw pipeline as every OS
+product, just staged by `prepare-iso-publication.sh` instead of
+`prepare-native-publication.sh`:
+
+```console
+# Build + assemble (see CLAUDE.md "Native A/B Prototype" / `just
+# native-installer-iso`): produces output/snosi-native-installer_<version>_
+# x86-64.iso, already version-stamped and correctly named by
+# shared/native-installer/tools/build-iso.sh itself.
+$ VERSION=$(date -u +%Y%m%d%H%M%S)
+$ shared/native-installer/tools/build-iso.sh output/native-installer output "$VERSION"
+
+$ shared/native-ab/publish/prepare-iso-publication.sh \
+    "output/snosi-native-installer_${VERSION}_x86-64.iso" "$VERSION" /var/tmp/iso-publish-out
+$ shared/native-ab/publish/publish-candidate.sh /var/tmp/iso-publish-out rclone:r2:frostyard-repository
+$ shared/native-ab/publish/verify-remote.sh /var/tmp/iso-publish-out \
+    https://repository.frostyard.org/isos/native/v1
+$ shared/native-ab/publish/promote.sh --signing-key .snosi-private/os-update-signing.key \
+    /var/tmp/iso-publish-out https://repository.frostyard.org/isos/native/v1 \
+    rclone:r2:frostyard-repository
+```
+
+`publication-info.json`'s `product`/`channel` are both
+`snosi-native-installer` (matching the frozen object name's literal prefix,
+`snosi-native-installer_<version>_x86-64.iso`) and its `dest_path` is
+`isos/native/v1` -- `publish-candidate.sh`/`promote.sh` read that field
+(`PUB_DEST_PATH`, `shared/native-ab/publish/publish-lib.sh`) instead of
+always deriving `os/native/v1/<product>/x86-64`, so no OS-artifact behavior
+changed to add this. `withdraw.sh` has no `publication-info.json` to read
+from (it takes `<product> <version> <dest>` directly, for incident response
+without a prepared directory on hand), so ISO withdrawal passes the same
+path explicitly:
+
+```console
+$ shared/native-ab/publish/withdraw.sh --dest-path isos/native/v1 \
+    snosi-native-installer 20260714150036 rclone:r2:frostyard-repository
+```
+
+`test/native-publication-pipeline-test.sh`'s "ISO-shaped fixture leg"
+exercises this whole flow locally (tiny fixture files standing in for a real
+ISO) as part of the same fast, non-root, per-PR check.
 
 ## Retention policy application
 

@@ -32,7 +32,7 @@
 #      configuration.
 #
 # Usage: sudo ./test/native-installer-iso-test.sh
-# Env overrides: SSH_PORT (2233), SSH_TIMEOUT (240), VM_MEMORY (2048),
+# Env overrides: SSH_PORT (2233), SSH_TIMEOUT (240), VM_MEMORY (4096),
 # VM_CPUS (2), SKIP_BUILD (0 -- set to 1 to reuse an existing
 # output/native-installer + output/native-installer.iso), KEEP_VM (0).
 set -euo pipefail
@@ -42,7 +42,21 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 : "${SSH_PORT:=2233}"
 : "${SSH_TIMEOUT:=240}"
-: "${VM_MEMORY:=2048}"
+# The installer's own hardware-firmware package block (Task 8.2, real
+# network installs on physical machines) roughly doubled the packed-rootfs-
+# as-initramfs size (~190MiB -> ~448MiB compressed / rootfs ~1.1GiB
+# uncompressed). The kernel unpacks that whole cpio archive into tmpfs
+# BEFORE any of this test's own SSH/console checks can run, and doing so
+# needs the compressed blob AND its fully unpacked tmpfs content
+# simultaneously resident -- root-caused live: at the old 2048MiB default
+# this failed with "Initramfs unpacking failed: write error" (tmpfs ENOSPC,
+# i.e. genuinely out of RAM) followed by a kernel panic ("Unable to mount
+# root fs on unknown-block(0,0)", since a no-/init initramfs falls back to
+# looking for a root= block device that does not exist here), well before
+# reaching userspace. 4096MiB leaves ample headroom over that ~1.5GiB peak;
+# real installer hardware is not expected to be memory-constrained the way
+# a minimal test fixture might be.
+: "${VM_MEMORY:=4096}"
 : "${VM_CPUS:=2}"
 : "${SKIP_BUILD:=0}"
 : "${KEEP_VM:=0}"
@@ -110,8 +124,9 @@ resolve_mkosi() {
 }
 
 ROOTFS="$ROOT_DIR/output/native-installer"
-ISO="$ROOT_DIR/output/native-installer.iso"
+OUTPUT_DIR="$ROOT_DIR/output"
 VERSION="$(date -u +%Y%m%d%H%M%S)"
+ISO="$OUTPUT_DIR/snosi-native-installer_${VERSION}_x86-64.iso"
 
 if [[ "$SKIP_BUILD" != 1 ]]; then
     resolve_mkosi
@@ -129,9 +144,25 @@ if [[ "$SKIP_BUILD" != 1 ]]; then
     install -m 0600 "$WORK_DIR/id_ed25519.pub" "$ROOTFS/root/.ssh/authorized_keys"
 
     echo "=== Assembling ISO ==="
-    "$ROOT_DIR/shared/native-installer/tools/build-iso.sh" "$ROOTFS" "$ISO" "$VERSION"
+    # build-iso.sh takes an OUTPUT DIRECTORY, not a file path: the exact
+    # filename is not caller-controlled (docs/native-ab-contracts.md
+    # "Installer ISO" -- snosi-native-installer_<version>_x86-64.iso), so a
+    # caller can never accidentally build/publish a mis-named artifact.
+    "$ROOT_DIR/shared/native-installer/tools/build-iso.sh" "$ROOTFS" "$OUTPUT_DIR" "$VERSION"
 else
-    echo "SKIP_BUILD=1: reusing existing $ROOTFS / $ISO"
+    # Reuse whatever was last built, whatever version it carries -- do NOT
+    # keep the fresh $VERSION computed above once a different ISO is
+    # substituted in, or every version-embedding assertion below (volid,
+    # /etc/snosi-installer-release, filename) would compare the reused
+    # ISO's real version against a version it was never built with.
+    [[ -f "$ISO" ]] || {
+        latest="$(ls -t "$OUTPUT_DIR"/snosi-native-installer_*_x86-64.iso 2>/dev/null | head -1 || true)"
+        [[ -n "$latest" ]] || { echo "Error: SKIP_BUILD=1 but no snosi-native-installer_*_x86-64.iso found under $OUTPUT_DIR" >&2; exit 1; }
+        ISO="$latest"
+        VERSION="$(basename "$ISO" | sed -E 's/^snosi-native-installer_([0-9]{14})_x86-64\.iso$/\1/')"
+        [[ "$VERSION" =~ ^[0-9]{14}$ ]] || { echo "Error: could not parse version from reused ISO filename: $ISO" >&2; exit 1; }
+    }
+    echo "SKIP_BUILD=1: reusing existing $ROOTFS / $ISO (version $VERSION)"
     ssh_keygen "$WORK_DIR"
     echo "NOTE: SKIP_BUILD reuses whatever SSH key (if any) is already baked into $ROOTFS/root/.ssh/authorized_keys"
 fi
@@ -145,9 +176,19 @@ fi
 echo ""
 echo "=== Structural checks ==="
 
+assert_eq() { # description actual expected
+    if [[ "$2" == "$3" ]]; then pass "$1"; else fail "$1" "expected '$3', got '$2'"; fi
+}
+assert_eq "ISO filename matches the frozen public name (docs/native-ab-contracts.md \"Installer ISO\")" \
+    "$(basename "$ISO")" "snosi-native-installer_${VERSION}_x86-64.iso"
+
 MNT_DIR="$WORK_DIR/esp-mnt"
 mkdir -p "$MNT_DIR"
 LOOP_DEV="$(losetup -P -f --show "$ISO")"
+
+iso_label="$(blkid -o value -s LABEL "$LOOP_DEV" 2>/dev/null || true)"
+assert_contains "ISO volume ID embeds the version" "$iso_label" "$VERSION"
+
 mount -o ro "${LOOP_DEV}p2" "$MNT_DIR"
 
 assert_true "shim present at EFI/BOOT/BOOTX64.EFI" test -f "$MNT_DIR/EFI/BOOT/BOOTX64.EFI"
@@ -195,16 +236,31 @@ fi
 initrd_list="$WORK_DIR/initrd.list"
 zstd -dc "$MNT_DIR/native-installer/initrd.img" 2>/dev/null | cpio -t --quiet 2>/dev/null > "$initrd_list" || true
 assert_contains "initrd contains gpgv (signed index verification)" "$(cat "$initrd_list")" "usr/bin/gpgv"
-assert_true "initrd contains cryptsetup" grep -q "cryptsetup$" "$initrd_list"
+# Anchored to the real binary path (both /sbin/cryptsetup and
+# /usr/sbin/cryptsetup exist in a merged-/usr tree, the latter being a real
+# file and the former a symlink to it) -- an earlier unanchored
+# "cryptsetup$" pattern would also silently pass against any unrelated path
+# that happened to end in that literal string.
+assert_true "initrd contains cryptsetup" grep -q "usr/sbin/cryptsetup$" "$initrd_list"
 assert_true "initrd contains mokutil" grep -q "usr/bin/mokutil$" "$initrd_list"
-assert_true "initrd contains the CLI installer placeholder" \
-    grep -q "usr/libexec/snosi-install-spike$" "$initrd_list"
+assert_true "initrd contains the product-aware CLI installer" \
+    grep -q "usr/libexec/snosi-install$" "$initrd_list"
 # cpio -t (no -v) lists names only, not symlink targets -- -tv is needed to
 # see "init -> usr/lib/systemd/systemd" the way ls -l/tar -tv would show it.
 initrd_verbose_list="$WORK_DIR/initrd.verbose.list"
 zstd -dc "$MNT_DIR/native-installer/initrd.img" 2>/dev/null | cpio -tv --quiet 2>/dev/null > "$initrd_verbose_list" || true
 assert_true "initrd's /init points at systemd (no switch_root design)" \
     grep -q "init -> usr/lib/systemd/systemd$" "$initrd_verbose_list"
+
+release_content="$(zstd -dc "$MNT_DIR/native-installer/initrd.img" 2>/dev/null | \
+    cpio -i --quiet --to-stdout 'etc/snosi-installer-release' 2>/dev/null || true)"
+assert_contains "/etc/snosi-installer-release embeds the ISO version" \
+    "$release_content" "SNOSI_INSTALLER_VERSION=${VERSION}"
+
+assert_true "shipped update pubring present at /usr/lib/snosi/os-update-pubring.gpg" \
+    grep -q "usr/lib/snosi/os-update-pubring.gpg$" "$initrd_list"
+assert_true "shipped MOK dev certificate present at /usr/lib/snosi/mok-dev.crt" \
+    grep -q "usr/lib/snosi/mok-dev.crt$" "$initrd_list"
 
 umount "$MNT_DIR"
 losetup -d "$LOOP_DEV"

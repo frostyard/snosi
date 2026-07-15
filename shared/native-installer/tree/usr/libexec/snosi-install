@@ -1,0 +1,1056 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# snosi-install -- product-aware installer for the native A/B products
+# (cayo-ab, snow-ab, snowfield-ab), shipped on the network-installer ISO
+# (mkosi.profiles/native-installer, shared/native-installer/mkosi.conf).
+# Generalizes test/cayo-ab-install-spike.sh's validated GPT-relocate/
+# var-grow/LUKS logic (ported here, not sourced -- see the note above the
+# ported functions below) into the full flow from docs/plans/2026-07-14-
+# bootc-native-ab-coexistence-plan.md "First-Round CLI Installer":
+#
+#   1.  Start networking and synchronize time.        (handled by the ISO's
+#       own NetworkManager/systemd-timesyncd units, not this script)
+#   2.  Offer cayo-ab, snow-ab, or snowfield-ab.       --product
+#   3.  Fetch and verify the product's signed R2 index.
+#   4.  Display version, minimum disk size, destructive warning.
+#   5.  Enumerate disks by path, model, serial, size, transport.
+#   6.  Refuse mounted, ambiguous, installer-media, RAID-member, undersized.
+#   7.  Require typed confirmation containing the disk path or serial.
+#   8.  Download the .disk.raw.xz while verifying its signed checksum.
+#   9.  Stream the decompressed image to the selected disk.
+#   10. Reread the partition table and relocate the backup GPT.
+#   11. Grow only the final /var partition.
+#   12. Recreate /var as per-machine LUKS2 for production installs.
+#   13. Generate an external recovery passphrase.
+#   14. Require confirmation that the recovery passphrase was saved off-disk.
+#   15. Enroll TPM unlock with empty raw PCRs, signed PCR 11, pcrlock off.
+#   16. Prompt for a one-time MokManager password, validate it twice.
+#   17. Import the Snosi MOK certificate with that password.
+#   18. Record product/channel/version/architecture in persistent /var.
+#   19. Optionally install a root SSH key for initial diagnostics.
+#   20. Reboot into MokManager for one-time enrollment.
+#   21. (Continue into graphical first setup -- owned by the product image
+#        itself, not this installer.)
+#
+# Every prompt above has a matching flag; --non-interactive requires all of
+# them to be given up front (validate_non_interactive() below) instead of
+# silently defaulting anything security-relevant.
+#
+# `snosi-install --restage-mok` is the plan's documented recovery path for a
+# skipped/mistyped/timed-out MokManager enrollment: it re-stages the same
+# certificate import request with a fresh one-time password, from the ISO,
+# against an already-installed disk (no reinstall).
+#
+# Streamed download/verify design choice (step 8-9): this streams the
+# decompressed image directly onto the target disk while independently
+# hashing the exact COMPRESSED bytes received (the signed index's sha256
+# covers the .xz object), rather than downloading to a scratch file,
+# verifying, and only then writing to disk. `.disk.raw.xz` objects are
+# multiple GiB (docs/native-ab-capacities.md); requiring 2x that in scratch
+# space before ever touching the target disk is not something every
+# install-target machine can afford. The tradeoff: on ANY failure (network
+# error, truncated/corrupt xz stream, or a checksum mismatch discovered only
+# after the write completes) the partition table on the target is wiped
+# before this exits non-zero, so a partially- or incorrectly-written image
+# is never left looking installable; it is not possible to detect a bad
+# transfer before the first byte lands on disk. See stream_download_verify().
+#
+# Test hooks (never present on a real target machine):
+#   SNOSI_INSTALL_LSBLK_JSON   -- path to a fixture `lsblk -b -J -O` JSON
+#                                 document, used instead of actually running
+#                                 lsblk (disk enumeration/refusal tests).
+#   SNOSI_INSTALL_SELF_DEVICE  -- fakes the "installer's own boot medium"
+#                                 device path instead of resolving it live.
+# --allow-file lets the install target be a regular file instead of a whole
+# block device (test-only, mirrors test/cayo-ab-install-spike.sh's own
+# --allow-file; MOK/TPM enrollment both refuse to run against a --allow-file
+# target, matching the spike's existing safety boundary).
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+PUBRING_DEFAULT=/usr/lib/snosi/os-update-pubring.gpg
+MOK_CERT_DEFAULT=/usr/lib/snosi/mok-dev.crt
+ORIGIN_DEFAULT=https://repository.frostyard.org
+VALID_PRODUCTS=(cayo-ab snow-ab snowfield-ab)
+
+# Set at top level (not only inside main()) so PUBRING is always defined --
+# including when this script is `source`d for unit testing (test/snosi-
+# install-test.sh) and a function like fetch_verified_index() that reads
+# $PUBRING is called directly without main() ever running.
+PUBRING="${SNOSI_INSTALL_PUBRING:-$PUBRING_DEFAULT}"
+
+# ---------------------------------------------------------------------------
+# Small helpers
+# ---------------------------------------------------------------------------
+log()  { printf '%s\n' "$*"; }
+warn() { printf 'Warning: %s\n' "$*" >&2; }
+die()  { printf 'Error: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+    cat >&2 <<'EOF'
+Usage:
+  snosi-install [OPTIONS]
+  snosi-install --restage-mok [OPTIONS]
+  snosi-install --help
+
+Install mode options:
+  --product {cayo-ab|snow-ab|snowfield-ab}  Product/channel to install
+  --origin URL                 R2 origin (default: https://repository.frostyard.org)
+  --disk PATH                  Target disk (block device path, or a regular
+                                file with --allow-file)
+  --confirm VALUE              Non-interactive: disk path or serial; must
+                                match the resolved --disk target
+  --encrypt-var                 Encrypt /var with LUKS2 (default)
+  --insecure-raw-var            Skip /var encryption (DANGEROUS, dev/test only)
+  --recovery-key-file PATH      Where to write the generated recovery passphrase
+  --acknowledge-recovery-saved  Non-interactive: confirms the recovery
+                                passphrase was saved off-disk
+  --no-tpm                      Skip TPM enrollment
+  --mok-password-file PATH      Non-interactive: one-time MokManager password
+  --skip-mok                    Skip MOK enrollment (recover later with
+                                --restage-mok)
+  --mok-cert PATH               MOK certificate to enroll
+                                (default: /usr/lib/snosi/mok-dev.crt)
+  --ssh-authorized-key PATH     Install a root SSH public key for initial
+                                diagnostics
+  --reboot                      Reboot when finished (never automatic
+                                otherwise, in either mode)
+  --non-interactive             Fully non-interactive; requires every
+                                security-relevant flag above
+  --allow-file                  TEST ONLY: install target may be a regular
+                                file instead of a whole block device
+  -h, --help                    Show this help
+
+Restage-mok mode options:
+  --restage-mok                 Recover a skipped/mistyped/timed-out MOK
+                                enrollment on an already-installed disk
+  --disk PATH                   Installed disk (optional; auto-detected if
+                                exactly one native A/B install is found)
+  --mok-password-file PATH      Non-interactive: fresh one-time password
+  --mok-cert PATH               MOK certificate to enroll
+  --reboot                      Reboot when finished
+  --non-interactive             Fully non-interactive; requires
+                                --mok-password-file
+EOF
+    exit 2
+}
+
+need_root() {
+    [[ $EUID -eq 0 ]] || die "must run as root"
+}
+
+confirm_yes_no() { # prompt -- returns 0 for yes, 1 for no
+    local prompt="$1" reply
+    while true; do
+        read -r -p "$prompt [y/N] " reply || return 1
+        case "$reply" in
+            [Yy]|[Yy][Ee][Ss]) return 0 ;;
+            [Nn]|[Nn][Oo]|"") return 1 ;;
+            *) echo "Please answer y or n." >&2 ;;
+        esac
+    done
+}
+
+# ---------------------------------------------------------------------------
+# Index fetch + verification (plan steps 3-4)
+# ---------------------------------------------------------------------------
+
+# fetch_verified_index origin channel workdir -- downloads SHA256SUMS +
+# SHA256SUMS.gpg from <origin>/os/native/v1/<product>/x86-64/ (product =
+# channel with the trailing "-ab" stripped, docs/native-ab-contracts.md §5)
+# into workdir, gpgv-verifies the signature against $PUBRING, and sets
+# INDEX_FILE to the verified SHA256SUMS path.
+fetch_verified_index() { # origin channel workdir
+    local origin="${1%/}" channel="$2" workdir="$3" product base
+    product="${channel%-ab}"
+    base="$origin/os/native/v1/$product/x86-64"
+
+    curl -fsSL --connect-timeout 10 --max-time 30 "$base/SHA256SUMS" -o "$workdir/SHA256SUMS" ||
+        die "could not fetch $base/SHA256SUMS"
+    curl -fsSL --connect-timeout 10 --max-time 30 "$base/SHA256SUMS.gpg" -o "$workdir/SHA256SUMS.gpg" ||
+        die "could not fetch $base/SHA256SUMS.gpg"
+    [[ -s "$PUBRING" ]] || die "update pubring not found or empty: $PUBRING"
+    gpgv --keyring "$PUBRING" "$workdir/SHA256SUMS.gpg" "$workdir/SHA256SUMS" ||
+        die "signature verification FAILED for $base/SHA256SUMS -- refusing to trust this index"
+
+    INDEX_FILE="$workdir/SHA256SUMS"
+    INDEX_BASE_URL="$base"
+}
+
+# index_object_sha256 index_file name -- prints the expected sha256 for
+# `name` from a verified SHA256SUMS, or nothing if absent.
+index_object_sha256() { # index_file name
+    awk -v n="$2" '$2 == n {print $1}' "$1"
+}
+
+# latest_channel_version index_file channel -- the numeric MAXIMUM 14-digit
+# version among this channel's manifest entries (line order in SHA256SUMS is
+# not guaranteed newest-first; same technique as snosi-update-status).
+latest_channel_version() { # index_file channel
+    grep -oE "${2}_[0-9]{14}\\.manifest\\.json" "$1" 2>/dev/null |
+        grep -oE '[0-9]{14}' | sort -n | tail -1
+}
+
+# ---------------------------------------------------------------------------
+# Minimum disk size (plan step 4)
+# ---------------------------------------------------------------------------
+
+# minimum_disk_bytes product -- ESP + 2x root slot (A/B) + 2x verity slot
+# (A/B) + minimum /var, from the frozen per-product capacity table
+# (docs/native-ab-contracts.md §12, shared/native-ab/channels/<product>/
+# mkosi.repart/*.conf). This is the documented-growth fallback the plan
+# allows ("computed from the disk image size + documented growth") when a
+# publication-info.json entry is not present in the index -- which is the
+# common case today, since shared/native-ab/publish/publish-candidate.sh
+# deliberately does not upload that file (it is a local pipeline record).
+# Exact, not a guess: these are the same fixed partition sizes systemd-repart
+# used to build the image, so the true minimum installable disk size for a
+# fresh install is deterministic from the product name alone.
+minimum_disk_bytes() { # product (bare, e.g. cayo)
+    local product="$1" esp=1073741824 verity=268435456 var_min=4294967296 root
+    case "$product" in
+        cayo) root=5368709120 ;;
+        snow|snowfield) root=8589934592 ;;
+        *) die "unknown product for capacity table: $product" ;;
+    esac
+    echo $(( esp + 2 * root + 2 * verity + var_min ))
+}
+
+human_bytes() { # bytes
+    awk -v b="$1" 'BEGIN {
+        split("B KiB MiB GiB TiB", units, " ")
+        i = 1
+        while (b >= 1024 && i < 5) { b /= 1024; i++ }
+        printf "%.1f %s", b, units[i]
+    }'
+}
+
+# ---------------------------------------------------------------------------
+# Disk enumeration + refusal (plan steps 5-6)
+# ---------------------------------------------------------------------------
+
+lsblk_json() {
+    if [[ -n "${SNOSI_INSTALL_LSBLK_JSON:-}" ]]; then
+        cat "$SNOSI_INSTALL_LSBLK_JSON"
+    else
+        lsblk -b -J -O
+    fi
+}
+
+self_boot_device() {
+    if [[ -n "${SNOSI_INSTALL_SELF_DEVICE:-}" ]]; then
+        printf '%s\n' "$SNOSI_INSTALL_SELF_DEVICE"
+        return 0
+    fi
+    local src pk
+    src="$(findmnt -no SOURCE / 2>/dev/null || true)"
+    [[ -n "$src" && -b "$src" ]] || { printf '\n'; return 0; }
+    pk="$(lsblk -ndo PKNAME "$src" 2>/dev/null || true)"
+    if [[ -n "$pk" ]]; then
+        printf '/dev/%s\n' "$pk"
+    else
+        printf '%s\n' "$src"
+    fi
+}
+
+# disk_refusal_reason disk_json min_bytes self_device -- prints a non-empty
+# human-readable refusal reason, or nothing if the disk is installable.
+disk_refusal_reason() { # disk_json min_bytes self_device
+    local disk_json="$1" min_bytes="$2" self_device="$3" path size
+
+    path="$(jq -r '.path // .name' <<<"$disk_json")"
+    size="$(jq -r '.size // 0' <<<"$disk_json")"
+
+    if [[ -n "$self_device" && "$self_device" == "$path" ]]; then
+        echo "is the installer's own boot medium ($path)"
+        return
+    fi
+
+    if jq -e '
+        [.. | objects | (.mountpoint // empty), (.mountpoints[]? // empty)]
+        | map(select(. != null and . != "")) | length > 0
+    ' <<<"$disk_json" >/dev/null 2>&1; then
+        echo "is mounted (this disk or one of its partitions is in use)"
+        return
+    fi
+
+    if jq -e '
+        [.. | objects | .fstype? // empty]
+        | map(select(. == "linux_raid_member" or . == "LVM2_member")) | length > 0
+    ' <<<"$disk_json" >/dev/null 2>&1; then
+        echo "is a member of an active RAID array or LVM volume group"
+        return
+    fi
+
+    if [[ "$size" =~ ^[0-9]+$ ]] && (( size < min_bytes )); then
+        echo "is too small ($(human_bytes "$size"), minimum $(human_bytes "$min_bytes"))"
+        return
+    fi
+
+    printf ''
+}
+
+# list_installable_disks min_bytes self_device -- prints one "path|model|
+# serial|size|transport|refusal-reason-or-empty" line per candidate disk
+# (plan step 5: "Enumerate disks by path, model, serial, size, transport").
+list_installable_disks() { # min_bytes self_device
+    local min_bytes="$1" self_device="$2" d reason
+    while IFS= read -r d; do
+        [[ -n "$d" ]] || continue
+        reason="$(disk_refusal_reason "$d" "$min_bytes" "$self_device")"
+        jq -r --arg reason "$reason" '
+            [(.path // .name), (.model // "unknown"), (.serial // "unknown"),
+             (.size | tostring), (.tran // "unknown"), $reason] | join("|")
+        ' <<<"$d"
+    done < <(lsblk_json | jq -c '.blockdevices[]? | select(.type == "disk")')
+}
+
+# resolve_target_disk selector min_bytes self_device allow_file -- resolves
+# selector (an exact disk path, or a serial number) to exactly one disk.
+# Sets RESOLVED_DISK_PATH/_MODEL/_SERIAL/_SIZE and, if the disk is refused,
+# RESOLVED_DISK_REFUSAL (empty when installable). "Ambiguous selector" (plan
+# step 6) is a selector matching more than one disk.
+resolve_target_disk() { # selector min_bytes self_device allow_file
+    local selector="$1" min_bytes="$2" self_device="$3" allow_file="$4"
+
+    if [[ "$allow_file" == 1 && -f "$selector" && ! -b "$selector" ]]; then
+        RESOLVED_DISK_PATH="$selector"
+        RESOLVED_DISK_MODEL=""
+        RESOLVED_DISK_SERIAL=""
+        RESOLVED_DISK_SIZE="$(stat -c %s "$selector")"
+        RESOLVED_DISK_REFUSAL=""
+        return 0
+    fi
+
+    local d matches=0 chosen="" p s
+    while IFS= read -r d; do
+        [[ -n "$d" ]] || continue
+        p="$(jq -r '.path // .name' <<<"$d")"
+        [[ "$p" == "$selector" ]] || continue
+        matches=$((matches + 1))
+        chosen="$d"
+    done < <(lsblk_json | jq -c '.blockdevices[]? | select(.type == "disk")')
+
+    if [[ "$matches" -eq 0 ]]; then
+        while IFS= read -r d; do
+            [[ -n "$d" ]] || continue
+            s="$(jq -r '.serial // empty' <<<"$d")"
+            [[ -n "$s" && "$s" == "$selector" ]] || continue
+            matches=$((matches + 1))
+            chosen="$d"
+        done < <(lsblk_json | jq -c '.blockdevices[]? | select(.type == "disk")')
+    fi
+
+    [[ "$matches" -ne 0 ]] || die "no disk matches '$selector' (checked path and serial)"
+    [[ "$matches" -eq 1 ]] || die "ambiguous disk selector '$selector': matches $matches disks"
+
+    RESOLVED_DISK_PATH="$(jq -r '.path // .name' <<<"$chosen")"
+    RESOLVED_DISK_MODEL="$(jq -r '.model // empty' <<<"$chosen")"
+    RESOLVED_DISK_SERIAL="$(jq -r '.serial // empty' <<<"$chosen")"
+    RESOLVED_DISK_SIZE="$(jq -r '.size // 0' <<<"$chosen")"
+    RESOLVED_DISK_REFUSAL="$(disk_refusal_reason "$chosen" "$min_bytes" "$self_device")"
+}
+
+# confirm_typed_matches provided path serial -- plan step 7: typed
+# confirmation containing the disk path OR serial.
+confirm_typed_matches() { # provided path serial
+    local provided="$1" path="$2" serial="$3"
+    [[ "$provided" == "$path" ]] && return 0
+    [[ -n "$serial" && "$provided" == "$serial" ]] && return 0
+    return 1
+}
+
+# ---------------------------------------------------------------------------
+# Streamed download + verify (plan steps 8-9)
+# ---------------------------------------------------------------------------
+
+wipe_target() { # target
+    local target="$1"
+    if [[ -b "$target" ]]; then
+        wipefs --all "$target" >/dev/null 2>&1 || true
+        blockdev --rereadpt "$target" 2>/dev/null || true
+    else
+        : >"$target"
+    fi
+}
+
+# stream_download_verify url expected_sha256 target -- see the header
+# comment's "Streamed download/verify design choice" for the full rationale.
+# On success, sets STREAM_DOWNLOAD_BYTES_WRITTEN to the exact number of
+# DEcompressed bytes written to target -- the true "image size" needed later
+# to decide whether the target disk has grow-worthy extra capacity
+# (relocate_and_grow_var()). This is NOT the same number as the target
+# disk's own size (which is normally >= the image and is what gets grown
+# INTO), and dd itself does not report it under `status=none`; a second tee
+# stage between xz and dd, mirroring the hash FIFO below, counts the
+# decompressed bytes independently via a backgrounded `wc -c`.
+stream_download_verify() { # url expected_sha256 target
+    local url="$1" expected_sha256="$2" target="$3"
+    local hash_fifo size_fifo hashfile sizefile hash_pid size_pid
+
+    hash_fifo="$(mktemp -u /var/tmp/snosi-install-verify.XXXXXX)"
+    mkfifo -m 600 "$hash_fifo"
+    hashfile="$(mktemp /var/tmp/snosi-install-verify.XXXXXX)"
+    sha256sum "$hash_fifo" >"$hashfile" &
+    hash_pid=$!
+
+    size_fifo="$(mktemp -u /var/tmp/snosi-install-verify.XXXXXX)"
+    mkfifo -m 600 "$size_fifo"
+    sizefile="$(mktemp /var/tmp/snosi-install-verify.XXXXXX)"
+    wc -c <"$size_fifo" >"$sizefile" &
+    size_pid=$!
+
+    local -a pipe_status
+    set +e
+    curl -fsSL --connect-timeout 10 --max-time 21600 "$url" \
+        | tee "$hash_fifo" \
+        | xz -dc \
+        | tee "$size_fifo" \
+        | dd of="$target" bs=16M iflag=fullblock conv=fsync status=none
+    pipe_status=("${PIPESTATUS[@]}")
+    set -e
+
+    wait "$hash_pid" || true
+    wait "$size_pid" || true
+    rm -f "$hash_fifo" "$size_fifo"
+    local actual_sha256
+    actual_sha256="$(awk '{print $1}' "$hashfile")"
+    rm -f "$hashfile"
+    STREAM_DOWNLOAD_BYTES_WRITTEN="$(awk '{print $1}' "$sizefile")"
+    rm -f "$sizefile"
+
+    local curl_rc=${pipe_status[0]:-1} xz_rc=${pipe_status[2]:-1} dd_rc=${pipe_status[4]:-1}
+    if [[ "$curl_rc" -ne 0 || "$xz_rc" -ne 0 || "$dd_rc" -ne 0 ]]; then
+        warn "download/decompress/write failed (curl=$curl_rc xz=$xz_rc dd=$dd_rc); wiping partition table on $target"
+        wipe_target "$target"
+        return 1
+    fi
+    if [[ -z "$actual_sha256" || "$actual_sha256" != "$expected_sha256" ]]; then
+        warn "checksum mismatch on $target: expected $expected_sha256, got ${actual_sha256:-<none>}; wiping partition table"
+        wipe_target "$target"
+        return 1
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Partition table relocate + var grow (plan steps 10-11)
+#
+# Ported (not sourced) from test/cayo-ab-install-spike.sh's already-validated
+# logic: that spike test script is kept unchanged so every existing harness
+# that drives it (test/native-ab-secure-boot-test.sh et al.) keeps working
+# byte-for-byte, and factoring a shared lib at this stage would touch a
+# script several already-green, multi-hour QEMU suites depend on for no
+# behavioral gain. If a real cross-cutting bug surfaces in this logic later,
+# fix both copies -- they are intentionally near-identical so a diff is easy.
+# ---------------------------------------------------------------------------
+
+validate_disk_image_layout() { # image_path
+    local image="$1" layout
+    layout="$(sfdisk --json "$image")"
+    local label
+    for label in esp _empty var; do
+        grep -Eq "\"name\"[[:space:]]*:[[:space:]]*\"$label\"" <<<"$layout" ||
+            die "image is missing required GPT label: $label"
+    done
+    [[ "$(grep -Ec '"name"[[:space:]]*:[[:space:]]*"_empty"' <<<"$layout")" -eq 2 ]] ||
+        die "image must contain two empty A/B slots"
+}
+
+relocate_and_grow_var() { # disk image_size target_size -- prints the var partition device
+    local disk="$1" image_size="$2" target_size="$3"
+
+    if (( target_size > image_size )); then
+        sfdisk --lock=yes --relocate gpt-bak-std "$disk"
+        blockdev --rereadpt "$disk"
+        udevadm settle
+    fi
+
+    local -a var_parts
+    mapfile -t var_parts < <(lsblk -nrpo NAME,PARTLABEL "$disk" | while read -r node label; do
+        [[ "$label" == var ]] && printf '%s\n' "$node"
+    done)
+    [[ ${#var_parts[@]} -eq 1 ]] || die "expected exactly one var partition, found ${#var_parts[@]}"
+    local var_part="${var_parts[0]}"
+    local var_number var_start last_number
+    var_number="$(lsblk -dnro PARTN "$var_part")"
+    var_start="$(lsblk -dnro START "$var_part")"
+    last_number="$(lsblk -nrpo PARTN,START,TYPE "$disk" | awk '$3 == "part"' | sort -k2,2n | tail -n 1 | awk '{ print $1 }')"
+    [[ "$var_number" == "$last_number" ]] || die "var is not the final physical partition"
+    [[ "$(blkid -o value -s TYPE "$var_part")" == ext4 ]] || die "var partition is not ext4"
+
+    if (( target_size > image_size )); then
+        local fsck_status=0
+        set +e
+        e2fsck -fp "$var_part"
+        fsck_status=$?
+        set -e
+        (( (fsck_status & ~1) == 0 )) || die "var filesystem check failed with status $fsck_status"
+
+        printf 'start=%s,size=+\n' "$var_start" | sfdisk --lock=yes --no-reread -N "$var_number" "$disk"
+        blockdev --rereadpt "$disk"
+        udevadm settle
+        [[ "$(lsblk -dnro START "$var_part")" == "$var_start" ]] || die "var partition start changed unexpectedly"
+        resize2fs "$var_part"
+    fi
+
+    printf '%s\n' "$var_part"
+}
+
+# ---------------------------------------------------------------------------
+# /var: LUKS2 (default) or raw (--insecure-raw-var), plan steps 12-14
+# ---------------------------------------------------------------------------
+
+VAR_MAPPER_ACTIVE=""
+
+close_var_mapper() {
+    if [[ -n "$VAR_MAPPER_ACTIVE" ]]; then
+        cryptsetup close "$VAR_MAPPER_ACTIVE" 2>/dev/null || true
+        VAR_MAPPER_ACTIVE=""
+    fi
+}
+
+# format_var var_part encrypt recovery_key_file -- prints the ext4-formatted
+# device (mapper path if encrypted, else var_part itself).
+format_var() { # var_part encrypt recovery_key_file
+    local var_part="$1" encrypt="$2" recovery_key_file="$3"
+
+    if [[ "$encrypt" != 1 ]]; then
+        mkfs.ext4 -F -L var "$var_part" >/dev/null
+        printf '%s\n' "$var_part"
+        return
+    fi
+
+    command -v cryptsetup >/dev/null || die "cryptsetup is required"
+    install -m 0600 /dev/null "$recovery_key_file"
+    local recovery_key
+    recovery_key="$(openssl rand -hex 32)"
+    printf '%s' "$recovery_key" >"$recovery_key_file"
+    cryptsetup luksFormat --type luks2 --batch-mode --key-file "$recovery_key_file" "$var_part"
+    local mapper="snosi-var-install-$$"
+    cryptsetup open --key-file "$recovery_key_file" "$var_part" "$mapper"
+    VAR_MAPPER_ACTIVE="$mapper"
+    mkfs.ext4 -F -L var "/dev/mapper/$mapper" >/dev/null
+    printf '/dev/mapper/%s\n' "$mapper"
+}
+
+# ---------------------------------------------------------------------------
+# TPM enrollment (plan step 15) -- mirrors enroll_token in
+# test/native-ab-secure-rotation-test.sh EXACTLY: empty raw PCRs, signed
+# PCR 11 only, pcrlock explicitly disabled. The signing public key comes
+# from the disk's OWN just-written UKI (.pcrpkey PE section, objcopy), never
+# an externally-supplied key -- self-contained, no separate key distribution
+# needed at install time.
+# ---------------------------------------------------------------------------
+
+tpm_present() {
+    [[ -e /dev/tpmrm0 || -e /dev/tpm0 ]]
+}
+
+# extract_pcrpkey_from_disk disk channel version out_path -- mounts the
+# disk's ESP read-only, locates the just-written EFI/Linux/<channel>_
+# <version>.efi (the initial install always ships exactly this name, no
+# +l-d update suffix -- see docs/native-ab-contracts.md §4), and dumps its
+# .pcrpkey PE section (same objcopy invocation as
+# test/native-ab-secure-artifact-test.sh) to out_path.
+extract_pcrpkey_from_disk() { # disk channel version out_path
+    local disk="$1" channel="$2" version="$3" out="$4"
+    local esp_part mnt uki
+
+    esp_part="$(lsblk -nrpo NAME,PARTLABEL "$disk" | awk '$2 == "esp" {print $1; exit}')"
+    [[ -n "$esp_part" ]] || die "no esp partition found on $disk"
+
+    mnt="$(mktemp -d /var/tmp/snosi-install-esp.XXXXXX)"
+    mount -o ro "$esp_part" "$mnt"
+    uki="$mnt/EFI/Linux/${channel}_${version}.efi"
+    if [[ ! -f "$uki" ]]; then
+        umount "$mnt"
+        rmdir "$mnt"
+        die "installed UKI not found at EFI/Linux/${channel}_${version}.efi"
+    fi
+    objcopy --dump-section ".pcrpkey=$out" "$uki" /dev/null
+    umount "$mnt"
+    rmdir "$mnt"
+    [[ -s "$out" ]] || die "extracted .pcrpkey section is empty"
+}
+
+enroll_tpm_var() { # var_part recovery_key_file pcrpkey_path
+    local var_part="$1" recovery_key_file="$2" pcrpkey="$3"
+    command -v systemd-cryptenroll >/dev/null || die "systemd-cryptenroll is required"
+    systemd-cryptenroll \
+        --unlock-key-file="$recovery_key_file" \
+        --tpm2-device=auto \
+        --tpm2-pcrs= \
+        --tpm2-pcrlock= \
+        --tpm2-public-key="$pcrpkey" \
+        --tpm2-public-key-pcrs=11 \
+        "$var_part"
+}
+
+# ---------------------------------------------------------------------------
+# Persistent /var seeding: install-info.json (step 18) + optional SSH key
+# (step 19). Writes into the SAME location the 95etc-overlay dracut module
+# reads at boot (shared/outformat/ab-root/tree/usr/lib/dracut/modules.d/
+# 95etc-overlay/etc-overlay-mount.sh): var/lib/snosi/etc-overlay/upper. The
+# root filesystem itself is dm-verity-sealed and read-only, both at install
+# time and at runtime, so /root/.ssh/authorized_keys can never be written
+# directly -- sshd is instead pointed at an /etc overlay location via
+# shared/outformat/ab-root/tree/etc/ssh/sshd_config.d/
+# 10-snosi-authorized-keys.conf (AuthorizedKeysFile /etc/ssh/
+# authorized_keys.d/%u).
+# ---------------------------------------------------------------------------
+
+seed_var() { # var_device product channel version arch ssh_key_path(optional)
+    local dev="$1" product="$2" channel="$3" version="$4" arch="$5" ssh_key="${6:-}"
+    local mnt
+    mnt="$(mktemp -d /var/tmp/snosi-install-var.XXXXXX)"
+    mount -t ext4 "$dev" "$mnt"
+
+    install -d -m 0755 "$mnt/lib/snosi"
+    jq -n --arg product "$product" --arg channel "$channel" --arg version "$version" \
+        --arg architecture "$arch" --arg installed_at "$(date -u +%FT%TZ)" \
+        '{product: $product, channel: $channel, version: $version,
+          architecture: $architecture, installed_at: $installed_at}' \
+        >"$mnt/lib/snosi/install-info.json"
+
+    if [[ -n "$ssh_key" ]]; then
+        install -d -m 0755 "$mnt/lib/snosi/etc-overlay/upper/ssh/authorized_keys.d"
+        install -m 0600 "$ssh_key" "$mnt/lib/snosi/etc-overlay/upper/ssh/authorized_keys.d/root"
+    fi
+
+    umount "$mnt"
+    rmdir "$mnt"
+}
+
+# ---------------------------------------------------------------------------
+# MOK enrollment (plan steps 16-17) + --restage-mok recovery
+# ---------------------------------------------------------------------------
+
+# mok_password_twice -- interactive prompt, validated twice. Sets
+# MOK_PASSWORD. Rejects an empty password and requires both entries to
+# match, retrying rather than silently taking the first entry.
+mok_password_twice() {
+    local p1 p2
+    while true; do
+        read -r -s -p "Enter a one-time MokManager enrollment password: " p1
+        echo >&2
+        read -r -s -p "Confirm password: " p2
+        echo >&2
+        if [[ -z "$p1" ]]; then
+            echo "Password must not be empty." >&2
+            continue
+        fi
+        if [[ "$p1" != "$p2" ]]; then
+            echo "Passwords do not match, try again." >&2
+            continue
+        fi
+        MOK_PASSWORD="$p1"
+        return
+    done
+}
+
+explain_mok_next_boot() {
+    cat <<'EOF'
+
+MOK enrollment has been staged. On the NEXT boot, the firmware will show a
+blue "MOK Management" (MokManager) screen automatically:
+  1. Press any key when prompted (a short countdown, do not let it expire).
+  2. Select "Enroll MOK".
+  3. Select "Continue", then "Yes" to confirm.
+  4. Enter the one-time password you just set.
+The system will then reboot again and continue normally. If you miss this
+window, mistype the password, or let it time out, the installed OS's
+MOK-signed boot chain will NOT be trusted and will refuse to boot -- run
+`snosi-install --restage-mok` from this ISO to recover without reinstalling.
+EOF
+}
+
+# mok_import cert password -- generates a password hash (mokutil
+# --generate-hash, never prints the plaintext password to a log or process
+# list beyond this function's own arguments) and stages the import request
+# non-interactively via `mokutil --import --hash-file`.
+mok_import() { # cert password
+    local cert="$1" password="$2"
+    command -v mokutil >/dev/null || die "mokutil is required"
+    [[ -f "$cert" ]] || die "MOK certificate not found: $cert"
+
+    local hashfile der
+    hashfile="$(mktemp /var/tmp/snosi-install-mok.XXXXXX)"
+    chmod 600 "$hashfile"
+    mokutil --generate-hash="$password" >"$hashfile"
+    der="$(mktemp --suffix=.der /var/tmp/snosi-install-mok.XXXXXX)"
+    openssl x509 -in "$cert" -outform DER -out "$der"
+    mokutil --import "$der" --hash-file "$hashfile"
+    rm -f "$hashfile" "$der"
+}
+
+# find_installed_esp_and_var [disk] -- auto-detects (or validates an
+# explicit --disk) an already-installed native A/B disk by locating exactly
+# one esp+var partition pair, for --restage-mok. Sets RESTAGE_DISK,
+# RESTAGE_ESP_PART, RESTAGE_VAR_PART.
+find_installed_esp_and_var() { # disk(optional)
+    local want_disk="${1:-}" d path esp var matches=0 chosen=""
+
+    while IFS= read -r d; do
+        [[ -n "$d" ]] || continue
+        path="$(jq -r '.path // .name' <<<"$d")"
+        if [[ -n "$want_disk" && "$path" != "$want_disk" ]]; then
+            continue
+        fi
+        esp="$(jq -r '[.. | objects | select(.partlabel? == "esp") | (.path // .name)] | .[0] // empty' <<<"$d")"
+        var="$(jq -r '[.. | objects | select(.partlabel? == "var") | (.path // .name)] | .[0] // empty' <<<"$d")"
+        if [[ -n "$esp" && -n "$var" ]]; then
+            matches=$((matches + 1))
+            chosen="$path|$esp|$var"
+        fi
+    done < <(lsblk_json | jq -c '.blockdevices[]? | select(.type == "disk")')
+
+    if [[ -n "$want_disk" ]]; then
+        [[ "$matches" -ge 1 ]] || die "no installed esp+var pair found on $want_disk"
+    else
+        [[ "$matches" -ne 0 ]] || die "no installed native A/B disk found (no esp+var pair) -- use --disk to specify one explicitly"
+        [[ "$matches" -eq 1 ]] || die "multiple installed disks found ($matches) -- use --disk to specify which one"
+    fi
+
+    RESTAGE_DISK="${chosen%%|*}"
+    local rest="${chosen#*|}"
+    RESTAGE_ESP_PART="${rest%%|*}"
+    RESTAGE_VAR_PART="${rest#*|}"
+}
+
+restage_mok() { # non_interactive mok_cert mok_password_file reboot disk_override
+    local non_interactive="$1" mok_cert="$2" mok_password_file="$3" reboot="$4" disk_override="$5"
+
+    # Argument validation first, matching main()'s pattern: a missing/empty
+    # --mok-password-file is a usage error, not a privilege or hardware
+    # problem, so it must be caught before need_root()/hardware access --
+    # this is what makes it possible to unit-test (test/snosi-install-test.sh
+    # "restage-mok argument handling") without root or a real install.
+    local password=""
+    if [[ "$non_interactive" == 1 ]]; then
+        [[ -n "$mok_password_file" ]] || die "--non-interactive --restage-mok requires --mok-password-file"
+        [[ -f "$mok_password_file" ]] || die "--mok-password-file not found: $mok_password_file"
+        password="$(head -1 "$mok_password_file")"
+        [[ -n "$password" ]] || die "--mok-password-file is empty"
+    fi
+
+    need_root
+    find_installed_esp_and_var "$disk_override"
+    log "Found installed disk: $RESTAGE_DISK (esp=$RESTAGE_ESP_PART var=$RESTAGE_VAR_PART)"
+
+    local mnt uki_found=0
+    mnt="$(mktemp -d /var/tmp/snosi-install-esp.XXXXXX)"
+    mount -o ro "$RESTAGE_ESP_PART" "$mnt"
+    if compgen -G "$mnt/EFI/Linux/*.efi" >/dev/null; then
+        uki_found=1
+    fi
+    umount "$mnt"
+    rmdir "$mnt"
+    [[ "$uki_found" -eq 1 ]] || die "no installed UKI found under EFI/Linux on $RESTAGE_ESP_PART -- refusing to stage a MOK request against what does not look like a real install"
+
+    if [[ "$non_interactive" != 1 ]]; then
+        explain_mok_next_boot
+        mok_password_twice
+        password="$MOK_PASSWORD"
+    fi
+
+    mok_import "$mok_cert" "$password"
+    unset password MOK_PASSWORD || true
+    log "MOK re-enrollment request staged for $RESTAGE_DISK."
+    [[ "$non_interactive" == 1 ]] || explain_mok_next_boot
+
+    if [[ "$reboot" == 1 ]]; then
+        log "Rebooting now..."
+        systemctl reboot
+    else
+        log "Reboot when ready to complete enrollment (systemctl reboot)."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# main (install mode)
+# ---------------------------------------------------------------------------
+
+main() {
+    local product="" origin="$ORIGIN_DEFAULT" disk="" confirm_value=""
+    local encrypt_var=1 recovery_key_file="" ack_recovery_saved=0
+    local no_tpm=0 mok_password_file="" skip_mok=0 mok_cert="$MOK_CERT_DEFAULT"
+    local ssh_key="" do_reboot=0 non_interactive=0 allow_file=0
+    local restage_mode=0
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --restage-mok) restage_mode=1; shift ;;
+            --product) [[ $# -ge 2 ]] || usage; product="$2"; shift 2 ;;
+            --origin) [[ $# -ge 2 ]] || usage; origin="$2"; shift 2 ;;
+            --disk) [[ $# -ge 2 ]] || usage; disk="$2"; shift 2 ;;
+            --confirm) [[ $# -ge 2 ]] || usage; confirm_value="$2"; shift 2 ;;
+            --encrypt-var) encrypt_var=1; shift ;;
+            --insecure-raw-var) encrypt_var=0; shift ;;
+            --recovery-key-file) [[ $# -ge 2 ]] || usage; recovery_key_file="$2"; shift 2 ;;
+            --acknowledge-recovery-saved) ack_recovery_saved=1; shift ;;
+            --no-tpm) no_tpm=1; shift ;;
+            --mok-password-file) [[ $# -ge 2 ]] || usage; mok_password_file="$2"; shift 2 ;;
+            --skip-mok) skip_mok=1; shift ;;
+            --mok-cert) [[ $# -ge 2 ]] || usage; mok_cert="$2"; shift 2 ;;
+            --ssh-authorized-key) [[ $# -ge 2 ]] || usage; ssh_key="$2"; shift 2 ;;
+            --reboot) do_reboot=1; shift ;;
+            --non-interactive) non_interactive=1; shift ;;
+            --allow-file) allow_file=1; shift ;;
+            -h|--help) usage ;;
+            --) shift; break ;;
+            -*) echo "Error: unknown option: $1" >&2; usage ;;
+            *) usage ;;
+        esac
+    done
+
+    if [[ "$restage_mode" == 1 ]]; then
+        restage_mok "$non_interactive" "$mok_cert" "$mok_password_file" "$do_reboot" "$disk"
+        return
+    fi
+
+    # -----------------------------------------------------------------
+    # Argument validation matrix (non-interactive mode)
+    # -----------------------------------------------------------------
+    if [[ "$non_interactive" == 1 ]]; then
+        [[ -n "$product" ]] || die "--non-interactive requires --product"
+        [[ -n "$disk" ]] || die "--non-interactive requires --disk"
+        [[ -n "$confirm_value" ]] || die "--non-interactive requires --confirm"
+        if [[ "$encrypt_var" == 1 ]]; then
+            [[ -n "$recovery_key_file" ]] || die "--non-interactive with /var encryption requires --recovery-key-file"
+            [[ "$ack_recovery_saved" == 1 ]] || die "--non-interactive with /var encryption requires --acknowledge-recovery-saved"
+        fi
+        if [[ "$skip_mok" != 1 ]]; then
+            [[ -n "$mok_password_file" ]] || die "--non-interactive requires --mok-password-file (or --skip-mok)"
+        fi
+    fi
+
+    local -a valid
+    valid=("${VALID_PRODUCTS[@]}")
+    if [[ -z "$product" ]]; then
+        if [[ "$non_interactive" == 1 ]]; then
+            die "--product is required"
+        fi
+        echo "Select a product to install:"
+        local i=1
+        for p in "${valid[@]}"; do echo "  $i) $p"; i=$((i + 1)); done
+        local choice
+        read -r -p "Product [1-${#valid[@]}]: " choice
+        [[ "$choice" =~ ^[0-9]+$ && "$choice" -ge 1 && "$choice" -le "${#valid[@]}" ]] ||
+            die "invalid selection: $choice"
+        product="${valid[$((choice - 1))]}"
+    else
+        local ok=0 p
+        for p in "${valid[@]}"; do [[ "$p" == "$product" ]] && ok=1; done
+        [[ "$ok" -eq 1 ]] || die "--product must be one of: ${valid[*]}"
+    fi
+    local channel="$product" bare_product="${product%-ab}"
+
+    need_root
+    for cmd in curl jq gpgv sfdisk lsblk blockdev udevadm blkid wipefs xz mkfs.ext4 objcopy openssl mokutil; do
+        command -v "$cmd" >/dev/null || die "required command not found: $cmd"
+    done
+
+    log "=== snosi-install: $channel ==="
+    local workdir
+    workdir="$(mktemp -d /var/tmp/snosi-install.XXXXXX)"
+    trap 'close_var_mapper; rm -rf "$workdir"' EXIT
+
+    fetch_verified_index "$origin" "$channel" "$workdir"
+    local version
+    version="$(latest_channel_version "$INDEX_FILE" "$channel")"
+    [[ -n "$version" ]] || die "no published version found for $channel in the verified index"
+
+    local disk_name disk_sha256
+    disk_name="${channel}_${version}.disk.raw.xz"
+    disk_sha256="$(index_object_sha256 "$INDEX_FILE" "$disk_name")"
+    [[ -n "$disk_sha256" ]] || die "signed index has no entry for $disk_name"
+
+    local arch="x86-64"
+    local manifest_name="${channel}_${version}.manifest.json"
+    local manifest_sha256
+    manifest_sha256="$(index_object_sha256 "$INDEX_FILE" "$manifest_name")"
+    if [[ -n "$manifest_sha256" ]] && curl -fsSL --connect-timeout 10 --max-time 30 \
+            "$INDEX_BASE_URL/$manifest_name" -o "$workdir/manifest.json" 2>/dev/null; then
+        if [[ "$(sha256sum "$workdir/manifest.json" | cut -d' ' -f1)" == "$manifest_sha256" ]]; then
+            arch="$(jq -r '.config.architecture // "x86-64"' "$workdir/manifest.json" 2>/dev/null || echo x86-64)"
+        fi
+    fi
+
+    local min_bytes
+    min_bytes="$(minimum_disk_bytes "$bare_product")"
+
+    log ""
+    log "Version:            $version"
+    log "Architecture:       $arch"
+    log "Minimum disk size:  $(human_bytes "$min_bytes")"
+    log ""
+    log "*** THIS WILL ERASE THE ENTIRE SELECTED DISK. THIS CANNOT BE UNDONE. ***"
+    log ""
+
+    if [[ -z "$disk" ]]; then
+        [[ "$non_interactive" != 1 ]] || die "--disk is required"
+        log "Available disks:"
+        list_installable_disks "$min_bytes" "$(self_boot_device)" | while IFS='|' read -r p m s sz t r; do
+            if [[ -n "$r" ]]; then
+                log "  $p  $m  serial=$s  $(human_bytes "$sz")  $t  [REFUSED: $r]"
+            else
+                log "  $p  $m  serial=$s  $(human_bytes "$sz")  $t"
+            fi
+        done
+        read -r -p "Target disk path: " disk
+    fi
+
+    resolve_target_disk "$disk" "$min_bytes" "$(self_boot_device)" "$allow_file"
+    [[ -z "$RESOLVED_DISK_REFUSAL" ]] || die "refusing disk $RESOLVED_DISK_PATH: $RESOLVED_DISK_REFUSAL"
+    log "Selected disk: $RESOLVED_DISK_PATH (model=${RESOLVED_DISK_MODEL:-unknown} serial=${RESOLVED_DISK_SERIAL:-unknown} size=$(human_bytes "$RESOLVED_DISK_SIZE"))"
+
+    if [[ "$non_interactive" == 1 ]]; then
+        confirm_typed_matches "$confirm_value" "$RESOLVED_DISK_PATH" "$RESOLVED_DISK_SERIAL" ||
+            die "--confirm '$confirm_value' does not match the resolved disk's path or serial"
+    else
+        local typed
+        read -r -p "Type the disk path or serial to confirm ERASING it: " typed
+        confirm_typed_matches "$typed" "$RESOLVED_DISK_PATH" "$RESOLVED_DISK_SERIAL" ||
+            die "confirmation did not match; aborting"
+    fi
+
+    if [[ "$encrypt_var" != 1 ]]; then
+        warn "/var will NOT be encrypted (--insecure-raw-var). This is unsafe for any production install."
+        if [[ "$non_interactive" != 1 ]]; then
+            confirm_yes_no "Really continue WITHOUT /var encryption?" || die "aborted"
+        fi
+    fi
+
+    if [[ "$encrypt_var" == 1 && "$non_interactive" != 1 ]]; then
+        [[ -n "$recovery_key_file" ]] || read -r -p "Path to save the /var recovery passphrase to: " recovery_key_file
+    fi
+    [[ "$encrypt_var" != 1 || -n "$recovery_key_file" ]] || die "--recovery-key-file is required with /var encryption"
+    [[ -z "$recovery_key_file" || ! -e "$recovery_key_file" ]] || die "recovery key file already exists: $recovery_key_file"
+
+    # -----------------------------------------------------------------
+    # Download + write (plan steps 8-9)
+    # -----------------------------------------------------------------
+    local disk_url="$INDEX_BASE_URL/$disk_name"
+    log "Downloading and writing $disk_url to $RESOLVED_DISK_PATH..."
+    stream_download_verify "$disk_url" "$disk_sha256" "$RESOLVED_DISK_PATH" ||
+        die "install image download/verify failed; target has been wiped"
+
+    local image_size target_size
+    # The decompressed byte count stream_download_verify actually wrote --
+    # NOT $RESOLVED_DISK_SIZE, which is the TARGET disk's own (normally
+    # larger) size and would make relocate_and_grow_var() think there is
+    # nothing to grow.
+    image_size="$STREAM_DOWNLOAD_BYTES_WRITTEN"
+    [[ "$image_size" =~ ^[0-9]+$ && "$image_size" -gt 0 ]] ||
+        die "internal error: could not determine the written image size"
+    if [[ -b "$RESOLVED_DISK_PATH" ]]; then
+        blockdev --rereadpt "$RESOLVED_DISK_PATH"
+        udevadm settle
+        target_size="$(blockdev --getsize64 "$RESOLVED_DISK_PATH")"
+    else
+        target_size="$RESOLVED_DISK_SIZE"
+    fi
+
+    # -----------------------------------------------------------------
+    # Relocate GPT + grow /var (plan steps 10-11)
+    # -----------------------------------------------------------------
+    log "Growing /var partition..."
+    local var_part
+    var_part="$(relocate_and_grow_var "$RESOLVED_DISK_PATH" "$image_size" "$target_size")"
+
+    # -----------------------------------------------------------------
+    # /var: LUKS2 or raw (plan steps 12-14)
+    # -----------------------------------------------------------------
+    if [[ "$encrypt_var" == 1 && "$non_interactive" != 1 ]]; then
+        log "The /var recovery passphrase will be written to: $recovery_key_file"
+        confirm_yes_no "Confirm you have saved this passphrase somewhere OFF this disk before continuing" ||
+            die "aborted (recovery passphrase not acknowledged)"
+    elif [[ "$encrypt_var" == 1 && "$non_interactive" == 1 && "$ack_recovery_saved" != 1 ]]; then
+        die "--acknowledge-recovery-saved is required with /var encryption in --non-interactive mode"
+    fi
+
+    log "Formatting /var..."
+    local var_device
+    var_device="$(format_var "$var_part" "$encrypt_var" "$recovery_key_file")"
+
+    # -----------------------------------------------------------------
+    # TPM enrollment (plan step 15)
+    # -----------------------------------------------------------------
+    if [[ "$encrypt_var" == 1 ]]; then
+        if [[ "$no_tpm" == 1 ]]; then
+            log "Skipping TPM enrollment (--no-tpm). /var is only unlockable with the recovery passphrase."
+        elif [[ "$allow_file" == 1 ]]; then
+            warn "TPM enrollment requires a real block device target; skipping (--allow-file test mode)."
+        elif ! tpm_present; then
+            warn "No TPM device found; skipping TPM enrollment. /var is only unlockable with the recovery passphrase."
+        else
+            log "Extracting the PCR signing public key from the installed UKI..."
+            local pcrpkey="$workdir/pcrpkey.pem"
+            extract_pcrpkey_from_disk "$RESOLVED_DISK_PATH" "$channel" "$version" "$pcrpkey"
+            log "Enrolling TPM unlock (signed PCR 11, pcrlock disabled)..."
+            enroll_tpm_var "$var_part" "$recovery_key_file" "$pcrpkey"
+        fi
+    fi
+
+    # -----------------------------------------------------------------
+    # Record install metadata + optional SSH key (plan steps 18-19)
+    # -----------------------------------------------------------------
+    log "Recording install metadata..."
+    seed_var "$var_device" "$bare_product" "$channel" "$version" "$arch" "$ssh_key"
+    close_var_mapper
+
+    # -----------------------------------------------------------------
+    # MOK enrollment (plan steps 16-17)
+    # -----------------------------------------------------------------
+    if [[ "$skip_mok" == 1 ]]; then
+        log "Skipping MOK enrollment (--skip-mok). Run 'snosi-install --restage-mok' before rebooting into the installed OS, or the MOK-signed boot chain will not be trusted."
+    elif [[ "$allow_file" == 1 ]]; then
+        warn "MOK enrollment requires a real UEFI target; skipping (--allow-file test mode)."
+    else
+        local password
+        if [[ "$non_interactive" == 1 ]]; then
+            [[ -f "$mok_password_file" ]] || die "--mok-password-file not found: $mok_password_file"
+            password="$(head -1 "$mok_password_file")"
+            [[ -n "$password" ]] || die "--mok-password-file is empty"
+        else
+            explain_mok_next_boot
+            mok_password_twice
+            password="$MOK_PASSWORD"
+        fi
+        log "Importing the Snosi MOK certificate ($mok_cert)..."
+        mok_import "$mok_cert" "$password"
+        unset password MOK_PASSWORD || true
+        [[ "$non_interactive" == 1 ]] || explain_mok_next_boot
+    fi
+
+    # -----------------------------------------------------------------
+    # Summary + reboot (plan steps 20-21)
+    # -----------------------------------------------------------------
+    log ""
+    log "=== Install complete ==="
+    log "Product:   $channel $version ($arch)"
+    log "Disk:      $RESOLVED_DISK_PATH"
+    if [[ -n "$recovery_key_file" ]]; then
+        log "Recovery passphrase saved to: $recovery_key_file (copy it off this machine)"
+    fi
+    if [[ "$skip_mok" != 1 && "$allow_file" != 1 ]]; then
+        log "Reboot to complete MokManager enrollment; the OS will not boot until that finishes."
+    else
+        log "Reboot into the installed OS when ready."
+    fi
+
+    if [[ "$do_reboot" == 1 ]]; then
+        log "Rebooting now..."
+        systemctl reboot
+    else
+        log "Not rebooting automatically; run 'systemctl reboot' when ready."
+    fi
+}
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    main "$@"
+fi

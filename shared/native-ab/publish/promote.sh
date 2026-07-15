@@ -183,7 +183,7 @@ declare -a GPG_SIGN_ARGS=(--batch --yes --detach-sign)
 # ---------------------------------------------------------------------------
 
 dest_parse "$DEST"
-product_dir="$(product_path "$PUB_PRODUCT")"
+product_dir="$PUB_DEST_PATH"
 candidate_rel="$(candidate_subpath "$PUB_VERSION")"
 
 WORK_DIR="$(mktemp -d /var/tmp/promote.XXXXXX)"
@@ -248,8 +248,21 @@ if dest_object_exists "$product_dir/SHA256SUMS" && dest_object_exists "$product_
     old_sums="$WORK_DIR/old-SHA256SUMS"
     old_sig="$WORK_DIR/old-SHA256SUMS.gpg"
     if dest_read_object "$product_dir/SHA256SUMS" "$old_sums" && dest_read_object "$product_dir/SHA256SUMS.gpg" "$old_sig"; then
-        old_version="$(grep -oE "${PUB_CHANNEL}_[0-9]{14}\\.manifest\\.json" "$old_sums" |
-            sed -E "s/^${PUB_CHANNEL}_([0-9]{14})\\.manifest\\.json\$/\\1/" | head -1)"
+        # Matches ANY object name starting with "<channel>_<14-digit
+        # version>" -- not only "*.manifest.json" -- so this also works for
+        # publication types with no manifest object at all (e.g. the
+        # installer ISO, whose SHA256SUMS only ever lists a single
+        # "<channel>_<version>_x86-64.iso" entry, docs/native-ab-
+        # contracts.md "Installer ISO"). The trailing "|| true" is required:
+        # under `set -o pipefail`, grep finding zero matches (a channel
+        # whose outgoing index this script cannot parse at all) exits 1, and
+        # that would otherwise silently kill this script via `set -e` on the
+        # plain assignment below -- caught via test/native-publication-
+        # pipeline-test.sh's ISO-shaped fixture leg, which is the first
+        # publication type without a "*.manifest.json" entry to promote
+        # twice in a row.
+        old_version="$( { grep -oE "${PUB_CHANNEL}_[0-9]{14}" "$old_sums" || true; } |
+            grep -oE '[0-9]{14}' | sort -n | tail -1 || true)"
         if [[ -z "$old_version" || "$old_version" == "$PUB_VERSION" ]]; then
             echo "Outgoing index already advertises $PUB_VERSION (or is unparseable); nothing to archive."
         elif ! gpgv --keyring "$PUBRING" "$old_sig" "$old_sums" 2>/dev/null; then

@@ -21,11 +21,15 @@ test/
 ├── native-ab-secure-artifact-negative-test.sh # Rejection mutations
 ├── native-ab-secure-rotation-test.sh # Destructive enrolled-VM rotation proof
 ├── native-ab-secure-update-test.sh # Destructive secure rollback/fallback proof
-├── cayo-ab-install-spike.sh   # Guarded native A/B disk installer
+├── cayo-ab-install-spike.sh   # Guarded native A/B disk installer (GPT/var-grow/LUKS spike, unchanged since Task 8.2)
+├── native-installer-iso-test.sh # Installer ISO boot-chain validation (structural + QEMU positive/negative Secure Boot proof)
+├── native-publication-pipeline-test.sh # Phase 7 candidate/verify/promote/withdraw pipeline self-test (OS + ISO fixture legs)
+├── snosi-install-test.sh      # snosi-install CLI unit tests (index verification, disk refusal, arg validation, streamed-verify, restage-mok)
 ├── run-qemu.sh                # Interactive QEMU runner (GTK display)
 ├── lib/
 │   ├── helpers.sh             # Shared test helpers: check(), counters, summary
 │   ├── ssh.sh                 # SSH key generation, command execution with retry
+│   ├── snosi-install-test-helpers.sh # Wrapper functions around snosi-install internals for fixture testing
 │   └── vm.sh                  # QEMU lifecycle, image loading, bootc installation
 ├── update-tests/
 │   ├── persistence-write.sh   # Writes /var, /etc, identity, and container markers before update hops

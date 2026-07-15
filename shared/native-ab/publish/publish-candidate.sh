@@ -73,7 +73,7 @@ if [[ ${#stray_tmpfiles[@]} -gt 0 ]]; then
 fi
 
 dest_parse "$DEST"
-product_dir="$(product_path "$PUB_PRODUCT")"
+product_dir="$PUB_DEST_PATH"
 candidate_dir="$product_dir/$(candidate_subpath "$PUB_VERSION")"
 
 echo "Uploading candidate objects to $DEST -> $candidate_dir/"

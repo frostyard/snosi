@@ -325,6 +325,7 @@ data = {
     "product": "$product",
     "channel": "$channel",
     "version": "$version",
+    "dest_path": "os/native/v1/$product/x86-64",
     "xz": bool($xz_enabled),
     "partuuids": {
         "root": "$root_partuuid",

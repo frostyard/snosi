@@ -24,19 +24,33 @@
 # already running the withdrawn version are unaffected; per the plan, they
 # need a higher-version repair release, never a server-side downgrade.
 #
-# Usage: withdraw.sh [--pubring <path>] [--purge-hook <cmd>]
+# Usage: withdraw.sh [--pubring <path>] [--purge-hook <cmd>] [--dest-path <path>]
 #                     <product> <version> <dest>
 #
-#   product   e.g. "cayo" (the ImageId, docs/native-ab-contracts.md §1).
-#   version   the 14-digit version whose archived signed index pair
-#             (promote.sh's ".history/<version>/") should become current
-#             again.
-#   dest      publication origin root, same addressing as publish-
-#             candidate.sh / promote.sh.
+#   product    e.g. "cayo" (the ImageId, docs/native-ab-contracts.md §1), or
+#              the ISO pseudo-product "native-installer" when combined with
+#              --dest-path (see below).
+#   version    the 14-digit version whose archived signed index pair
+#              (promote.sh's ".history/<version>/") should become current
+#              again.
+#   dest       publication origin root, same addressing as publish-
+#              candidate.sh / promote.sh.
+#
+#   --dest-path <path>  override the DEST-relative directory withdrawal acts
+#                        on, instead of deriving it from <product> via
+#                        product_path() (i.e. instead of assuming
+#                        "os/native/v1/<product>/x86-64", docs/native-ab-
+#                        contracts.md §5). Needed for the flat ISO namespace
+#                        ("isos/native/v1", no per-product/x86-64 subpath) --
+#                        prepare-iso-publication.sh's own publication-info.json
+#                        records this same value as "dest_path". Every other
+#                        (OS) product withdrawal omits this and keeps the
+#                        default os/native/v1/<product>/x86-64 behavior
+#                        unchanged.
 set -euo pipefail
 
 usage() {
-    echo "Usage: $0 [--pubring <path>] [--purge-hook <cmd>] <product> <version> <dest>" >&2
+    echo "Usage: $0 [--pubring <path>] [--purge-hook <cmd>] [--dest-path <path>] <product> <version> <dest>" >&2
     exit 2
 }
 
@@ -49,6 +63,7 @@ source "$SCRIPT_DIR/publish-lib.sh"
 
 PUBRING="$ROOT_DIR/shared/native-ab/keys/import-pubring.gpg"
 PURGE_HOOK=""
+DEST_PATH_OVERRIDE=""
 POSITIONAL=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -58,6 +73,10 @@ while [[ $# -gt 0 ]]; do
         ;;
     --purge-hook)
         PURGE_HOOK="$2"
+        shift 2
+        ;;
+    --dest-path)
+        DEST_PATH_OVERRIDE="$2"
         shift 2
         ;;
     -h | --help)
@@ -93,7 +112,7 @@ command -v gpgv >/dev/null || { echo "Error: required command not found: gpgv" >
 [[ -s "$PUBRING" ]] || { echo "Error: pubring not found or empty: $PUBRING" >&2; exit 1; }
 
 dest_parse "$DEST"
-product_dir="$(product_path "$PRODUCT")"
+product_dir="${DEST_PATH_OVERRIDE:-$(product_path "$PRODUCT")}"
 history_rel="$product_dir/$(history_subpath "$VERSION")"
 
 echo "Withdrawing to archived version $VERSION for product $PRODUCT ($DEST -> $product_dir/)"

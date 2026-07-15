@@ -35,9 +35,22 @@
 # systemd just boots normally, with the whole tree as final root, entirely
 # in RAM.
 #
-# Usage: build-iso.sh <rootfs-dir> <output-iso-path> [version]
-#   version: 14-digit UTC YYYYMMDDHHMMSS (docs/native-ab-contracts.md §2);
-#            defaults to the current time.
+# Usage: build-iso.sh <rootfs-dir> <output-dir> [version]
+#   output-dir: directory the final ISO is written into. The filename itself
+#               is NOT caller-controlled: it is always the frozen public name
+#               from docs/native-ab-contracts.md "Installer ISO",
+#               snosi-native-installer_<version>_x86-64.iso, so a caller can
+#               never accidentally publish (or test against) a mis-named
+#               artifact. The final path is printed as the last line of
+#               stdout ("ISO_PATH=...").
+#   version:    14-digit UTC YYYYMMDDHHMMSS (docs/native-ab-contracts.md §2);
+#               defaults to the current time. Embedded in the ISO volume ID
+#               (truncated to fit the 32-character ISO9660 d-characters
+#               limit) and in /etc/snosi-installer-release inside the packed
+#               rootfs/initramfs, so a booted installer can report its own
+#               build version (e.g. from `snosi-install`'s summary output)
+#               without depending on the ISO filename surviving whatever
+#               media it was written to.
 #
 # Must run as root: reads root-owned/restricted subtrees of <rootfs-dir>
 # (e.g. mode-0700 credstore dirs mkosi always creates) that a non-root
@@ -45,13 +58,13 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: $0 <rootfs-dir> <output-iso-path> [version]" >&2
+    echo "Usage: $0 <rootfs-dir> <output-dir> [version]" >&2
     exit 2
 }
 [[ $# -eq 2 || $# -eq 3 ]] || usage
 
 ROOTFS=$1
-ISO_OUT=$2
+OUTPUT_DIR=$2
 VERSION=${3:-$(date -u +%Y%m%d%H%M%S)}
 
 [[ -d "$ROOTFS" ]] || { echo "Error: rootfs directory does not exist: $ROOTFS" >&2; exit 1; }
@@ -60,6 +73,10 @@ VERSION=${3:-$(date -u +%Y%m%d%H%M%S)}
 for cmd in xorriso mcopy mmd mkfs.vfat cpio zstd find; do
     command -v "$cmd" >/dev/null || { echo "Error: required tool not found: $cmd" >&2; exit 1; }
 done
+
+mkdir -p "$OUTPUT_DIR"
+ISO_NAME="snosi-native-installer_${VERSION}_x86-64.iso"
+ISO_OUT="$OUTPUT_DIR/$ISO_NAME"
 
 echo "=== Building native-installer ISO ==="
 echo "  rootfs:  $ROOTFS"
@@ -99,6 +116,19 @@ kver=$(basename "$kernel_dir")
 vmlinuz="$ROOTFS/boot/vmlinuz-$kver"
 [[ -f "$vmlinuz" ]] || { echo "Error: vmlinuz-$kver not found under $ROOTFS/boot" >&2; exit 1; }
 echo "  kernel:  $kver"
+
+# ---------------------------------------------------------------------------
+# 1b. Stamp the version into the packed rootfs. VERSION is only known at ISO
+#     ASSEMBLY time (this script), not at mkosi BUILD time (the rootfs was
+#     already built by `mkosi --profile native-installer build` before this
+#     script ever runs) -- so this file cannot be baked in by the profile's
+#     own postinst the way e.g. /etc/os-release is. `snosi-install` reads
+#     this to report which installer build it is running from, independent
+#     of the ISO filename (which may not survive being written to physical
+#     media / re-labeled by imaging tools).
+# ---------------------------------------------------------------------------
+printf 'SNOSI_INSTALLER_VERSION=%s\nSNOSI_INSTALLER_BUILD_ID=native-installer\n' "$VERSION" \
+    >"$ROOTFS/etc/snosi-installer-release"
 
 # ---------------------------------------------------------------------------
 # 2. Pack the whole rootfs as the initramfs. Excludes the Debian-generated
@@ -212,9 +242,12 @@ echo "=== Assembling ISO ==="
 # actually has them, regardless of which device GRUB itself started from.
 mkdir -p "$WORK/iso-root/EFI/debian"
 cp "$WORK/grub.cfg" "$WORK/iso-root/EFI/debian/grub.cfg"
+# "SNOSI_INSTALLER_<14-digit version>" is 30 d-characters (uppercase/digit/
+# underscore), within ISO9660's 32-character primary volume-identifier limit.
+volid="SNOSI_INSTALLER_${VERSION}"
 xorriso -as mkisofs \
     -iso-level 3 \
-    -volid "SNOSI_INSTALLER" \
+    -volid "$volid" \
     -appended_part_as_gpt \
     -partition_offset 16 \
     -no-emul-boot \
@@ -227,3 +260,4 @@ xorriso -as mkisofs \
 
 echo "=== ISO built: $ISO_OUT ==="
 sha256sum "$ISO_OUT"
+echo "ISO_PATH=$ISO_OUT"

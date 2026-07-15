@@ -740,11 +740,172 @@ profile) in place of the trusted GRUB, is rejected by shim itself
 boot is a genuine Secure Boot enforcement result, not an accidentally-
 permissive OVMF configuration. `check-native-publication-guard.sh`'s
 production-name matching (`cayo-ab`/`snow-ab`/`snowfield-ab` only) already
-excludes `native-installer` with no code change needed. The CLI installer
-itself is a placeholder: `test/cayo-ab-install-spike.sh` shipped verbatim at
-`/usr/libexec/snosi-install-spike` (single source of truth, copied at build
-time by the postinst chroot script via `$CHROOT_SRCDIR`); Task 8.2
-generalizes it into the real product-aware installer.
+excludes `native-installer` with no code change needed.
+
+Two carry-over fixes from the phase 8.1 review, both in
+`shared/native-installer/tools/build-iso.sh`: (1) the script's 2nd argument
+is now an OUTPUT DIRECTORY, not a caller-chosen file path -- it always
+writes the frozen public name (`snosi-native-installer_<version>_x86-64.iso`,
+docs/native-ab-contracts.md "Installer ISO") inside it, and stamps the
+version into both the ISO9660 volume ID (`SNOSI_INSTALLER_<version>`, 30
+d-characters, under the 32-char limit) and a
+`/etc/snosi-installer-release` file written into the packed rootfs
+immediately before the cpio/zstd step (VERSION is only known at ISO-
+ASSEMBLY time, not at the earlier `mkosi build` time, so this can't be
+baked in by the profile's own postinst); (2) the iso-test's cryptsetup
+check is anchored to `usr/sbin/cryptsetup$` (both `/sbin/cryptsetup` and
+`/usr/sbin/cryptsetup` exist under merged-`/usr`, the former a symlink) --
+an earlier unanchored `cryptsetup$` pattern would also pass against any
+unrelated path ending in that literal string. The profile also gained a
+firmware package block (`firmware-linux-free`/`-nonfree`/`-linux` plus the
+same per-vendor `firmware-*` set `shared/kernel/stock/mkosi.conf` ships,
+plus network-adapter extras from `shared/packages/snow`/`shared/packages/
+cayo`) so the installer can actually reach a network on real hardware, not
+just virtio-only QEMU fixtures.
+
+### snosi-install CLI (Task 8.2)
+
+`shared/native-installer/tree/usr/libexec/snosi-install` replaces the
+phase-8.1 placeholder (`test/cayo-ab-install-spike.sh` shipped verbatim at
+`/usr/libexec/snosi-install-spike`) with the full 21-step flow from the
+plan's "First-Round CLI Installer". The spike test script itself is
+UNCHANGED (still shipped at its own path, still what every existing QEMU
+harness drives) -- its GPT-relocate/var-grow/LUKS logic is PORTED, not
+sourced, into `snosi-install`'s own functions: factoring a shared lib was
+rejected because it would touch a script several already-green, multi-hour
+QEMU suites depend on, for no behavioral gain at this stage. If a bug
+surfaces in that logic later, both near-identical copies need the fix.
+
+Design decisions worth knowing before touching this script:
+
+- **Testability via a `BASH_SOURCE[0] == $0` guard**, not an env var: `main`
+  only runs when the file is executed directly, so `test/snosi-install-
+  test.sh` can `source` it (via `test/lib/snosi-install-test-helpers.sh`,
+  which adds thin wrapper functions around a few internals that set output
+  globals) and call individual functions. Each call happens in its OWN
+  `bash -c` subprocess, so a function's `die` (a plain `exit 1`) only ends
+  that one subprocess -- never the test harness.
+- **`PUBRING` is a top-level assignment, not only set inside `main()`**:
+  `set -u` means a function like `fetch_verified_index` referencing
+  `$PUBRING` would hit "unbound variable" if sourced without `main()` ever
+  running. `SNOSI_INSTALL_PUBRING`/`SNOSI_INSTALL_LSBLK_JSON`/
+  `SNOSI_INSTALL_SELF_DEVICE` are the only test hooks; none exist on a real
+  target machine.
+- **Streamed download+verify, not download-then-verify-then-write**: a FIFO
+  + backgrounded `sha256sum` lets `curl | tee fifo | xz -dc | dd` hash the
+  exact compressed bytes received while simultaneously writing the
+  decompressed image to the target disk. `.disk.raw.xz` objects are
+  multiple GiB; requiring 2x that in scratch space before ever touching the
+  target disk was rejected as impractical for install-target machines with
+  little free space anywhere but the target disk itself. Tradeoff: a
+  failure (network error, corrupt xz stream, or a checksum mismatch found
+  only after the full write) is only detectable AFTER bytes have already
+  landed on disk -- `wipe_target()` (wipefs + reread, or truncate for
+  `--allow-file` regular-file targets) always runs before returning
+  non-zero, so a partially/incorrectly-written image is never left looking
+  installable.
+- **TPM enrollment is self-contained**: the PCR-11 signing public key is
+  extracted from the JUST-WRITTEN disk's own UKI (`objcopy --dump-section
+  .pcrpkey=...`, same invocation as `test/native-ab-secure-artifact-
+  test.sh`), mounting the disk's ESP and reading `EFI/Linux/<channel>_
+  <version>.efi` -- an initial install always ships exactly that name, no
+  `+l-d` update suffix (docs/native-ab-contracts.md §4). No external key
+  distribution needed at install time. The `systemd-cryptenroll` invocation
+  mirrors `test/native-ab-secure-rotation-test.sh`'s `enroll_token`
+  EXACTLY: empty raw PCRs, signed PCR 11 only, `--tpm2-pcrlock=` (disabled),
+  `--tpm2-device=auto`.
+- **MOK enrollment is fully non-interactive-capable via a real mokutil
+  feature, not a workaround**: `mokutil --import` normally reads a password
+  interactively via termios, which cannot be scripted. `mokutil
+  --generate-hash=<password>` (prints a sha512crypt hash to stdout) plus
+  `mokutil --import <cert> --hash-file <hashfile>` stages the identical
+  enrolling request with zero interactive prompts -- confirmed via
+  `mokutil(1)`'s SYNOPSIS/OPTIONS on the installer's own `mokutil 0.7.2`.
+  Interactive mode still prompts twice with match validation
+  (`mok_password_twice`) and prints `explain_mok_next_boot`'s blue-screen
+  walkthrough before AND after staging (plan: "explain the exact next-boot
+  interaction before staging the request").
+- **`--restage-mok` validates arguments BEFORE `need_root()`**, mirroring
+  `main()`'s own ordering: a missing/empty `--mok-password-file` is a usage
+  error, not a hardware problem, and this is what makes it unit-testable
+  without root. It auto-detects (or validates an explicit `--disk`) the
+  installed disk by finding exactly one esp+var partition-label pair, then
+  refuses to stage anything unless it can find a real `EFI/Linux/*.efi` on
+  that ESP (a sanity check against restaging a request onto something that
+  is not actually a real install).
+- **Root SSH key install (`--ssh-authorized-key`) cannot write to `/root`**:
+  the root filesystem is dm-verity-sealed and read-only, at install time
+  AND at runtime -- `/root/.ssh/authorized_keys` can never exist for real.
+  A new drop-in, `shared/outformat/ab-root/tree/etc/ssh/sshd_config.d/
+  10-snosi-authorized-keys.conf`, adds `AuthorizedKeysFile /etc/ssh/
+  authorized_keys.d/%u` as a SECOND lookup location (Debian's stock
+  `sshd_config` already `Include`s `sshd_config.d/*.conf`), which resolves
+  under the SAME persistent `/etc` overlay upperdir the 95etc-overlay
+  dracut module mounts at boot
+  (`var/lib/snosi/etc-overlay/upper`, `shared/outformat/ab-root/tree/usr/
+  lib/dracut/modules.d/95etc-overlay/etc-overlay-mount.sh`) -- so
+  `snosi-install` (during its `/var` mount, alongside writing
+  `/var/lib/snosi/install-info.json`) can seed a key there directly, before
+  first boot, with no new mechanism.
+- **MOK certificate is committed, dev-only, public material**: same
+  reasoning as the existing `import-pubring.gpg` -- a certificate is
+  exactly the thing you hand out for verification. `shared/native-ab/keys/
+  mok-dev.crt` is a plain copy of the gitignored `mkosi.crt`; it ships into
+  the installer at `/usr/lib/snosi/mok-dev.crt` (ExtraTrees=) and the
+  update pubring ships at `/usr/lib/snosi/os-update-pubring.gpg` (same
+  file, same single-canonical-copy pattern as the ab-root fragment's own
+  `/usr/lib/systemd/import-pubring.gpg` copy -- deliberately a SEPARATE
+  path/copy, not shared, since the installer and the installed OS have
+  independent trust boundaries and lifecycles).
+
+`test/snosi-install-test.sh` covers the pure logic via fixtures (index
+parsing/verification against a local HTTP origin + ephemeral gpg key,
+disk-refusal filters against fixture `lsblk -b -J -O` JSON, name derivation,
+the full `--non-interactive` argument validation matrix, streamed-verify
+mismatch handling against a small fixture payload, `--restage-mok` argument
+handling) -- wired into `validate.yml`. It deliberately does NOT cover
+actual disk writes, LUKS/TPM enrollment, or MOK against real EFI variables;
+that needs a full product build and a real (or QEMU) install target, which
+is a later task, not this fast per-PR check.
+
+### Publication pipeline generalization for the ISO (Task 8.2)
+
+The Phase 7 candidate/verify/promote/withdraw pipeline
+(`shared/native-ab/publish/`) was generalized to also publish the installer
+ISO under the FLAT `isos/native/v1/` namespace (docs/native-ab-contracts.md
+§5 -- no per-product/x86-64 subpath, since there is exactly one installer).
+Minimal change: `publication-info.json` now carries an explicit `dest_path`
+field (both `prepare-native-publication.sh`, which sets it to
+`os/native/v1/<product>/x86-64` exactly reproducing the old hardcoded
+behavior, and the new `prepare-iso-publication.sh`, which sets it to
+`isos/native/v1`); `read_publication_info()` in `publish-lib.sh` reads it
+into `PUB_DEST_PATH`; `publish-candidate.sh`/`promote.sh` use
+`$PUB_DEST_PATH` directly instead of always computing `product_path
+"$PUB_PRODUCT"`. `withdraw.sh` (which has no prepared-dir -- it is an
+incident-response tool taking `<product> <version> <dest>` directly) grew
+an optional `--dest-path <path>` override for the same reason, defaulting
+to the unchanged `product_path()` derivation when omitted.
+`prepare-iso-publication.sh` sets BOTH `product` and `channel` to the
+literal string `snosi-native-installer` (matching the frozen object name's
+own prefix, `snosi-native-installer_<version>_x86-64.iso`) rather than
+following the OS pipeline's product-vs-channel split, since that string IS
+what `promote.sh`'s outgoing-index archival step greps for.
+
+That archival step (`old_version="$(grep -oE "${PUB_CHANNEL}_[0-9]{14}
+\\.manifest\\.json" ...)"`) turned out to have a LATENT bug, only surfaced
+by adding a publication type with no `*.manifest.json` entry at all: under
+`set -o pipefail`, `grep` finding zero matches exits 1, and since the whole
+pipeline was the right-hand side of a plain variable assignment (not a
+condition), `set -e` silently killed `promote.sh` -- no error message, just
+an abrupt exit -- the SECOND time an ISO version was promoted (the first
+promotion has no outgoing index yet, so the archival code path, and the
+bug, never ran). Fixed by generalizing the pattern to match any `<channel>_
+<14-digit-version>` prefix (not only `.manifest.json`) and adding `|| true`
+at both grep stages, so "the outgoing index cannot be parsed" degrades to
+the existing "nothing to archive" log line instead of an unrelated-looking
+silent death. Caught by `test/native-publication-pipeline-test.sh`'s new
+"ISO-shaped fixture leg", which is the first test in this suite to promote
+the SAME (non-manifest-bearing) publication type twice in a row.
 
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 

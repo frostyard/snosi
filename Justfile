@@ -100,7 +100,7 @@ _snowfield-ab: _clean
 [private]
 _native-installer-iso: _clean
     {{mkosi}} --profile native-installer build
-    ./shared/native-installer/tools/build-iso.sh output/native-installer output/native-installer.iso
+    ./shared/native-installer/tools/build-iso.sh output/native-installer output "$(date -u +%Y%m%d%H%M%S)"
 
 [private]
 _test-install image="output/snow":

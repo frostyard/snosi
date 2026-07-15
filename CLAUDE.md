@@ -794,19 +794,73 @@ different root cause.
 
 `test/native-installer-iso-test.sh` validates: ESP structural checks
 (signed-binary issuer strings via `sbverify`, packed-initramfs content,
-systemd-family version), a QEMU positive boot with Secure Boot ENFORCED
-against a freshly-copied, NEVER-enrolled `OVMF_VARS_4M.ms.fd` (must reach
-SSH with `mokutil --sb-state` reporting enabled), and a negative proof on
-the SAME never-enrolled varstore — grub's own unsigned monolithic EFI image,
+systemd-family version, the version-stamped filename/volid/release-file —
+below), a QEMU positive boot with Secure Boot ENFORCED against a
+freshly-copied, NEVER-enrolled `OVMF_VARS_4M.ms.fd` (must reach SSH with
+`mokutil --sb-state` reporting enabled), and a negative proof on the SAME
+never-enrolled varstore — grub's own unsigned monolithic EFI image,
 signed with the project's real `mkosi.key`/`mkosi.crt` in place of the
 trusted GRUB, must be rejected by shim itself ("Security Violation"),
 proving the positive boot is a genuine enforcement result and not an
 accidentally-permissive OVMF config. `check-native-publication-guard.sh`
 already excludes `native-installer` (it only matches `cayo-ab`/`snow-ab`/
-`snowfield-ab` by literal name) — no code change was needed there. The CLI
-installer is a placeholder for now: `test/cayo-ab-install-spike.sh` shipped
-verbatim at `/usr/libexec/snosi-install-spike`, generalized into the real
-product-aware installer in a later task.
+`snowfield-ab` by literal name) — no code change was needed there.
+
+`shared/native-installer/tools/build-iso.sh` takes an OUTPUT DIRECTORY (not
+a caller-chosen file path) and always writes the frozen public name
+(`snosi-native-installer_<version>_x86-64.iso`, docs/native-ab-contracts.md
+"Installer ISO"), embedding VERSION in both the ISO9660 volid and a
+`/etc/snosi-installer-release` file written into the packed rootfs at
+assembly time (VERSION is only known then, not at the earlier `mkosi build`
+time). The profile also ships hardware firmware (`shared/kernel/stock/
+mkosi.conf`'s full `firmware-*` set plus snow/cayo's per-vendor extras) so
+network installs work on real machines, not just virtio-only QEMU fixtures.
+
+**`shared/native-installer/tree/usr/libexec/snosi-install`** (Task 8.2) is
+the real product-aware CLI installer, replacing the phase-8.1 placeholder
+(`test/cayo-ab-install-spike.sh` shipped verbatim at
+`/usr/libexec/snosi-install-spike` — that spike script itself is UNCHANGED
+and still what every existing QEMU harness drives; its GPT-relocate/
+var-grow/LUKS logic is PORTED, not sourced, into `snosi-install`). Full
+21-step interactive + `--non-interactive` flow (every prompt has a flag),
+plus `snosi-install --restage-mok` recovery for a skipped/mistyped/timed-out
+MokManager enrollment. Fetches and `gpgv`-verifies the product's signed R2
+index against `/usr/lib/snosi/os-update-pubring.gpg`, streams the decompressed
+disk image onto the target while hashing the compressed bytes received
+(wipes the partition table on ANY mismatch — see the script's own header
+for the full design rationale), extracts the TPM PCR-11 signing public key
+from the disk's OWN just-written UKI (`objcopy --dump-section .pcrpkey=`,
+self-contained, no external key), and enrolls TPM/MOK exactly matching
+`test/native-ab-secure-rotation-test.sh`'s `enroll_token`. MOK enrollment is
+genuinely non-interactive-capable via `mokutil --generate-hash`/`--import
+--hash-file` (not a workaround — a real, if under-documented, mokutil
+feature). Root SSH key install writes into the persistent `/etc` overlay
+upperdir (`/root` is dm-verity-sealed read-only, always) via a new
+`AuthorizedKeysFile` drop-in shipped on the installed product,
+`shared/outformat/ab-root/tree/etc/ssh/sshd_config.d/
+10-snosi-authorized-keys.conf`. `shared/native-ab/keys/mok-dev.crt` (new,
+committed public certificate — a plain copy of gitignored `mkosi.crt`, same
+DEV-only reasoning as `import-pubring.gpg`) ships alongside the pubring via
+`ExtraTrees=`. `test/snosi-install-test.sh` covers the pure logic (index
+parsing/verification, disk-refusal filters, argument validation matrix,
+streamed-verify mismatch handling, restage-mok argument handling) via
+fixtures, wired into `validate.yml`; full disk-write/LUKS/TPM/MOK behavior
+needs a real product build and install target (a later task). Full design
+notes: `yeti/OVERVIEW.md` "snosi-install CLI (Task 8.2)".
+
+The Phase 7 candidate/verify/promote/withdraw publication pipeline
+(`shared/native-ab/publish/`) now also publishes this ISO, under the flat
+`isos/native/v1/` namespace (docs/native-ab-contracts.md §5) via a new
+`prepare-iso-publication.sh` and a `dest_path` field in
+`publication-info.json` (`publish-candidate.sh`/`promote.sh` read it instead
+of always deriving `os/native/v1/<product>/x86-64`; `withdraw.sh` grew an
+optional `--dest-path` override). See `docs/native-ab-publication.md`
+"Installer ISO publication" for the operational runbook and
+`yeti/OVERVIEW.md`'s "Publication pipeline generalization for the ISO" for
+a latent `promote.sh` bug this generalization surfaced and fixed (an
+outgoing-index archival regex that only matched `*.manifest.json` entries,
+silently killing `promote.sh` via `set -e`+`pipefail` on the second
+promotion of any publication type with none — the ISO has none).
 
 ### Native `/var` Factory State
 

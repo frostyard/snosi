@@ -274,4 +274,62 @@ assert_contains "missing --pubring error names the bad path" \
 after_snapshot="$(find "$DEST" -type f -exec sha256sum {} + | sort)"
 assert_eq "origin dir unchanged after missing-pubring promote failure" "$after_snapshot" "$before_snapshot"
 
+# ---------------------------------------------------------------------------
+# ISO-shaped fixture leg (Task 8.2, docs/native-ab-contracts.md §5's flat
+# "isos/native/v1" namespace): proves the SAME candidate/verify/promote/
+# withdraw pipeline, unmodified apart from reading PUB_DEST_PATH instead of
+# always deriving "os/native/v1/<product>/x86-64", works end to end for a
+# publication-info.json whose dest_path has no per-product/x86-64 subpath.
+# Uses shared/native-ab/publish/prepare-iso-publication.sh -- a tiny fixture
+# file standing in for a real multi-hundred-MiB ISO (naming/staging logic
+# does not care about the bytes).
+# ---------------------------------------------------------------------------
+echo "=== ISO-shaped fixture leg (isos/native/v1) ==="
+
+ISO_VERSION1=20260301000000
+ISO_VERSION2=20260302000000
+ISO_FIXTURE1="$WORK_DIR/snosi-native-installer_${ISO_VERSION1}_x86-64.iso"
+ISO_FIXTURE2="$WORK_DIR/snosi-native-installer_${ISO_VERSION2}_x86-64.iso"
+printf 'fixture ISO bytes v1\n' >"$ISO_FIXTURE1"
+printf 'fixture ISO bytes v2, slightly different length\n' >"$ISO_FIXTURE2"
+
+assert_false "prepare-iso-publication.sh rejects a mis-named ISO file" \
+    "$PUBLISH_DIR/prepare-iso-publication.sh" "$WORK_DIR/wrong-name.iso" "$ISO_VERSION1" "$WORK_DIR/iso-prepared-bad"
+
+"$PUBLISH_DIR/prepare-iso-publication.sh" "$ISO_FIXTURE1" "$ISO_VERSION1" "$WORK_DIR/iso-prepared-1" >/dev/null
+"$PUBLISH_DIR/prepare-iso-publication.sh" "$ISO_FIXTURE2" "$ISO_VERSION2" "$WORK_DIR/iso-prepared-2" >/dev/null
+ISO_PREPARED1="$WORK_DIR/iso-prepared-1"
+ISO_PREPARED2="$WORK_DIR/iso-prepared-2"
+assert_true "prepare-iso-publication.sh: publication-info.json has the flat isos/native/v1 dest_path" \
+    bash -c "[[ \$(jq -er '.dest_path' '$ISO_PREPARED1/publication-info.json') == 'isos/native/v1' ]]"
+
+ISO_BASE_URL="http://127.0.0.1:${PORT}/isos/native/v1"
+
+"$PUBLISH_DIR/publish-candidate.sh" "$ISO_PREPARED1" "$DEST"
+assert_true "ISO candidate object landed under isos/native/v1/.candidate/$ISO_VERSION1/" \
+    test -f "$DEST/isos/native/v1/.candidate/$ISO_VERSION1/snosi-native-installer_${ISO_VERSION1}_x86-64.iso"
+
+assert_true "verify-remote.sh clean pass for the ISO candidate" \
+    "$PUBLISH_DIR/verify-remote.sh" "$ISO_PREPARED1" "$ISO_BASE_URL"
+
+"$PUBLISH_DIR/promote.sh" "${PROMOTE_KEY_ARGS[@]}" --pubring "$PUBRING" "$ISO_PREPARED1" "$ISO_BASE_URL" "$DEST"
+iso_product_dir="$DEST/isos/native/v1"
+assert_true "ISO final SHA256SUMS.gpg exists (no product/x86-64 subpath)" test -f "$iso_product_dir/SHA256SUMS.gpg"
+assert_true "gpgv accepts the promoted ISO index" \
+    gpgv --keyring "$PUBRING" "$iso_product_dir/SHA256SUMS.gpg" "$iso_product_dir/SHA256SUMS"
+assert_contains "promoted ISO index lists the version-stamped name" \
+    "$(cat "$iso_product_dir/SHA256SUMS")" "snosi-native-installer_${ISO_VERSION1}_x86-64.iso"
+
+"$PUBLISH_DIR/publish-candidate.sh" "$ISO_PREPARED2" "$DEST" >/dev/null
+"$PUBLISH_DIR/verify-remote.sh" "$ISO_PREPARED2" "$ISO_BASE_URL" >/dev/null
+"$PUBLISH_DIR/promote.sh" "${PROMOTE_KEY_ARGS[@]}" --pubring "$PUBRING" "$ISO_PREPARED2" "$ISO_BASE_URL" "$DEST" >/dev/null
+assert_true "ISO v1's signed index was archived to .history/$ISO_VERSION1/" \
+    test -f "$iso_product_dir/.history/$ISO_VERSION1/SHA256SUMS.gpg"
+
+"$PUBLISH_DIR/withdraw.sh" --pubring "$PUBRING" --dest-path isos/native/v1 snosi-native-installer "$ISO_VERSION1" "$DEST"
+assert_contains "ISO index advertises v1 again after withdrawal via --dest-path" \
+    "$(cat "$iso_product_dir/SHA256SUMS")" "snosi-native-installer_${ISO_VERSION1}_x86-64.iso"
+assert_true "gpgv accepts the withdrawn (restored) ISO index" \
+    gpgv --keyring "$PUBRING" "$iso_product_dir/SHA256SUMS.gpg" "$iso_product_dir/SHA256SUMS"
+
 print_summary

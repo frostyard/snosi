@@ -16,13 +16,14 @@ set -euo pipefail
 # install, not a dracut initrd), so systemd boots straight to normal targets.
 ln -sf usr/lib/systemd/systemd /init
 
-# CLI installer placeholder (Task 8.2 generalizes this into the real
-# product-aware installer -- docs/plans/2026-07-14-bootc-native-ab-
-# coexistence-plan.md "First-Round CLI Installer"). Ship the current spike
-# script verbatim so there is exactly one copy in the tree (no drift).
-[[ -f "$CHROOT_SRCDIR/test/cayo-ab-install-spike.sh" ]] || {
-    echo "ERROR: test/cayo-ab-install-spike.sh not found at \$CHROOT_SRCDIR" >&2
+# The product-aware CLI installer (shared/native-installer/tree/usr/libexec/
+# snosi-install, Task 8.2 -- docs/plans/2026-07-14-bootc-native-ab-
+# coexistence-plan.md "First-Round CLI Installer") ships via this profile's
+# own ExtraTrees=, not from here; this postinst only fixes up its mode
+# (ExtraTrees= preserves the source tree's file mode, but that source file
+# is only editor-writable, not executable, in git).
+[[ -f /usr/libexec/snosi-install ]] || {
+    echo "ERROR: /usr/libexec/snosi-install missing (shared/native-installer/mkosi.conf ExtraTrees=)" >&2
     exit 1
 }
-install -D -m 0755 "$CHROOT_SRCDIR/test/cayo-ab-install-spike.sh" \
-    /usr/libexec/snosi-install-spike
+chmod 0755 /usr/libexec/snosi-install

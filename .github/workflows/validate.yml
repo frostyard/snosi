@@ -74,6 +74,19 @@ jobs:
         # markers; the raw dev fixture must never gain them either.
         run: ./check-native-publication-guard.sh
 
+      - name: Validate snosi-install CLI installer
+        # shared/native-installer/tree/usr/libexec/snosi-install (Task 8.2):
+        # index parsing/verification (good/tampered signed SHA256SUMS over a
+        # local HTTP origin + ephemeral gpg key), disk-refusal filters
+        # (fixture `lsblk -b -J -O` JSON), name derivation, the full
+        # --non-interactive argument validation matrix, streamed-verify
+        # mismatch handling (small fixture "disk image"), and --restage-mok
+        # argument handling. No root, no network beyond localhost, no image
+        # build, no real block device. Full end-to-end disk-write/LUKS/TPM/
+        # MOK behavior needs a real product build and install target (Task
+        # 8.3), intentionally out of scope for this fast per-PR check.
+        run: ./test/snosi-install-test.sh
+
       - name: Validate snosi-etc-diff drift tooling
         # Static, non-root regression test driving the real script against
         # fixture trees via its SNOSI_ETC_DIFF_LIVE_ETC/PRISTINE_ETC test
