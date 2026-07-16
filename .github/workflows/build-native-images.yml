@@ -159,6 +159,22 @@ jobs:
       - name: Assert mkosi pin matches build.yml
         run: ./shared/native-ab/ci/check-mkosi-pin.sh .mkosi
 
+      - name: Prepare mkosi build host
+        # Mirrors the host setup the systemd/mkosi action gives build.yml /
+        # build-images.yml for free (minus KVM device setup -- these jobs
+        # never boot VMs): the Debian archive keyring mkosi needs to verify
+        # deb.debian.org, unprivileged user namespaces, removal of the
+        # runner's broken apparmor profiles (apparmor/apparmor#402), and the
+        # ca-certificates mountpoint.
+        run: |
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_userns=0
+          sudo aa-teardown || true
+          sudo apt-get remove -y apparmor || true
+          sudo mkdir -p /var/lib/ca-certificates
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debian-archive-keyring
+
       - name: Write Secure Boot/MOK and PCR signing key material
         # docs/native-ab-publication.md "Interim protected-builder
         # constraints": ephemeral, file-based, never echoed, removed
@@ -291,6 +307,22 @@ jobs:
       - name: Assert mkosi pin matches build.yml
         run: ./shared/native-ab/ci/check-mkosi-pin.sh .mkosi
 
+      - name: Prepare mkosi build host
+        # Mirrors the host setup the systemd/mkosi action gives build.yml /
+        # build-images.yml for free (minus KVM device setup -- these jobs
+        # never boot VMs): the Debian archive keyring mkosi needs to verify
+        # deb.debian.org, unprivileged user namespaces, removal of the
+        # runner's broken apparmor profiles (apparmor/apparmor#402), and the
+        # ca-certificates mountpoint.
+        run: |
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_userns=0
+          sudo aa-teardown || true
+          sudo apt-get remove -y apparmor || true
+          sudo mkdir -p /var/lib/ca-certificates
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debian-archive-keyring
+
       - name: Write Secure Boot/MOK and PCR signing key material
         env:
           NATIVE_SECURE_BOOT_KEY: ${{ secrets.NATIVE_SECURE_BOOT_KEY }}
@@ -407,6 +439,22 @@ jobs:
 
       - name: Assert mkosi pin matches build.yml
         run: ./shared/native-ab/ci/check-mkosi-pin.sh .mkosi
+
+      - name: Prepare mkosi build host
+        # Mirrors the host setup the systemd/mkosi action gives build.yml /
+        # build-images.yml for free (minus KVM device setup -- these jobs
+        # never boot VMs): the Debian archive keyring mkosi needs to verify
+        # deb.debian.org, unprivileged user namespaces, removal of the
+        # runner's broken apparmor profiles (apparmor/apparmor#402), and the
+        # ca-certificates mountpoint.
+        run: |
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_userns=0
+          sudo aa-teardown || true
+          sudo apt-get remove -y apparmor || true
+          sudo mkdir -p /var/lib/ca-certificates
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debian-archive-keyring
 
       - name: Write Secure Boot/MOK and PCR signing key material
         env:
