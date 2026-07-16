@@ -114,12 +114,28 @@ images with those keys and confirm nothing private leaked.
       see CLAUDE.md "MOK Rotation."
 - [x] **Confirm the production PCR signing keypair** (`pcr-signing.{key,crt}`,
       generated in the key ceremony) exists and is in the encrypted offsite backup.
-      This is a **build-time** key (mkosi `SignExpectedPcr` reads
+      **It MUST be ECC P-256, not RSA.** TPM2 signed-PCR-policy *unlock* makes the
+      TPM load and verify this key; RSA-4096 is optional in the TPM2 spec and is
+      rejected by swtpm and most hardware TPMs (`Esys_LoadExternal` →
+      `TPM_RC_VALUE`, systemd #30546) — enrollment succeeds but every auto-unlock
+      then fails. Only RSA-2048 is mandatory; ECC P-256 is the robust choice
+      (`openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256`). The MOK
+      key is unaffected (RSA-4096 is fine — Secure Boot, verified by firmware, never
+      touches the TPM). This is a **build-time** key (mkosi `SignExpectedPcr` reads
       `.snosi-private/pcr-signing.{key,crt}`), same custody tier as the MOK key —
       its private half goes into the `native-build` environment secrets in §4
       (`NATIVE_PCR_SIGNING_KEY` / `NATIVE_PCR_SIGNING_CERTIFICATE`), **not** the
       offline OpenPGP promotion tier. The public half is **not** committed to the
       repo; the build extracts it from the cert. (Nothing to commit here.)
+- [ ] **Refresh the offsite backup and secrets after any key (re)generation.**
+      Whenever a private key changes (e.g. the PCR key was regenerated ECC), rebuild
+      the encrypted bundle and re-copy it to BOTH offsite locations, then re-set the
+      matching GitHub environment secret(s) so CI signs with the current key:
+      `tar czf - mkosi.key mkosi.crt pcr-signing.key pcr-signing.crt | age -p >
+      backup/snosi-signing-keys-<year>.age` (offsite ×2), and
+      `gh secret set NATIVE_PCR_SIGNING_KEY --env native-build < pcr-signing.key`
+      (plus the matching cert / any other changed key). Verify the new bundle
+      restores (`age -d … | tar tzf -`) before trusting it.
 - [x] **Local pre-flight rebuild with the production keys** (optional but
       recommended — the authoritative production images are built by CI in §4/§6/§7;
       this catches a bad/misformatted key locally in minutes instead of inside a
