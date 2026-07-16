@@ -173,7 +173,8 @@ jobs:
           sudo apt-get remove -y apparmor || true
           sudo mkdir -p /var/lib/ca-certificates
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends debian-archive-keyring
+          sudo apt-get install -y --no-install-recommends debian-archive-keyring \
+            dracut-core binutils file python3-cryptography
 
       - name: Write Secure Boot/MOK and PCR signing key material
         # docs/native-ab-publication.md "Interim protected-builder
@@ -321,7 +322,8 @@ jobs:
           sudo apt-get remove -y apparmor || true
           sudo mkdir -p /var/lib/ca-certificates
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends debian-archive-keyring
+          sudo apt-get install -y --no-install-recommends debian-archive-keyring \
+            dracut-core binutils file python3-cryptography
 
       - name: Write Secure Boot/MOK and PCR signing key material
         env:
@@ -454,7 +456,8 @@ jobs:
           sudo apt-get remove -y apparmor || true
           sudo mkdir -p /var/lib/ca-certificates
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends debian-archive-keyring
+          sudo apt-get install -y --no-install-recommends debian-archive-keyring \
+            dracut-core binutils file python3-cryptography
 
       - name: Write Secure Boot/MOK and PCR signing key material
         env:
