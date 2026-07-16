@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+[Unit]
+Description=Stage native A/B update (download only; applies at next reboot)
+Documentation=man:systemd-sysupdate(8)
+After=network-online.target
+Wants=network-online.target
+# Defensive: this unit only ships in the native A/B tree in the first place
+# (shared/outformat/ab-root/tree), so it never coexists with a bootc image,
+# but keep the same self-gating shape as bootc-update-stage.service for
+# consistency.
+ConditionPathExists=/usr/lib/snosi/native-ab
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/snosi-sysupdate-stage

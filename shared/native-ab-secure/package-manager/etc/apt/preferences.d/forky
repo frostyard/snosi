@@ -1,0 +1,4 @@
+# Forky packages must be selected explicitly by the secure profile.
+Package: *
+Pin: release n=forky
+Pin-Priority: 50

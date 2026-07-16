@@ -2,22 +2,33 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # snosi-update-status — answer "is this machine current?" in one command.
 #
-# Reads local state only by default: the running IMAGE_VERSION, the bootc
-# deployment status, and the result files written by the hourly checker
-# (/usr/libexec/bootc-update-stage): /run/snosi/update-check (outcome of the
-# last check) and /run/snosi/update-staged (reboot-pending semaphore).
+# Dispatches on /usr/lib/snosi/native-ab (docs/native-ab-contracts.md): if
+# present, uses the native A/B backend (systemd-sysupdate); otherwise uses
+# the bootc backend below, UNCHANGED from before this dispatch existed.
+#
+# Both backends read local state only by default: the running IMAGE_VERSION
+# and the result files written by their respective hourly checker
+# (/usr/libexec/bootc-update-stage or /usr/libexec/snosi-sysupdate-stage):
+# /run/snosi/update-check (outcome of the last check) and
+# /run/snosi/update-staged (reboot-pending semaphore). See those two
+# scripts' headers for the full state-file field contract.
 #
 # Usage: snosi-update-status [--check]
 #
-#   --check   also query the registry live (skopeo inspect) and compare the
-#             published org.opencontainers.image.version label against the
-#             running version. Compare VERSIONS, never digests: the same
-#             build has a different digest per transport (registry vs ISO
-#             vs podman-loaded).
+#   --check   also query the update source live and compare the newest
+#             published version against the running version, never digests
+#             (the same build has a different digest per transport). bootc:
+#             skopeo inspect against the followed registry image, comparing
+#             org.opencontainers.image.version. Native: fetch SHA256SUMS +
+#             SHA256SUMS.gpg from the channel's R2 index
+#             (docs/native-ab-contracts.md §5), verify with gpgv against the
+#             shipped pubring (§7) before trusting any version it lists.
 set -euo pipefail
 
 CHECK=/run/snosi/update-check
 SEM=/run/snosi/update-staged
+MARKER=/usr/lib/snosi/native-ab
+PUBRING=/usr/lib/systemd/import-pubring.gpg
 
 usage() {
     echo "Usage: snosi-update-status [--check]" >&2
@@ -33,7 +44,7 @@ for arg in "$@"; do
 done
 
 if [[ $EUID -ne 0 ]]; then
-    echo "snosi-update-status: must run as root (bootc status requires it)" >&2
+    echo "snosi-update-status: must run as root (bootc status / partition inspection requires it)" >&2
     exit 1
 fi
 
@@ -42,67 +53,221 @@ if [[ -r /usr/lib/os-release ]]; then
     running_version=$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
 fi
 
-status=$(bootc status --format json)
-image=$(jq -r '.spec.image.image // empty' <<<"$status")
-staged_digest=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$status")
-
-echo "Running:    snosi ${running_version:-unknown}"
-if [[ -z "$image" ]]; then
-    echo "Following:  (not a bootc-managed system; updates handled by nbc)"
-    exit 0
-fi
-echo "Following:  $image"
-
 # key FILE - print the value of key= from FILE, empty if absent
 key() { sed -n "s/^$1=//p" "$2" 2>/dev/null || true; }
 
-if [[ -s "$CHECK" ]]; then
-    outcome=$(key outcome "$CHECK")
-    checked_at=$(key checked_at "$CHECK")
-    remote_version=$(key remote_version "$CHECK")
-    case "$outcome" in
-    current)
-        echo "Last check: up to date ($checked_at)"
-        ;;
-    staged)
-        echo "Last check: update to ${remote_version:-unknown} staged ($checked_at)"
-        ;;
-    held-rollback)
-        echo "Last check: published image equals the rollback deployment ($checked_at)"
-        echo "            Not applied automatically; use \`bootc rollback\` if intended."
-        ;;
-    failed)
-        echo "Last check: FAILED ($checked_at)"
-        echo "            See: journalctl -u bootc-update-stage.service"
-        ;;
-    *)
-        echo "Last check: unknown outcome '${outcome:-}' ($checked_at)"
-        ;;
-    esac
-else
-    echo "Last check: none recorded this boot (bootc-update-stage.timer runs hourly)"
-fi
+# ---------------------------------------------------------------------------
+# Native A/B backend
+# ---------------------------------------------------------------------------
+native_status() {
+    local image_id channel outcome checked_at remote_version
+    local staged_at version uki_prefix uki_matches
 
-if [[ -s "$SEM" ]]; then
-    staged_at=$(key staged_at "$SEM")
-    digest=$(key digest "$SEM")
-    echo "Staged:     ${digest:0:19} at $staged_at — reboot to apply"
-elif [[ -n "$staged_digest" ]]; then
-    # Staged outside the checker (manual bootc upgrade) before the next
-    # timer run re-asserts the semaphore.
-    echo "Staged:     ${staged_digest:0:19} — reboot to apply"
-fi
+    image_id=""
+    if [[ -r /usr/lib/os-release ]]; then
+        image_id=$(. /usr/lib/os-release && echo "${IMAGE_ID:-}")
+    fi
+    channel="${image_id}-ab"
 
-if [[ $LIVE -eq 1 ]]; then
-    published=$(skopeo inspect "docker://$image" 2>/dev/null |
-        jq -r '.Labels["org.opencontainers.image.version"] // empty') || published=""
+    echo "Running:    snosi ${running_version:-unknown} (native A/B: $channel)"
+    echo "Following:  $channel (native A/B; signed R2 index, docs/native-ab-contracts.md §5)"
+
+    if [[ -s "$CHECK" ]]; then
+        outcome=$(key outcome "$CHECK")
+        checked_at=$(key checked_at "$CHECK")
+        remote_version=$(key remote_version "$CHECK")
+        case "$outcome" in
+        current)
+            echo "Last check: up to date ($checked_at)"
+            ;;
+        staged)
+            echo "Last check: update to ${remote_version:-unknown} staged ($checked_at)"
+            ;;
+        failed)
+            echo "Last check: FAILED ($checked_at)"
+            echo "            See: journalctl -u snosi-sysupdate-stage.service"
+            ;;
+        *)
+            echo "Last check: unknown outcome '${outcome:-}' ($checked_at)"
+            ;;
+        esac
+    else
+        echo "Last check: none recorded this boot (snosi-sysupdate-stage.timer runs hourly when enabled -- see docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md \"Activation policy\")"
+    fi
+
+    if [[ -s "$SEM" ]]; then
+        staged_at=$(key staged_at "$SEM")
+        version=$(key version "$SEM")
+        echo "Staged:     $version at $staged_at — reboot to apply"
+        uki_prefix="${channel}_${version}+"
+        shopt -s nullglob
+        uki_matches=("/boot/EFI/Linux/${uki_prefix}"*.efi)
+        shopt -u nullglob
+        if [[ ${#uki_matches[@]} -gt 0 ]]; then
+            echo "            UKI present in ESP: $(basename "${uki_matches[0]}")"
+        else
+            echo "            WARNING: staged UKI not found in ESP (/boot/EFI/Linux/${uki_prefix}*.efi)"
+        fi
+    fi
+
+    if [[ -x /usr/lib/systemd/systemd-sysupdate ]]; then
+        if /usr/lib/systemd/systemd-sysupdate pending >/dev/null 2>&1; then
+            echo "Pending:    a newer version than running is already installed (reboot to apply)"
+        else
+            echo "Pending:    none (running is the newest installed version)"
+        fi
+    fi
+
+    if command -v systemd-bless-boot >/dev/null 2>&1; then
+        echo "Boot:       $(systemd-bless-boot status 2>/dev/null || echo unknown) (systemd-bless-boot status)"
+    fi
+
+    local rollback_label rollback_version
+    # The booted slot is excluded by its LABEL, never by findmnt's mount
+    # source: a dm-verity root mounts from /dev/mapper/root (or /dev/dm-N),
+    # which never equals the partition's /dev path, so a path comparison
+    # silently reports the RUNNING version as its own rollback (root-caused
+    # live in test/native-ab-updateux-test.sh's first QEMU run). ".. |
+    # objects" (recursive descent), not ".blockdevices[]": lsblk nests
+    # partitions under each disk's "children" array -- matches the proven
+    # pattern in test/native-ab-update-test.sh.
+    rollback_label="$(lsblk -J -o PATH,PARTLABEL 2>/dev/null | jq -r \
+        --arg running "${image_id}_${running_version}_r" --arg prefix "${image_id}_" '
+        .. | objects
+        | select(.partlabel? != null)
+        | select(.partlabel != $running)
+        | select(.partlabel | startswith($prefix))
+        | select(.partlabel | endswith("_r"))
+        | .partlabel' 2>/dev/null | head -1 || true)"
+    if [[ -n "$rollback_label" ]]; then
+        rollback_version="${rollback_label#"${image_id}_"}"
+        rollback_version="${rollback_version%_r}"
+        echo "Rollback:   $rollback_version (other root slot)"
+    else
+        echo "Rollback:   none (other root slot is empty)"
+    fi
+
+    if [[ $LIVE -eq 1 ]]; then
+        native_check_live "$channel" "$image_id"
+    fi
+}
+
+# native_check_live channel image_id -- fetch and gpgv-verify the channel's
+# R2 index, then compare the newest advertised version to running_version.
+# Never trusts an unsigned or badly-signed SHA256SUMS.
+native_check_live() {
+    local channel="$1" image_id="$2"
+    local base tmpd published
+
+    base="https://repository.frostyard.org/os/native/v1/${image_id}/x86-64"
+    tmpd="$(mktemp -d)"
+    # shellcheck disable=SC2064
+    trap "rm -rf '$tmpd'" RETURN
+
+    if ! curl -fsSL --connect-timeout 10 --max-time 30 "$base/SHA256SUMS" -o "$tmpd/SHA256SUMS" 2>"$tmpd/curl.err"; then
+        echo "Registry:   query failed (network? unpublished channel? $base)"
+        return 1
+    fi
+    if ! curl -fsSL --connect-timeout 10 --max-time 30 "$base/SHA256SUMS.gpg" -o "$tmpd/SHA256SUMS.gpg" 2>>"$tmpd/curl.err"; then
+        echo "Registry:   query failed (SHA256SUMS.gpg fetch failed)"
+        return 1
+    fi
+    if [[ ! -s "$PUBRING" ]]; then
+        echo "Registry:   query failed (no update pubring at $PUBRING)"
+        return 1
+    fi
+    if ! gpgv --keyring "$PUBRING" "$tmpd/SHA256SUMS.gpg" "$tmpd/SHA256SUMS" 2>"$tmpd/gpgv.err"; then
+        echo "Registry:   SIGNATURE VERIFICATION FAILED -- refusing to trust the index" >&2
+        cat "$tmpd/gpgv.err" >&2
+        return 1
+    fi
+
+    # Multiple manifest entries can appear in one signed index (e.g. during a
+    # rolling publish); take the numeric MAXIMUM version, not the first
+    # match -- SHA256SUMS line order is not guaranteed to be newest-first.
+    published="$(grep -oE "${channel}_[0-9]{14}\.manifest\.json" "$tmpd/SHA256SUMS" | grep -oE '[0-9]{14}' | sort -n | tail -1)" || true
     if [[ -z "$published" ]]; then
-        echo "Registry:   query failed (network? unpublished tag?)"
-        exit 1
+        echo "Registry:   query failed (no manifest entry for $channel in the signed index)"
+        return 1
     fi
     if [[ "$published" == "$running_version" ]]; then
         echo "Registry:   $published — this machine is current"
     else
         echo "Registry:   $published — differs from running ${running_version:-unknown}"
     fi
+}
+
+# ---------------------------------------------------------------------------
+# bootc backend (unchanged behavior)
+# ---------------------------------------------------------------------------
+bootc_status() {
+    local status image staged_digest outcome checked_at remote_version staged_at digest published
+
+    status=$(bootc status --format json)
+    image=$(jq -r '.spec.image.image // empty' <<<"$status")
+    staged_digest=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$status")
+
+    echo "Running:    snosi ${running_version:-unknown}"
+    if [[ -z "$image" ]]; then
+        echo "Following:  (not a bootc-managed system; updates handled by nbc)"
+        return 0
+    fi
+    echo "Following:  $image"
+
+    if [[ -s "$CHECK" ]]; then
+        outcome=$(key outcome "$CHECK")
+        checked_at=$(key checked_at "$CHECK")
+        remote_version=$(key remote_version "$CHECK")
+        case "$outcome" in
+        current)
+            echo "Last check: up to date ($checked_at)"
+            ;;
+        staged)
+            echo "Last check: update to ${remote_version:-unknown} staged ($checked_at)"
+            ;;
+        held-rollback)
+            echo "Last check: published image equals the rollback deployment ($checked_at)"
+            echo "            Not applied automatically; use \`bootc rollback\` if intended."
+            ;;
+        failed)
+            echo "Last check: FAILED ($checked_at)"
+            echo "            See: journalctl -u bootc-update-stage.service"
+            ;;
+        *)
+            echo "Last check: unknown outcome '${outcome:-}' ($checked_at)"
+            ;;
+        esac
+    else
+        echo "Last check: none recorded this boot (bootc-update-stage.timer runs hourly)"
+    fi
+
+    if [[ -s "$SEM" ]]; then
+        staged_at=$(key staged_at "$SEM")
+        digest=$(key digest "$SEM")
+        echo "Staged:     ${digest:0:19} at $staged_at — reboot to apply"
+    elif [[ -n "$staged_digest" ]]; then
+        # Staged outside the checker (manual bootc upgrade) before the next
+        # timer run re-asserts the semaphore.
+        echo "Staged:     ${staged_digest:0:19} — reboot to apply"
+    fi
+
+    if [[ $LIVE -eq 1 ]]; then
+        published=$(skopeo inspect "docker://$image" 2>/dev/null |
+            jq -r '.Labels["org.opencontainers.image.version"] // empty') || published=""
+        if [[ -z "$published" ]]; then
+            echo "Registry:   query failed (network? unpublished tag?)"
+            return 1
+        fi
+        if [[ "$published" == "$running_version" ]]; then
+            echo "Registry:   $published — this machine is current"
+        else
+            echo "Registry:   $published — differs from running ${running_version:-unknown}"
+        fi
+    fi
+}
+
+if [[ -e "$MARKER" ]]; then
+    native_status
+else
+    bootc_status
 fi

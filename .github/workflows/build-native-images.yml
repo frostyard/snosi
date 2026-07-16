@@ -1,0 +1,984 @@
+name: Build Native Images
+
+# Native A/B (cayo-ab, snow-ab, snowfield-ab) build/publish pipeline
+# (docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md "Native Build
+# Workflow", docs/native-ab-publication.md, docs/native-ab-contracts.md).
+#
+# THIS WORKFLOW IS A THIN CALLER. Every real step below is a call into an
+# in-repo, independently testable script (shared/native-ab/publish/*.sh,
+# shared/native-ab/ci/*.sh, test/*.sh) -- the only logic that lives directly
+# in this YAML is orchestration glue (job ordering, secret-file plumbing,
+# disk-space mitigation) that has no meaningful existence outside a GitHub
+# Actions runner. Any build/publish/verification LOGIC added here instead of
+# to one of those scripts is a defect -- see docs/native-ab-publication.md's
+# "CI publication flow" section for the full rationale.
+#
+# Trigger (interim protected-builder rule, docs/native-ab-publication.md
+# "Interim protected-builder constraints"): workflow_dispatch (manual, needs
+# write access) and a weekly schedule ONLY. Both run only on the main branch.
+# Native builds are deliberately NOT fired by every main push -- a full
+# 3-product build is heavy and publication must be an intentional act.
+# Never pull_request, never a fork-originated trigger, never
+# repository_dispatch from an untrusted source. Until mkosi supports split
+# final assembly from signing (docs/native-ab-contracts.md SS7 "Protected
+# signing architecture"), the build-* jobs below are themselves the accepted
+# interim "protected builder": they receive the Secure Boot/MOK
+# (SecureBootKey/SecureBootCertificate) and PCR signing
+# (SignExpectedPcrKey/SignExpectedPcrCertificate) private key material as
+# environment-scoped secrets (environment: native-build, a protected
+# environment restricted to main-branch deployments), written to
+# runner-local files immediately before the one mkosi build step that
+# consumes them, never echoed, and removed by both an in-step trap and an
+# explicit `if: always()` cleanup step. This is an accepted INTERIM risk,
+# not the final custody model -- see docs/native-ab-publication.md for the
+# full checklist and what changes once mkosi gains native split-signing
+# support.
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly candidate build, Sundays 06:00 UTC. Promotion still requires
+    # manual approval in the native-promotion environment, so this uploads
+    # candidates and pauses -- it never publishes a live index unattended.
+    # (schedule runs only on the default branch.)
+    - cron: '0 6 * * 0'
+
+permissions: {}
+
+# One promotion in flight at a time: two interleaved runs racing promote.sh
+# against the same product's live SHA256SUMS/SHA256SUMS.gpg is exactly the
+# "short interval where an old manifest and new detached signature
+# disagree" the plan warns about, just self-inflicted instead of a client
+# race. Never cancel a run that may already be mid-promotion.
+concurrency:
+  group: build-native-images
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Cheap, no-network, no-build governance gate. Runs before any expensive
+  # job starts (Mkosi Pin Governance: "CI must derive local and workflow
+  # mkosi from the same commit and fail if they diverge").
+  # ---------------------------------------------------------------------
+  pin-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Assert mkosi pin matches build.yml
+        run: ./shared/native-ab/ci/check-mkosi-pin.sh
+
+  # ---------------------------------------------------------------------
+  # Assign one version/revision shared by every product built in this run,
+  # matching how build-images.yml versions its OCI builds -- co-published
+  # native products share the same build timestamp.
+  # ---------------------------------------------------------------------
+  prepare:
+    needs: pin-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      revision: ${{ steps.revision.outputs.revision }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Generate version
+        # 14-digit UTC timestamp -- the frozen ^[0-9]{14}$ grammar
+        # (docs/native-ab-contracts.md SS2), same shape as build-images.yml's
+        # own version tag, so co-published products share one timestamp.
+        id: version
+        run: echo "version=$(date -u +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
+
+      - name: Record source revision
+        id: revision
+        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  # ===========================================================================
+  # build-cayo / build-snow / build-snowfield
+  #
+  # Independent jobs (not a matrix) so each gets its own protected-
+  # environment approval and one product's build failure never blocks
+  # another's. Intentionally near-identical; the only per-product
+  # differences are the profile/image-id names and snowfield's extra
+  # Surface artifact check.
+  # ===========================================================================
+
+  build-cayo:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: native-build
+    permissions:
+      contents: read
+    env:
+      PROFILE: cayo-ab
+      PRODUCT: cayo
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Show disk space (before)
+        run: sudo df -h
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+
+      - name: Redirect temp to /mnt
+        # Mirrors build-images.yml's CI-disk-exhaustion mitigation: mkosi's
+        # build workspace honors $TMPDIR. shared/native-ab/publish/*.sh
+        # deliberately hard-code /var/tmp (never $TMPDIR, per this repo's
+        # "/var/tmp not /tmp" convention), so bind-mount extra space over
+        # /var/tmp too -- those scripts re-download full-size candidate
+        # objects for independent verification later in this same job.
+        run: |
+          sudo mkdir -p /mnt/tmp /mnt/var-tmp
+          sudo chmod 1777 /mnt/tmp /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
+      - name: Show disk space (after)
+        run: sudo df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap pinned mkosi
+        run: ./shared/native-ab/ci/bootstrap-mkosi.sh .mkosi
+
+      - name: Assert mkosi pin matches build.yml
+        run: ./shared/native-ab/ci/check-mkosi-pin.sh .mkosi
+
+      - name: Write Secure Boot/MOK and PCR signing key material
+        # docs/native-ab-publication.md "Interim protected-builder
+        # constraints": ephemeral, file-based, never echoed, removed
+        # immediately after the one build step that needs them.
+        env:
+          NATIVE_SECURE_BOOT_KEY: ${{ secrets.NATIVE_SECURE_BOOT_KEY }}
+          NATIVE_SECURE_BOOT_CERTIFICATE: ${{ secrets.NATIVE_SECURE_BOOT_CERTIFICATE }}
+          NATIVE_PCR_SIGNING_KEY: ${{ secrets.NATIVE_PCR_SIGNING_KEY }}
+          NATIVE_PCR_SIGNING_CERTIFICATE: ${{ secrets.NATIVE_PCR_SIGNING_CERTIFICATE }}
+        run: |
+          set -euo pipefail
+          [[ -n "$NATIVE_SECURE_BOOT_KEY" ]] || { echo "::error::secrets.NATIVE_SECURE_BOOT_KEY is not set in the native-build environment" >&2; exit 1; }
+          [[ -n "$NATIVE_SECURE_BOOT_CERTIFICATE" ]] || { echo "::error::secrets.NATIVE_SECURE_BOOT_CERTIFICATE is not set in the native-build environment" >&2; exit 1; }
+          [[ -n "$NATIVE_PCR_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_KEY is not set in the native-build environment" >&2; exit 1; }
+          [[ -n "$NATIVE_PCR_SIGNING_CERTIFICATE" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_CERTIFICATE is not set in the native-build environment" >&2; exit 1; }
+          umask 077
+          mkdir -p .snosi-private
+          printf '%s' "$NATIVE_SECURE_BOOT_KEY" > mkosi.key
+          printf '%s' "$NATIVE_SECURE_BOOT_CERTIFICATE" > mkosi.crt
+          printf '%s' "$NATIVE_PCR_SIGNING_KEY" > .snosi-private/pcr-signing.key
+          printf '%s' "$NATIVE_PCR_SIGNING_CERTIFICATE" > .snosi-private/pcr-signing.crt
+          chmod 600 mkosi.key mkosi.crt .snosi-private/pcr-signing.key .snosi-private/pcr-signing.crt
+          # Non-sensitive public key extracted for the artifact-test step
+          # below; the private/cert files themselves are removed by the
+          # cleanup step right after the build.
+          openssl x509 -in .snosi-private/pcr-signing.crt -pubkey -noout > .snosi-private/pcr-signing.pub
+
+      - name: Build image
+        run: |
+          sudo TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile "$PROFILE" \
+            --dependency= \
+            --dependency=base \
+            --image-version "$VERSION" \
+            build
+
+      - name: Remove Secure Boot/MOK and PCR signing key material
+        if: always()
+        run: |
+          rm -f mkosi.key mkosi.crt .snosi-private/pcr-signing.key .snosi-private/pcr-signing.crt
+
+      - name: Validate native A/B secure artifact contract
+        run: |
+          OUTPUT_NAME="$PROFILE" ./test/native-ab-secure-artifact-test.sh \
+            "" "" "" .snosi-private/pcr-signing.pub single
+
+      - name: Prepare native publication
+        # shared/native-ab/publish/prepare-native-publication.sh derives
+        # product/channel/version from the build's own manifest -- nothing
+        # here is passed on the command line except the profile output name.
+        # generate-sbom.sh is called internally.
+        run: |
+          ./shared/native-ab/publish/prepare-native-publication.sh --xz \
+            output "$PROFILE" /var/tmp/native-publish
+
+      - name: Publish candidate objects to R2
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.NATIVE_R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.NATIVE_R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_R2_ACL: private
+          RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+        run: |
+          sudo apt-get install -y rclone
+          ./shared/native-ab/publish/publish-candidate.sh \
+            "/var/tmp/native-publish/$PRODUCT/x86-64" \
+            "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
+
+      - name: Upload prepared publication metadata
+        # Only the small pipeline records (publication-info.json,
+        # SHA256SUMS) -- never the multi-gigabyte payload objects, which
+        # already live in R2 after the step above. verify-remote.sh and
+        # promote.sh only need these two files locally; they re-download
+        # the actual candidate/final bytes over HTTP.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-prepared-cayo
+          path: |
+            /var/tmp/native-publish/cayo/x86-64/publication-info.json
+            /var/tmp/native-publish/cayo/x86-64/SHA256SUMS
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: cleanup build output
+        if: always()
+        run: sudo -E .mkosi/bin/mkosi clean
+
+  build-snow:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: native-build
+    permissions:
+      contents: read
+    env:
+      PROFILE: snow-ab
+      PRODUCT: snow
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Show disk space (before)
+        run: sudo df -h
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+
+      - name: Redirect temp to /mnt
+        run: |
+          sudo mkdir -p /mnt/tmp /mnt/var-tmp
+          sudo chmod 1777 /mnt/tmp /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
+      - name: Show disk space (after)
+        run: sudo df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap pinned mkosi
+        run: ./shared/native-ab/ci/bootstrap-mkosi.sh .mkosi
+
+      - name: Assert mkosi pin matches build.yml
+        run: ./shared/native-ab/ci/check-mkosi-pin.sh .mkosi
+
+      - name: Write Secure Boot/MOK and PCR signing key material
+        env:
+          NATIVE_SECURE_BOOT_KEY: ${{ secrets.NATIVE_SECURE_BOOT_KEY }}
+          NATIVE_SECURE_BOOT_CERTIFICATE: ${{ secrets.NATIVE_SECURE_BOOT_CERTIFICATE }}
+          NATIVE_PCR_SIGNING_KEY: ${{ secrets.NATIVE_PCR_SIGNING_KEY }}
+          NATIVE_PCR_SIGNING_CERTIFICATE: ${{ secrets.NATIVE_PCR_SIGNING_CERTIFICATE }}
+        run: |
+          set -euo pipefail
+          [[ -n "$NATIVE_SECURE_BOOT_KEY" ]] || { echo "::error::secrets.NATIVE_SECURE_BOOT_KEY is not set in the native-build environment" >&2; exit 1; }
+          [[ -n "$NATIVE_SECURE_BOOT_CERTIFICATE" ]] || { echo "::error::secrets.NATIVE_SECURE_BOOT_CERTIFICATE is not set in the native-build environment" >&2; exit 1; }
+          [[ -n "$NATIVE_PCR_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_KEY is not set in the native-build environment" >&2; exit 1; }
+          [[ -n "$NATIVE_PCR_SIGNING_CERTIFICATE" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_CERTIFICATE is not set in the native-build environment" >&2; exit 1; }
+          umask 077
+          mkdir -p .snosi-private
+          printf '%s' "$NATIVE_SECURE_BOOT_KEY" > mkosi.key
+          printf '%s' "$NATIVE_SECURE_BOOT_CERTIFICATE" > mkosi.crt
+          printf '%s' "$NATIVE_PCR_SIGNING_KEY" > .snosi-private/pcr-signing.key
+          printf '%s' "$NATIVE_PCR_SIGNING_CERTIFICATE" > .snosi-private/pcr-signing.crt
+          chmod 600 mkosi.key mkosi.crt .snosi-private/pcr-signing.key .snosi-private/pcr-signing.crt
+          openssl x509 -in .snosi-private/pcr-signing.crt -pubkey -noout > .snosi-private/pcr-signing.pub
+
+      - name: Build image
+        run: |
+          sudo TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile "$PROFILE" \
+            --dependency= \
+            --dependency=base \
+            --image-version "$VERSION" \
+            build
+
+      - name: Remove Secure Boot/MOK and PCR signing key material
+        if: always()
+        run: |
+          rm -f mkosi.key mkosi.crt .snosi-private/pcr-signing.key .snosi-private/pcr-signing.crt
+
+      - name: Validate native A/B secure artifact contract
+        run: |
+          OUTPUT_NAME="$PROFILE" ./test/native-ab-secure-artifact-test.sh \
+            "" "" "" .snosi-private/pcr-signing.pub single
+
+      - name: Prepare native publication
+        run: |
+          ./shared/native-ab/publish/prepare-native-publication.sh --xz \
+            output "$PROFILE" /var/tmp/native-publish
+
+      - name: Publish candidate objects to R2
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.NATIVE_R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.NATIVE_R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_R2_ACL: private
+          RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+        run: |
+          sudo apt-get install -y rclone
+          ./shared/native-ab/publish/publish-candidate.sh \
+            "/var/tmp/native-publish/$PRODUCT/x86-64" \
+            "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
+
+      - name: Upload prepared publication metadata
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-prepared-snow
+          path: |
+            /var/tmp/native-publish/snow/x86-64/publication-info.json
+            /var/tmp/native-publish/snow/x86-64/SHA256SUMS
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: cleanup build output
+        if: always()
+        run: sudo -E .mkosi/bin/mkosi clean
+
+  build-snowfield:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: native-build
+    permissions:
+      contents: read
+    env:
+      PROFILE: snowfield-ab
+      PRODUCT: snowfield
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Show disk space (before)
+        run: sudo df -h
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+
+      - name: Redirect temp to /mnt
+        run: |
+          sudo mkdir -p /mnt/tmp /mnt/var-tmp
+          sudo chmod 1777 /mnt/tmp /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
+      - name: Show disk space (after)
+        run: sudo df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap pinned mkosi
+        run: ./shared/native-ab/ci/bootstrap-mkosi.sh .mkosi
+
+      - name: Assert mkosi pin matches build.yml
+        run: ./shared/native-ab/ci/check-mkosi-pin.sh .mkosi
+
+      - name: Write Secure Boot/MOK and PCR signing key material
+        env:
+          NATIVE_SECURE_BOOT_KEY: ${{ secrets.NATIVE_SECURE_BOOT_KEY }}
+          NATIVE_SECURE_BOOT_CERTIFICATE: ${{ secrets.NATIVE_SECURE_BOOT_CERTIFICATE }}
+          NATIVE_PCR_SIGNING_KEY: ${{ secrets.NATIVE_PCR_SIGNING_KEY }}
+          NATIVE_PCR_SIGNING_CERTIFICATE: ${{ secrets.NATIVE_PCR_SIGNING_CERTIFICATE }}
+        run: |
+          set -euo pipefail
+          [[ -n "$NATIVE_SECURE_BOOT_KEY" ]] || { echo "::error::secrets.NATIVE_SECURE_BOOT_KEY is not set in the native-build environment" >&2; exit 1; }
+          [[ -n "$NATIVE_SECURE_BOOT_CERTIFICATE" ]] || { echo "::error::secrets.NATIVE_SECURE_BOOT_CERTIFICATE is not set in the native-build environment" >&2; exit 1; }
+          [[ -n "$NATIVE_PCR_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_KEY is not set in the native-build environment" >&2; exit 1; }
+          [[ -n "$NATIVE_PCR_SIGNING_CERTIFICATE" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_CERTIFICATE is not set in the native-build environment" >&2; exit 1; }
+          umask 077
+          mkdir -p .snosi-private
+          printf '%s' "$NATIVE_SECURE_BOOT_KEY" > mkosi.key
+          printf '%s' "$NATIVE_SECURE_BOOT_CERTIFICATE" > mkosi.crt
+          printf '%s' "$NATIVE_PCR_SIGNING_KEY" > .snosi-private/pcr-signing.key
+          printf '%s' "$NATIVE_PCR_SIGNING_CERTIFICATE" > .snosi-private/pcr-signing.crt
+          chmod 600 mkosi.key mkosi.crt .snosi-private/pcr-signing.key .snosi-private/pcr-signing.crt
+          openssl x509 -in .snosi-private/pcr-signing.crt -pubkey -noout > .snosi-private/pcr-signing.pub
+
+      - name: Build image
+        run: |
+          sudo TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile "$PROFILE" \
+            --dependency= \
+            --dependency=base \
+            --image-version "$VERSION" \
+            build
+
+      - name: Remove Secure Boot/MOK and PCR signing key material
+        if: always()
+        run: |
+          rm -f mkosi.key mkosi.crt .snosi-private/pcr-signing.key .snosi-private/pcr-signing.crt
+
+      - name: Validate native A/B secure artifact contract
+        run: |
+          OUTPUT_NAME="$PROFILE" ./test/native-ab-secure-artifact-test.sh \
+            "" "" "" .snosi-private/pcr-signing.pub single
+
+      - name: Validate Snowfield Surface artifact contract
+        # Loop-mounts the root erofs partition read-only; needs root.
+        run: sudo OUTPUT_NAME="$PROFILE" IMAGE_ID="$PRODUCT" ./test/snowfield-artifact-test.sh
+
+      - name: Prepare native publication
+        run: |
+          ./shared/native-ab/publish/prepare-native-publication.sh --xz \
+            output "$PROFILE" /var/tmp/native-publish
+
+      - name: Publish candidate objects to R2
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.NATIVE_R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.NATIVE_R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_R2_ACL: private
+          RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+        run: |
+          sudo apt-get install -y rclone
+          ./shared/native-ab/publish/publish-candidate.sh \
+            "/var/tmp/native-publish/$PRODUCT/x86-64" \
+            "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
+
+      - name: Upload prepared publication metadata
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-prepared-snowfield
+          path: |
+            /var/tmp/native-publish/snowfield/x86-64/publication-info.json
+            /var/tmp/native-publish/snowfield/x86-64/SHA256SUMS
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: cleanup build output
+        if: always()
+        run: sudo -E .mkosi/bin/mkosi clean
+
+  # ===========================================================================
+  # test-public-origin: independently re-verify each product's candidate
+  # objects against the REAL public URL (not the write path) before any
+  # promotion is allowed to run. A single matrix job (fail-fast: false) so
+  # legs run in parallel; each leg's own artifact download decides whether
+  # its product actually has anything to verify, so one product's build
+  # failure never blocks the others' verification.
+  # ===========================================================================
+  test-public-origin:
+    needs: [build-cayo, build-snow, build-snowfield]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        product: [cayo, snow, snowfield]
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Redirect /var/tmp to /mnt
+        # verify-remote.sh hard-codes /var/tmp (see build-* jobs' own
+        # comment on this); it downloads full candidate objects to verify
+        # them byte-for-byte.
+        run: |
+          sudo mkdir -p /mnt/var-tmp
+          sudo chmod 1777 /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+
+      - name: Download prepared publication metadata
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-prepared-${{ matrix.product }}
+          path: /var/tmp/native-publish/${{ matrix.product }}/x86-64
+
+      - name: Skip (build did not produce candidate objects for this product)
+        if: steps.download.outcome != 'success'
+        run: |
+          echo "::notice::No native-prepared-${{ matrix.product }} artifact found -- build-${{ matrix.product }} did not complete successfully this run. Skipping public-origin verification for ${{ matrix.product }}."
+
+      - name: Verify candidate objects against the public origin
+        if: steps.download.outcome == 'success'
+        id: verify
+        run: |
+          ./shared/native-ab/publish/verify-remote.sh \
+            "/var/tmp/native-publish/${{ matrix.product }}/x86-64" \
+            "https://repository.frostyard.org/os/native/v1/${{ matrix.product }}/x86-64"
+
+      - name: Record verified marker
+        if: steps.verify.outcome == 'success'
+        run: |
+          mkdir -p /var/tmp/native-verified
+          echo "${{ matrix.product }} verified $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "/var/tmp/native-verified/${{ matrix.product }}"
+
+      - name: Upload verified marker
+        if: steps.verify.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-verified-${{ matrix.product }}
+          path: /var/tmp/native-verified/${{ matrix.product }}
+          retention-days: 3
+          if-no-files-found: error
+
+  # ===========================================================================
+  # promote-cayo / promote-snow / promote-snowfield
+  #
+  # Each gated on the native-promotion protected environment, which holds
+  # the OpenPGP update-signing private key as an environment secret. Runs
+  # promote.sh. Independent jobs so one product's promotion failure never
+  # blocks another's; each independently checks for its own product's
+  # "verified" marker from test-public-origin and no-ops (not fails) if
+  # that product never got that far this run.
+  # ===========================================================================
+
+  promote-cayo:
+    needs: test-public-origin
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    environment: native-promotion
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Redirect /var/tmp to /mnt
+        run: |
+          sudo mkdir -p /mnt/var-tmp
+          sudo chmod 1777 /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+
+      - name: Download verified marker
+        id: marker
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-verified-cayo
+          path: /var/tmp/native-verified
+
+      - name: Download prepared publication metadata
+        id: prepared
+        if: steps.marker.outcome == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-prepared-cayo
+          path: /var/tmp/native-publish/cayo/x86-64
+
+      - name: Skip (cayo did not pass public-origin verification this run)
+        if: steps.marker.outcome != 'success' || steps.prepared.outcome != 'success'
+        run: |
+          echo "::notice::cayo has no verified candidate this run -- skipping promotion."
+
+      - name: Install rclone
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: sudo apt-get install -y rclone
+
+      - name: Write OpenPGP update-signing key
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        env:
+          NATIVE_UPDATE_SIGNING_KEY: ${{ secrets.NATIVE_UPDATE_SIGNING_KEY }}
+          NATIVE_UPDATE_SIGNING_PASSPHRASE: ${{ secrets.NATIVE_UPDATE_SIGNING_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          [[ -n "$NATIVE_UPDATE_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_UPDATE_SIGNING_KEY is not set in the native-promotion environment -- see docs/native-ab-publication.md 'Production key ceremony'" >&2; exit 1; }
+          umask 077
+          mkdir -p /var/tmp/native-promote-secrets
+          printf '%s' "$NATIVE_UPDATE_SIGNING_KEY" > /var/tmp/native-promote-secrets/os-update-signing.key
+          chmod 600 /var/tmp/native-promote-secrets/os-update-signing.key
+          # The production key is passphrase-protected; write the passphrase so
+          # promote.sh can sign via gpg --pinentry-mode loopback. A passphrase-less
+          # key simply leaves this secret unset (no file, no --passphrase-file).
+          if [[ -n "${NATIVE_UPDATE_SIGNING_PASSPHRASE:-}" ]]; then
+            printf '%s' "$NATIVE_UPDATE_SIGNING_PASSPHRASE" > /var/tmp/native-promote-secrets/passphrase
+            chmod 600 /var/tmp/native-promote-secrets/passphrase
+          fi
+
+      - name: Promote cayo
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.NATIVE_R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.NATIVE_R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_R2_ACL: private
+          RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          args=(--signing-key /var/tmp/native-promote-secrets/os-update-signing.key)
+          [[ -f /var/tmp/native-promote-secrets/passphrase ]] && \
+            args+=(--passphrase-file /var/tmp/native-promote-secrets/passphrase)
+          # Purge the edge cache for the metadata pair after promotion, when a
+          # Cloudflare token is configured. The no-store header + cache-bypass
+          # rule are the primary protection; this is belt-and-suspenders, and is
+          # simply skipped for staging/rehearsal runs without CF secrets.
+          if [[ -n "${CF_ZONE_ID:-}" && -n "${CF_API_TOKEN:-}" ]]; then
+            args+=(--purge-hook "$PWD/shared/native-ab/publish/cloudflare-purge.sh")
+          fi
+          ./shared/native-ab/publish/promote.sh "${args[@]}" \
+            /var/tmp/native-publish/cayo/x86-64 \
+            https://repository.frostyard.org/os/native/v1/cayo/x86-64 \
+            "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
+
+      - name: Verify cayo published index (served bytes, not just purge API 200)
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          set -euo pipefail
+          ver="$(jq -r .version /var/tmp/native-publish/cayo/x86-64/publication-info.json)"
+          ./shared/native-ab/publish/verify-published-index.sh \
+            --expect-version "$ver" \
+            https://repository.frostyard.org/os/native/v1/cayo/x86-64
+
+      - name: Remove OpenPGP update-signing key
+        if: always()
+        run: rm -rf /var/tmp/native-promote-secrets
+
+      - name: Record promoted marker
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          mkdir -p /var/tmp/native-promoted
+          echo "cayo promoted $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/tmp/native-promoted/cayo
+
+      - name: Upload promoted marker
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-promoted-cayo
+          path: /var/tmp/native-promoted/cayo
+          retention-days: 90
+          if-no-files-found: error
+
+  promote-snow:
+    needs: test-public-origin
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    environment: native-promotion
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Redirect /var/tmp to /mnt
+        run: |
+          sudo mkdir -p /mnt/var-tmp
+          sudo chmod 1777 /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+
+      - name: Download verified marker
+        id: marker
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-verified-snow
+          path: /var/tmp/native-verified
+
+      - name: Download prepared publication metadata
+        id: prepared
+        if: steps.marker.outcome == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-prepared-snow
+          path: /var/tmp/native-publish/snow/x86-64
+
+      - name: Skip (snow did not pass public-origin verification this run)
+        if: steps.marker.outcome != 'success' || steps.prepared.outcome != 'success'
+        run: |
+          echo "::notice::snow has no verified candidate this run -- skipping promotion."
+
+      - name: Install rclone
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: sudo apt-get install -y rclone
+
+      - name: Write OpenPGP update-signing key
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        env:
+          NATIVE_UPDATE_SIGNING_KEY: ${{ secrets.NATIVE_UPDATE_SIGNING_KEY }}
+          NATIVE_UPDATE_SIGNING_PASSPHRASE: ${{ secrets.NATIVE_UPDATE_SIGNING_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          [[ -n "$NATIVE_UPDATE_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_UPDATE_SIGNING_KEY is not set in the native-promotion environment -- see docs/native-ab-publication.md 'Production key ceremony'" >&2; exit 1; }
+          umask 077
+          mkdir -p /var/tmp/native-promote-secrets
+          printf '%s' "$NATIVE_UPDATE_SIGNING_KEY" > /var/tmp/native-promote-secrets/os-update-signing.key
+          chmod 600 /var/tmp/native-promote-secrets/os-update-signing.key
+          # The production key is passphrase-protected; write the passphrase so
+          # promote.sh can sign via gpg --pinentry-mode loopback. A passphrase-less
+          # key simply leaves this secret unset (no file, no --passphrase-file).
+          if [[ -n "${NATIVE_UPDATE_SIGNING_PASSPHRASE:-}" ]]; then
+            printf '%s' "$NATIVE_UPDATE_SIGNING_PASSPHRASE" > /var/tmp/native-promote-secrets/passphrase
+            chmod 600 /var/tmp/native-promote-secrets/passphrase
+          fi
+
+      - name: Promote snow
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.NATIVE_R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.NATIVE_R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_R2_ACL: private
+          RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          args=(--signing-key /var/tmp/native-promote-secrets/os-update-signing.key)
+          [[ -f /var/tmp/native-promote-secrets/passphrase ]] && \
+            args+=(--passphrase-file /var/tmp/native-promote-secrets/passphrase)
+          # Purge the edge cache for the metadata pair after promotion, when a
+          # Cloudflare token is configured. The no-store header + cache-bypass
+          # rule are the primary protection; this is belt-and-suspenders, and is
+          # simply skipped for staging/rehearsal runs without CF secrets.
+          if [[ -n "${CF_ZONE_ID:-}" && -n "${CF_API_TOKEN:-}" ]]; then
+            args+=(--purge-hook "$PWD/shared/native-ab/publish/cloudflare-purge.sh")
+          fi
+          ./shared/native-ab/publish/promote.sh "${args[@]}" \
+            /var/tmp/native-publish/snow/x86-64 \
+            https://repository.frostyard.org/os/native/v1/snow/x86-64 \
+            "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
+
+      - name: Verify snow published index (served bytes, not just purge API 200)
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          set -euo pipefail
+          ver="$(jq -r .version /var/tmp/native-publish/snow/x86-64/publication-info.json)"
+          ./shared/native-ab/publish/verify-published-index.sh \
+            --expect-version "$ver" \
+            https://repository.frostyard.org/os/native/v1/snow/x86-64
+
+      - name: Remove OpenPGP update-signing key
+        if: always()
+        run: rm -rf /var/tmp/native-promote-secrets
+
+      - name: Record promoted marker
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          mkdir -p /var/tmp/native-promoted
+          echo "snow promoted $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/tmp/native-promoted/snow
+
+      - name: Upload promoted marker
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-promoted-snow
+          path: /var/tmp/native-promoted/snow
+          retention-days: 90
+          if-no-files-found: error
+
+  promote-snowfield:
+    needs: test-public-origin
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    environment: native-promotion
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Redirect /var/tmp to /mnt
+        run: |
+          sudo mkdir -p /mnt/var-tmp
+          sudo chmod 1777 /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+
+      - name: Download verified marker
+        id: marker
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-verified-snowfield
+          path: /var/tmp/native-verified
+
+      - name: Download prepared publication metadata
+        id: prepared
+        if: steps.marker.outcome == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-prepared-snowfield
+          path: /var/tmp/native-publish/snowfield/x86-64
+
+      - name: Skip (snowfield did not pass public-origin verification this run)
+        if: steps.marker.outcome != 'success' || steps.prepared.outcome != 'success'
+        run: |
+          echo "::notice::snowfield has no verified candidate this run -- skipping promotion."
+
+      - name: Install rclone
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: sudo apt-get install -y rclone
+
+      - name: Write OpenPGP update-signing key
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        env:
+          NATIVE_UPDATE_SIGNING_KEY: ${{ secrets.NATIVE_UPDATE_SIGNING_KEY }}
+          NATIVE_UPDATE_SIGNING_PASSPHRASE: ${{ secrets.NATIVE_UPDATE_SIGNING_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          [[ -n "$NATIVE_UPDATE_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_UPDATE_SIGNING_KEY is not set in the native-promotion environment -- see docs/native-ab-publication.md 'Production key ceremony'" >&2; exit 1; }
+          umask 077
+          mkdir -p /var/tmp/native-promote-secrets
+          printf '%s' "$NATIVE_UPDATE_SIGNING_KEY" > /var/tmp/native-promote-secrets/os-update-signing.key
+          chmod 600 /var/tmp/native-promote-secrets/os-update-signing.key
+          # The production key is passphrase-protected; write the passphrase so
+          # promote.sh can sign via gpg --pinentry-mode loopback. A passphrase-less
+          # key simply leaves this secret unset (no file, no --passphrase-file).
+          if [[ -n "${NATIVE_UPDATE_SIGNING_PASSPHRASE:-}" ]]; then
+            printf '%s' "$NATIVE_UPDATE_SIGNING_PASSPHRASE" > /var/tmp/native-promote-secrets/passphrase
+            chmod 600 /var/tmp/native-promote-secrets/passphrase
+          fi
+
+      - name: Promote snowfield
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.NATIVE_R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.NATIVE_R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_R2_ACL: private
+          RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          args=(--signing-key /var/tmp/native-promote-secrets/os-update-signing.key)
+          [[ -f /var/tmp/native-promote-secrets/passphrase ]] && \
+            args+=(--passphrase-file /var/tmp/native-promote-secrets/passphrase)
+          # Purge the edge cache for the metadata pair after promotion, when a
+          # Cloudflare token is configured. The no-store header + cache-bypass
+          # rule are the primary protection; this is belt-and-suspenders, and is
+          # simply skipped for staging/rehearsal runs without CF secrets.
+          if [[ -n "${CF_ZONE_ID:-}" && -n "${CF_API_TOKEN:-}" ]]; then
+            args+=(--purge-hook "$PWD/shared/native-ab/publish/cloudflare-purge.sh")
+          fi
+          ./shared/native-ab/publish/promote.sh "${args[@]}" \
+            /var/tmp/native-publish/snowfield/x86-64 \
+            https://repository.frostyard.org/os/native/v1/snowfield/x86-64 \
+            "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
+
+      - name: Verify snowfield published index (served bytes, not just purge API 200)
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          set -euo pipefail
+          ver="$(jq -r .version /var/tmp/native-publish/snowfield/x86-64/publication-info.json)"
+          ./shared/native-ab/publish/verify-published-index.sh \
+            --expect-version "$ver" \
+            https://repository.frostyard.org/os/native/v1/snowfield/x86-64
+
+      - name: Remove OpenPGP update-signing key
+        if: always()
+        run: rm -rf /var/tmp/native-promote-secrets
+
+      - name: Record promoted marker
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          mkdir -p /var/tmp/native-promoted
+          echo "snowfield promoted $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/tmp/native-promoted/snowfield
+
+      - name: Upload promoted marker
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-promoted-snowfield
+          path: /var/tmp/native-promoted/snowfield
+          retention-days: 90
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------
+  # release-notes: non-blocking, human-facing summary of whichever
+  # products actually promoted this run (plan "GitHub Releases").
+  # ---------------------------------------------------------------------
+  release-notes:
+    needs: [prepare, promote-cayo, promote-snow, promote-snowfield]
+    if: github.ref == 'refs/heads/main' && !cancelled()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Download promoted markers
+        id: markers
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: native-promoted-*
+          path: /var/tmp/native-promoted
+          merge-multiple: true
+
+      - name: Compose and publish release notes
+        if: steps.markers.outcome == 'success'
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          REVISION: ${{ needs.prepare.outputs.revision }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          promoted=()
+          for product in cayo snow snowfield; do
+            [[ -f "/var/tmp/native-promoted/$product" ]] && promoted+=("$product")
+          done
+          if [[ ${#promoted[@]} -eq 0 ]]; then
+            echo "::notice::No native products were promoted this run; skipping release."
+            exit 0
+          fi
+          {
+            echo "Native A/B build $VERSION (source ${REVISION:0:12})"
+            echo ""
+            echo "Promoted products: ${promoted[*]}"
+            echo ""
+            for product in "${promoted[@]}"; do
+              echo "## $product"
+              echo "- Index: https://repository.frostyard.org/os/native/v1/$product/x86-64/SHA256SUMS"
+              echo "- Signature: https://repository.frostyard.org/os/native/v1/$product/x86-64/SHA256SUMS.gpg"
+            done
+            echo ""
+            echo "See docs/native-ab-publication.md for verification instructions and the update-key fingerprint."
+          } > /var/tmp/native-release-notes.md
+          gh release create "native-$VERSION" \
+            --title "Native A/B $VERSION" \
+            --notes-file /var/tmp/native-release-notes.md

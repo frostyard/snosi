@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+[Unit]
+Description=Stage native A/B update timer
+
+[Timer]
+# Mirrors bootc-update-stage.timer's cadence.
+OnCalendar=hourly
+RandomizedDelaySec=15m
+Persistent=true
+
+# No [Install]: this timer is INERT by default (docs/plans/2026-07-14-
+# bootc-native-ab-coexistence-plan.md, "Activation policy"). Publication is
+# not signed/live yet, so every build today ships this file present but
+# unreferenced by any .wants/ directory -- `systemctl is-enabled` reports
+# "static", and nothing ever starts it. The ab-root finalize script
+# (shared/outformat/ab-root/finalize/mkosi.finalize.chroot) creates a static
+# /usr/lib/systemd/system/timers.target.wants/snosi-sysupdate-stage.timer
+# link ONLY when SNOSI_NATIVE_AUTOSTAGE=1 is set in the build environment --
+# a static /usr link, not a preset, per CLAUDE.md's static-wants infra-unit
+# rule: a brand new preset-only enablement cannot bootstrap on installs
+# whose first boot predates it, but a static link ships correctly with the
+# very update that introduces it. The first publication-enabled release sets
+# SNOSI_NATIVE_AUTOSTAGE=1 in CI; until then every local and CI build stays
+# disabled.

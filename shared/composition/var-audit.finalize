@@ -1,0 +1,156 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Per-product /var inventory audit. This is a NON-chroot mkosi FinalizeScript
+# (no .chroot suffix): it runs on the host, outside the image root, so
+# $BUILDROOT is a plain host directory we can `find` directly rather than a
+# chroot we'd have to enter. See CLAUDE.md "Native /var Factory State" for
+# why this exists: the native installer creates a fresh per-machine /var, so
+# anything written under image /var at build time that isn't accounted for
+# is silently lost (or, worse, silently *not* lost when it should have been
+# discarded and instead papers over a real gap in installer/tmpfiles state).
+#
+# For each path found under $BUILDROOT/var, this script:
+#   - classifies it against the product's outcome map
+#     (shared/composition/<cayo|snow>/var-outcomes.txt), selected by
+#     $IMAGE_ID (snow and snowfield share the snow map: same payload
+#     composition, see shared/composition/snow/mkosi.conf),
+#   - FAILS the build listing every path that matched no glob (an
+#     unclassified path must be triaged: is it real image-metadata that
+#     needs relocating like dpkg, is it tmpfiles-recreatable, is it
+#     deliberate build residue, or is it an installer-seeded path?),
+#   - FAILS the build listing every map glob that matched nothing (a stale
+#     entry hides real coverage gaps behind an outcome that no longer
+#     applies to anything),
+#   - writes the classified inventory to
+#     $BUILDROOT/usr/share/snosi/var-inventory.txt.
+#
+# Glob patterns are relative to /var. `*` matches any run of characters,
+# including `/` (this is bash string glob matching via `[[ == ]]`, not
+# filesystem pathname expansion, so there is no special path-separator
+# handling) — so both `lib/dpkg` (matches exactly that path) and
+# `lib/dpkg/**` (matches anything below it; `**` behaves identically to a
+# single `*` in this context, spelled doubled by convention to signal
+# "subtree") are meaningful, DISTINCT patterns. List more specific globs
+# before broader ones: a path is classified by the FIRST glob that matches
+# it, top to bottom, and only that glob is marked as "used" for the stale
+# check — an earlier broad glob silently shadowing a later specific one
+# would make the specific one wrongly report as stale.
+#
+# Walked entries: regular files and symlinks at any depth, plus EMPTY
+# directories (a directory with real content is represented by its
+# contents, not by itself; an empty directory has nothing else to stand in
+# for it and must be classified directly, usually `tmpfiles` if something
+# recreates it, `discard` otherwise).
+set -euo pipefail
+
+: "${BUILDROOT:?var-audit.finalize: \$BUILDROOT not set (must run as a FinalizeScript)}"
+: "${SRCDIR:?var-audit.finalize: \$SRCDIR not set (must run as a FinalizeScript)}"
+: "${IMAGE_ID:?var-audit.finalize: \$IMAGE_ID not set (must run as a FinalizeScript)}"
+
+case "$IMAGE_ID" in
+    cayo)
+        map="$SRCDIR/shared/composition/cayo/var-outcomes.txt"
+        ;;
+    snow | snowfield)
+        map="$SRCDIR/shared/composition/snow/var-outcomes.txt"
+        ;;
+    *)
+        echo "var-audit.finalize: no /var outcome map wired for IMAGE_ID='$IMAGE_ID'" >&2
+        exit 1
+        ;;
+esac
+
+[[ -f "$map" ]] || {
+    echo "var-audit.finalize: outcome map not found: $map" >&2
+    exit 1
+}
+
+var_dir="$BUILDROOT/var"
+[[ -d "$var_dir" ]] || {
+    echo "var-audit.finalize: $var_dir does not exist" >&2
+    exit 1
+}
+
+valid_outcome() {
+    case "$1" in
+        image-metadata | tmpfiles | discard | installer-seed) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+patterns=()
+outcomes=()
+lineno=0
+while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${line//[[:space:]]/}" ]] && continue
+    if [[ "$line" != *$'\t'* ]]; then
+        echo "var-audit.finalize: $map:$lineno: expected '<glob><TAB><outcome>', got: $line" >&2
+        exit 1
+    fi
+    glob="${line%%$'\t'*}"
+    outcome="${line#*$'\t'}"
+    valid_outcome "$outcome" || {
+        echo "var-audit.finalize: $map:$lineno: invalid outcome '$outcome' (want image-metadata|tmpfiles|discard|installer-seed)" >&2
+        exit 1
+    }
+    patterns+=("$glob")
+    outcomes+=("$outcome")
+done <"$map"
+
+[[ ${#patterns[@]} -gt 0 ]] || {
+    echo "var-audit.finalize: $map has no entries" >&2
+    exit 1
+}
+
+used=()
+for ((i = 0; i < ${#patterns[@]}; i++)); do used[i]=0; done
+
+inventory_tmp="$(mktemp)"
+trap 'rm -f "$inventory_tmp"' EXIT
+
+unclassified=()
+while IFS= read -r -d '' path; do
+    rel="${path#"$var_dir"/}"
+    matched=0
+    for ((i = 0; i < ${#patterns[@]}; i++)); do
+        # shellcheck disable=SC2053 # intentional glob match against pattern variable
+        if [[ "$rel" == ${patterns[i]} ]]; then
+            used[i]=1
+            printf '%s\t/var/%s\n' "${outcomes[i]}" "$rel" >>"$inventory_tmp"
+            matched=1
+            break
+        fi
+    done
+    [[ "$matched" == 1 ]] || unclassified+=("$rel")
+done < <(find "$var_dir" -mindepth 1 \( \( -type d -empty \) -o ! -type d \) -print0)
+
+failed=0
+
+if [[ ${#unclassified[@]} -gt 0 ]]; then
+    failed=1
+    echo "var-audit.finalize: ${#unclassified[@]} unclassified /var path(s) for IMAGE_ID='$IMAGE_ID' (map: $map):" >&2
+    printf '  /var/%s\n' "${unclassified[@]}" | LC_ALL=C sort >&2
+fi
+
+stale=()
+for ((i = 0; i < ${#patterns[@]}; i++)); do
+    [[ "${used[i]}" == 1 ]] || stale+=("${patterns[i]}")
+done
+if [[ ${#stale[@]} -gt 0 ]]; then
+    failed=1
+    echo "var-audit.finalize: ${#stale[@]} stale outcome-map glob(s) matched nothing (map: $map):" >&2
+    printf '  %s\n' "${stale[@]}" | LC_ALL=C sort >&2
+fi
+
+if [[ "$failed" == 1 ]]; then
+    echo "var-audit.finalize: FAILED. Triage unclassified paths into $map (outcome one of:" \
+        "image-metadata, tmpfiles, discard, installer-seed) and/or remove stale globs." >&2
+    exit 1
+fi
+
+mkdir -p "$BUILDROOT/usr/share/snosi"
+LC_ALL=C sort -o "$BUILDROOT/usr/share/snosi/var-inventory.txt" "$inventory_tmp"
+echo "var-audit.finalize: classified $(wc -l <"$BUILDROOT/usr/share/snosi/var-inventory.txt") /var path(s) for IMAGE_ID='$IMAGE_ID' -> usr/share/snosi/var-inventory.txt"

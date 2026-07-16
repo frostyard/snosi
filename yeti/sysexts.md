@@ -240,12 +240,24 @@ moves on its own.
 
 ## Sysupdate Registration
 
-Each sysext distributed to users needs two files in the base image at `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`:
+Each sysext distributed to users needs two files in the base image, in its
+own component directory at
+`mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/`:
 
 > Note: a sysext built and published from a separate repository still needs its
 > sysupdate wiring registered in the base image (every sysext distributed via
 > repository.frostyard.org does). emdash was registered this way until 2026-07-07,
 > when it was retired.
+
+> Note: each sysext gets its OWN `sysupdate.<name>.d/` directory — never add
+> sysext transfer/feature files to the shared `sysupdate.d/` target, which is
+> reserved for native-profile OS transfers (see `docs/native-ab-contracts.md`
+> §6). systemd-sysupdate version-locks all enabled transfers sharing one
+> definitions directory, so mixing sysext and OS versions in the same
+> directory would corrupt version resolution for both. This per-component
+> layout requires `frostyard-updex` component discovery
+> (`feat/sysupdate-components`); do not publish base images built after this
+> migration until that updex release reaches the Frostyard APT repo.
 
 ### Transfer file (`<name>.transfer`)
 
@@ -391,7 +403,7 @@ succeeds the moment the cache is stale or absent.
 3. Create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in); the shared finalize check fails the build without it
 4. Add any extra files in `mkosi.images/<name>/mkosi.extra/`
 5. If configs needed in `/etc`: create `mkosi.finalize` to capture ONLY the needed paths to `/usr/share/factory/etc/` (never all of `/etc` — see Constraints), add tmpfiles.d rules
-6. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`
+6. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/` (its own component directory — do not add to the shared `sysupdate.d/`)
 7. **If the sysext ships a systemd service:** add `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` with `Upholds=<name>.service` (see [Service Activation Pattern](#service-activation-pattern-upholds) above)
 8. **If the sysext ships a desktop application:** include `sysext-strip-icon-cache.sh` in `FinalizeScripts=` (all sysexts do, per the template) and list the `.desktop` file and icon in `required-paths.txt` (see [Desktop Applications in Sysexts](#desktop-applications-in-sysexts) above)
 9. Add the sysext name to root `mkosi.conf` Dependencies list

@@ -1,0 +1,26 @@
+# Tracked deviations from docs/native-ab-contracts.md.
+#
+# Format: "<repo-relative-path> <reason-tag>" (one per line, exactly one
+# space-separated pair). test/native-ab-contracts-test.sh fails the build if
+# a violation is not listed here, AND fails the build if a listed entry's
+# file is gone or the file no longer actually violates the contract
+# (stale-entry check) — so this file must shrink to empty as the phases in
+# docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md land, never grow
+# silently.
+#
+# reason-tag: legacy-url -- OS transfer Path= still points at the pre-freeze
+#                            https://.../os/cayo/%a/ URL instead of the
+#                            frozen os/native/v1/<product>/x86-64/ prefix.
+#                            Removed in Phase 3: every shipped transfer now
+#                            conforms (shared/native-ab/channels/<product>/).
+#
+# (component-migration -- sysext transfer/feature pair still shipping in the
+# shared default sysupdate.d/ target instead of its own sysupdate.<name>.d/
+# component -- was removed in Phase 1 once frostyard-updex gained component
+# discovery; the 17 pairs now each live in their own
+# mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/. See CLAUDE.md's
+# "Native A/B Prototype" section for the release-ordering constraint this
+# depends on.)
+#
+# No tracked deviations remain. This file is intentionally empty of entries;
+# the stale-entry check keeps it that way.

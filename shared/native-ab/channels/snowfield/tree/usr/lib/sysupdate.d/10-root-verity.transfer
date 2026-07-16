@@ -1,0 +1,17 @@
+[Transfer]
+ProtectVersion=%A
+Verify=yes
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/os/native/v1/snowfield/x86-64/
+MatchPattern=snowfield-ab_@v_@u.root-verity.raw.xz
+
+[Target]
+Type=partition
+Path=auto
+MatchPattern=snowfield_@v_v
+MatchPartitionType=root-verity
+PartitionFlags=0
+ReadOnly=yes
+InstancesMax=2

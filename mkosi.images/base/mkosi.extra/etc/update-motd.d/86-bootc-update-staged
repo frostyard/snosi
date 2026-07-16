@@ -1,22 +1,36 @@
 #!/bin/sh
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# motd hook (headless/server logins): surface OS update status. Two inputs,
-# both written by /usr/libexec/bootc-update-stage and living in /run (the
-# applying reboot clears them):
-#   /run/snosi/update-staged - reboot-pending semaphore (also re-asserted for
-#     updates staged manually via `bootc upgrade`)
-#   /run/snosi/update-check  - result of the last hourly check, so "up to
-#     date" and "checker broken" are distinguishable at a glance
+# motd hook (headless/server logins): surface OS update status. Transport-
+# neutral -- ships ONE copy in base (mkosi.images/base/mkosi.extra), never
+# forked into the native A/B tree. Both stagers
+# (/usr/libexec/bootc-update-stage for OCI/bootc,
+# /usr/libexec/snosi-sysupdate-stage for native A/B) write the SAME two
+# state files, living in /run (the applying reboot clears them):
+#   /run/snosi/update-staged - reboot-pending semaphore. Carries EITHER
+#     digest= (bootc: sha256:... image digest) OR version= (native:
+#     14-digit version, docs/native-ab-contracts.md §2) -- exactly one is
+#     ever present on a given image.
+#   /run/snosi/update-check  - result of the last hourly check (when the
+#     staging timer is active), so "up to date" and "checker broken" are
+#     distinguishable at a glance. outcome=held-rollback is bootc-only (see
+#     snosi-sysupdate-stage's header for why native has no equivalent state
+#     under systemd-sysupdate's InstancesMax=2 model); this hook still
+#     handles it defensively in case a future native outcome value reuses
+#     the branch.
 SEM=/run/snosi/update-staged
 CHECK=/run/snosi/update-check
 
 if [ -s "$SEM" ]; then
     digest=$(sed -n 's/^digest=sha256:\(.\{12\}\).*/\1/p' "$SEM")
-    printf '\nA system update is staged (%s) and will apply at the next reboot.\n' "${digest:-unknown}"
+    version=$(sed -n 's/^version=//p' "$SEM")
+    id="${digest:-$version}"
+    printf '\nA system update is staged (%s) and will apply at the next reboot.\n' "${id:-unknown}"
     exit 0
 fi
 
-# No check recorded yet this boot (timer has not fired): stay silent rather
+# No check recorded yet this boot (timer has not fired, or is disabled --
+# e.g. a publication-disabled native image, docs/plans/2026-07-14-bootc-
+# native-ab-coexistence-plan.md "Activation policy"): stay silent rather
 # than guess.
 [ -s "$CHECK" ] || exit 0
 
@@ -30,7 +44,11 @@ current)
     ;;
 failed)
     printf '\nWARNING: the last OS update check FAILED (%s).\n' "${checked_at:-unknown}"
-    printf 'See: journalctl -u bootc-update-stage.service\n'
+    if [ -e /usr/lib/snosi/native-ab ]; then
+        printf 'See: journalctl -u snosi-sysupdate-stage.service\n'
+    else
+        printf 'See: journalctl -u bootc-update-stage.service\n'
+    fi
     ;;
 held-rollback)
     printf '\nAn OS update is available but matches the rollback deployment;\n'

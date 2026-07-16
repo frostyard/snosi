@@ -38,6 +38,61 @@ jobs:
             git ls-files | xargs awk 'FNR==1 && /^#!\/(usr\/)?bin\/(env )?(ba)?sh/ {print FILENAME} {nextfile}' 2>/dev/null
           } | grep -v '^saved-unused/' | sort -u | xargs -r shellcheck -S warning -x
 
+      - name: Validate native A/B invariants
+        run: ./test/native-ab-static-test.sh
+
+      - name: Validate frozen native A/B contracts
+        # docs/native-ab-contracts.md is the source of truth for native A/B
+        # naming, paths, and policy; this is its executable form. No root,
+        # no network, no image build. Also runs test/native-publish-test.sh
+        # internally (below is a standalone run for clearer CI attribution
+        # if only the publisher's naming drifts).
+        run: ./test/native-ab-contracts-test.sh
+
+      - name: Validate native A/B publication naming pipeline
+        # shared/native-ab/publish/prepare-native-publication.sh turns
+        # mkosi's internal split outputs into the frozen public §4 names.
+        # Fixture GPT via truncate+sfdisk script mode -- no root, no
+        # network, no image build.
+        run: ./test/native-publish-test.sh
+
+      - name: Validate native A/B publication and signing pipeline
+        # shared/native-ab/publish/{publish-candidate,verify-remote,promote,
+        # withdraw}.sh (Phase 7) against a synthetic fixture, a local
+        # directory dest, and a local HTTP origin (test/lib/range-http-
+        # server.py). Uses the committed DEV signing key/pubring (dev-only,
+        # never production material). No root, no network beyond localhost,
+        # no image build. The real-build QEMU rehearsal (test/native-ab-
+        # publication-test.sh) needs root/KVM and is intentionally not run
+        # in CI, matching every other QEMU harness in this repo.
+        run: ./test/native-publication-pipeline-test.sh
+
+      - name: Validate native A/B publication guard
+        # A profile literally named cayo-ab, snow-ab, or snowfield-ab is
+        # production-facing (docs/native-ab-contracts.md §15) and must never
+        # be publishable without shim/Secure Boot/PCR signing/NvPCR/pubring
+        # markers; the raw dev fixture must never gain them either.
+        run: ./check-native-publication-guard.sh
+
+      - name: Validate snosi-install CLI installer
+        # shared/native-installer/tree/usr/libexec/snosi-install (Task 8.2):
+        # index parsing/verification (good/tampered signed SHA256SUMS over a
+        # local HTTP origin + ephemeral gpg key), disk-refusal filters
+        # (fixture `lsblk -b -J -O` JSON), name derivation, the full
+        # --non-interactive argument validation matrix, streamed-verify
+        # mismatch handling (small fixture "disk image"), and --restage-mok
+        # argument handling. No root, no network beyond localhost, no image
+        # build, no real block device. Full end-to-end disk-write/LUKS/TPM/
+        # MOK behavior needs a real product build and install target (Task
+        # 8.3), intentionally out of scope for this fast per-PR check.
+        run: ./test/snosi-install-test.sh
+
+      - name: Validate snosi-etc-diff drift tooling
+        # Static, non-root regression test driving the real script against
+        # fixture trees via its SNOSI_ETC_DIFF_LIVE_ETC/PRISTINE_ETC test
+        # hooks. No root, no bind mount, no image build.
+        run: ./test/snosi-etc-diff-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:

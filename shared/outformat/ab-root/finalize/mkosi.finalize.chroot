@@ -1,0 +1,57 @@
+#!/bin/bash
+set -euo pipefail
+
+# The initrd mounts the persistent overlay before switch-root, so host PID 1
+# sees the golden-image machine-id and persistent /etc from its first access.
+if [[ ! -d /.etc.lower ]]; then
+    mv /etc /.etc.lower
+    mkdir /etc
+fi
+
+# Factory UKI naming (see UnifiedKernelImageFormat=&e in
+# shared/outformat/ab-root/mkosi.conf for the full rationale): kernel-install
+# resolves the "&e" entry-token specifier via /etc/kernel/entry-token when
+# present (kernel-install(8), "auto" entry-token mode). mkosi's own
+# install_kernel() -- which builds the actual UKI -- runs strictly AFTER all
+# FinalizeScripts=, so this file only needs to exist on disk by the time this
+# script exits; it is written into the fresh (post-mv) /etc above, not
+# /.etc.lower, since nothing at runtime ever needs it (kernel-install never
+# runs again on a booted dm-verity read-only root). IMAGE_ID/IMAGE_VERSION
+# are exported into FinalizeScripts= by mkosi itself (mkosi.1
+# "Environment="/finalize_environment()).
+: "${IMAGE_ID:?IMAGE_ID not set in FinalizeScripts environment}"
+: "${IMAGE_VERSION:?IMAGE_VERSION not set in FinalizeScripts environment}"
+mkdir -p /etc/kernel
+printf '%s' "${IMAGE_ID}-ab_${IMAGE_VERSION}" > /etc/kernel/entry-token
+
+# The cayo profile's historical tree carries this bootc-only config. The A/B
+# extra tree overwrites it before this point; fail closed if that changes.
+if grep -qr 'add_dracutmodules.*\bbootc\b' /usr/lib/dracut/dracut.conf.d; then
+    echo "bootc dracut configuration leaked into the native A/B image" >&2
+    exit 1
+fi
+
+# Activation policy (docs/plans/2026-07-14-bootc-native-ab-coexistence-
+# plan.md, "Activation policy", Phase 4): the native stager timer
+# (usr/lib/systemd/system/snosi-sysupdate-stage.timer, this tree) ships with
+# NO [Install] section -- it is INERT by default in every publication-
+# disabled build (today, always). Flip it on with a STATIC
+# /usr/lib/systemd/system/timers.target.wants/ link, never a preset: an
+# already-installed image whose first boot predates a publication-enabled
+# release would never pick up a brand new preset-only enablement (preset
+# policy is only consulted at first boot / preset-reconcile time), but a
+# static /usr link ships correctly with the very update that introduces it
+# (see CLAUDE.md's static-wants infra-unit rule). The first publication-
+# enabled release sets SNOSI_NATIVE_AUTOSTAGE=1 in CI; until then every
+# local and CI build stays disabled, and this block is a no-op.
+#
+# Independent of this knob, systemd-sysupdate.timer/-reboot.timer stay
+# masked in /etc unconditionally (shared/outformat/image/finalize/
+# mkosi.finalize.chroot, native-ab branch) -- our stager replaces them, and
+# upstream's own auto-reboot timers must never activate even once
+# publication goes live.
+if [[ "${SNOSI_NATIVE_AUTOSTAGE:-}" == "1" ]]; then
+    mkdir -p /usr/lib/systemd/system/timers.target.wants
+    ln -sf ../snosi-sysupdate-stage.timer \
+        /usr/lib/systemd/system/timers.target.wants/snosi-sysupdate-stage.timer
+fi

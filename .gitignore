@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
+__pycache__/
 mkosi.local/
 mkosi.local.conf
 output/
@@ -8,6 +9,7 @@ mkosi.tools.manifest
 mkosi.key
 mkosi.crt
 .mkosi-private
+.snosi-private
 .mkosi/
 .envrc
 mkosi.images/base/mkosi.extra/usr/share/homebrew.tar.zst

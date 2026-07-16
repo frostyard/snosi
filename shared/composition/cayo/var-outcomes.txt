@@ -1,0 +1,198 @@
+# Per-product /var factory-state outcome map for IMAGE_ID=cayo.
+# Format: <glob><TAB><outcome>, one per line. `#` starts a comment.
+# outcome in {image-metadata, tmpfiles, discard, installer-seed}; see
+# shared/composition/var-audit.finalize and CLAUDE.md "Native /var Factory
+# State" for the audit mechanism and meanings. List more specific globs
+# before broader ones matching the same subtree (first match wins).
+#
+# Populated from a real `mkosi --profile cayo-ab-raw build` (2026-07-14) —
+# the audit's own "unclassified paths" failure listing was used as the
+# ground truth for what actually lands under /var at build time; see
+# docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md and the phase 2
+# task report for the full methodology (cross-referenced against every
+# *.conf in the built image's /usr/lib/tmpfiles.d, package-shipped and
+# custom overlay alike, not just the hand-authored ones in this repo).
+
+# --- image-metadata: belongs to the immutable root -------------------------
+# The dpkg database. Relocated by shared/outformat/image/finalize/
+# mkosi.finalize.chroot (native-gated) to /usr/lib/sysimage/dpkg. This one
+# glob covers BOTH shapes this map has to classify: on native builds
+# /var/lib/dpkg is the relative symlink left behind by the relocation (the
+# audit sees it as the single path "lib/dpkg", no further contents); on
+# bootc builds (unaffected by the relocation, real /var/lib/dpkg ships as
+# today) it's a real, populated directory, so the audit instead sees every
+# individual "lib/dpkg/<file>" underneath it. A trailing bare `*` (not
+# `/**`) is required so the SAME line matches both the exact "lib/dpkg"
+# path and every "lib/dpkg/..." path — this map is shared across both
+# output formats (see shared/composition/cayo/mkosi.conf's FinalizeScripts=
+# ordering), and the audit's stale-glob check runs per build: a
+# native-only build never produces "lib/dpkg/**" candidates and a
+# bootc-only build never produces a bare "lib/dpkg" candidate, so two
+# separate globs would make one of them spuriously "stale" in every single
+# build depending on which format ran.
+lib/dpkg*	image-metadata
+# aspell's dictionary directory — EMPTY on cayo (aspell/aspell-en are
+# snow-only packages; only the base aspell.conf tmpfiles rule creates the
+# bare directory here), but relocated to /usr/lib/sysimage/aspell by the
+# same native-gated finalize block as dpkg above so every native product
+# ships the same /var/lib/aspell relocation-symlink shape and the shared
+# 00-snosi-aspell.conf tmpfiles rule (shared/outformat/ab-root/tree) never
+# creates a dangling symlink on a fresh /var. Same dual-shape bare-`*`
+# glob as lib/dpkg*: native builds show the relocation symlink, bootc
+# builds the (here empty) real directory. See the snow map's lib/aspell*
+# entry for the populated case this relocation actually fixes (compiled
+# *.rws dictionaries reached via absolute /usr/lib/aspell dict-dir
+# symlinks that would otherwise dangle after a native install).
+lib/aspell*	image-metadata
+
+# --- tmpfiles: directories a shipped tmpfiles.d rule recreates -------------
+backups	tmpfiles
+cache/debconf/tmp.ci	tmpfiles
+cache/homebrew	tmpfiles
+cache/private	tmpfiles
+home/linuxbrew	tmpfiles
+lib/AccountsService/icons	tmpfiles
+lib/AccountsService/users	tmpfiles
+lib/apache2	tmpfiles
+lib/apt/lists	tmpfiles
+lib/apt/mirrors/partial	tmpfiles
+lib/apt/periodic	tmpfiles
+lib/bluetooth	tmpfiles
+lib/colord/icc	tmpfiles
+lib/dbus/machine-id	tmpfiles
+lib/dictionaries-common/aspell	tmpfiles
+lib/dictionaries-common/hunspell	tmpfiles
+lib/dictionaries-common/wordlist	tmpfiles
+lib/emacsen-common/state/flavor/installed	tmpfiles
+lib/emacsen-common/state/flavor/pending	tmpfiles
+lib/emacsen-common/state/package/installed	tmpfiles
+# ghostscript ships ~250 individual CMap symlinks via a generated tmpfiles.d
+# rule (mkosi.images/base/mkosi.extra/usr/lib/tmpfiles.d/ghostscript.conf);
+# every one of them is an exact L-type target, so the whole subtree is
+# tmpfiles-recreated.
+lib/ghostscript/CMap/**	tmpfiles
+lib/ghostscript/fonts	tmpfiles
+lib/homebrew	tmpfiles
+lib/ispell	tmpfiles
+lib/misc	tmpfiles
+lib/NetworkManager	tmpfiles
+lib/nix	tmpfiles
+lib/PackageKit	tmpfiles
+lib/plymouth	tmpfiles
+lib/private	tmpfiles
+lib/realmd	tmpfiles
+lib/snmp	tmpfiles
+lib/sudo/lectured	tmpfiles
+lib/systemd/coredump	tmpfiles
+lib/systemd/ephemeral-trees	tmpfiles
+lib/systemd/network	tmpfiles
+lib/systemd/pstore	tmpfiles
+lib/tpm	tmpfiles
+lib/tpm2-tss/system/keystore	tmpfiles
+lib/usb_modeswitch	tmpfiles
+lib/xfsprogs	tmpfiles
+local	tmpfiles
+lock	tmpfiles
+log/apt	tmpfiles
+log/journal	tmpfiles
+log/private	tmpfiles
+log/README	tmpfiles
+mail	tmpfiles
+mnt	tmpfiles
+opt	tmpfiles
+roothome	tmpfiles
+run	tmpfiles
+spool/mail	tmpfiles
+srv	tmpfiles
+tmp	tmpfiles
+usrlocal/bin	tmpfiles
+usrlocal/etc	tmpfiles
+usrlocal/games	tmpfiles
+usrlocal/include	tmpfiles
+usrlocal/lib	tmpfiles
+usrlocal/libexec	tmpfiles
+usrlocal/man	tmpfiles
+usrlocal/sbin	tmpfiles
+usrlocal/share/man	tmpfiles
+usrlocal/src	tmpfiles
+
+# --- discard: build residue, deliberately lost ------------------------------
+# Package/dpkg caches and metadata. Nothing on a booted, immutable-root
+# system runs apt/dpkg postinst again, so these are pure build-time
+# byproducts (verified: /etc/pam.d/common-password uses only pam_unix, no
+# pam_cracklib/pam_pwquality, so losing the cracklib dictionary cache does
+# not degrade password checks at runtime either).
+cache/adduser	discard
+cache/app-info/xmls	discard
+cache/apparmor	discard
+cache/apt/archives/partial	discard
+cache/apt/pkgcache.bin	discard
+cache/apt/srcpkgcache.bin	discard
+cache/cracklib/**	discard
+cache/debconf/**	discard
+cache/fontconfig/**	discard
+cache/ldconfig/aux-cache	discard
+cache/realmd	discard
+cache/swcatalog/cache/C-local-metainfo.xb	discard
+lib/apt/extended_states	discard
+# man-db cat-page cache (~150 files across every installed locale);
+# man-db.timer / on-demand `man` invocation regenerate it, and man-db's own
+# auto-update marker (lib/man-db/auto-update) below is equally disposable.
+cache/man/**	discard
+lib/man-db/auto-update	discard
+lib/cni/networks	discard
+lib/containers/storage/tmp	discard
+lib/dahdi/digium-firm/Makefile	discard
+# dracut's console-setup staging is BUILD-time input to initrd assembly
+# only (the assembled UKI/initrd is what actually boots); nothing reads it
+# from a live /var at runtime.
+lib/dracut/console-setup-dir/**	discard
+lib/dracut/console-setup-files	discard
+# Placeholder-only: shared/{cayo,snow}/tree/var/lib/extensions/.keep exists
+# solely so git tracks the empty directory; systemd-sysext and
+# systemd-sysupdate both tolerate a missing/empty /var/lib/extensions (see
+# reload-sysext.service's ConditionDirectoryNotEmpty=|, an OR-list where a
+# missing directory just evaluates false, not an error) and the actual
+# sysext delivery target is /var/lib/extensions.d/, created on demand by
+# systemd-sysupdate on first transfer.
+lib/extensions/.keep	discard
+lib/confexts	discard
+lib/git	discard
+lib/grub/ucf/grub.previous	discard
+lib/machines	discard
+# pam-auth-update's own bookkeeping of which profiles it has configured;
+# not consulted by PAM at authentication time.
+lib/pam/**	discard
+# systemd-portabled image storage; empty until an admin attaches a portable
+# service image, which is not part of this product.
+lib/portables	discard
+lib/python/python3.13_installed	discard
+lib/saned	discard
+lib/sgml-base/**	discard
+lib/shells.state	discard
+lib/systemd/catalog/database	discard
+# deb-systemd-helper's own idempotency tracking for postinst re-runs
+# (.dsh-also files and mirrored .wants/ symlinks); nothing on an immutable,
+# pre-baked root re-runs a package postinst, and none of this is consulted
+# by systemd itself at boot (contrast with the REAL enablement symlinks
+# under /etc, covered by the separate enablement-manifest.txt mechanism).
+lib/systemd/deb-systemd-helper-enabled/**	discard
+lib/systemd/deb-systemd-user-helper-enabled/**	discard
+lib/tuned	discard
+# ucf's conffile-management bookkeeping; irrelevant once the image's /etc
+# is baked, only meaningful if `ucf` itself is invoked again post-install.
+lib/ucf/**	discard
+lib/upower	discard
+lib/vim/addons	discard
+# Login history (wtmp/lastlog/btmp) and equivalent modern (wtmpdb) forms —
+# machine state/logs are the plan's canonical discard example.
+lib/wtmpdb/wtmp.db	discard
+lib/xkb	discard
+lib/xml-core/**	discard
+log/alternatives.log	discard
+log/btmp	discard
+log/fontconfig.log	discard
+log/lastlog	discard
+log/runit/**	discard
+log/tuned	discard
+log/wtmp	discard

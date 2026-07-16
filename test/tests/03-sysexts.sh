@@ -19,15 +19,21 @@ check "systemd-sysext binary exists" \
 check "systemd-sysext list succeeds" \
     systemd-sysext list
 
-check "sysupdate transfer configs exist" \
-    test -d /usr/lib/sysupdate.d
+check "sysupdate component directories exist" \
+    bash -c 'shopt -s nullglob; dirs=(/usr/lib/sysupdate.*.d); (( ${#dirs[@]} > 0 ))'
 
 echo ""
-echo "# Informational: sysupdate transfer configs"
-if [[ -d /usr/lib/sysupdate.d ]]; then
-    ls -1 /usr/lib/sysupdate.d/ 2>/dev/null || echo "(empty)"
+echo "# Informational: sysupdate component directories"
+shopt -s nullglob
+component_dirs=(/usr/lib/sysupdate.*.d)
+shopt -u nullglob
+if [[ ${#component_dirs[@]} -gt 0 ]]; then
+    for d in "${component_dirs[@]}"; do
+        echo "## $d"
+        ls -1 "$d" 2>/dev/null || echo "(empty)"
+    done
 else
-    echo "(directory not found)"
+    echo "(no sysupdate component directories found)"
 fi
 
 echo ""

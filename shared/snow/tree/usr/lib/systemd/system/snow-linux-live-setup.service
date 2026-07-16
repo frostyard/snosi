@@ -7,6 +7,17 @@ Requires=systemd-logind.service
 Before=display-manager.service
 After=systemd-logind.service systemd-homed.service
 ConditionPathExists=/usr/bin/_snow-linux-live-setup
+# Positive live-media detection (docs/plans/2026-07-14-bootc-native-ab-
+# coexistence-plan.md, "Snow Native A/B": this unit's old marker-file-only
+# gate is a NEGATIVE heuristic -- "absence of the done marker" -- which is
+# indistinguishable from a freshly installed native A/B system's first boot
+# (fresh /var, no marker). That false-positive would create a passwordless
+# sudo "snow" user on every real install. Mirror the SAME positive
+# kernel-cmdline signal already used by docker.socket.d/override.conf,
+# incus.socket.d/override.conf, and brew-setup.service (which skip
+# themselves with `!snow-linux.live=1`); this unit is the inverse case (it
+# must run ONLY on live media), so it requires the cmdline arg directly.
+ConditionKernelCommandLine=snow-linux.live=1
 # Run-once via marker file instead of `systemctl disable`: the disable
 # removed this unit's .wants/.requires symlinks from /etc at runtime, and
 # any path deleted from the live /etc makes bootc's /etc merge fail at

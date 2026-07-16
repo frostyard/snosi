@@ -1,0 +1,345 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Stage a native A/B update: check the image's DEFAULT sysupdate target
+# (/usr/lib/sysupdate.d/, docs/native-ab-contracts.md §6 -- the signed R2
+# index, §5) for a newer version and, if found, download+install it into the
+# INACTIVE root/verity slots via `systemd-sysupdate update`. Never reboots --
+# the update applies at the next natural reboot via systemd-boot's ordinary
+# boot-counting entry selection, exactly mirroring what
+# mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage does for the
+# OCI/bootc transport. Speaks the SAME /run/snosi/update-check and
+# /run/snosi/update-staged state-file language as that script (see its
+# header for the check-file field contract) so snosi-update-status, the
+# MOTD hook (/etc/update-motd.d/86-bootc-update-staged), and the desktop
+# notification (usr/libexec/bootc-update-notify, reused verbatim) work
+# without caring which transport is running.
+#
+# /run/snosi/update-staged fields (extends the bootc-only "digest=" shape):
+#   image=<channel>       e.g. "cayo-ab" (docs/native-ab-contracts.md §1)
+#   version=<14-digit>    the staged version (native only; bootc writes
+#                          digest= instead -- consumers key off whichever of
+#                          the two is present)
+#   staged_at=<ISO8601>
+#
+# Test-only origin override (documented here; no code in this script reads
+# an override variable): systemd-sysupdate's *.transfer config directories
+# follow the SAME whole-file search-path precedence as tmpfiles.d/sysctl.d/
+# etc (confirmed against upstream sysupdate.d(5): there is no NAME.transfer.d/
+# per-key drop-in mechanism the way unit files have). A file in
+# /etc/sysupdate.d/ with the identical name as one in /usr/lib/sysupdate.d/
+# replaces it WHOLE. test/native-ab-updateux-test.sh uses exactly this to
+# redirect the 3 shipped OS transfers at a local HTTP fixture origin: it
+# drops complete replacement *.transfer files into /etc/sysupdate.d/ with
+# [Source] Path= pointed at the test origin and everything else
+# (MatchPattern, [Target], Verify=yes) byte-identical to the shipped file.
+# This script only ever invokes the bare `systemd-sysupdate` CLI with no
+# --definitions=, so it automatically honors whatever /etc override is (or
+# isn't) present -- production and the test exercise the identical code
+# path.
+#
+# held-rollback has NO native equivalent, deliberately: bootc's held-
+# rollback fires because ostree tracks an explicit separate "rollback
+# deployment" pointer, and a re-pull of an unchanged registry tag can
+# collide with it. systemd-sysupdate has no such separate pointer -- its
+# InstancesMax=2 accounting treats BOTH on-disk root slots as "installed"
+# when deciding what counts as newer (systemd-sysupdate(8): check-new/update
+# "enumerate downloadable and installed versions"), so a version already
+# sitting in the other slot -- including one the admin just rolled away
+# from -- is never re-offered as "newer" in the first place; there is
+# nothing left to hold. See the "already staged" branch below for the one
+# adjacent case that DOES need explicit handling: a version already
+# downloaded into the inactive slot by an earlier stager run this boot,
+# waiting for reboot.
+set -euo pipefail
+
+MARKER=/usr/lib/snosi/native-ab
+CHECK=/run/snosi/update-check
+SEM=/run/snosi/update-staged
+SYSUPDATE=/usr/lib/systemd/systemd-sysupdate
+ESP_UKI_DIR=/boot/EFI/Linux
+
+if [[ ! -e "$MARKER" ]]; then
+    echo "Not a native A/B system; nothing to do."
+    exit 0
+fi
+
+running_version=""
+image_id=""
+channel=""
+if [[ -r /usr/lib/os-release ]]; then
+    running_version=$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
+    image_id=$(. /usr/lib/os-release && echo "${IMAGE_ID:-}")
+fi
+
+write_check() { # outcome
+    mkdir -p /run/snosi
+    printf 'outcome=%s\nchecked_at=%s\nimage=%s\nrunning_version=%s\nremote_version=%s\n' \
+        "$1" "$(date --iso-8601=seconds)" "$channel" "$running_version" \
+        "${remote_version:-}" >"$CHECK"
+}
+
+# Registered before ANY exit path (including the IMAGE_ID-missing check right
+# below) so every failure mode -- not just ones after $channel is known --
+# writes outcome=failed to $CHECK. $channel is declared empty above so this
+# trap is always safe to fire, even before it's assigned its real value.
+#
+# Any failure below (check-new error, update, post-stage verification)
+# records outcome=failed; a broken/tampered checker must not be
+# indistinguishable from an up-to-date system.
+trap '[[ $? -eq 0 ]] || write_check failed' EXIT
+
+if [[ -z "$image_id" ]]; then
+    echo "ERROR: /usr/lib/os-release has no IMAGE_ID; cannot derive the publication channel" >&2
+    exit 1
+fi
+channel="${image_id}-ab"
+
+write_staged_semaphore() { # version
+    mkdir -p /run/snosi
+    printf 'image=%s\nversion=%s\nstaged_at=%s\n' \
+        "$channel" "$1" "$(date --iso-8601=seconds)" >/run/snosi/update-staged
+}
+
+# other_slot_version -- version label of the currently INACTIVE root slot
+# (the non-booted "${image_id}_<version>_r" partition), or empty if that
+# slot is still "_empty" (fresh install, nothing installed there yet).
+# The booted slot is excluded by its LABEL (${image_id}_${running_version}_r),
+# never by comparing against findmnt's mount source: on a dm-verity root the
+# source is /dev/mapper/root (or /dev/dm-N), which never equals the
+# partition's /dev path, so a path comparison silently fails to exclude the
+# running slot (root-caused live in the first QEMU run of
+# test/native-ab-updateux-test.sh: "Rollback: <running version>" on a fresh
+# image whose other slot was still _empty). ".. | objects" (recursive
+# descent), not ".blockdevices[]": lsblk nests partitions under each disk's
+# "children" array -- matches the proven pattern in
+# test/native-ab-update-test.sh.
+other_slot_version() {
+    local running_label other
+    running_label="${image_id}_${running_version}_r"
+    other="$(lsblk -J -o PATH,PARTLABEL 2>/dev/null | jq -r \
+        --arg running "$running_label" --arg prefix "${image_id}_" '
+        .. | objects
+        | select(.partlabel? != null)
+        | select(.partlabel != $running)
+        | select(.partlabel | startswith($prefix))
+        | select(.partlabel | endswith("_r"))
+        | .partlabel' 2>/dev/null || true)"
+    [[ -n "$other" ]] || { echo ""; return 0; }
+    sed -E "s/^${image_id}_(.*)_r\$/\\1/" <<<"$other" | head -1
+}
+
+# effective_transfer name -- the config file that actually governs, honoring
+# the /etc override-by-identical-filename precedence documented above.
+effective_transfer() { # filename
+    if [[ -f "/etc/sysupdate.d/$1" ]]; then
+        echo "/etc/sysupdate.d/$1"
+    else
+        echo "/usr/lib/sysupdate.d/$1"
+    fi
+}
+
+# source_path_of file -- the [Source] Path= value of a *.transfer file.
+source_path_of() {
+    awk -F'= *' '/^\[Source\]/{f=1;next} /^\[/{f=0} f && /^Path=/{print $2; exit}' "$1"
+}
+
+# effective_pubring -- the update-signing keyring systemd-sysupdate itself
+# trusts, honoring the same /etc-over-/usr/lib precedence systemd's import
+# machinery uses for import-pubring.gpg.
+effective_pubring() {
+    if [[ -s /etc/systemd/import-pubring.gpg ]]; then
+        echo /etc/systemd/import-pubring.gpg
+    else
+        echo /usr/lib/systemd/import-pubring.gpg
+    fi
+}
+
+# probe_index -- independently fetch and gpgv-verify the channel's signed
+# SHA256SUMS. Used to disambiguate check-new's boolean exit collapse (see
+# below): a healthy origin whose index simply advertises nothing newer
+# passes this probe; a broken/tampered/unreachable origin fails it.
+probe_index() {
+    local origin tmpd pubring
+    origin="$(source_path_of "$(effective_transfer 20-root.transfer)")"
+    [[ -n "$origin" ]] || { echo "probe: no [Source] Path= found" >&2; return 1; }
+    pubring="$(effective_pubring)"
+    [[ -s "$pubring" ]] || { echo "probe: no update pubring at $pubring" >&2; return 1; }
+    tmpd="$(mktemp -d)"
+    # shellcheck disable=SC2064
+    trap "rm -rf '$tmpd'" RETURN
+    curl -fsSL --connect-timeout 10 --max-time 30 "${origin%/}/SHA256SUMS" -o "$tmpd/SHA256SUMS" || return 1
+    curl -fsSL --connect-timeout 10 --max-time 30 "${origin%/}/SHA256SUMS.gpg" -o "$tmpd/SHA256SUMS.gpg" || return 1
+    gpgv --keyring "$pubring" "$tmpd/SHA256SUMS.gpg" "$tmpd/SHA256SUMS" 2>/dev/null || return 1
+}
+
+echo "Checking for a newer native A/B version (channel: $channel, running: ${running_version:-unknown})"
+
+# stdout ONLY: check-new prints the candidate version identifier to stdout
+# and everything else (progress: "Discovering installed instances…",
+# "Determining available update sets…", errors) to stderr as log output.
+# Capturing 2>&1 here mixes those log lines into the version string --
+# root-caused live in the first QEMU run of test/native-ab-updateux-test.sh
+# ("Update '<five lines of progress>\n<version>' not found."). stderr passes
+# through to the journal untouched.
+newest_out=""
+newest_rc=0
+newest_out="$("$SYSUPDATE" check-new)" || newest_rc=$?
+
+if [[ $newest_rc -ne 0 ]]; then
+    # check-new is a boolean predicate (systemd-sysupdate(8)): non-zero
+    # collapses "nothing newer than what's already installed" and every
+    # genuine failure (network down, tampered signature) into one exit
+    # code. Disambiguate with an independent probe of the signed index:
+    # if we can fetch and gpgv-verify SHA256SUMS ourselves, the origin is
+    # healthy and "nothing newer" is the truth -- otherwise the checker is
+    # broken and MUST NOT masquerade as "up to date" (outcome=failed via
+    # the EXIT trap).
+    if ! probe_index; then
+        echo "ERROR: check-new reported nothing to do, but the signed index cannot be fetched and verified -- treating as a failed check, not an up-to-date system" >&2
+        exit 1
+    fi
+    echo "No newer version available."
+    # Re-assert an already-staged semaphore from an earlier run this boot
+    # (see the "already staged" comment above the update branch): once a
+    # version is downloaded into the inactive slot, check-new correctly
+    # stops offering it, but /run/snosi/update-staged should keep reporting
+    # reboot-pending until the reboot that applies it clears /run.
+    if [[ -s "$SEM" ]]; then
+        echo "A previously staged update is still pending a reboot."
+        remote_version="$(sed -n 's/^version=//p' "$SEM")"
+        write_check staged
+    else
+        write_check current
+    fi
+    exit 0
+fi
+
+remote_version="$(tail -n1 <<<"$newest_out" | tr -d '[:space:]')"
+if [[ ! "$remote_version" =~ ^[0-9]{14}$ ]]; then
+    echo "ERROR: check-new offered '$remote_version', which does not match the frozen version grammar ^[0-9]{14}\$ (docs/native-ab-contracts.md §2)" >&2
+    exit 1
+fi
+
+if [[ -n "$running_version" && ! "$remote_version" > "$running_version" ]]; then
+    # The candidate is not newer than what is running. Kept as
+    # belt-and-suspenders even now that the image's build-time ESP UKI name
+    # matches the transfer's Target MatchPattern (shared/outformat/ab-root/
+    # mkosi.conf's UnifiedKernelImageFormat=&e), so sysupdate's
+    # installed-version accounting correctly counts the running version as
+    # installed and check-new should not re-offer it on a fresh install.
+    # Never "update" sideways or backwards regardless -- report current,
+    # exactly like the bootc stager's pulled==booted branch.
+    echo "Newest published version $remote_version is not newer than running ${running_version}; nothing to stage."
+    write_check current
+    exit 0
+fi
+echo "Newer version available: $remote_version"
+
+rollback_or_staged="$(other_slot_version)"
+if [[ "$rollback_or_staged" == "$remote_version" ]]; then
+    # The inactive slot already carries exactly this version. Since
+    # check-new only ever offers something newer than EVERYTHING currently
+    # installed (see the header comment), the only way this can happen is a
+    # previous stager run already staged it and the applying reboot simply
+    # hasn't happened yet -- re-assert, don't re-download.
+    echo "$remote_version is already installed in the inactive slot; re-asserting staged state."
+    write_staged_semaphore "$remote_version"
+    write_check staged
+    exit 0
+fi
+
+echo "Staging update: $remote_version"
+"$SYSUPDATE" update "$remote_version"
+
+# ---------------------------------------------------------------------------
+# Post-stage verification (mandatory, plan "Native Runtime Isolation" stager
+# requirements list): confirm what was actually written to disk, don't just
+# trust a zero exit code.
+# ---------------------------------------------------------------------------
+
+# (1) Partition labels now exist, and their PARTUUIDs match the UUIDs
+# embedded in the source filenames the signed SHA256SUMS advertised.
+# systemd-sysupdate's own Verify=yes already cryptographically validated
+# SHA256SUMS/.gpg moments ago as part of `update` above; this re-fetch of
+# the (small, already-trusted-this-run) SHA256SUMS crosses no new trust
+# boundary -- it is a same-run consistency cross-check, not a second
+# signature verification.
+root_transfer="$(effective_transfer 20-root.transfer)"
+verity_transfer="$(effective_transfer 10-root-verity.transfer)"
+root_origin="$(source_path_of "$root_transfer")"
+verity_origin="$(source_path_of "$verity_transfer")"
+[[ -n "$root_origin" && -n "$verity_origin" ]] || {
+    echo "ERROR: could not determine [Source] Path= from $root_transfer / $verity_transfer" >&2
+    exit 1
+}
+
+sums="$(curl -fsSL --connect-timeout 10 --max-time 30 "${root_origin%/}/SHA256SUMS")"
+root_name="$(grep -oE "${channel}_${remote_version}_[0-9a-fA-F-]+\.root\.raw\.xz" <<<"$sums" | head -1)"
+verity_name="$(grep -oE "${channel}_${remote_version}_[0-9a-fA-F-]+\.root-verity\.raw\.xz" <<<"$sums" | head -1)"
+[[ -n "$root_name" && -n "$verity_name" ]] || {
+    echo "ERROR: SHA256SUMS from ${root_origin%/} has no root/root-verity entry for $remote_version" >&2
+    exit 1
+}
+expected_root_uuid="$(sed -E "s/^${channel}_${remote_version}_([0-9a-fA-F-]+)\.root\.raw\.xz\$/\\1/" <<<"$root_name")"
+expected_verity_uuid="$(sed -E "s/^${channel}_${remote_version}_([0-9a-fA-F-]+)\.root-verity\.raw\.xz\$/\\1/" <<<"$verity_name")"
+
+# lsblk reads PARTLABEL/PARTUUID from the udev property database, which is
+# refreshed ASYNCHRONOUSLY after sysupdate's GPT writes (udev's inotify
+# watch on the whole-disk node synthesizes change events that udevd then
+# processes). Reading immediately after `update` returns can therefore see
+# a MIXED stale view -- observed live (2026-07-15, full-window QEMU run):
+# the reused root slot showed its NEW label with the OLD pre-vacuum
+# PARTUUID, failing this check even though the on-disk GPT was provably
+# correct (the very next boot and the next hop's identical verification
+# both passed). `udevadm settle` alone is not sufficient: it returns early
+# when the watch event has not yet been SYNTHESIZED (empty queue !=
+# events-all-delivered), so retry the read a few times before failing hard.
+# The assertions themselves are unchanged -- a real mismatch still fails
+# with the same errors after the retries are exhausted.
+installed_root_uuid=""
+installed_verity_uuid=""
+for _ in 1 2 3 4 5; do
+    udevadm settle 2>/dev/null || true
+    layout="$(lsblk -J -o PATH,PARTLABEL,PARTUUID)"
+    installed_root_uuid="$(jq -r --arg label "${image_id}_${remote_version}_r" \
+        '.. | objects | select(.partlabel? == $label) | .partuuid' <<<"$layout")"
+    installed_verity_uuid="$(jq -r --arg label "${image_id}_${remote_version}_v" \
+        '.. | objects | select(.partlabel? == $label) | .partuuid' <<<"$layout")"
+    if [[ "${installed_root_uuid,,}" == "${expected_root_uuid,,}" \
+        && "${installed_verity_uuid,,}" == "${expected_verity_uuid,,}" ]]; then
+        break
+    fi
+    sleep 1
+done
+
+if [[ -z "$installed_root_uuid" || -z "$installed_verity_uuid" ]]; then
+    echo "ERROR: post-stage verification failed: expected partitions labeled ${image_id}_${remote_version}_r/_v not found" >&2
+    exit 1
+fi
+if [[ "${installed_root_uuid,,}" != "${expected_root_uuid,,}" ]]; then
+    echo "ERROR: post-stage verification failed: root PARTUUID $installed_root_uuid does not match SHA256SUMS-advertised $expected_root_uuid" >&2
+    exit 1
+fi
+if [[ "${installed_verity_uuid,,}" != "${expected_verity_uuid,,}" ]]; then
+    echo "ERROR: post-stage verification failed: verity PARTUUID $installed_verity_uuid does not match SHA256SUMS-advertised $expected_verity_uuid" >&2
+    exit 1
+fi
+echo "Post-stage check: partitions ${image_id}_${remote_version}_r/_v match the signed manifest"
+
+# (2) The matching UKI exists in the ESP. Presence here, checked AFTER the
+# partition checks above, stands in for install ordering: sysupdate applies
+# transfers in target-listing order (10-root-verity, 20-root, 90-uki), so a
+# UKI on disk implies the partition transfers already completed.
+uki_prefix="${channel}_${remote_version}+"
+shopt -s nullglob
+uki_matches=("${ESP_UKI_DIR}/${uki_prefix}"*.efi)
+shopt -u nullglob
+if [[ ${#uki_matches[@]} -eq 0 ]]; then
+    echo "ERROR: post-stage verification failed: no UKI matching ${ESP_UKI_DIR}/${uki_prefix}*.efi" >&2
+    exit 1
+fi
+echo "Post-stage check: UKI present in ESP (${uki_matches[0]})"
+
+write_staged_semaphore "$remote_version"
+write_check staged
+echo "Update staged; it will apply at the next reboot."

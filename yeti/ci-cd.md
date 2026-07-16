@@ -65,6 +65,103 @@ After the matrix completes, a self-contained `release` job runs on main-branch p
 
 **Skip paths:** Missing/invalid snow artifact, no previous tag, or `previous == current` all emit warnings and skip release creation.
 
+### build-native-images.yml — Native A/B Build and Publish (Phase 7)
+
+**Trigger:** Push to `main`, manual dispatch. **ONLY** these two -- never
+`pull_request`, never a fork-originated trigger, never
+`repository_dispatch`. This is the interim protected-builder rule
+(`docs/native-ab-publication.md` "Interim protected-builder constraints"):
+the `build-*` jobs handle Secure Boot/MOK and PCR signing private keys, so
+they must never run against untrusted code. A single `concurrency` group
+(`build-native-images`, `cancel-in-progress: false`) prevents two runs from
+interleaving `promote.sh` invocations against the same product's live
+signed index.
+
+A **thin caller**: every real step is a call into an in-repo script
+(`shared/native-ab/publish/*.sh`, `shared/native-ab/ci/*.sh`,
+`test/native-ab-secure-artifact-test.sh`, `test/snowfield-artifact-test.sh`)
+that can be run and tested locally. See `docs/native-ab-publication.md`'s
+"CI publication flow" section for the full narrative, secret inventory
+table, and the "First production publication checklist" -- this section is
+the mechanical job-by-job summary.
+
+**Jobs:**
+1. `pin-check` -- `shared/native-ab/ci/check-mkosi-pin.sh` (Mkosi Pin
+   Governance, no build, no network)
+2. `prepare` -- assigns one 14-digit version + records the source revision,
+   shared by every product built this run (mirrors `build-images.yml`'s own
+   version tag step)
+3. `build-cayo` / `build-snow` / `build-snowfield` -- independent jobs
+   (not a matrix), each gated on the `native-build` protected GitHub
+   environment:
+   - Free disk space, redirect `TMPDIR` to `/mnt/tmp` (mirrors
+     `build-images.yml`'s CI-disk-exhaustion mitigation), bind-mount extra
+     space over `/var/tmp` too (`shared/native-ab/publish/*.sh` hard-code
+     `/var/tmp`, not `$TMPDIR`)
+   - `shared/native-ab/ci/bootstrap-mkosi.sh .mkosi` then `check-mkosi-
+     pin.sh .mkosi` (bootstraps at the exact commit `build.yml` pins;
+     asserts it landed there)
+   - Writes `NATIVE_SECURE_BOOT_KEY`/`_CERTIFICATE` and
+     `NATIVE_PCR_SIGNING_KEY`/`_CERTIFICATE` environment secrets to
+     `mkosi.key`/`mkosi.crt`/`.snosi-private/pcr-signing.{key,crt}`
+     immediately before the one `mkosi build` step, `chmod 600`, never
+     echoed
+   - `mkosi --profile <profile> --dependency= --dependency=base
+     --image-version <version> build`
+   - Removes the key files (`if: always()`)
+   - `test/native-ab-secure-artifact-test.sh` (all three products; single
+     PCR signature mode); snowfield additionally runs
+     `test/snowfield-artifact-test.sh` (needs `sudo`: loop-mounts the root
+     erofs partition read-only)
+   - `prepare-native-publication.sh --xz` then `publish-candidate.sh`
+     against `rclone:r2:<NATIVE_R2_BUCKET>` (rclone configured via
+     `RCLONE_CONFIG_R2_*` env vars from the `NATIVE_R2_*` secrets)
+   - Uploads only `publication-info.json` + `SHA256SUMS` as a GitHub
+     Actions artifact (`native-prepared-<product>`) -- never the
+     multi-gigabyte payload objects, which are already durably in R2
+4. `test-public-origin` -- one matrix job (`fail-fast: false`, legs
+   `[cayo, snow, snowfield]`), no secrets needed (pure HTTP). Downloads its
+   product's `native-prepared-<product>` artifact with
+   `continue-on-error: true` and no-ops if absent (that product's build
+   didn't finish), otherwise runs `verify-remote.sh` against the REAL
+   public `https://repository.frostyard.org/os/native/v1/<product>/x86-64`
+   URL and uploads a `native-verified-<product>` marker on success
+5. `promote-cayo` / `promote-snow` / `promote-snowfield` -- independent
+   jobs, each gated on the `native-promotion` protected GitHub environment
+   (holds `NATIVE_UPDATE_SIGNING_KEY`, the OpenPGP update-signing private
+   key). Downloads its own `native-verified-<product>` marker and
+   `native-prepared-<product>` artifact (both `continue-on-error: true`);
+   no-ops if either is missing. Otherwise writes the signing key to
+   `/var/tmp/native-promote-secrets/os-update-signing.key`, runs
+   `promote.sh --signing-key ...`, removes the key file (`if: always()`),
+   and uploads a `native-promoted-<product>` marker on success
+6. `release-notes` -- non-blocking, main-branch pushes only
+   (`github.ref == 'refs/heads/main' && !cancelled()`). Downloads every
+   `native-promoted-*` marker (`continue-on-error: true`); if none exist,
+   skips. Otherwise composes a short release body (per-product R2 index/
+   signature URLs) and runs `gh release create native-<version>`.
+
+**Independence pattern:** every `test-public-origin` leg and every
+`promote-*` job downloads its own upstream artifact with
+`continue-on-error: true` and treats a missing artifact as "nothing to do
+here" rather than a failure -- the same pattern `build-images.yml`'s own
+`release` job already uses for its `snow-tag` artifact (`Download snow tag
+artifact ... continue-on-error: true`). This is what makes one product's
+build/verify/promote failure never block another product's promotion in
+the same run.
+
+**Secret inventory, protected environments, and the full "first production
+publication" checklist:** see `docs/native-ab-publication.md`. Short
+version: `native-build` holds the Secure Boot/MOK and PCR signing keys
+(interim risk, accepted until mkosi supports split final assembly from
+signing); `native-promotion` holds the OpenPGP update-signing key; R2
+credentials (`NATIVE_R2_*`) are repository-level secrets, scoped to a
+dedicated upload-only token, never the sysext/manifest token `build.yml`/
+`build-images.yml` already use. **Production R2 upload has not been
+exercised through this workflow** -- only local rehearsal and the
+workflow's structure (actionlint-clean, every script reference
+hand-verified) have been.
+
 ### check-dependencies.yml — Direct Download Updates
 
 **Trigger:** Weekly (Monday 9am UTC), manual dispatch
@@ -132,10 +229,10 @@ during the sysext build.
 
 **Trigger:** PR/push to main, manual dispatch
 
-Three validation checks:
-1. **Shell linting:** Runs shellcheck on tracked `*.sh`/`*.chroot` files and extensionless tracked shell scripts discovered by shebang, excluding `saved-unused/`
-2. **Runtime /etc guard:** Runs `check-runtime-etc-guard.sh` — scans every tracked file in image payload dirs (`mkosi.extra/`, `shared/*/tree/`) for patterns that delete paths from `/etc` at runtime: `systemctl disable/enable/revert/unmask/preset` (and `deb-systemd-helper`) in units/scripts, `rm`/`mv`/`find -delete` targeting `/etc/`, and tmpfiles.d removal types (`r`/`R`/`D`) on `/etc`. Any such deletion on a bootc/composefs install breaks the `/etc` merge in `bootc-finalize-staged` at shutdown ("a path led outside of the filesystem", bootc ≤ 1.16.3) and the staged update is silently discarded — the host keeps booting the old image while the updater logs success (root-caused 2026-07-05 on `enable-incus-agent.service`, which self-disabled via `ExecStartPost`). Run-once units must gate on a `/var` marker instead (`ConditionPathExists=!/var/lib/<unit>.done` + `ExecStartPost=touch`). Escape hatch for provably safe lines: `# etc-guard-allow: <reason>` comment on the same line or the line directly above (unit files have no trailing comments). Build-time scripts (`*.chroot`, `mkosi.postinst`, etc.) are outside payload dirs and intentionally unscanned — build-time `systemctl enable` is correct
-3. **mkosi validation:** Runs `mkosi summary` for root config and all profiles to verify configuration, plus `check-profile-dependencies.sh` to ensure profile builds do not include sysext images
+Three jobs:
+1. **shell-lint:** Runs shellcheck on tracked `*.sh`/`*.chroot` files and extensionless tracked shell scripts discovered by shebang, excluding `saved-unused/`; then `test/native-ab-static-test.sh` (cheap native A/B configuration invariants — no root, no build); then `test/native-ab-contracts-test.sh` (validates `docs/native-ab-contracts.md`'s frozen naming/label/URL grammar against the actual tree and the `test/native-ab-contracts-allow.txt` deviation list); then `check-native-publication-guard.sh` (docs/native-ab-contracts.md §15 — hard-fails a `cayo-ab`/`snow-ab`/`snowfield-ab` profile missing shim/Secure Boot/PCR-signing/NvPCR/pubring markers or carrying a `KernelModules=` filter, and hard-fails `cayo-ab-raw` if it ever gains a publication marker; since Phase 3 all three production profiles exist and are validated for real, `cayo-ab-raw` continues to pass the "must stay unpublishable" side)
+2. **runtime-etc-guard:** Runs `check-runtime-etc-guard.sh` — scans every tracked file in image payload dirs (`mkosi.extra/`, `shared/*/tree/`) for patterns that delete paths from `/etc` at runtime: `systemctl disable/enable/revert/unmask/preset` (and `deb-systemd-helper`) in units/scripts, `rm`/`mv`/`find -delete` targeting `/etc/`, and tmpfiles.d removal types (`r`/`R`/`D`) on `/etc`. Any such deletion on a bootc/composefs install breaks the `/etc` merge in `bootc-finalize-staged` at shutdown ("a path led outside of the filesystem", bootc ≤ 1.16.3) and the staged update is silently discarded — the host keeps booting the old image while the updater logs success (root-caused 2026-07-05 on `enable-incus-agent.service`, which self-disabled via `ExecStartPost`). Run-once units must gate on a `/var` marker instead (`ConditionPathExists=!/var/lib/<unit>.done` + `ExecStartPost=touch`). Escape hatch for provably safe lines: `# etc-guard-allow: <reason>` comment on the same line or the line directly above (unit files have no trailing comments). Build-time scripts (`*.chroot`, `mkosi.postinst`, etc.) are outside payload dirs and intentionally unscanned — build-time `systemctl enable` is correct
+3. **mkosi-config-sanity:** Runs `mkosi summary` for root config and all profiles to verify configuration, plus `check-profile-dependencies.sh` to ensure profile builds do not include sysext images
 
 ### test-install.yml — Bootc Installation Test
 
@@ -170,3 +267,4 @@ Runs OpenSSF Scorecard analysis for supply-chain security assessment. Publishes 
 | Sysexts (EROFS) | repository.frostyard.org/ext/ | R2 upload via frostyard/repogen |
 | Desktop/server OCI images | ghcr.io/frostyard/ | buildah push + cosign sign + SBOM via ORAS |
 | Manifests | R2 manifests bucket | Direct upload |
+| Native A/B images (cayo-ab/snow-ab/snowfield-ab) | repository.frostyard.org/os/native/v1/\<product\>/x86-64/ | `rclone` candidate upload + independent HTTP re-verify + `promote.sh` (OpenPGP-signed `SHA256SUMS`/`SHA256SUMS.gpg`) via `build-native-images.yml`; production upload not yet exercised, see `docs/native-ab-publication.md` |

@@ -1,0 +1,59 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: LGPL-2.1-or-later
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+def option_values(args: list[str], option: str) -> list[str]:
+    values = []
+    for index, arg in enumerate(args):
+        if arg == option:
+            values.append(args[index + 1])
+        elif arg.startswith(f"{option}="):
+            values.append(arg.split("=", 1)[1])
+    return values
+
+
+args = sys.argv[1:]
+previous_name = os.getenv("PCR_SIGNING_KEY_PREVIOUS")
+private_keys = option_values(args, "--pcr-private-key")
+
+if previous_name and args[:1] == ["build"] and private_keys:
+    if len(private_keys) != 1:
+        raise SystemExit(f"expected one primary PCR signer, found {len(private_keys)}")
+    if option_values(args, "--pcrpkey"):
+        raise SystemExit("unexpected pre-existing --pcrpkey")
+    if Path(previous_name).name != previous_name:
+        raise SystemExit("PCR_SIGNING_KEY_PREVIOUS must be a filename")
+
+    primary = Path(private_keys[0])
+    previous = Path("/usr/lib/snosi-pcr-history") / previous_name
+    if not previous.is_file():
+        raise SystemExit(f"previous PCR signing key not found: {previous}")
+
+    public_file = tempfile.NamedTemporaryFile(prefix="pcr-signing-", suffix=".pub", delete=False)
+    public_file.close()
+    subprocess.run(
+        ["openssl", "pkey", "-in", primary, "-pubout", "-out", public_file.name],
+        check=True,
+    )
+
+    phases = ",".join(
+        (
+            "enter-initrd",
+            "enter-initrd:leave-initrd",
+            "enter-initrd:leave-initrd:sysinit",
+            "enter-initrd:leave-initrd:sysinit:ready",
+        )
+    )
+    args += [
+        f"--pcr-private-key={previous}",
+        f"--pcrpkey={public_file.name}",
+        f"--phases={phases}",
+        f"--phases={phases}",
+    ]
+
+os.execv(sys.executable, [sys.executable, "/usr/lib/systemd/ukify", *args])
