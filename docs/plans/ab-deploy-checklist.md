@@ -112,8 +112,11 @@ images with those keys and confirm nothing private leaked.
       `mok-dev.crt`; shipped at `/usr/lib/snosi/mok.crt`). Private key stays in
       protected signing only. Note: MOK rotation is a fleet-wide re-enrollment event —
       see CLAUDE.md "MOK Rotation."
-- [ ] **Confirm the production PCR signing keypair** (`pcr-signing.{key,crt}`,
-      generated in the key ceremony) exists and is in the encrypted offsite backup.
+- [x] **Confirm the production PCR signing keypair** (`pcr-signing.{key,crt}`,
+      generated in the key ceremony) exists. Done: regenerated as **RSA-2048**
+      2026-07-16 (CN `snosi PCR signing 2026`, valid to 2036; key/cert/pub verified
+      mutually consistent) after two wrong-algorithm attempts — offsite backup
+      inclusion is the next item.
       **It MUST be RSA-2048** (`openssl genpkey -algorithm RSA -pkeyopt
       rsa_keygen_bits:2048`, default exponent 65537) — the only algorithm the
       whole unlock chain accepts, proven live 2026-07-16 on systemd 261.1-3 +
@@ -139,7 +142,10 @@ images with those keys and confirm nothing private leaked.
       `gh secret set NATIVE_PCR_SIGNING_KEY --env native-build < pcr-signing.key`
       (plus the matching cert / any other changed key). Verify the new bundle
       restores (`age -d … | tar tzf -`) before trusting it.
-- [x] **Local pre-flight rebuild with the production keys** (optional but
+- [~] **Local pre-flight rebuild with the production keys** — was done with the
+      superseded RSA-4096/ECC keys; being redone implicitly for the RSA-2048 key
+      by the §7 full-window runs launched 2026-07-16 (the harness runs the secure
+      artifact test against every build). (Optional but
       recommended — the authoritative production images are built by CI in §4/§6/§7;
       this catches a bad/misformatted key locally in minutes instead of inside a
       gated CI run). Place the four build-time keys where the secure build reads
@@ -234,11 +240,14 @@ still `PROVISIONAL` — this is where they get confirmed with production keys.
 
 ## 7. Runtime validation gates (per product)
 
-- [ ] **QEMU secure full window** — `sudo PROFILE=<product-ab>
+- [~] **QEMU secure full window** — `sudo PROFILE=<product-ab>
 test/native-ab-secure-boot-test.sh --full-window` green (N→N+3, slot reuse,
       rollback, 3-try boot-count fallback, per-boot NvPCR clean, recovery unlock,
-      under enforced Secure Boot + unattended TPM). Done for snow-ab; **run for
-      cayo-ab and snowfield-ab**.
+      under enforced Secure Boot + unattended TPM). snow-ab's earlier 125/125 was
+      with the DEV key; with the production RSA-2048 PCR key, cayo-ab + snow-ab
+      runs launched 2026-07-16 (sequential, in progress — the RSA-4096 and ECC
+      key attempts both failed exactly here at Step 4b). snowfield-ab parked
+      until those two are green.
 - [ ] **QEMU end-to-end install** — `sudo test/native-installer-e2e-test.sh`
       green for cayo-ab + snow-ab (add `--with-snowfield` only when running on/for
       Surface). Confirms ISO boot on virgin varstore, own-boot-medium refusal in the
