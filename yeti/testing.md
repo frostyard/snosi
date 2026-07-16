@@ -507,7 +507,7 @@ snow-ab runs steps 2, 4, 5, 7 only; `snowfield-ab` is behind `--with-snowfield`
 6). `SKIP_ISO_BUILD` / `SKIP_CAYO_BUILD` / `SKIP_SNOW_BUILD` with
 `BUILD_CAYO_DIR` / `BUILD_SNOW_DIR` skip the multi-GiB rebuilds during iteration.
 First full run: 75/75 assertions passed (2026-07-15, cayo-ab full + snow-ab
-partial, ISO `20260715204023`, wall time ~17 min). It also fixed real product
+partial, ISO `snosi-native-installer_20260716003626_x86-64.iso` (cayo-ab image 20260715203830, snow-ab 20260715204023), wall time ~17 min). It also fixed real product
 bugs along the way — the installer ISO was missing `fdisk` (sfdisk), `binutils`
 (objcopy for `.pcrpkey` extraction), and `openssl`, and `snosi-install` wrote
 several tool-diagnostic streams to stdout instead of stderr, dumped a UKI section

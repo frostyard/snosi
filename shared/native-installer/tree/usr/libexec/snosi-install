@@ -665,18 +665,19 @@ VAR_MAPPER_ACTIVE=""
 # still visible.
 close_var_mapper() {
     if [[ -n "$VAR_MAPPER_ACTIVE" ]]; then
-        local attempt close_rc=0
+        local attempt close_rc=0 close_err
+        close_err="$(mktemp /var/tmp/snosi-install-close-var-mapper.XXXXXX.err)"
         for attempt in 1 2 3 4 5; do
             close_rc=0
-            cryptsetup close "$VAR_MAPPER_ACTIVE" 2>/tmp/snosi-install-close-var-mapper.err && break
+            cryptsetup close "$VAR_MAPPER_ACTIVE" 2>"$close_err" && break
             close_rc=$?
             sleep 1
         done
         if [[ "$close_rc" -ne 0 ]]; then
-            cat /tmp/snosi-install-close-var-mapper.err >&2 2>/dev/null || true
+            cat "$close_err" >&2 2>/dev/null || true
             warn "could not close LUKS mapper $VAR_MAPPER_ACTIVE after $attempt attempts (rc=$close_rc); it may still be attached"
         fi
-        rm -f /tmp/snosi-install-close-var-mapper.err
+        rm -f "$close_err"
         VAR_MAPPER_ACTIVE=""
     fi
 }

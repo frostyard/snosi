@@ -914,7 +914,7 @@ rather than `cryptsetup open` of a second mapper, because the installer's own
 partition once it is a valid LUKS2 volume and holds the device busy.
 
 First green run 75/75 (2026-07-15, cayo-ab full + snow-ab partial, ISO
-`20260715204023`, ~17 min wall). The test also fixed real product bugs it
+ISO `snosi-native-installer_20260716003626_x86-64.iso` (product images 20260715203830/20260715204023), ~17 min wall). The test also fixed real product bugs it
 surfaced: the network-installer ISO was missing `fdisk` (ships `sfdisk`, which
 moved out of `util-linux`), `binutils` (`objcopy`, for `.pcrpkey` extraction),
 and `openssl`; and `snosi-install` wrote several tool-diagnostic streams to
