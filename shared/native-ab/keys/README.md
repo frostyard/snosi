@@ -1,57 +1,54 @@
-# Native A/B update signing pubring (DEV)
+# Native A/B update signing pubring
 
-`import-pubring.gpg` is a **DEV-only** OpenPGP public keyring (binary
-`gpg --export` format, ed25519 signing key, no passphrase). It exists so the
-three production native profiles (`cayo-ab`, `snow-ab`, `snowfield-ab`) can
-carry a real, non-empty `/usr/lib/systemd/import-pubring.gpg` and satisfy
-`check-native-publication-guard.sh` / `docs/native-ab-contracts.md` §7/§15
-before the protected signing pipeline exists.
+`import-pubring.gpg` is the binary (`gpg --export`) OpenPGP public keyring that
+every native A/B image ships at `/usr/lib/systemd/import-pubring.gpg`, so
+systemd-sysupdate can verify the detached `SHA256SUMS.gpg` on each downloaded
+index. It carries the **production** update-signing public key and satisfies
+`check-native-publication-guard.sh` / `docs/native-ab-contracts.md` §7/§15.
 
-- **uid:** `snosi native OS updates (DEV — rotate before production)
-  <os-updates@frostyard.org>`
-- **Private half:** `.snosi-private/os-update-signing.key` (gitignored,
-  never committed, never printed). Nothing in this repo needs it yet —
-  dev/local `SHA256SUMS` are unsigned/unpublished (`docs/native-ab-
-  contracts.md` §7 key table).
+- **uid:** `snosi native OS updates <os-updates@frostyard.org>`
+- **Fingerprint:** `F37282A35CB6BDFEBFC8FE775A2EAC5C8216FD68`
+- **Generated:** 2026-07 (production key ceremony,
+  `docs/native-ab-publication.md` §"Production key ceremony").
+- **Private half:** offline only. It lives in the offline key-ceremony
+  environment and, for CI, in the `native-promotion` GitHub environment as
+  `NATIVE_UPDATE_SIGNING_KEY`. It is **never** committed, never an Actions
+  artifact, and never placed in `.snosi-private/`; it is consumed only by
+  `promote.sh --signing-key` inside the protected promotion environment.
 - **Ships at:** `/usr/lib/systemd/import-pubring.gpg` on every native A/B
   image via a `file:target` `ExtraTrees=` pair in the generic
   `shared/outformat/ab-root/mkosi.conf` fragment (consumed by all native
   profiles, including the never-published `cayo-ab-raw` dev fixture).
 - **QEMU tests are unaffected:** `test/native-ab-update-test.sh` and the
   other QEMU harnesses generate and inject their own ephemeral signing keys
-  via `--definitions` overrides; they never rely on this dev key.
+  via `--definitions` overrides; they never rely on this key.
 
-**This key MUST be rotated before first production publication.** The real
-key ceremony is `docs/native-ab-contracts.md` §7 ("Protected signing
-architecture"): the production private key lives only in the protected
-promotion environment, never in this repository or in `.snosi-private`, and
-rotation follows the overlap-window procedure in §7 (both old and new public
-keys ship simultaneously until every supported client has fetched an
-index signed by the new key). Do not treat this DEV key as adequate custody
-for anything published to `repository.frostyard.org`.
+**Rotation** follows `docs/native-ab-contracts.md` §7 / the runbook's overlap
+window: export both the outgoing and incoming public keys into this same
+keyring (`gpg --export old new > import-pubring.gpg`) and rebuild every native
+profile, keeping both until every supported client has booted an image carrying
+the new pubring AND fetched at least one index signed by the new key; only then
+drop the old key.
 
-## MOK certificate (DEV)
+## MOK certificate
 
-`mok-dev.crt` is a plain copy of the repository root's gitignored
-`mkosi.crt` (the Secure Boot/MOK **public certificate** -- `openssl x509`,
-DER/PEM, no private key material; the matching private key, `mkosi.key`,
-stays gitignored and is never copied here). Committing the certificate is
-safe by design: a certificate is exactly the thing you hand out for
-verification, the same reasoning that already applies to
-`import-pubring.gpg` above.
+`mok-2026.crt` is a plain copy of the repository root's gitignored `mkosi.crt`
+(the Secure Boot/MOK **public certificate** -- `openssl x509`, DER/PEM, no
+private key material; the matching private key, `mkosi.key`, stays gitignored
+and never enters this directory). Committing the certificate is safe by design:
+a certificate is exactly the thing you hand out for verification, the same
+reasoning that already applies to `import-pubring.gpg` above.
 
-- **Ships at:** `/usr/lib/snosi/mok-dev.crt` on the network-installer ISO
-  (`shared/native-installer/mkosi.conf` `ExtraTrees=`), and effectively
-  public already inside every secure native profile's own MOK-signed
-  boot chain (`cayo-ab`, `snow-ab`, `snowfield-ab`) -- this file just gives
-  `snosi-install` (and `--restage-mok`) a copy to `mokutil --import` without
-  depending on gitignored dev material being present on the machine running
-  the installer build.
+- **Subject:** `CN=snosi Secure Boot 2026, O=frostyard` (valid to 2036).
+- **Ships at:** the version-neutral path `/usr/lib/snosi/mok.crt` on the
+  network-installer ISO (`shared/native-installer/mkosi.conf` `ExtraTrees=`).
+  The in-image path is deliberately version-neutral so a key rotation only
+  changes the committed source filename and the one `ExtraTrees=` line, not
+  `snosi-install`'s default or the ISO test.
 - **Used by:** `snosi-install`'s MOK enrollment step (plan step 16-17) and
   `--restage-mok` recovery mode, both overridable with `--mok-cert <path>`
   for testing against a different signing key.
-- **This is DEV-only material.** Production MOK certificate custody follows
-  `docs/native-ab-contracts.md` §7 "MOK Rotation": the production
-  certificate is committed the same way (certificates are public), but the
-  private key that signs UKIs/systemd-boot/modules never leaves the
-  protected signer.
+- **Private key custody:** the MOK private key (`mkosi.key`) signs
+  systemd-boot, UKIs, and any Snosi-signed modules; it never leaves the
+  protected signer. MOK rotation is a fleet-wide re-enrollment event -- see
+  `docs/native-ab-contracts.md` §7 "MOK Rotation".

@@ -845,9 +845,10 @@ feature). Root SSH key install writes into the persistent `/etc` overlay
 upperdir (`/root` is dm-verity-sealed read-only, always) via a new
 `AuthorizedKeysFile` drop-in shipped on the installed product,
 `shared/outformat/ab-root/tree/etc/ssh/sshd_config.d/
-10-snosi-authorized-keys.conf`. `shared/native-ab/keys/mok-dev.crt` (new,
-committed public certificate — a plain copy of gitignored `mkosi.crt`, same
-DEV-only reasoning as `import-pubring.gpg`) ships alongside the pubring via
+10-snosi-authorized-keys.conf`. `shared/native-ab/keys/mok-2026.crt`
+(committed public certificate — a plain copy of gitignored `mkosi.crt`, safe
+to commit for the same reason as `import-pubring.gpg`; shipped in-image at the
+version-neutral path `/usr/lib/snosi/mok.crt`) ships alongside the pubring via
 `ExtraTrees=`. `test/snosi-install-test.sh` covers the pure logic (index
 parsing/verification, disk-refusal filters, argument validation matrix,
 streamed-verify mismatch handling, restage-mok argument handling) via

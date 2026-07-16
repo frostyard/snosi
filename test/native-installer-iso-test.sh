@@ -259,8 +259,8 @@ assert_contains "/etc/snosi-installer-release embeds the ISO version" \
 
 assert_true "shipped update pubring present at /usr/lib/snosi/os-update-pubring.gpg" \
     grep -q "usr/lib/snosi/os-update-pubring.gpg$" "$initrd_list"
-assert_true "shipped MOK dev certificate present at /usr/lib/snosi/mok-dev.crt" \
-    grep -q "usr/lib/snosi/mok-dev.crt$" "$initrd_list"
+assert_true "shipped MOK certificate present at /usr/lib/snosi/mok.crt" \
+    grep -q "usr/lib/snosi/mok.crt$" "$initrd_list"
 
 umount "$MNT_DIR"
 losetup -d "$LOOP_DEV"

@@ -79,7 +79,7 @@ set -euo pipefail
 # Constants
 # ---------------------------------------------------------------------------
 PUBRING_DEFAULT=/usr/lib/snosi/os-update-pubring.gpg
-MOK_CERT_DEFAULT=/usr/lib/snosi/mok-dev.crt
+MOK_CERT_DEFAULT=/usr/lib/snosi/mok.crt
 ORIGIN_DEFAULT=https://repository.frostyard.org
 VALID_PRODUCTS=(cayo-ab snow-ab snowfield-ab)
 
@@ -150,7 +150,7 @@ Install mode options:
   --skip-mok                    Skip MOK enrollment (recover later with
                                 --restage-mok)
   --mok-cert PATH               MOK certificate to enroll
-                                (default: /usr/lib/snosi/mok-dev.crt)
+                                (default: /usr/lib/snosi/mok.crt)
   --ssh-authorized-key PATH     Install a root SSH public key for initial
                                 diagnostics
   --reboot                      Reboot when finished (never automatic

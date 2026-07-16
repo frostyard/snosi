@@ -209,7 +209,7 @@ validates its channel *argument*, not which mkosi profile physically
 produced the bytes — see `test/native-ab-updateux-test.sh`'s header for the
 same pattern). Deliberately uses `cayo-ab-raw` (no Secure Boot/MOK) rather
 than the secure `cayo-ab` profile: `shared/native-ab/keys/README.md`
-documents that the DEV pubring ships at `/usr/lib/systemd/import-pubring.gpg`
+documents that the update-signing pubring ships at `/usr/lib/systemd/import-pubring.gpg`
 on **every** native A/B image via the shared `shared/outformat/ab-root/
 mkosi.conf` fragment, `cayo-ab-raw` included, so booting it and never
 touching `/etc/systemd/import-pubring.gpg` exercises exactly the same
@@ -863,11 +863,12 @@ Design decisions worth knowing before touching this script:
   `snosi-install` (during its `/var` mount, alongside writing
   `/var/lib/snosi/install-info.json`) can seed a key there directly, before
   first boot, with no new mechanism.
-- **MOK certificate is committed, dev-only, public material**: same
+- **MOK certificate is committed, public material**: same
   reasoning as the existing `import-pubring.gpg` -- a certificate is
   exactly the thing you hand out for verification. `shared/native-ab/keys/
-  mok-dev.crt` is a plain copy of the gitignored `mkosi.crt`; it ships into
-  the installer at `/usr/lib/snosi/mok-dev.crt` (ExtraTrees=) and the
+  mok-2026.crt` is a plain copy of the gitignored `mkosi.crt`; it ships into
+  the installer at the version-neutral path `/usr/lib/snosi/mok.crt`
+  (ExtraTrees=) and the
   update pubring ships at `/usr/lib/snosi/os-update-pubring.gpg` (same
   file, same single-canonical-copy pattern as the ab-root fragment's own
   `/usr/lib/systemd/import-pubring.gpg` copy -- deliberately a SEPARATE
