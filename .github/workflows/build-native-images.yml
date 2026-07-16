@@ -175,7 +175,10 @@ jobs:
           [[ -n "$NATIVE_PCR_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_KEY is not set in the native-build environment" >&2; exit 1; }
           [[ -n "$NATIVE_PCR_SIGNING_CERTIFICATE" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_CERTIFICATE is not set in the native-build environment" >&2; exit 1; }
           umask 077
-          mkdir -p .snosi-private
+          # .snosi-private/history is a SandboxTrees= source in shared/native-ab-secure/mkosi.conf
+          # (PCR-key rotation history); mkosi refuses to build if it does not exist. It is
+          # legitimately empty when no rotation is in progress.
+          mkdir -p .snosi-private/history
           printf '%s' "$NATIVE_SECURE_BOOT_KEY" > mkosi.key
           printf '%s' "$NATIVE_SECURE_BOOT_CERTIFICATE" > mkosi.crt
           printf '%s' "$NATIVE_PCR_SIGNING_KEY" > .snosi-private/pcr-signing.key
@@ -301,7 +304,10 @@ jobs:
           [[ -n "$NATIVE_PCR_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_KEY is not set in the native-build environment" >&2; exit 1; }
           [[ -n "$NATIVE_PCR_SIGNING_CERTIFICATE" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_CERTIFICATE is not set in the native-build environment" >&2; exit 1; }
           umask 077
-          mkdir -p .snosi-private
+          # .snosi-private/history is a SandboxTrees= source in shared/native-ab-secure/mkosi.conf
+          # (PCR-key rotation history); mkosi refuses to build if it does not exist. It is
+          # legitimately empty when no rotation is in progress.
+          mkdir -p .snosi-private/history
           printf '%s' "$NATIVE_SECURE_BOOT_KEY" > mkosi.key
           printf '%s' "$NATIVE_SECURE_BOOT_CERTIFICATE" > mkosi.crt
           printf '%s' "$NATIVE_PCR_SIGNING_KEY" > .snosi-private/pcr-signing.key
@@ -415,7 +421,10 @@ jobs:
           [[ -n "$NATIVE_PCR_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_KEY is not set in the native-build environment" >&2; exit 1; }
           [[ -n "$NATIVE_PCR_SIGNING_CERTIFICATE" ]] || { echo "::error::secrets.NATIVE_PCR_SIGNING_CERTIFICATE is not set in the native-build environment" >&2; exit 1; }
           umask 077
-          mkdir -p .snosi-private
+          # .snosi-private/history is a SandboxTrees= source in shared/native-ab-secure/mkosi.conf
+          # (PCR-key rotation history); mkosi refuses to build if it does not exist. It is
+          # legitimately empty when no rotation is in progress.
+          mkdir -p .snosi-private/history
           printf '%s' "$NATIVE_SECURE_BOOT_KEY" > mkosi.key
           printf '%s' "$NATIVE_SECURE_BOOT_CERTIFICATE" > mkosi.crt
           printf '%s' "$NATIVE_PCR_SIGNING_KEY" > .snosi-private/pcr-signing.key
