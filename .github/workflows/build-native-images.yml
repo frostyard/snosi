@@ -14,8 +14,11 @@ name: Build Native Images
 # "CI publication flow" section for the full rationale.
 #
 # Trigger (interim protected-builder rule, docs/native-ab-publication.md
-# "Interim protected-builder constraints"): workflow_dispatch and pushes to
-# main ONLY. Never pull_request, never a fork-originated trigger, never
+# "Interim protected-builder constraints"): workflow_dispatch (manual, needs
+# write access) and a weekly schedule ONLY. Both run only on the main branch.
+# Native builds are deliberately NOT fired by every main push -- a full
+# 3-product build is heavy and publication must be an intentional act.
+# Never pull_request, never a fork-originated trigger, never
 # repository_dispatch from an untrusted source. Until mkosi supports split
 # final assembly from signing (docs/native-ab-contracts.md SS7 "Protected
 # signing architecture"), the build-* jobs below are themselves the accepted
@@ -31,9 +34,13 @@ name: Build Native Images
 # full checklist and what changes once mkosi gains native split-signing
 # support.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+  schedule:
+    # Weekly candidate build, Sundays 06:00 UTC. Promotion still requires
+    # manual approval in the native-promotion environment, so this uploads
+    # candidates and pauses -- it never publishes a live index unattended.
+    # (schedule runs only on the default branch.)
+    - cron: '0 6 * * 0'
 
 permissions: {}
 
