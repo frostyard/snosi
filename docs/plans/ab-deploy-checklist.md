@@ -142,7 +142,10 @@ images with those keys and confirm nothing private leaked.
       `gh secret set NATIVE_PCR_SIGNING_KEY --env native-build < pcr-signing.key`
       (plus the matching cert / any other changed key). Verify the new bundle
       restores (`age -d … | tar tzf -`) before trusting it.
-- [~] **Local pre-flight rebuild with the production keys** — was done with the
+- [x] **Local pre-flight rebuild with the production keys** — redone for the
+      RSA-2048 key by the §7 full-window runs (green 2026-07-16: cayo-ab 112/112,
+      snow-ab 125/125, 8 fresh builds, artifact test per build). Originally done
+      with the superseded RSA-4096/ECC keys. Historical note: was done with the
   superseded RSA-4096/ECC keys; being redone implicitly for the RSA-2048 key
   by the §7 full-window runs launched 2026-07-16 (the harness runs the secure
   artifact test against every build). (Optional but
@@ -258,11 +261,11 @@ still `PROVISIONAL` — this is where they get confirmed with production keys.
 - [~] **QEMU secure full window** — `sudo PROFILE=<product-ab>
 test/native-ab-secure-boot-test.sh --full-window` green (N→N+3, slot reuse,
   rollback, 3-try boot-count fallback, per-boot NvPCR clean, recovery unlock,
-  under enforced Secure Boot + unattended TPM). snow-ab's earlier 125/125 was
-  with the DEV key; with the production RSA-2048 PCR key, cayo-ab + snow-ab
-  runs launched 2026-07-16 (sequential, in progress — the RSA-4096 and ECC
-  key attempts both failed exactly here at Step 4b). snowfield-ab parked
-  until those two are green.
+  under enforced Secure Boot + unattended TPM). **Green with the production
+  RSA-2048 PCR key 2026-07-16: cayo-ab 112/112, snow-ab 125/125** (the RSA-4096
+  and ECC key attempts both failed exactly here at Step 4b). Remaining:
+  snowfield-ab (parked; run before its publication, alongside the Surface
+  hardware gate below).
 - [ ] **QEMU end-to-end install** — `sudo test/native-installer-e2e-test.sh`
       green for cayo-ab + snow-ab (add `--with-snowfield` only when running on/for
       Surface). Confirms ISO boot on virgin varstore, own-boot-medium refusal in the
