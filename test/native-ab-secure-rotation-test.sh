@@ -56,7 +56,7 @@ uki="${prefix}.efi"
 root="${prefix}.cayo_@v.root.raw.raw"
 verity="${prefix}.cayo_@v.root-verity.raw.raw"
 
-for command in awk base64 cut gpg jq openssl realpath scp sfdisk sha256sum ssh xz; do
+for command in awk base64 gpg jq openssl python3 realpath scp sfdisk sha256sum ssh xz; do
     command -v "$command" >/dev/null || {
         echo "Error: required command not found: $command" >&2
         exit 1
@@ -72,6 +72,7 @@ done
 }
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fingerprint_helper="$script_dir/lib/pubkey-fingerprint.py"
 workdir=$(mktemp -d)
 mkdir -p "$workdir/source" "$workdir/definitions"
 remote_dir=/var/tmp/native-ab-secure-rotation
@@ -127,8 +128,7 @@ cleanup() {
 trap cleanup EXIT
 
 public_fingerprint() {
-    openssl rsa -pubin -in "$1" -RSAPublicKey_out -outform DER 2>/dev/null | \
-        sha256sum | cut -d' ' -f1
+    python3 "$fingerprint_helper" "$1"
 }
 
 guest_version() {
@@ -232,9 +232,7 @@ locate_token() {
 
     while IFS=$'\t' read -r id slots encoded; do
         [[ -n ${encoded:-} && $encoded != null ]] || continue
-        fingerprint=$(printf '%s' "$encoded" | base64 -d | \
-            openssl rsa -pubin -RSAPublicKey_out -outform DER 2>/dev/null | \
-            sha256sum | cut -d' ' -f1)
+        fingerprint=$(printf '%s' "$encoded" | base64 -d | python3 "$fingerprint_helper")
         if [[ $fingerprint == "$expected_fingerprint" ]]; then
             [[ $slots != *,* ]] || {
                 echo "Error: TPM token $id references multiple keyslots: $slots" >&2

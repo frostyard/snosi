@@ -60,7 +60,7 @@ incus_instance=${10}
 incus_target=$incus_instance
 [[ -z $INCUS_REMOTE ]] || incus_target="$INCUS_REMOTE:$incus_instance"
 
-for command in base64 cmp cut dpkg gpg grep incus jq openssl realpath scp \
+for command in base64 cmp dpkg gpg grep incus jq openssl python3 realpath scp \
     sfdisk sha256sum ssh stat xz; do
     command -v "$command" >/dev/null || {
         echo "Error: required command not found: $command" >&2
@@ -84,6 +84,7 @@ done
 }
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fingerprint_helper="$script_dir/lib/pubkey-fingerprint.py"
 workdir=$(mktemp -d /var/tmp/native-ab-secure-update-test.XXXXXX)
 mkdir -p "$workdir/source" "$workdir/definitions" "$workdir/gnupg"
 chmod 0700 "$workdir/gnupg"
@@ -168,8 +169,7 @@ reboot_guest() {
 }
 
 public_fingerprint() {
-    openssl rsa -pubin -in "$1" -RSAPublicKey_out -outform DER 2>/dev/null | \
-        sha256sum | cut -d' ' -f1
+    python3 "$fingerprint_helper" "$1"
 }
 
 luks_metadata() {
@@ -185,9 +185,7 @@ assert_new_only_token() {
         return 1
     }
     encoded=$(jq -er '.tokens[] | select(.type == "systemd-tpm2") | .tpm2_pubkey' <<< "$metadata")
-    fingerprint=$(printf '%s' "$encoded" | base64 -d | \
-        openssl rsa -pubin -RSAPublicKey_out -outform DER 2>/dev/null | \
-        sha256sum | cut -d' ' -f1)
+    fingerprint=$(printf '%s' "$encoded" | base64 -d | python3 "$fingerprint_helper")
     [[ $fingerprint == "$new_fingerprint" ]] || {
         echo "Error: sole TPM token uses $fingerprint, expected $new_fingerprint" >&2
         return 1

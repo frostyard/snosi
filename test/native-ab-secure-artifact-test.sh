@@ -17,6 +17,9 @@ if [[ -n "$signature_mode" && "$signature_mode" != single ]]; then
     exit 2
 fi
 
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fingerprint_helper="$script_dir/lib/pubkey-fingerprint.py"
+
 for command in dpkg jq lsinitrd objcopy objdump; do
     command -v "$command" >/dev/null || {
         echo "Error: $command is required" >&2
@@ -69,7 +72,7 @@ grep -q '[[:space:]]\.pcrpkey[[:space:]]' <<< "$sections"
 grep -q '[[:space:]]\.pcrsig[[:space:]]' <<< "$sections"
 
 if [[ -n "$previous_certificate" ]]; then
-    for command in cmp cut openssl sha256sum; do
+    for command in cmp openssl python3; do
         command -v "$command" >/dev/null || {
             echo "Error: $command is required for dual-signature validation" >&2
             exit 1
@@ -91,10 +94,8 @@ if [[ -n "$previous_certificate" ]]; then
     cmp "$primary_public_key" "$pcrpkey"
 
     previous_fp=$(openssl x509 -in "$previous_certificate" -pubkey -noout | \
-        openssl rsa -pubin -RSAPublicKey_out -outform DER 2>/dev/null | \
-        sha256sum | cut -d' ' -f1)
-    primary_fp=$(openssl rsa -pubin -in "$primary_public_key" \
-        -RSAPublicKey_out -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1)
+        python3 "$fingerprint_helper")
+    primary_fp=$(python3 "$fingerprint_helper" "$primary_public_key")
     jq -e --arg previous "$previous_fp" --arg primary "$primary_fp" '
         .sha256 as $signatures
         | ($signatures | length) == 8
@@ -107,7 +108,7 @@ if [[ -n "$previous_certificate" ]]; then
                 == ([$previous, $primary] | sort)))
     ' "$pcrsig" >/dev/null
 elif [[ "$signature_mode" == single ]]; then
-    for command in cmp cut openssl sha256sum; do
+    for command in cmp python3; do
         command -v "$command" >/dev/null || {
             echo "Error: $command is required for single-signature validation" >&2
             exit 1
@@ -124,8 +125,7 @@ elif [[ "$signature_mode" == single ]]; then
         "$uki" "$workdir/uki-pcr.copy"
     cmp "$primary_public_key" "$pcrpkey"
 
-    primary_fp=$(openssl rsa -pubin -in "$primary_public_key" \
-        -RSAPublicKey_out -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1)
+    primary_fp=$(python3 "$fingerprint_helper" "$primary_public_key")
     jq -e --arg primary "$primary_fp" '
         .sha256 as $signatures
         | ($signatures | length) == 4
