@@ -342,7 +342,14 @@ fixture. LUKS2 creation,
 MOK enrollment, enforced Secure Boot, TPM auto-unlock, TPM replacement failure,
 recovery unlock, and PCR signing-key rotation are validated in Incus. Update,
 rollback, and boot-count fallback are also validated end to end with the sole
-new-key TPM token. The three production profiles upgrade the complete systemd family to
+new-key TPM token. **The PCR signing key MUST be ECC P-256, never RSA** — TPM
+auto-unlock loads the PCR public key into the TPM, and an RSA key with the
+default exponent 65537 makes systemd 261's `Esys_LoadExternal` fail with
+`TPM_RC_VALUE` (systemd #30546), so enrollment succeeds but unlock fails on every
+profile (NOT Surface-specific; swtpm also has no RSA-4096 at all). This bit a
+production key swap (RSA-4096 pcr-signing) after the dev-key `125/125` runs
+below; the fix is ECC, see `docs/native-ab-contracts.md` §7. The MOK key stays
+RSA-4096 (Secure Boot, firmware-verified, never touches the TPM). The three production profiles upgrade the complete systemd family to
 Forky 261+ through the shared fragment's profile-only, low-priority APT source; never expose that
 source to the base or normal profiles, and keep all exact-version systemd
 libraries and companion packages qualified together.
