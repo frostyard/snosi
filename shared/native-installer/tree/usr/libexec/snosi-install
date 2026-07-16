@@ -586,8 +586,30 @@ validate_disk_image_layout() { # disk
 relocate_and_grow_var() { # disk image_size target_size -- prints the var partition device
     local disk="$1" image_size="$2" target_size="$3"
 
+    # Every diagnostic-noisy command in this function is redirected to
+    # stderr (>&2). Root-caused live (test/native-installer-e2e-test.sh's
+    # first real install, 2026-07-15): this function's only contract with
+    # its caller is stdout == exactly one line, the var partition device
+    # path (main() calls it as `var_part="$(relocate_and_grow_var ...)"`).
+    # sfdisk/e2fsck/resize2fs all write their normal progress/summary
+    # output to STDOUT, not stderr -- with no redirection, command
+    # substitution captured ALL of that noise (partition table dumps,
+    # filesystem-check summaries, resize progress) into $var_part instead
+    # of just the intended device path, so every later use of $var_part
+    # (cryptsetup, mkfs.ext4, systemd-cryptenroll, ...) received a garbage
+    # multi-line string instead of e.g. "/dev/vdb6" -- surfacing as
+    # `cryptsetup`/`systemd-cryptenroll` "Block device required" or mapper-
+    # not-found errors deep inside format_var()/enroll_tpm_var(), nowhere
+    # near this actual root cause. This exact bug could not exist in
+    # test/cayo-ab-install-spike.sh (the "already-validated logic" this was
+    # ported from): that script never wraps this sequence in a function
+    # whose stdout is captured -- it just uses top-level shell variables
+    # directly in the same scope, so its identical unredirected sfdisk/
+    # e2fsck/resize2fs calls were always harmless there. Introduced by the
+    # port itself, not present in the spike script -- do not "fix" this by
+    # re-adding the same bug to the spike script's copy.
     if (( target_size > image_size )); then
-        sfdisk --lock=yes --relocate gpt-bak-std "$disk"
+        sfdisk --lock=yes --relocate gpt-bak-std "$disk" >&2
         rereadpt_settle "$disk"
     fi
 
@@ -607,15 +629,15 @@ relocate_and_grow_var() { # disk image_size target_size -- prints the var partit
     if (( target_size > image_size )); then
         local fsck_status=0
         set +e
-        e2fsck -fp "$var_part"
+        e2fsck -fp "$var_part" >&2
         fsck_status=$?
         set -e
         (( (fsck_status & ~1) == 0 )) || die "var filesystem check failed with status $fsck_status"
 
-        printf 'start=%s,size=+\n' "$var_start" | sfdisk --lock=yes --no-reread -N "$var_number" "$disk"
+        printf 'start=%s,size=+\n' "$var_start" | sfdisk --lock=yes --no-reread -N "$var_number" "$disk" >&2
         rereadpt_settle "$disk"
         [[ "$(lsblk -dnro START "$var_part")" == "$var_start" ]] || die "var partition start changed unexpectedly"
-        resize2fs "$var_part"
+        resize2fs "$var_part" >&2
     fi
 
     printf '%s\n' "$var_part"
@@ -627,9 +649,34 @@ relocate_and_grow_var() { # disk image_size target_size -- prints the var partit
 
 VAR_MAPPER_ACTIVE=""
 
+# close_var_mapper -- bounded retry on transient EBUSY, same class of race
+# as rereadpt_settle()'s blockdev --rereadpt retry. Root-caused live
+# (test/native-installer-e2e-test.sh's first fully-successful install,
+# 2026-07-15): closing the install-time LUKS mapper immediately after
+# mkfs.ext4 just wrote to it can transiently fail ("device busy") while the
+# kernel still has cached/dirty references to it -- the single unretried
+# attempt, with its failure silently swallowed by `2>/dev/null || true`,
+# then unconditionally cleared $VAR_MAPPER_ACTIVE regardless of whether the
+# close actually succeeded. That made the script's own bookkeeping claim
+# "closed" while the mapper was genuinely still attached on the real disk,
+# which broke a later `cryptsetup open` of the same partition ("Cannot use
+# device ... which is in use") with no diagnostic pointing back here. Only
+# the LAST attempt's stderr is allowed through, so a genuine failure is
+# still visible.
 close_var_mapper() {
     if [[ -n "$VAR_MAPPER_ACTIVE" ]]; then
-        cryptsetup close "$VAR_MAPPER_ACTIVE" 2>/dev/null || true
+        local attempt close_rc=0
+        for attempt in 1 2 3 4 5; do
+            close_rc=0
+            cryptsetup close "$VAR_MAPPER_ACTIVE" 2>/tmp/snosi-install-close-var-mapper.err && break
+            close_rc=$?
+            sleep 1
+        done
+        if [[ "$close_rc" -ne 0 ]]; then
+            cat /tmp/snosi-install-close-var-mapper.err >&2 2>/dev/null || true
+            warn "could not close LUKS mapper $VAR_MAPPER_ACTIVE after $attempt attempts (rc=$close_rc); it may still be attached"
+        fi
+        rm -f /tmp/snosi-install-close-var-mapper.err
         VAR_MAPPER_ACTIVE=""
     fi
 }
@@ -650,9 +697,15 @@ format_var() { # var_part encrypt recovery_key_file
     local recovery_key
     recovery_key="$(openssl rand -hex 32)"
     printf '%s' "$recovery_key" >"$recovery_key_file"
-    cryptsetup luksFormat --type luks2 --batch-mode --key-file "$recovery_key_file" "$var_part"
+    # >&2 on both cryptsetup calls: this function's stdout is captured by
+    # its caller (`var_device="$(format_var ...)"`) and must contain
+    # exactly the printed device path -- see relocate_and_grow_var()'s
+    # header comment for the full story of this bug class (any stray
+    # stdout from an internal command here corrupts $var_device the same
+    # way it corrupted $var_part there).
+    cryptsetup luksFormat --type luks2 --batch-mode --key-file "$recovery_key_file" "$var_part" >&2
     local mapper="snosi-var-install-$$"
-    cryptsetup open --key-file "$recovery_key_file" "$var_part" "$mapper"
+    cryptsetup open --key-file "$recovery_key_file" "$var_part" "$mapper" >&2
     VAR_MAPPER_ACTIVE="$mapper"
     mkfs.ext4 -F -L var "/dev/mapper/$mapper" >/dev/null
     printf '/dev/mapper/%s\n' "$mapper"
@@ -675,11 +728,23 @@ tpm_present() {
 # disk's ESP read-only, locates the just-written EFI/Linux/<channel>_
 # <version>.efi (the initial install always ships exactly this name, no
 # +l-d update suffix -- see docs/native-ab-contracts.md §4), and dumps its
-# .pcrpkey PE section (same objcopy invocation as
+# .pcrpkey PE section (same --dump-section flag as
 # test/native-ab-secure-artifact-test.sh) to out_path.
+#
+# The COPY TARGET must be a real scratch file, never /dev/null: root-caused
+# live (test/native-installer-e2e-test.sh's first real install,
+# 2026-07-15) -- objcopy still WRITES out_path's content correctly when the
+# copy target is /dev/null, but then reports "objcopy: /dev/null: file
+# truncated" and exits 1 anyway (confirmed independently against a real
+# signed .efi outside this script), which fatally aborted the whole
+# installer under `set -e` immediately after the desired section had
+# already been extracted -- the `[[ -s "$out" ]]` check two lines below,
+# which is the ACTUAL success signal, never even ran.
+# test/native-ab-secure-artifact-test.sh never hit this: it always uses a
+# real scratch file as the copy target, never /dev/null.
 extract_pcrpkey_from_disk() { # disk channel version out_path
     local disk="$1" channel="$2" version="$3" out="$4"
-    local esp_part mnt uki
+    local esp_part mnt uki copy_target
 
     esp_part="$(lsblk -nrpo NAME,PARTLABEL "$disk" | awk '$2 == "esp" {print $1; exit}')"
     [[ -n "$esp_part" ]] || die "no esp partition found on $disk"
@@ -692,7 +757,9 @@ extract_pcrpkey_from_disk() { # disk channel version out_path
         rmdir "$mnt"
         die "installed UKI not found at EFI/Linux/${channel}_${version}.efi"
     fi
-    objcopy --dump-section ".pcrpkey=$out" "$uki" /dev/null
+    copy_target="$(mktemp /var/tmp/snosi-install-uki-copy.XXXXXX)"
+    objcopy --dump-section ".pcrpkey=$out" "$uki" "$copy_target"
+    rm -f "$copy_target"
     umount "$mnt"
     rmdir "$mnt"
     [[ -s "$out" ]] || die "extracted .pcrpkey section is empty"
@@ -1004,7 +1071,21 @@ main() {
     log "=== snosi-install: $channel ==="
     local workdir
     workdir="$(mktemp -d /var/tmp/snosi-install.XXXXXX)"
-    trap 'close_var_mapper; rm -rf "$workdir"' EXIT
+    # Double-quoted trap body (NOT single-quoted): $workdir must be
+    # substituted NOW, at trap-registration time, not deferred to
+    # trap-FIRE time. Root-caused live (test/native-installer-e2e-test.sh's
+    # first fully-successful install, 2026-07-15): with the single-quoted
+    # form, the EXIT trap correctly saw $workdir while main() was still
+    # on the call stack (e.g. during any die()-triggered early exit), but
+    # on ordinary SUCCESSFUL completion main() returns BEFORE the script's
+    # own top-level EXIT fires -- and workdir, being `local` to main(),
+    # is out of scope by then, so the trap's own `$workdir` reference is
+    # genuinely unbound under `set -u` ("workdir: unbound variable"),
+    # which made every clean run still exit non-zero. Embedding the
+    # already-resolved path directly in the trap command avoids ever
+    # needing `$workdir` to still be in scope when the trap runs.
+    # shellcheck disable=SC2064 # intentional: expand $workdir NOW, see above
+    trap "close_var_mapper; rm -rf '$workdir'" EXIT
 
     fetch_verified_index "$origin" "$channel" "$workdir"
     local version

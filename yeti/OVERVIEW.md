@@ -763,6 +763,22 @@ plus network-adapter extras from `shared/packages/snow`/`shared/packages/
 cayo`) so the installer can actually reach a network on real hardware, not
 just virtio-only QEMU fixtures.
 
+`test/native-installer-e2e-test.sh` is the higher-level Phase 8 exit proof: where
+`native-installer-iso-test.sh` validates the boot chain structurally and via
+positive/negative Secure Boot boots, the e2e test drives a REAL install of both
+`cayo-ab` and `snow-ab` — build+publish through the actual publication pipeline to
+a local origin, boot the fresh ISO on a virgin never-enrolled `OVMF_VARS_4M.ms.fd`
++ persistent swtpm, run a non-interactive encrypted-`/var` install (recovery key +
+TPM enrollment + MOK password file), prove the pre-enrollment Security Violation,
+simulate MokManager approval via host-side `virt-fw-vars --add-mok` into the same
+varstore, then boot the installed system fully enforced and fully unattended and
+assert SB enforced, kernel lockdown, unattended TPM `/var` unlock, the `/etc`
+overlay, `IMAGE_ID`/`IMAGE_VERSION`, `install-info.json`, clean
+`snosi-update-status`, and no failed units. It also de-risks commit 99f4921's
+own-boot-medium refusal in the real initramfs (cayo-ab step 3). First green run
+75/75 (2026-07-15); see yeti/testing.md "Phase 8 (ISO install end-to-end)" for the
+full step breakdown and the real product bugs it surfaced.
+
 ### snosi-install CLI (Task 8.2)
 
 `shared/native-installer/tree/usr/libexec/snosi-install` replaces the

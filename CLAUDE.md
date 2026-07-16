@@ -672,14 +672,21 @@ checklist for the user to run on real Surface hardware:
    --full-window` — this has NOT been run for snowfield yet (Phase 6
    deliberately skipped it; see above) and should be green before spending
    hardware time.
-3. On the real Surface device: enroll the Snosi MOK certificate
-   (`mkosi.crt`) via MokManager during a signed-shim boot of installer
-   media (see "Installer ISO boot chain",
-   `docs/native-ab-contracts.md` §8 — the Phase 8 ISO does not exist yet;
-   until then, use whatever interim installer media Phase 6/7's state
-   provides), then run the installer against the real disk (mirror
-   `test/cayo-ab-install-spike.sh`'s non-`--allow-file` real-device path,
-   `--encrypt-var --recovery-key-file <path outside the disk>`).
+3. On the real Surface device: build the network-installer ISO
+   (`shared/native-installer/tools/build-iso.sh`, or reuse the published
+   `isos/native/v1/` artifact — see "Installer ISO boot chain" and
+   `docs/native-ab-contracts.md` §8), write it to USB with a raw `dd`/`cp`
+   that preserves the ISO9660 volume ID (Ventoy/Rufus ISO-DD label-rewriting
+   defeats the installer-medium self-refusal), enroll the Snosi MOK
+   certificate (`mkosi.crt`) via MokManager during its signed-shim boot, then
+   run `/usr/libexec/snosi-install --product snowfield-ab ...
+   --encrypt-var --recovery-key-file <path outside the disk>` against the real
+   disk. The full ISO -> non-interactive encrypted install -> MOK-enrolled
+   enforced/unattended-boot flow is proven in QEMU for `cayo-ab`/`snow-ab` by
+   `test/native-installer-e2e-test.sh` (Phase 8 exit, 75/75); this hardware
+   step is the Surface-specific analogue of that harness. The older
+   `test/cayo-ab-install-spike.sh` real-device path still works but is the
+   superseded 8.1 spike, not the shipped `snosi-install` CLI.
 4. Verify TPM enrollment (`systemd-cryptenroll --unlock-key-file=<recovery
    key path> --tpm2-device=auto --tpm2-pcrs= --tpm2-pcrlock=
    --tpm2-public-key=.snosi-private/pcr-signing.pub
@@ -845,7 +852,9 @@ DEV-only reasoning as `import-pubring.gpg`) ships alongside the pubring via
 parsing/verification, disk-refusal filters, argument validation matrix,
 streamed-verify mismatch handling, restage-mok argument handling) via
 fixtures, wired into `validate.yml`; full disk-write/LUKS/TPM/MOK behavior
-needs a real product build and install target (a later task). Known
+is proven end to end by `test/native-installer-e2e-test.sh` (Phase 8 exit —
+see "Phase 8 exit: real ISO install proof" below), which drives a real
+build+publish+install+enrolled-boot of `cayo-ab` and `snow-ab`. Known
 limitation: the installer-medium self-refusal (`disk_is_installer_medium()`)
 detects the ISO's ISO9660 volume ID, so label-rewriting USB writers (Ventoy,
 Rufus in ISO/DD mode) that strip or replace that volume ID when staging the
@@ -866,6 +875,53 @@ a latent `promote.sh` bug this generalization surfaced and fixed (an
 outgoing-index archival regex that only matched `*.manifest.json` entries,
 silently killing `promote.sh` via `set -e`+`pipefail` on the second
 promotion of any publication type with none — the ISO has none).
+
+### Phase 8 exit: real ISO install proof
+
+`test/native-installer-e2e-test.sh` is the Phase 8 exit criterion — the sole
+test proving a user can take the shipped network-installer ISO to a running,
+Secure-Boot-enforced, TPM-unlocked native A/B system on stock artifacts, no
+keyring injection, no hand-editing. Per run it builds the ISO fresh (so commit
+99f4921's own-boot-medium refusal is exercised in the REAL initramfs, not a
+fixture) and builds+publishes `cayo-ab` and `snow-ab` through the actual
+`prepare -> publish-candidate -> verify-remote -> promote` pipeline (DEV signing
+key) to a local origin served by `test/lib/range-http-server.py`; trust leg is
+the stock shipped `import-pubring.gpg`. Per product it boots a VM with a VIRGIN
+never-enrolled `OVMF_VARS_4M.ms.fd` + persistent swtpm against a blank disk sized
+to the product's `minimum_disk_bytes()` (sourced from `snosi-install`, not
+duplicated) plus a 3 GiB margin so grow-to-end runs, then drives seven steps:
+(2) ISO boots to installer with SB enabled; (3, cayo-ab only) own-boot-medium
+install refused before any write to the ISO device; (4) non-interactive
+encrypted-`/var` install (recovery key, TPM enroll, MOK password file — first
+proving a world/group-readable file is refused), asserting one `systemd-tpm2`
+LUKS token, a recovery keyslot, a grown `var`, and `--test-passphrase` unlock;
+(5) pre-enrollment boot fails with shim's Security Violation; (6) `--restage-mok`
+succeeds (cayo-ab gets a dedicated fresh-ISO-boot restage; snow-ab skips it);
+(7) host-side `virt-fw-vars --add-mok` into the SAME varstore simulates
+MokManager approval, then the installed system boots fully enforced and fully
+unattended — asserting SB enforced, kernel lockdown, `/var` on the LUKS mapper
+via unattended TPM unlock, the `/etc` overlay, `IMAGE_ID`/`IMAGE_VERSION`, every
+`install-info.json` field, clean `snosi-update-status`, no failed units, and that
+the recovery passphrase still opens `/var`. cayo-ab runs the full sequence;
+snow-ab runs steps 2, 4, 5, 7; `snowfield-ab` is behind `--with-snowfield` (off
+by default — QEMU cannot represent Surface hardware). Two Step-7 device details
+matter: the final boot detaches the ISO so the target disk shifts from `/dev/vdb`
+to `/dev/vda` — derive the `/var` backing partition from the open mapper
+(`cryptsetup status var`), never from a device letter captured on an
+ISO-attached boot; and `--test-passphrase` (a read-only header check) is used
+rather than `cryptsetup open` of a second mapper, because the installer's own
+`systemd-gpt-auto-generator` legitimately auto-activates the `var` GPT-type
+partition once it is a valid LUKS2 volume and holds the device busy.
+
+First green run 75/75 (2026-07-15, cayo-ab full + snow-ab partial, ISO
+`20260715204023`, ~17 min wall). The test also fixed real product bugs it
+surfaced: the network-installer ISO was missing `fdisk` (ships `sfdisk`, which
+moved out of `util-linux`), `binutils` (`objcopy`, for `.pcrpkey` extraction),
+and `openssl`; and `snosi-install` wrote several tool-diagnostic streams to
+stdout instead of stderr (corrupting values captured by command substitution),
+dumped a UKI section to `/dev/null` (objcopy always exits 1 doing that — now a
+real scratch file), and did not retry the LUKS mapper close. Full step breakdown
+and bug list: `yeti/testing.md` "Phase 8 (ISO install end-to-end)".
 
 ### Native `/var` Factory State
 

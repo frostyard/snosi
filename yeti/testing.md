@@ -23,6 +23,7 @@ test/
 ├── native-ab-secure-update-test.sh # Destructive secure rollback/fallback proof
 ├── cayo-ab-install-spike.sh   # Guarded native A/B disk installer (GPT/var-grow/LUKS spike, unchanged since Task 8.2)
 ├── native-installer-iso-test.sh # Installer ISO boot-chain validation (structural + QEMU positive/negative Secure Boot proof)
+├── native-installer-e2e-test.sh # Phase 8 exit: real ISO install of cayo-ab + snow-ab end to end (build/publish -> boot ISO -> non-interactive encrypted install -> MOK enroll -> enforced unattended boot)
 ├── native-publication-pipeline-test.sh # Phase 7 candidate/verify/promote/withdraw pipeline self-test (OS + ISO fixture legs)
 ├── snosi-install-test.sh      # snosi-install CLI unit tests (index verification, disk refusal, arg validation, streamed-verify, restage-mok)
 ├── run-qemu.sh                # Interactive QEMU runner (GTK display)
@@ -472,6 +473,46 @@ snowfield in Phase 6 (see `docs/native-ab-capacities.md`
 "PROVISIONAL-pending-hardware" and CLAUDE.md's "PENDING HUMAN GATE"
 checklist) — representative Surface hardware validation is out of scope
 for a QEMU-only machine and is the actual Phase 6 plan exit criterion.
+
+**Phase 8 (ISO install end-to-end).** `test/native-installer-e2e-test.sh` is the
+Phase 8 exit criterion: the sole test that proves a user can take the shipped
+network-installer ISO and reach a running, Secure-Boot-enforced, TPM-unlocked
+native A/B system with no keyring injection and no hand-editing — the whole
+trust chain on stock artifacts. Per run it (1) builds the ISO fresh (so the
+own-boot-medium fix from commit 99f4921 is exercised in the REAL initramfs, not a
+fixture) and builds+publishes `cayo-ab` and `snow-ab` through the actual
+`prepare -> publish-candidate -> verify-remote -> promote` pipeline with the DEV
+signing key to a local origin served by `test/lib/range-http-server.py`; trust leg
+is the stock shipped `import-pubring.gpg` everywhere. Then per product it boots a
+VM with a VIRGIN Secure-Boot varstore (`OVMF_VARS_4M.ms.fd`, no MOK) and
+persistent swtpm against a blank disk sized to the product's documented minimum
+plus a 3 GiB margin (so the grow-to-end path runs), and drives the seven-step
+sequence: (2) ISO boots to the installer with SB enabled; (3, cayo-ab only)
+own-boot-medium install is refused in the real initramfs, before any write to the
+ISO device; (4) non-interactive encrypted-`/var` install with a recovery key, TPM
+enrollment, and a MOK password file — first proving a world/group-readable
+password file is refused — then asserting exactly one `systemd-tpm2` LUKS token,
+a recovery keyslot, a grown `var`, and that the recovery passphrase opens the
+volume (`--test-passphrase`); (5) pre-enrollment boot fails with shim's Security
+Violation because the MOK is not yet enrolled; (6) `--restage-mok` succeeds
+(cayo-ab gets a dedicated fresh-ISO-boot restage; snow-ab skips it); (7)
+host-side `virt-fw-vars --add-mok` into the SAME varstore simulates the MokManager
+one-time approval, then the installed system boots fully enforced and fully
+unattended, verifying SB enforced, kernel lockdown, `/var` on the LUKS mapper via
+unattended TPM unlock, the `/etc` overlay, correct `IMAGE_ID`/`IMAGE_VERSION`, all
+`install-info.json` fields, a clean `snosi-update-status`, no failed units, and
+that the recovery passphrase still opens `/var`. cayo-ab runs the full sequence;
+snow-ab runs steps 2, 4, 5, 7 only; `snowfield-ab` is behind `--with-snowfield`
+(off by default — QEMU cannot represent Surface hardware, same rationale as Phase
+6). `SKIP_ISO_BUILD` / `SKIP_CAYO_BUILD` / `SKIP_SNOW_BUILD` with
+`BUILD_CAYO_DIR` / `BUILD_SNOW_DIR` skip the multi-GiB rebuilds during iteration.
+First full run: 75/75 assertions passed (2026-07-15, cayo-ab full + snow-ab
+partial, ISO `20260715204023`, wall time ~17 min). It also fixed real product
+bugs along the way — the installer ISO was missing `fdisk` (sfdisk), `binutils`
+(objcopy for `.pcrpkey` extraction), and `openssl`, and `snosi-install` wrote
+several tool-diagnostic streams to stdout instead of stderr, dumped a UKI section
+to `/dev/null` (objcopy always exits 1 doing that), and left the LUKS mapper close
+un-retried — see CLAUDE.md "Native A/B Prototype".
 
 ## Test Tiers
 

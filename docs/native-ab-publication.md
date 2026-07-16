@@ -503,3 +503,13 @@ two real `cayo-ab-raw` images unless `SKIP_BUILD=1 BUILD_N_DIR=... BUILD_N1_DIR=
 point at already-built output dirs). See that script's own header for the
 full sequence and why `cayo-ab-raw` (not `cayo-ab`) is used as the build
 target while still publishing under the real `cayo-ab` channel name.
+
+`test/native-installer-e2e-test.sh` (Phase 8 exit) drives this same local
+rehearsal origin one step further: it publishes real `cayo-ab` and `snow-ab`
+through the full `prepare -> publish-candidate -> verify-remote -> promote`
+pipeline to a `range-http-server.py` origin, then boots the shipped
+network-installer ISO in QEMU and runs a real non-interactive encrypted install
+that fetches and `gpgv`-verifies the promoted index with the stock shipped DEV
+pubring — the publication path exercised end to end from an actual installer,
+not just a verify-only guest. See `yeti/testing.md` "Phase 8 (ISO install
+end-to-end)".
