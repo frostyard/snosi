@@ -118,7 +118,7 @@ images with those keys and confirm nothing private leaked.
       mutually consistent) after two wrong-algorithm attempts — offsite backup
       inclusion is the next item.
       **It MUST be RSA-2048** (`openssl genpkey -algorithm RSA -pkeyopt
-      rsa_keygen_bits:2048`, default exponent 65537) — the only algorithm the
+    rsa_keygen_bits:2048`, default exponent 65537) — the only algorithm the
       whole unlock chain accepts, proven live 2026-07-16 on systemd 261.1-3 +
       swtpm. RSA-4096 fails at `Esys_LoadExternal` (`TPM_RC_VALUE`: optional in
       the TPM2 spec, rejected by swtpm and many hardware TPMs; see also systemd
@@ -133,30 +133,30 @@ images with those keys and confirm nothing private leaked.
       (`NATIVE_PCR_SIGNING_KEY` / `NATIVE_PCR_SIGNING_CERTIFICATE`), **not** the
       offline OpenPGP promotion tier. The public half is **not** committed to the
       repo; the build extracts it from the cert. (Nothing to commit here.)
-- [ ] **Refresh the offsite backup and secrets after any key (re)generation.**
+- [x] **Refresh the offsite backup and secrets after any key (re)generation.**
       Whenever a private key changes (e.g. the PCR key regenerated as RSA-2048), rebuild
       the encrypted bundle and re-copy it to BOTH offsite locations, then re-set the
       matching GitHub environment secret(s) so CI signs with the current key:
       `tar czf - mkosi.key mkosi.crt pcr-signing.key pcr-signing.crt | age -p >
-      backup/snosi-signing-keys-<year>.age` (offsite ×2), and
+    backup/snosi-signing-keys-<year>.age` (offsite ×2), and
       `gh secret set NATIVE_PCR_SIGNING_KEY --env native-build < pcr-signing.key`
       (plus the matching cert / any other changed key). Verify the new bundle
       restores (`age -d … | tar tzf -`) before trusting it.
 - [~] **Local pre-flight rebuild with the production keys** — was done with the
-      superseded RSA-4096/ECC keys; being redone implicitly for the RSA-2048 key
-      by the §7 full-window runs launched 2026-07-16 (the harness runs the secure
-      artifact test against every build). (Optional but
-      recommended — the authoritative production images are built by CI in §4/§6/§7;
-      this catches a bad/misformatted key locally in minutes instead of inside a
-      gated CI run). Place the four build-time keys where the secure build reads
-      them, all gitignored: `mkosi.key`/`mkosi.crt` at the **repo root** and
-      `pcr-signing.{key,crt}` in **`.snosi-private/`**; then extract the PCR public
-      key: `openssl x509 -in .snosi-private/pcr-signing.crt -pubkey -noout >
+  superseded RSA-4096/ECC keys; being redone implicitly for the RSA-2048 key
+  by the §7 full-window runs launched 2026-07-16 (the harness runs the secure
+  artifact test against every build). (Optional but
+  recommended — the authoritative production images are built by CI in §4/§6/§7;
+  this catches a bad/misformatted key locally in minutes instead of inside a
+  gated CI run). Place the four build-time keys where the secure build reads
+  them, all gitignored: `mkosi.key`/`mkosi.crt` at the **repo root** and
+  `pcr-signing.{key,crt}` in **`.snosi-private/`**; then extract the PCR public
+  key: `openssl x509 -in .snosi-private/pcr-signing.crt -pubkey -noout >
 .snosi-private/pcr-signing.pub`. For each profile: `just <profile>` then
-      `OUTPUT_NAME=<profile> ./test/native-ab-secure-artifact-test.sh "" "" ""
+  `OUTPUT_NAME=<profile> ./test/native-ab-secure-artifact-test.sh "" "" ""
 .snosi-private/pcr-signing.pub single`. This validates the MOK + PCR keys
-      produce correctly-signed UKIs; the OpenPGP update key is validated separately
-      by the publish→install round-trip in §6/§7. Do **not** publish the local build.
+  produce correctly-signed UKIs; the OpenPGP update key is validated separately
+  by the publish→install round-trip in §6/§7. Do **not** publish the local build.
 - [x] Confirm **no private key material is tracked** after the swap:
       `git grep -l 'PRIVATE KEY'` returns nothing; `.snosi-private/` and `mkosi.key`
       remain gitignored.
@@ -169,12 +169,12 @@ images with those keys and confirm nothing private leaked.
 GitHub environments with required reviewers. See runbook §"Secret inventory" for
 the full table.
 
-- [ ] Create environment **`native-build`** (protected). Add secrets:
+- [x] Create environment **`native-build`** (protected). Add secrets:
   - `NATIVE_SECURE_BOOT_KEY`, `NATIVE_SECURE_BOOT_CERTIFICATE`
   - `NATIVE_PCR_SIGNING_KEY`, `NATIVE_PCR_SIGNING_CERTIFICATE`
   - `NATIVE_R2_ACCESS_KEY_ID`, `NATIVE_R2_SECRET_ACCESS_KEY`,
     `NATIVE_R2_ACCOUNT_ID`, `NATIVE_R2_BUCKET`
-- [ ] Create environment **`native-promotion`** (protected, required reviewers).
+- [x] Create environment **`native-promotion`** (protected, required reviewers).
       Add secret:
   - `NATIVE_UPDATE_SIGNING_KEY` (OpenPGP update-signing private key — never leaves
     this environment; consumed only by `promote.sh --signing-key`).
@@ -199,7 +199,14 @@ the signature-first ordering.
       `https://repository.frostyard.org/isos/native/v1/` (frozen in contract §5).
 - [x] Add a Cloudflare **cache rule that bypasses cache** for the exact names
       `SHA256SUMS` and `SHA256SUMS.gpg` under those prefixes (runbook §"Cache-Control
-      and cache-bypass rules").
+      and cache-bypass rules"). Validated 2026-07-16 via Cloudflare's rule trace:
+      the `dropcacheshas` rule matches with `cache: false` for the metadata URLs.
+      Note the header caveat: on this R2 custom domain a matched bypass still
+      reports `cf-cache-status: DYNAMIC` (nothing on the host is cache-eligible),
+      so header probes alone cannot confirm/deny the rule — use the dashboard
+      Trace tool. The older overlapping `sha256bypass` rule
+      (`ends_with(path, "SHA256SUMS")`) never matches `SHA256SUMS.gpg` and is
+      redundant now — safe to delete.
 - [x] Wire `promote.sh --purge-hook <cmd>` to a real Cloudflare purge script that
       purges exactly the two metadata URLs. Done: `shared/native-ab/publish/cloudflare-purge.sh`
       is wired into the three promote jobs (skipped when `CF_ZONE_ID`/`CF_API_TOKEN`
@@ -242,12 +249,12 @@ still `PROVISIONAL` — this is where they get confirmed with production keys.
 
 - [~] **QEMU secure full window** — `sudo PROFILE=<product-ab>
 test/native-ab-secure-boot-test.sh --full-window` green (N→N+3, slot reuse,
-      rollback, 3-try boot-count fallback, per-boot NvPCR clean, recovery unlock,
-      under enforced Secure Boot + unattended TPM). snow-ab's earlier 125/125 was
-      with the DEV key; with the production RSA-2048 PCR key, cayo-ab + snow-ab
-      runs launched 2026-07-16 (sequential, in progress — the RSA-4096 and ECC
-      key attempts both failed exactly here at Step 4b). snowfield-ab parked
-      until those two are green.
+  rollback, 3-try boot-count fallback, per-boot NvPCR clean, recovery unlock,
+  under enforced Secure Boot + unattended TPM). snow-ab's earlier 125/125 was
+  with the DEV key; with the production RSA-2048 PCR key, cayo-ab + snow-ab
+  runs launched 2026-07-16 (sequential, in progress — the RSA-4096 and ECC
+  key attempts both failed exactly here at Step 4b). snowfield-ab parked
+  until those two are green.
 - [ ] **QEMU end-to-end install** — `sudo test/native-installer-e2e-test.sh`
       green for cayo-ab + snow-ab (add `--with-snowfield` only when running on/for
       Surface). Confirms ISO boot on virgin varstore, own-boot-medium refusal in the
