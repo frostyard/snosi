@@ -165,23 +165,38 @@ discovery and migrates each pair to its own `sysupdate.<name>.d/`.
 | Key | Purpose | Production custody | Dev/local custody |
 |---|---|---|---|
 | Secure Boot / MOK key | Signs systemd-boot, UKIs, and only modules proven to need re-signing | Protected signer (HSM/PKCS#11 or locked self-hosted signer); never a general-runner secret, never an Actions artifact | `mkosi.key` / `mkosi.crt` (gitignored, DEV ONLY) |
-| PCR signing key | Signed PCR 11 policy authorizing per-machine LUKS `/var`. **MUST be ECC P-256, not RSA** (see note) | Protected signer | `.snosi-private/pcr-signing.key` |
+| PCR signing key | Signed PCR 11 policy authorizing per-machine LUKS `/var`. **MUST be RSA-2048** (see note) | Protected signer | `.snosi-private/pcr-signing.key` |
 | OpenPGP update key | Signs `SHA256SUMS` | Private key only in the protected promotion environment | N/A — dev builds are unsigned/unpublished |
 | R2 credentials | Upload authorization only | Scoped to write immutable candidate/promoted objects; compromise MUST NOT authenticate updates (that is the OpenPGP key's job) | N/A |
 
-**PCR signing key algorithm — ECC P-256, never RSA.** TPM2 signed-PCR-policy
-*unlock* makes the initrd load the PCR public key into the TPM and verify the
-`.pcrsig` signature. An RSA key with the default exponent 65537 fails there:
-systemd 261 passes the literal exponent to `Esys_LoadExternal` instead of
-normalizing it (systemd #30546), and the TPM returns `TPM_RC_VALUE` — so
-enrollment succeeds but every auto-unlock fails, on *every* profile (this is not
-Surface/kernel-specific). swtpm additionally does not implement RSA-4096 at all.
-ECC P-256 has no exponent and is universally TPM-supported, so it is the required
-algorithm (`openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256`). The
-MOK key is unaffected — it may stay RSA-4096 because Secure Boot verifies it in
-firmware, never in the TPM. Tooling that fingerprints the PCR key must hash
+**PCR signing key algorithm — RSA-2048, nothing else.** TPM2 signed-PCR-policy
+*unlock* makes the initrd load the PCR public key into the TPM
+(`Esys_LoadExternal`) and verify the `.pcrsig` signature in the TPM
+(`Esys_VerifySignature`). Both steps constrain the algorithm, and RSA-2048 is
+the only choice that passes both — established empirically 2026-07-16 on
+systemd 261.1-3 + swtpm with a live enroll→sign→unlock of each candidate:
+
+- **RSA-4096 fails at LoadExternal** (`TPM_RC_VALUE`): RSA-4096 is optional in
+  the TPM2 spec and unimplemented by swtpm and many hardware TPMs; systemd
+  #30546 (literal default exponent 65537 passed unnormalized) compounds this on
+  some TPMs. Enrollment succeeds, every auto-unlock fails, on *every* profile
+  (not Surface/kernel-specific).
+- **ECC (any curve) fails at VerifySignature** (`TPM_RC_SCHEME`): systemd 261's
+  `tpm2_policy_authorize()` (`src/shared/tpm2-util.c`) hardcodes
+  `.sigAlg = TPM2_ALG_RSASSA` with no ECDSA branch, so the TPM is handed an
+  RSA-shaped verification request against an ECC key. Enrollment succeeds
+  (enroll skips signature verification), every auto-unlock fails.
+- **RSA-2048 with the default exponent 65537 passes end to end**: LoadExternal
+  OK, VerifySignature OK, unseal OK. RSA-2048 is also the TPM2 spec's
+  mandatory-to-support RSA size. Generate with
+  `openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048`.
+
+The MOK key is unaffected — it may stay RSA-4096 because Secure Boot verifies it
+in firmware, never in the TPM. Tooling that fingerprints the PCR key must hash
 `i2d_PublicKey` DER (RSA → PKCS#1, EC → uncompressed point), matching systemd's
-`pubkey_fingerprint()`.
+`pubkey_fingerprint()` — keep the tooling algorithm-agnostic even though only
+RSA-2048 is deployable today, so a future systemd with an ECDSA branch needs no
+test changes.
 
 Rotation:
 

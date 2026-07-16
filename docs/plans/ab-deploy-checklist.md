@@ -112,14 +112,17 @@ images with those keys and confirm nothing private leaked.
       `mok-dev.crt`; shipped at `/usr/lib/snosi/mok.crt`). Private key stays in
       protected signing only. Note: MOK rotation is a fleet-wide re-enrollment event —
       see CLAUDE.md "MOK Rotation."
-- [x] **Confirm the production PCR signing keypair** (`pcr-signing.{key,crt}`,
+- [ ] **Confirm the production PCR signing keypair** (`pcr-signing.{key,crt}`,
       generated in the key ceremony) exists and is in the encrypted offsite backup.
-      **It MUST be ECC P-256, not RSA.** TPM2 signed-PCR-policy *unlock* makes the
-      TPM load and verify this key; RSA-4096 is optional in the TPM2 spec and is
-      rejected by swtpm and most hardware TPMs (`Esys_LoadExternal` →
-      `TPM_RC_VALUE`, systemd #30546) — enrollment succeeds but every auto-unlock
-      then fails. Only RSA-2048 is mandatory; ECC P-256 is the robust choice
-      (`openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256`). The MOK
+      **It MUST be RSA-2048** (`openssl genpkey -algorithm RSA -pkeyopt
+      rsa_keygen_bits:2048`, default exponent 65537) — the only algorithm the
+      whole unlock chain accepts, proven live 2026-07-16 on systemd 261.1-3 +
+      swtpm. RSA-4096 fails at `Esys_LoadExternal` (`TPM_RC_VALUE`: optional in
+      the TPM2 spec, rejected by swtpm and many hardware TPMs; see also systemd
+      #30546). ECC fails at `Esys_VerifySignature` (`TPM_RC_SCHEME`: systemd
+      261's `tpm2_policy_authorize()` hardcodes RSASSA, no ECDSA branch). In
+      both failure modes enrollment succeeds but every auto-unlock then fails,
+      on every profile. See docs/native-ab-contracts.md §7. The MOK
       key is unaffected (RSA-4096 is fine — Secure Boot, verified by firmware, never
       touches the TPM). This is a **build-time** key (mkosi `SignExpectedPcr` reads
       `.snosi-private/pcr-signing.{key,crt}`), same custody tier as the MOK key —
@@ -128,7 +131,7 @@ images with those keys and confirm nothing private leaked.
       offline OpenPGP promotion tier. The public half is **not** committed to the
       repo; the build extracts it from the cert. (Nothing to commit here.)
 - [ ] **Refresh the offsite backup and secrets after any key (re)generation.**
-      Whenever a private key changes (e.g. the PCR key was regenerated ECC), rebuild
+      Whenever a private key changes (e.g. the PCR key regenerated as RSA-2048), rebuild
       the encrypted bundle and re-copy it to BOTH offsite locations, then re-set the
       matching GitHub environment secret(s) so CI signs with the current key:
       `tar czf - mkosi.key mkosi.crt pcr-signing.key pcr-signing.crt | age -p >
