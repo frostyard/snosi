@@ -125,16 +125,31 @@ if [[ -s "$DEV_SIGNING_KEY" && -s "$DEV_PUBRING" ]]; then
     PUBRING="$DEV_PUBRING"
     PROMOTE_KEY_ARGS=(--signing-key "$DEV_SIGNING_KEY")
 else
-    KEY_MODE="ephemeral key (dev key not present -- generating a throwaway ed25519 keypair for this run only; exercises script mechanics, not the shipped-image trust leg)"
+    # The ephemeral key is PASSPHRASE-PROTECTED and driven through
+    # --signing-key + --passphrase-file, mirroring the production custody
+    # exactly (the real key has a passphrase; promote.sh signs it via
+    # gpg --pinentry-mode loopback). This exercises that loopback path on
+    # every fresh-checkout CI run, not just the passphrase-less --gnupghome path.
+    KEY_MODE="ephemeral passphrase-protected key (dev key not present -- throwaway ed25519 keypair for this run; exercises --signing-key + --passphrase-file loopback signing, not the shipped-image trust leg)"
     EPHEMERAL_GNUPGHOME="$WORK_DIR/ephemeral-gnupghome"
     mkdir -p "$EPHEMERAL_GNUPGHOME"
     chmod 700 "$EPHEMERAL_GNUPGHOME"
-    GNUPGHOME="$EPHEMERAL_GNUPGHOME" gpg --batch --passphrase '' --quick-generate-key \
+    EPHEMERAL_PASSPHRASE="pipeline-test-passphrase"
+    EPHEMERAL_PASSFILE="$WORK_DIR/ephemeral-passphrase"
+    printf '%s' "$EPHEMERAL_PASSPHRASE" > "$EPHEMERAL_PASSFILE"
+    chmod 600 "$EPHEMERAL_PASSFILE"
+    GNUPGHOME="$EPHEMERAL_GNUPGHOME" gpg --batch --pinentry-mode loopback \
+        --passphrase "$EPHEMERAL_PASSPHRASE" --quick-generate-key \
         'native-publication-pipeline-test EPHEMERAL key <ephemeral@invalid>' ed25519 sign 0 >/dev/null 2>&1
     PUBRING="$WORK_DIR/ephemeral-pubring.gpg"
     GNUPGHOME="$EPHEMERAL_GNUPGHOME" gpg --batch --export -o "$PUBRING"
     [[ -s "$PUBRING" ]] || { echo "Error: failed to export ephemeral pubring" >&2; exit 1; }
-    PROMOTE_KEY_ARGS=(--gnupghome "$EPHEMERAL_GNUPGHOME")
+    EPHEMERAL_SECRET="$WORK_DIR/ephemeral-secret.asc"
+    GNUPGHOME="$EPHEMERAL_GNUPGHOME" gpg --batch --pinentry-mode loopback \
+        --passphrase "$EPHEMERAL_PASSPHRASE" --armor --export-secret-keys \
+        -o "$EPHEMERAL_SECRET" 'ephemeral@invalid'
+    [[ -s "$EPHEMERAL_SECRET" ]] || { echo "Error: failed to export ephemeral secret key" >&2; exit 1; }
+    PROMOTE_KEY_ARGS=(--signing-key "$EPHEMERAL_SECRET" --passphrase-file "$EPHEMERAL_PASSFILE")
 fi
 echo "=== signing key mode: $KEY_MODE ==="
 

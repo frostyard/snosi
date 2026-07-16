@@ -388,7 +388,8 @@ would, per the "never trust local disk" property described above.
 | `NATIVE_R2_ACCESS_KEY_ID` | (repo-level) | same | `RCLONE_CONFIG_R2_ACCESS_KEY_ID` env var | Same scope. Use a dedicated R2 API token scoped only to the native publication bucket/prefix -- do not reuse the `R2_ACCESS_KEY_ID` token `build.yml`/`build-images.yml` already use for sysexts/manifests. |
 | `NATIVE_R2_SECRET_ACCESS_KEY` | (repo-level) | same | `RCLONE_CONFIG_R2_SECRET_ACCESS_KEY` env var | Same scope. |
 | `NATIVE_R2_BUCKET` | (repo-level) | same | `rclone:r2:<bucket>` dest argument | Bucket name behind `repository.frostyard.org`; not itself sensitive, kept as a secret only to avoid hardcoding it in the workflow before the bucket is finalized. |
-| `NATIVE_UPDATE_SIGNING_KEY` | `native-promotion` | `promote.sh --signing-key` only | `/var/tmp/native-promote-secrets/os-update-signing.key` | OpenPGP update-signing private key. Never leaves this environment. Rotation: overlap window, both keys in the shipped pubring -- see "Production key ceremony" above. |
+| `NATIVE_UPDATE_SIGNING_KEY` | `native-promotion` | `promote.sh --signing-key` only | `/var/tmp/native-promote-secrets/os-update-signing.key` | OpenPGP update-signing private key (armored `gpg --export-secret-keys`). Never leaves this environment. Rotation: overlap window, both keys in the shipped pubring -- see "Production key ceremony" above. |
+| `NATIVE_UPDATE_SIGNING_PASSPHRASE` | `native-promotion` | `promote.sh --passphrase-file` only | `/var/tmp/native-promote-secrets/passphrase` | Passphrase for the production signing key. The key is passphrase-protected, so `promote.sh` signs via `gpg --pinentry-mode loopback --passphrase-file`. Omit only if the key has no passphrase (not recommended); then `promote.sh` runs without `--passphrase-file`. |
 
 Every secret-consuming step writes key material to a runner-local file
 immediately before the one command that needs it, `chmod 600`s it, never

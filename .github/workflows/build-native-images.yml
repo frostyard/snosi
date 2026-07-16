@@ -608,6 +608,7 @@ jobs:
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
         env:
           NATIVE_UPDATE_SIGNING_KEY: ${{ secrets.NATIVE_UPDATE_SIGNING_KEY }}
+          NATIVE_UPDATE_SIGNING_PASSPHRASE: ${{ secrets.NATIVE_UPDATE_SIGNING_PASSPHRASE }}
         run: |
           set -euo pipefail
           [[ -n "$NATIVE_UPDATE_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_UPDATE_SIGNING_KEY is not set in the native-promotion environment -- see docs/native-ab-publication.md 'Production key ceremony'" >&2; exit 1; }
@@ -615,6 +616,13 @@ jobs:
           mkdir -p /var/tmp/native-promote-secrets
           printf '%s' "$NATIVE_UPDATE_SIGNING_KEY" > /var/tmp/native-promote-secrets/os-update-signing.key
           chmod 600 /var/tmp/native-promote-secrets/os-update-signing.key
+          # The production key is passphrase-protected; write the passphrase so
+          # promote.sh can sign via gpg --pinentry-mode loopback. A passphrase-less
+          # key simply leaves this secret unset (no file, no --passphrase-file).
+          if [[ -n "${NATIVE_UPDATE_SIGNING_PASSPHRASE:-}" ]]; then
+            printf '%s' "$NATIVE_UPDATE_SIGNING_PASSPHRASE" > /var/tmp/native-promote-secrets/passphrase
+            chmod 600 /var/tmp/native-promote-secrets/passphrase
+          fi
 
       - name: Promote cayo
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
@@ -627,8 +635,11 @@ jobs:
           RCLONE_CONFIG_R2_ACL: private
           RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
         run: |
-          ./shared/native-ab/publish/promote.sh \
-            --signing-key /var/tmp/native-promote-secrets/os-update-signing.key \
+          set -euo pipefail
+          args=(--signing-key /var/tmp/native-promote-secrets/os-update-signing.key)
+          [[ -f /var/tmp/native-promote-secrets/passphrase ]] && \
+            args+=(--passphrase-file /var/tmp/native-promote-secrets/passphrase)
+          ./shared/native-ab/publish/promote.sh "${args[@]}" \
             /var/tmp/native-publish/cayo/x86-64 \
             https://repository.frostyard.org/os/native/v1/cayo/x86-64 \
             "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
@@ -701,6 +712,7 @@ jobs:
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
         env:
           NATIVE_UPDATE_SIGNING_KEY: ${{ secrets.NATIVE_UPDATE_SIGNING_KEY }}
+          NATIVE_UPDATE_SIGNING_PASSPHRASE: ${{ secrets.NATIVE_UPDATE_SIGNING_PASSPHRASE }}
         run: |
           set -euo pipefail
           [[ -n "$NATIVE_UPDATE_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_UPDATE_SIGNING_KEY is not set in the native-promotion environment -- see docs/native-ab-publication.md 'Production key ceremony'" >&2; exit 1; }
@@ -708,6 +720,13 @@ jobs:
           mkdir -p /var/tmp/native-promote-secrets
           printf '%s' "$NATIVE_UPDATE_SIGNING_KEY" > /var/tmp/native-promote-secrets/os-update-signing.key
           chmod 600 /var/tmp/native-promote-secrets/os-update-signing.key
+          # The production key is passphrase-protected; write the passphrase so
+          # promote.sh can sign via gpg --pinentry-mode loopback. A passphrase-less
+          # key simply leaves this secret unset (no file, no --passphrase-file).
+          if [[ -n "${NATIVE_UPDATE_SIGNING_PASSPHRASE:-}" ]]; then
+            printf '%s' "$NATIVE_UPDATE_SIGNING_PASSPHRASE" > /var/tmp/native-promote-secrets/passphrase
+            chmod 600 /var/tmp/native-promote-secrets/passphrase
+          fi
 
       - name: Promote snow
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
@@ -720,8 +739,11 @@ jobs:
           RCLONE_CONFIG_R2_ACL: private
           RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
         run: |
-          ./shared/native-ab/publish/promote.sh \
-            --signing-key /var/tmp/native-promote-secrets/os-update-signing.key \
+          set -euo pipefail
+          args=(--signing-key /var/tmp/native-promote-secrets/os-update-signing.key)
+          [[ -f /var/tmp/native-promote-secrets/passphrase ]] && \
+            args+=(--passphrase-file /var/tmp/native-promote-secrets/passphrase)
+          ./shared/native-ab/publish/promote.sh "${args[@]}" \
             /var/tmp/native-publish/snow/x86-64 \
             https://repository.frostyard.org/os/native/v1/snow/x86-64 \
             "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
@@ -794,6 +816,7 @@ jobs:
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
         env:
           NATIVE_UPDATE_SIGNING_KEY: ${{ secrets.NATIVE_UPDATE_SIGNING_KEY }}
+          NATIVE_UPDATE_SIGNING_PASSPHRASE: ${{ secrets.NATIVE_UPDATE_SIGNING_PASSPHRASE }}
         run: |
           set -euo pipefail
           [[ -n "$NATIVE_UPDATE_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_UPDATE_SIGNING_KEY is not set in the native-promotion environment -- see docs/native-ab-publication.md 'Production key ceremony'" >&2; exit 1; }
@@ -801,6 +824,13 @@ jobs:
           mkdir -p /var/tmp/native-promote-secrets
           printf '%s' "$NATIVE_UPDATE_SIGNING_KEY" > /var/tmp/native-promote-secrets/os-update-signing.key
           chmod 600 /var/tmp/native-promote-secrets/os-update-signing.key
+          # The production key is passphrase-protected; write the passphrase so
+          # promote.sh can sign via gpg --pinentry-mode loopback. A passphrase-less
+          # key simply leaves this secret unset (no file, no --passphrase-file).
+          if [[ -n "${NATIVE_UPDATE_SIGNING_PASSPHRASE:-}" ]]; then
+            printf '%s' "$NATIVE_UPDATE_SIGNING_PASSPHRASE" > /var/tmp/native-promote-secrets/passphrase
+            chmod 600 /var/tmp/native-promote-secrets/passphrase
+          fi
 
       - name: Promote snowfield
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
@@ -813,8 +843,11 @@ jobs:
           RCLONE_CONFIG_R2_ACL: private
           RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
         run: |
-          ./shared/native-ab/publish/promote.sh \
-            --signing-key /var/tmp/native-promote-secrets/os-update-signing.key \
+          set -euo pipefail
+          args=(--signing-key /var/tmp/native-promote-secrets/os-update-signing.key)
+          [[ -f /var/tmp/native-promote-secrets/passphrase ]] && \
+            args+=(--passphrase-file /var/tmp/native-promote-secrets/passphrase)
+          ./shared/native-ab/publish/promote.sh "${args[@]}" \
             /var/tmp/native-publish/snowfield/x86-64 \
             https://repository.frostyard.org/os/native/v1/snowfield/x86-64 \
             "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"

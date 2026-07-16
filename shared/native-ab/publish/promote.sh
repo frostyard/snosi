@@ -29,6 +29,11 @@
 #                           homedir has more than one usable secret key.
 #                           Optional; gpg's default selection is used
 #                           otherwise.
+#   --passphrase-file <f>  read the signing key's passphrase from this file
+#                           and sign via gpg --pinentry-mode loopback. Required
+#                           when the production key is passphrase-protected (it
+#                           is); omit for a passphrase-less key. The file is
+#                           read by gpg only, never echoed.
 #   --pubring <path>       update-signing pubring used ONLY to gpgv-verify
 #                           the OUTGOING signed index before archiving it
 #                           (see "Archive the OUTGOING signed index pair"
@@ -64,8 +69,8 @@ set -euo pipefail
 usage() {
     cat >&2 <<'EOF'
 Usage: promote.sh [--signing-key <file> | --gnupghome <dir>] [--key-id <id>]
-                   [--purge-hook <cmd>] [--keep-candidate]
-                   <prepared-dir> <base-url> <dest>
+                   [--passphrase-file <file>] [--purge-hook <cmd>]
+                   [--keep-candidate] <prepared-dir> <base-url> <dest>
 EOF
     exit 2
 }
@@ -80,6 +85,7 @@ source "$SCRIPT_DIR/publish-lib.sh"
 SIGNING_KEY=""
 GNUPGHOME_ARG=""
 KEY_ID=""
+PASSPHRASE_FILE=""
 PURGE_HOOK=""
 KEEP_CANDIDATE=0
 PUBRING="$ROOT_DIR/shared/native-ab/keys/import-pubring.gpg"
@@ -96,6 +102,10 @@ while [[ $# -gt 0 ]]; do
         ;;
     --key-id)
         KEY_ID="$2"
+        shift 2
+        ;;
+    --passphrase-file)
+        PASSPHRASE_FILE="$2"
         shift 2
         ;;
     --pubring)
@@ -177,6 +187,14 @@ export GNUPGHOME
 
 declare -a GPG_SIGN_ARGS=(--batch --yes --detach-sign)
 [[ -z "$KEY_ID" ]] || GPG_SIGN_ARGS+=(--local-user "$KEY_ID")
+# A passphrase-protected signing key (the production key is) cannot sign under
+# plain --batch. Supply the passphrase via loopback so gpg reads it from the
+# file non-interactively; the file is never echoed and is the caller's to
+# manage (the CI workflow writes it runner-local and removes it in cleanup).
+if [[ -n "$PASSPHRASE_FILE" ]]; then
+    [[ -f "$PASSPHRASE_FILE" ]] || { echo "Error: passphrase file not found: $PASSPHRASE_FILE" >&2; exit 1; }
+    GPG_SIGN_ARGS+=(--pinentry-mode loopback --passphrase-file "$PASSPHRASE_FILE")
+fi
 
 # ---------------------------------------------------------------------------
 # Step 8: copy verified candidate objects to their final immutable names.
