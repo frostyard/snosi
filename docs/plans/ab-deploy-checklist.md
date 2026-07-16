@@ -62,8 +62,11 @@ stops sysext updates on every installed machine**.
       components; do **not** expect it to enumerate 17 pre-merge. Validated on
       selfie (10.0.1.200) 2026-07-16: subcommand works, discovers a per-component
       dir when present, `features list` reads the legacy 17.
-- [ ] Only then merge `feat/mkosi-ab-root`. (See CLAUDE.md "Sysupdate Target And
+- [x] Only then merge `feat/mkosi-ab-root`. (See CLAUDE.md "Sysupdate Target And
       Component Topology" and the allowlist comment for the rationale.)
+      **Merged 2026-07-16**: PR #409, merge commit `b6888c2`. Validate passed on
+      main post-merge; sysext/base and bootc image publication ran on the merge
+      push (updex 1.3.0 component-discovery gate was already satisfied).
 
 ---
 
