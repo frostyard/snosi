@@ -174,14 +174,22 @@ the full table.
   - `NATIVE_PCR_SIGNING_KEY`, `NATIVE_PCR_SIGNING_CERTIFICATE`
   - `NATIVE_R2_ACCESS_KEY_ID`, `NATIVE_R2_SECRET_ACCESS_KEY`,
     `NATIVE_R2_ACCOUNT_ID`, `NATIVE_R2_BUCKET`
+
+  All 8 present 2026-07-16; the PCR pair was re-set the same day with the
+  regenerated RSA-2048 key (secret timestamps postdate the key's notBefore).
 - [x] Create environment **`native-promotion`** (protected, required reviewers).
       Add secret:
   - `NATIVE_UPDATE_SIGNING_KEY` (OpenPGP update-signing private key — never leaves
     this environment; consumed only by `promote.sh --signing-key`).
-- [ ] Confirm the interim protected-builder constraints are honored: the workflow
-      triggers on `workflow_dispatch` + `main` push **only** (no `pull_request`/fork),
+
+  Done 2026-07-16, plus `NATIVE_UPDATE_SIGNING_PASSPHRASE`, `CF_ZONE_ID`, and
+  `CF_API_TOKEN` (all four confirmed via `gh secret list --env native-promotion`).
+- [x] Confirm the interim protected-builder constraints are honored: the workflow
+      triggers on `workflow_dispatch` + weekly `schedule` **only** (no
+      `pull_request`/fork; the original main-push trigger was removed 2026-07-16),
       writes key material to runner-local files with `always()` cleanup, and never
-      echoes secrets. (Already coded; verify the environment protection rules back it.)
+      echoes secrets. Environment protection verified via the GitHub API 2026-07-16:
+      both environments carry `required_reviewers` + `branch_policy` rules.
 - [ ] **Long-term:** migrate MOK/PCR signing to an HSM/PKCS#11 or a locked
       self-hosted signer (the current in-runner key files are the documented interim
       risk — runbook §"Interim protected-builder constraints").
@@ -212,10 +220,10 @@ the signature-first ordering.
       is wired into the three promote jobs (skipped when `CF_ZONE_ID`/`CF_API_TOKEN`
       are unset), and each promote is followed by `verify-published-index.sh`, which
       re-fetches the served `SHA256SUMS`/`.gpg`, gpgv-verifies the pair, and asserts
-      the promoted version — so an API 200 alone is never treated as success. **Still
-      to do:** add `CF_ZONE_ID` + `CF_API_TOKEN` to the `native-promotion` environment,
-      and after the first real promotion re-fetch the two metadata URLs from a **second
-      region** to confirm no stale edge cache (runbook §14-15).
+      the promoted version — so an API 200 alone is never treated as success.
+      `CF_ZONE_ID` + `CF_API_TOKEN` added to `native-promotion` 2026-07-16. **Still
+      to do:** after the first real promotion re-fetch the two metadata URLs from a
+      **second region** to confirm no stale edge cache (runbook §14-15).
 - [ ] Confirm payload objects get `Cache-Control: public, max-age=31536000, immutable`
       and both metadata files get `no-store` (the workflow/scripts set these — verify
       on real responses).
