@@ -70,6 +70,12 @@ VERSION=${3:-$(date -u +%Y%m%d%H%M%S)}
 [[ -d "$ROOTFS" ]] || { echo "Error: rootfs directory does not exist: $ROOTFS" >&2; exit 1; }
 [[ "$VERSION" =~ ^[0-9]{14}$ ]] || { echo "Error: version must be exactly 14 digits: $VERSION" >&2; exit 1; }
 
+# mkfs.vfat lives in /usr/sbin, which Debian's default USER PATH omits; the
+# Justfile recipe runs this under `sudo PATH="$PATH"` (preserving the caller's
+# PATH for user-local tools), so sbin must be appended here rather than relied
+# on from sudo's secure_path.
+PATH="$PATH:/usr/sbin:/sbin"
+
 for cmd in xorriso mcopy mmd mkfs.vfat cpio zstd find; do
     command -v "$cmd" >/dev/null || { echo "Error: required tool not found: $cmd" >&2; exit 1; }
 done
