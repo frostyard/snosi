@@ -127,9 +127,9 @@ images with those keys and confirm nothing private leaked.
       them, all gitignored: `mkosi.key`/`mkosi.crt` at the **repo root** and
       `pcr-signing.{key,crt}` in **`.snosi-private/`**; then extract the PCR public
       key: `openssl x509 -in .snosi-private/pcr-signing.crt -pubkey -noout >
-  .snosi-private/pcr-signing.pub`. For each profile: `just <profile>` then
+.snosi-private/pcr-signing.pub`. For each profile: `just <profile>` then
       `OUTPUT_NAME=<profile> ./test/native-ab-secure-artifact-test.sh "" "" ""
-  .snosi-private/pcr-signing.pub single`. This validates the MOK + PCR keys
+.snosi-private/pcr-signing.pub single`. This validates the MOK + PCR keys
       produce correctly-signed UKIs; the OpenPGP update key is validated separately
       by the publish→install round-trip in §6/§7. Do **not** publish the local build.
 - [x] Confirm **no private key material is tracked** after the swap:
@@ -169,16 +169,21 @@ R2 is the only blob origin. The metadata cache-bypass is a correctness
 requirement, not a nicety — a stale edge-cached `SHA256SUMS`/`.gpg` pair defeats
 the signature-first ordering.
 
-- [ ] Create the R2 bucket and confirm it is served under
+- [x] Create the R2 bucket and confirm it is served under
       `https://repository.frostyard.org/os/native/v1/<product>/x86-64/` and
       `https://repository.frostyard.org/isos/native/v1/` (frozen in contract §5).
-- [ ] Add a Cloudflare **cache rule that bypasses cache** for the exact names
+- [x] Add a Cloudflare **cache rule that bypasses cache** for the exact names
       `SHA256SUMS` and `SHA256SUMS.gpg` under those prefixes (runbook §"Cache-Control
       and cache-bypass rules").
-- [ ] Wire `promote.sh --purge-hook <cmd>` to a real Cloudflare purge script that
-      purges exactly the two metadata URLs, and **verify from a second region** that
-      the new matched pair is served (runbook §14-15). Do not treat an API 200 alone
-      as success.
+- [x] Wire `promote.sh --purge-hook <cmd>` to a real Cloudflare purge script that
+      purges exactly the two metadata URLs. Done: `shared/native-ab/publish/cloudflare-purge.sh`
+      is wired into the three promote jobs (skipped when `CF_ZONE_ID`/`CF_API_TOKEN`
+      are unset), and each promote is followed by `verify-published-index.sh`, which
+      re-fetches the served `SHA256SUMS`/`.gpg`, gpgv-verifies the pair, and asserts
+      the promoted version — so an API 200 alone is never treated as success. **Still
+      to do:** add `CF_ZONE_ID` + `CF_API_TOKEN` to the `native-promotion` environment,
+      and after the first real promotion re-fetch the two metadata URLs from a **second
+      region** to confirm no stale edge cache (runbook §14-15).
 - [ ] Confirm payload objects get `Cache-Control: public, max-age=31536000, immutable`
       and both metadata files get `no-store` (the workflow/scripts set these — verify
       on real responses).

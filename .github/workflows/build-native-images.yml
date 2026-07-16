@@ -634,15 +634,33 @@ jobs:
           RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           RCLONE_CONFIG_R2_ACL: private
           RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
           set -euo pipefail
           args=(--signing-key /var/tmp/native-promote-secrets/os-update-signing.key)
           [[ -f /var/tmp/native-promote-secrets/passphrase ]] && \
             args+=(--passphrase-file /var/tmp/native-promote-secrets/passphrase)
+          # Purge the edge cache for the metadata pair after promotion, when a
+          # Cloudflare token is configured. The no-store header + cache-bypass
+          # rule are the primary protection; this is belt-and-suspenders, and is
+          # simply skipped for staging/rehearsal runs without CF secrets.
+          if [[ -n "${CF_ZONE_ID:-}" && -n "${CF_API_TOKEN:-}" ]]; then
+            args+=(--purge-hook "$PWD/shared/native-ab/publish/cloudflare-purge.sh")
+          fi
           ./shared/native-ab/publish/promote.sh "${args[@]}" \
             /var/tmp/native-publish/cayo/x86-64 \
             https://repository.frostyard.org/os/native/v1/cayo/x86-64 \
             "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
+
+      - name: Verify cayo published index (served bytes, not just purge API 200)
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          set -euo pipefail
+          ver="$(jq -r .version /var/tmp/native-publish/cayo/x86-64/publication-info.json)"
+          ./shared/native-ab/publish/verify-published-index.sh \
+            --expect-version "$ver" \
+            https://repository.frostyard.org/os/native/v1/cayo/x86-64
 
       - name: Remove OpenPGP update-signing key
         if: always()
@@ -738,15 +756,33 @@ jobs:
           RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           RCLONE_CONFIG_R2_ACL: private
           RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
           set -euo pipefail
           args=(--signing-key /var/tmp/native-promote-secrets/os-update-signing.key)
           [[ -f /var/tmp/native-promote-secrets/passphrase ]] && \
             args+=(--passphrase-file /var/tmp/native-promote-secrets/passphrase)
+          # Purge the edge cache for the metadata pair after promotion, when a
+          # Cloudflare token is configured. The no-store header + cache-bypass
+          # rule are the primary protection; this is belt-and-suspenders, and is
+          # simply skipped for staging/rehearsal runs without CF secrets.
+          if [[ -n "${CF_ZONE_ID:-}" && -n "${CF_API_TOKEN:-}" ]]; then
+            args+=(--purge-hook "$PWD/shared/native-ab/publish/cloudflare-purge.sh")
+          fi
           ./shared/native-ab/publish/promote.sh "${args[@]}" \
             /var/tmp/native-publish/snow/x86-64 \
             https://repository.frostyard.org/os/native/v1/snow/x86-64 \
             "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
+
+      - name: Verify snow published index (served bytes, not just purge API 200)
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          set -euo pipefail
+          ver="$(jq -r .version /var/tmp/native-publish/snow/x86-64/publication-info.json)"
+          ./shared/native-ab/publish/verify-published-index.sh \
+            --expect-version "$ver" \
+            https://repository.frostyard.org/os/native/v1/snow/x86-64
 
       - name: Remove OpenPGP update-signing key
         if: always()
@@ -842,15 +878,33 @@ jobs:
           RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
           RCLONE_CONFIG_R2_ACL: private
           RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
           set -euo pipefail
           args=(--signing-key /var/tmp/native-promote-secrets/os-update-signing.key)
           [[ -f /var/tmp/native-promote-secrets/passphrase ]] && \
             args+=(--passphrase-file /var/tmp/native-promote-secrets/passphrase)
+          # Purge the edge cache for the metadata pair after promotion, when a
+          # Cloudflare token is configured. The no-store header + cache-bypass
+          # rule are the primary protection; this is belt-and-suspenders, and is
+          # simply skipped for staging/rehearsal runs without CF secrets.
+          if [[ -n "${CF_ZONE_ID:-}" && -n "${CF_API_TOKEN:-}" ]]; then
+            args+=(--purge-hook "$PWD/shared/native-ab/publish/cloudflare-purge.sh")
+          fi
           ./shared/native-ab/publish/promote.sh "${args[@]}" \
             /var/tmp/native-publish/snowfield/x86-64 \
             https://repository.frostyard.org/os/native/v1/snowfield/x86-64 \
             "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
+
+      - name: Verify snowfield published index (served bytes, not just purge API 200)
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          set -euo pipefail
+          ver="$(jq -r .version /var/tmp/native-publish/snowfield/x86-64/publication-info.json)"
+          ./shared/native-ab/publish/verify-published-index.sh \
+            --expect-version "$ver" \
+            https://repository.frostyard.org/os/native/v1/snowfield/x86-64
 
       - name: Remove OpenPGP update-signing key
         if: always()

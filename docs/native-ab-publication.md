@@ -153,28 +153,31 @@ $ shared/native-ab/publish/promote.sh \
 
 `promote.sh --purge-hook <cmd>` invokes `<cmd> <sha256sums.gpg-url>
 <sha256sums-url>` after a successful signature-first/manifest-last publish.
-Locally this is documented as a no-op (nothing to purge against a plain
-directory). In production, point it at a small wrapper that calls the
-Cloudflare API to purge exactly those two URLs, e.g.:
+Locally this is a no-op (nothing to purge against a plain directory). In
+production the hook is `shared/native-ab/publish/cloudflare-purge.sh`, which
+POSTs those exact two URLs to the Cloudflare purge API and hard-fails unless the
+API returns `success: true`. It reads `CF_ZONE_ID` and `CF_API_TOKEN` from the
+environment (set by the promote job from the `native-promotion` secrets); the
+CI promote step adds `--purge-hook` only when both are present, so
+staging/rehearsal runs without CF secrets simply skip the purge. The
+`build-native-images.yml` wiring is already in place.
 
-```bash
-#!/bin/bash
-# cloudflare-purge.sh <url> <url>...
-set -euo pipefail
-curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
-    -H "Authorization: Bearer ${CF_API_TOKEN}" \
-    -H "Content-Type: application/json" \
-    --data "$(printf '{"files":%s}' "$(printf '%s\n' "$@" | jq -R . | jq -s .)")"
-```
+A purge-API `success: true` means the purge was *accepted*, not that the edge is
+already serving fresh bytes. So the promote step then runs
+`shared/native-ab/publish/verify-published-index.sh` against the public product
+URL: it re-fetches the plain `SHA256SUMS`/`SHA256SUMS.gpg` a real client would
+get, `gpgv`-verifies the pair against the shipped pubring, asserts the served
+`SHA256SUMS` advertises the just-promoted version, and retries to absorb
+purge-propagation delay -- a persistent stale/mismatched pair is a hard failure.
+This is the "do not treat a 200 alone as sufficient" served-bytes check.
 
-Per the plan: "verify response headers from the public custom domain" and
-"test that a second region sees the new matching pair" after every
-promotion -- do not treat a 200 from the purge API call alone as sufficient;
-re-`curl -I` the two metadata URLs from a network path outside the promotion
-environment afterward. If public-origin testing ever shows Cloudflare not
-honoring the exact-name cache-bypass rule for `SHA256SUMS`/`SHA256SUMS.gpg`,
-a Worker-backed atomic generation switch becomes mandatory before
-publication continues (plan, "Atomic Publication Procedure").
+For a true multi-region check (`verify-published-index.sh` runs from the CI
+runner's single vantage), also re-fetch the two metadata URLs from a network
+path outside the promotion environment after a real production promotion. If
+public-origin testing ever shows Cloudflare not honoring the exact-name
+cache-bypass rule for `SHA256SUMS`/`SHA256SUMS.gpg`, a Worker-backed atomic
+generation switch becomes mandatory before publication continues (plan, "Atomic
+Publication Procedure").
 
 ### Cache-Control and cache-bypass rules
 
@@ -390,6 +393,8 @@ would, per the "never trust local disk" property described above.
 | `NATIVE_R2_BUCKET` | (repo-level) | same | `rclone:r2:<bucket>` dest argument | Bucket name behind `repository.frostyard.org`; not itself sensitive, kept as a secret only to avoid hardcoding it in the workflow before the bucket is finalized. |
 | `NATIVE_UPDATE_SIGNING_KEY` | `native-promotion` | `promote.sh --signing-key` only | `/var/tmp/native-promote-secrets/os-update-signing.key` | OpenPGP update-signing private key (armored `gpg --export-secret-keys`). Never leaves this environment. Rotation: overlap window, both keys in the shipped pubring -- see "Production key ceremony" above. |
 | `NATIVE_UPDATE_SIGNING_PASSPHRASE` | `native-promotion` | `promote.sh --passphrase-file` only | `/var/tmp/native-promote-secrets/passphrase` | Passphrase for the production signing key. The key is passphrase-protected, so `promote.sh` signs via `gpg --pinentry-mode loopback --passphrase-file`. Omit only if the key has no passphrase (not recommended); then `promote.sh` runs without `--passphrase-file`. |
+| `CF_ZONE_ID` | `native-promotion` | `cloudflare-purge.sh` env | never on disk (env only) | Cloudflare zone id for `repository.frostyard.org`. If unset, the promote step skips the edge purge (the no-store header + cache-bypass rule are the primary protection). |
+| `CF_API_TOKEN` | `native-promotion` | `cloudflare-purge.sh` env | never on disk (env only) | Cloudflare API token scoped to **Zone.Cache Purge** on that zone only. If unset, the promote step skips the edge purge. |
 
 Every secret-consuming step writes key material to a runner-local file
 immediately before the one command that needs it, `chmod 600`s it, never

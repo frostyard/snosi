@@ -239,6 +239,50 @@ assert_contains "SHA256SUMS sidecar is no-store" \
 assert_true "gpgv accepts the promoted index against the in-use pubring ($KEY_MODE)" \
     gpgv --keyring "$PUBRING" "$product_dir/SHA256SUMS.gpg" "$product_dir/SHA256SUMS"
 
+echo "=== verify-published-index.sh: served-bytes check against the (live http) origin ==="
+assert_true "verify-published-index passes for the promoted version ($VERSION1)" \
+    "$PUBLISH_DIR/verify-published-index.sh" --pubring "$PUBRING" \
+    --expect-version "$VERSION1" --attempts 2 --delay 1 "$BASE_URL"
+assert_false "verify-published-index fails when expecting a not-yet-served version ($VERSION2)" \
+    "$PUBLISH_DIR/verify-published-index.sh" --pubring "$PUBRING" \
+    --expect-version "$VERSION2" --attempts 1 --delay 0 "$BASE_URL"
+# Tamper the served signature -> must fail (stale/mismatched pair). Restore
+# exact bytes after; the second-promotion test below overwrites it anyway.
+cp "$product_dir/SHA256SUMS.gpg" "$WORK_DIR/sig.bak"
+printf 'tamper' >>"$product_dir/SHA256SUMS.gpg"
+assert_false "verify-published-index fails on a tampered served signature" \
+    "$PUBLISH_DIR/verify-published-index.sh" --pubring "$PUBRING" \
+    --attempts 1 --delay 0 "$BASE_URL"
+cp "$WORK_DIR/sig.bak" "$product_dir/SHA256SUMS.gpg"
+
+echo "=== cloudflare-purge.sh: purge API call + success/failure handling (mocked curl) ==="
+CFMOCK="$WORK_DIR/cfmock"
+mkdir -p "$CFMOCK"
+cat >"$CFMOCK/curl" <<'MOCK'
+#!/usr/bin/env bash
+# Mock curl for cloudflare-purge.sh: emit success unless the purge body names a
+# URL containing "fail". Ignores all flags; only inspects the --data payload.
+prev=""; body=""
+for a in "$@"; do [[ "$prev" == "--data" ]] && body="$a"; prev="$a"; done
+if [[ "$body" == *fail* ]]; then
+    echo '{"success":false,"errors":[{"code":1012,"message":"mock failure"}]}'
+else
+    echo '{"success":true,"errors":[],"result":{"id":"mock"}}'
+fi
+MOCK
+chmod +x "$CFMOCK/curl"
+assert_true "cloudflare-purge succeeds on API success:true" \
+    env CF_ZONE_ID=z CF_API_TOKEN=t "PATH=$CFMOCK:$PATH" \
+    "$PUBLISH_DIR/cloudflare-purge.sh" "$BASE_URL/SHA256SUMS.gpg" "$BASE_URL/SHA256SUMS"
+assert_false "cloudflare-purge fails on API success:false" \
+    env CF_ZONE_ID=z CF_API_TOKEN=t "PATH=$CFMOCK:$PATH" \
+    "$PUBLISH_DIR/cloudflare-purge.sh" "https://x/fail/SHA256SUMS"
+assert_false "cloudflare-purge fails without CF env" \
+    env -u CF_ZONE_ID -u CF_API_TOKEN "$PUBLISH_DIR/cloudflare-purge.sh" "$BASE_URL/SHA256SUMS"
+assert_false "cloudflare-purge rejects a non-URL arg" \
+    env CF_ZONE_ID=z CF_API_TOKEN=t "PATH=$CFMOCK:$PATH" \
+    "$PUBLISH_DIR/cloudflare-purge.sh" "not-a-url"
+
 echo "=== a second promotion archives the outgoing pair ==="
 "$PUBLISH_DIR/publish-candidate.sh" "$PREPARED2" "$DEST" >/dev/null
 "$PUBLISH_DIR/verify-remote.sh" "$PREPARED2" "$BASE_URL" >/dev/null
