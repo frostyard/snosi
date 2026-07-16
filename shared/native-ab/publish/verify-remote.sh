@@ -25,7 +25,15 @@
 #
 #   prepared-dir  same prepare-native-publication.sh output dir passed to
 #                 publish-candidate.sh (source of expected names/sizes/
-#                 hashes and of product/version).
+#                 hashes and of product/version). The full blobs are OPTIONAL:
+#                 when an object listed in SHA256SUMS is not present locally
+#                 (the CI cross-job verifier ships only publication-info.json
+#                 + SHA256SUMS between jobs -- multi-GiB blobs never travel
+#                 as artifacts), the object is downloaded once from the
+#                 public URL, verified against SHA256SUMS, and that
+#                 downloaded copy becomes the byte-level reference for the
+#                 size and range checks. Every check stays fail-closed; only
+#                 the source of the reference bytes changes.
 #   base-url      HTTP(S) URL of the product's "os/native/v1/<product>/
 #                 x86-64" directory (e.g. the local rehearsal origin, or
 #                 https://repository.frostyard.org/os/native/v1/cayo/x86-64
@@ -65,29 +73,54 @@ check_object() { # name
     local_file="$PREPARED_DIR/$name"
     url="$candidate_url/$name"
     expected_sha256="$(candidate_object_sha256 "$PREPARED_DIR" "$name")"
-    expected_size="$(stat -c %s "$local_file")"
 
     echo "  $name"
 
-    # 1. size
+    # 1. size (HEAD). With a local blob the reference size is the pre-upload
+    # file; without one it is the downloaded reference copy's size, checked
+    # after the full GET below (HEAD-vs-body consistency).
     actual_size="$(http_size "$url")" || {
         echo "    FAIL: could not fetch size (HEAD) from $url" >&2
         fail_count=$((fail_count + 1))
         return
     }
-    if [[ "$actual_size" != "$expected_size" ]]; then
-        echo "    FAIL: size mismatch: expected $expected_size, got $actual_size" >&2
-        fail_count=$((fail_count + 1))
-        return
-    fi
-    echo "    ok: size $actual_size"
 
-    # 2. full GET + sha256
-    actual_sha256="$(http_get_sha256 "$url")" || {
-        echo "    FAIL: full GET failed from $url" >&2
-        fail_count=$((fail_count + 1))
-        return
-    }
+    if [[ -f "$local_file" ]]; then
+        expected_size="$(stat -c %s "$local_file")"
+        if [[ "$actual_size" != "$expected_size" ]]; then
+            echo "    FAIL: size mismatch: expected $expected_size, got $actual_size" >&2
+            fail_count=$((fail_count + 1))
+            return
+        fi
+        echo "    ok: size $actual_size"
+
+        # 2. full GET + sha256
+        actual_sha256="$(http_get_sha256 "$url")" || {
+            echo "    FAIL: full GET failed from $url" >&2
+            fail_count=$((fail_count + 1))
+            return
+        }
+    else
+        # Metadata-only mode: download the object once; it becomes both the
+        # subject of check 2 and the byte-level reference for check 3.
+        local_file="$(mktemp /var/tmp/verify-remote-ref.XXXXXX)"
+        register_cleanup "rm -f '$local_file'"
+        echo "    (no local blob -- downloading reference copy)"
+        http_get_to_file "$url" "$local_file" || {
+            echo "    FAIL: full GET failed from $url" >&2
+            fail_count=$((fail_count + 1))
+            return
+        }
+        expected_size="$(stat -c %s "$local_file")"
+        if [[ "$actual_size" != "$expected_size" ]]; then
+            echo "    FAIL: HEAD Content-Length $actual_size != downloaded body size $expected_size" >&2
+            fail_count=$((fail_count + 1))
+            return
+        fi
+        echo "    ok: size $actual_size"
+        actual_sha256="$(sha256sum "$local_file" | cut -d' ' -f1)"
+    fi
+
     if [[ "$actual_sha256" != "$expected_sha256" ]]; then
         echo "    FAIL: sha256 mismatch: expected $expected_sha256, got $actual_sha256" >&2
         fail_count=$((fail_count + 1))
