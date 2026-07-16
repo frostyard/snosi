@@ -178,6 +178,22 @@ grep -q -- '--tpm2-public-key-pcrs=11' "$installer"
 grep -q 'mokutil --import' "$installer"
 grep -q 'cryptsetup luksFormat --type luks2' "$installer"
 
+# The SHIPPED product installer must carry the same crypto invariants as the dev
+# spike (signed-PCR-11 policy, empty raw PCRs, no PCR 7, MOK enrollment, LUKS2).
+# The spike is a test fixture; snosi-install is what installs onto real disks, so
+# a regression in its PCR/TPM flags must fail fast CI, not only the root-gated
+# QEMU harness.
+shipped_installer="$root/shared/native-installer/tree/usr/libexec/snosi-install"
+grep -qF -- '--tpm2-pcrs= \' "$shipped_installer"
+grep -qF -- '--tpm2-pcrlock= \' "$shipped_installer"
+if grep -q -- '--tpm2-pcrs=7' "$shipped_installer"; then
+    echo "$shipped_installer must not bind PCR 7 (installer/UKI boot authorities differ)" >&2
+    exit 1
+fi
+grep -q -- '--tpm2-public-key-pcrs=11' "$shipped_installer"
+grep -q 'mokutil --import' "$shipped_installer"
+grep -q 'cryptsetup luksFormat --type luks2' "$shipped_installer"
+
 nvpcr_finalize="$root/shared/native-ab-secure/finalize/disable-nvpcr.chroot"
 [[ -x "$nvpcr_finalize" ]]
 grep -q '/usr/lib/nvpcr/\*\.nvpcr' "$nvpcr_finalize"
