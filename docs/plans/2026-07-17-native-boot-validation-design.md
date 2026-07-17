@@ -56,12 +56,16 @@ Steps:
    (never a hardcoded filename — the frozen §4 names are derived, not
    restated). Decompress the `.xz` to a scratch raw disk (honoring the
    `/var/tmp` convention of the publish scripts).
-2. **Inject SSH access into the var partition only**: loop-mount partition 6
-   (the var partition), write a throwaway ed25519 public key to
-   `roothome/.ssh/authorized_keys` (mode 700/600), unmount. This is the exact
-   pattern proven in `test/native-ab-components-test.sh:416`. Root and verity
-   partitions stay byte-pristine — the OS content booted is exactly what was
-   published; only user-data state is seeded.
+2. **Inject SSH access into the var partition only**: loop-mount the var
+   partition (located by `PARTLABEL=var`), write a throwaway ed25519 public
+   key to `lib/snosi/etc-overlay/upper/ssh/authorized_keys.d/root` — the
+   exact path `snosi-install`'s `seed_var()` seeds, read through the sshd
+   `AuthorizedKeysFile` drop-in (`10-snosi-authorized-keys.conf`). On native
+   images `/root` lives on the sealed read-only root, so the
+   `roothome/.ssh` pattern from `native-ab-components-test.sh` does NOT
+   apply here. Root and verity partitions stay byte-pristine — the OS
+   content booted is exactly what was published; only user-data state is
+   seeded.
 3. **Boot** via `vm_start` (plain OVMF CODE/VARS, KVM, serial console to a log
    file, user-net SSH port-forward). Secure Boot is deliberately NOT enforced:
    the MOK certificate is not enrolled in a virgin varstore, so SB enforcement
