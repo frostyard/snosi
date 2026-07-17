@@ -42,6 +42,7 @@ DEV_PUBRING="$ROOT_DIR/shared/native-ab/keys/import-pubring.gpg"
 
 WORK_DIR=""
 HTTP_PID=""
+S3_PID=""
 PORT=0
 PASS=0
 FAIL=0
@@ -101,6 +102,7 @@ print_summary() {
 
 cleanup() {
     [[ -z "$HTTP_PID" ]] || kill "$HTTP_PID" 2>/dev/null || true
+    [[ -z "$S3_PID" ]] || kill "$S3_PID" 2>/dev/null || true
     [[ -z "$WORK_DIR" || ! -d "$WORK_DIR" ]] || rm -rf "$WORK_DIR"
 }
 trap cleanup EXIT
@@ -224,7 +226,14 @@ assert_false "verify-remote.sh fails closed on a corrupted candidate byte" \
 assert_true "verify-remote.sh clean pass" "$PUBLISH_DIR/verify-remote.sh" "$PREPARED1" "$BASE_URL"
 
 echo "=== promote.sh: ordering, sidecars, gpgv ==="
-"$PUBLISH_DIR/promote.sh" "${PROMOTE_KEY_ARGS[@]}" --pubring "$PUBRING" "$PREPARED1" "$BASE_URL" "$DEST"
+promote1_out="$("$PUBLISH_DIR/promote.sh" "${PROMOTE_KEY_ARGS[@]}" --pubring "$PUBRING" "$PREPARED1" "$BASE_URL" "$DEST")"
+echo "$promote1_out"
+# Guards the archive block's exists-check: a first promotion has no outgoing
+# signed index, and must say so -- not take the "already advertises (or is
+# unparseable)" branch, which is what a false dest_object_exists positive
+# produced on R2 (2026-07-16).
+assert_contains "first promotion reports no existing signed index to archive" \
+    "$promote1_out" "No existing signed index to archive (first promotion"
 product_dir="$DEST/os/native/v1/$PRODUCT/x86-64"
 assert_true "final SHA256SUMS.gpg exists" test -f "$product_dir/SHA256SUMS.gpg"
 assert_true "final SHA256SUMS exists" test -f "$product_dir/SHA256SUMS"
@@ -390,5 +399,99 @@ assert_contains "ISO index advertises v1 again after withdrawal via --dest-path"
     "$(cat "$iso_product_dir/SHA256SUMS")" "snosi-native-installer_${ISO_VERSION1}_x86-64.iso"
 assert_true "gpgv accepts the withdrawn (restored) ISO index" \
     gpgv --keyring "$PUBRING" "$iso_product_dir/SHA256SUMS.gpg" "$iso_product_dir/SHA256SUMS"
+
+# ---------------------------------------------------------------------------
+# publish-lib.sh dest backend semantics: dest_object_exists /
+# dest_read_object / dest_copy_object must report a MISSING object as
+# missing on EVERY backend. rclone's exit codes are backend-dependent here:
+# bucket backends (S3/R2) have no real directories, so `rclone lsf`, `cat`,
+# and `copyto` of a nonexistent object all exit 0 with empty output --
+# observed live on R2 2026-07-16, when promote.sh took the "already
+# advertises (or is unparseable)" archive branch on a FIRST promotion. The
+# helpers must therefore key on produced output, never on exit status
+# alone. The local-backend leg always runs (and pins that both backends
+# behave identically); the S3 leg reproduces the real R2 shape via
+# `rclone serve s3` and is skipped when rclone is not installed.
+# ---------------------------------------------------------------------------
+echo "=== publish-lib.sh dest backend semantics (missing vs present objects) ==="
+
+# publib dest fn [args...] -- source publish-lib.sh in a child bash (it sets
+# set -e and an EXIT trap of its own), dest_parse `dest`, then run one helper.
+publib() { # dest fn [args...]
+    env PUBLISH_DIR="$PUBLISH_DIR" bash -ec '
+        source "$PUBLISH_DIR/publish-lib.sh"
+        dest_parse "$1"
+        fn="$2"
+        shift 2
+        "$fn" "$@"
+    ' _ "$@"
+}
+
+# run_backend_asserts label dest -- the same 8 assertions against one backend.
+run_backend_asserts() { # label dest
+    local label="$1" dest="$2"
+    local read_out="$WORK_DIR/backend-read-$label"
+    local read_missing_out="$WORK_DIR/backend-read-missing-$label"
+    rm -f "$read_out" "$read_missing_out"
+
+    assert_true "$label dest: dest_object_exists true for a present object" \
+        publib "$dest" dest_object_exists "sub/present.txt"
+    assert_false "$label dest: dest_object_exists false for a missing object" \
+        publib "$dest" dest_object_exists "sub/SHA256SUMS"
+    assert_true "$label dest: dest_read_object fetches a present object" \
+        publib "$dest" dest_read_object "sub/present.txt" "$read_out"
+    assert_eq "$label dest: dest_read_object content round-trips" \
+        "$(cat "$read_out" 2>/dev/null)" "present"
+    assert_false "$label dest: dest_read_object fails for a missing object" \
+        publib "$dest" dest_read_object "sub/SHA256SUMS" "$read_missing_out"
+    assert_false "$label dest: dest_read_object leaves no outfile for a missing object" \
+        test -e "$read_missing_out"
+    assert_false "$label dest: dest_copy_object refuses a missing source object" \
+        publib "$dest" dest_copy_object "sub/SHA256SUMS" "sub/copy-of-missing"
+    assert_true "$label dest: dest_copy_object copies a present object" \
+        publib "$dest" dest_copy_object "sub/present.txt" "sub/copy.txt"
+}
+
+LOCAL_BACKEND_DIR="$WORK_DIR/backend-local"
+mkdir -p "$LOCAL_BACKEND_DIR/sub"
+printf 'present\n' >"$LOCAL_BACKEND_DIR/sub/present.txt"
+run_backend_asserts "local" "$LOCAL_BACKEND_DIR"
+assert_false "local dest: dest_copy_object of a missing source created nothing" \
+    test -e "$LOCAL_BACKEND_DIR/sub/copy-of-missing"
+
+if command -v rclone >/dev/null; then
+    S3_ROOT="$WORK_DIR/backend-s3-root"
+    mkdir -p "$S3_ROOT/bucket/sub"
+    printf 'present\n' >"$S3_ROOT/bucket/sub/present.txt"
+    S3_PORT=18924
+    rclone serve s3 --auth-key testkey,testsecret --addr "127.0.0.1:$S3_PORT" \
+        "$S3_ROOT" >"$WORK_DIR/rclone-s3.log" 2>&1 &
+    S3_PID=$!
+    export RCLONE_CONFIG_PIPES3_TYPE=s3 \
+        RCLONE_CONFIG_PIPES3_PROVIDER=Rclone \
+        RCLONE_CONFIG_PIPES3_ENDPOINT="http://127.0.0.1:$S3_PORT" \
+        RCLONE_CONFIG_PIPES3_ACCESS_KEY_ID=testkey \
+        RCLONE_CONFIG_PIPES3_SECRET_ACCESS_KEY=testsecret \
+        RCLONE_CONFIG_PIPES3_FORCE_PATH_STYLE=true
+    s3_up=0
+    for _ in $(seq 1 20); do
+        if rclone lsf "pipes3:bucket/sub/" >/dev/null 2>&1; then
+            s3_up=1
+            break
+        fi
+        sleep 0.5
+    done
+    if [[ "$s3_up" == 1 ]]; then
+        run_backend_asserts "s3" "rclone:pipes3:bucket"
+        assert_false "s3 dest: dest_copy_object of a missing source created nothing" \
+            test -e "$S3_ROOT/bucket/sub/copy-of-missing"
+    else
+        fail "rclone serve s3 backend came up" "$(tail -5 "$WORK_DIR/rclone-s3.log" 2>/dev/null)"
+    fi
+    kill "$S3_PID" 2>/dev/null || true
+    S3_PID=""
+else
+    echo "# rclone not installed -- skipping the S3-backend leg (the local-backend leg above still ran)"
+fi
 
 print_summary

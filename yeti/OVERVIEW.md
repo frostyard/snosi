@@ -924,6 +924,30 @@ silent death. Caught by `test/native-publication-pipeline-test.sh`'s new
 "ISO-shaped fixture leg", which is the first test in this suite to promote
 the SAME (non-manifest-bearing) publication type twice in a row.
 
+A second latent bug in the same archive block surfaced during the first
+REAL promotion against R2 (2026-07-16): `publish-lib.sh`'s
+`dest_object_exists()` trusted `rclone lsf`'s exit code, but that exit code
+is BACKEND-DEPENDENT for a missing object -- directory backends (rclone's
+`local`) exit 3, while bucket backends (S3/R2) have no real directories, so
+`lsf`/`cat`/`copyto` of a nonexistent object are all just empty-prefix
+listings: exit 0, empty output, no file produced. On R2 this made a first
+promotion take the misleading "already advertises (or is unparseable)"
+branch (the false "exists" led to `dest_read_object` producing an empty
+file via `rclone cat`, whose version grep then matched nothing); archiving
+was still correctly skipped, but a false "exists" could have masked real
+archive/restore bugs. Fix (all three helpers now judge by produced OUTPUT,
+never rclone's exit status): `dest_object_exists` compares `lsf` output to
+the object's basename; `dest_read_object` uses `copyto` and requires the
+outfile to actually exist afterward; `dest_copy_object`'s rclone branch
+gained the same explicit source-exists refusal its local branch always
+had (a missing source was a silent no-op copy on bucket backends).
+Covered by `test/native-publication-pipeline-test.sh`'s "dest backend
+semantics" leg, which asserts missing-vs-present behavior is identical on
+a local-dir dest and on a REAL S3 backend (`rclone serve s3` against a
+temp dir, reproducing the exact R2 shape; skipped when rclone is not
+installed), plus a first-promotion assertion that `promote.sh` prints
+"No existing signed index to archive (first promotion ...)".
+
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
 1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, lemonade, nix, podman, tailscale, vscode
