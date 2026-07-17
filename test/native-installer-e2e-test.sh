@@ -252,6 +252,14 @@ copy_build_artifacts() { # profile image_id dest
     for suffix in manifest raw efi "${image_id}_@v.root.raw.raw" "${image_id}_@v.root-verity.raw.raw"; do
         cp --sparse=always "$OUTPUT_DIR/$profile.$suffix" "$dest/"
     done
+    # The product-curated feature catalog (features-catalog.finalize) is a
+    # REQUIRED publication artifact since the sysext feature catalog landed
+    # (prepare-native-publication.sh hard-fails without it). The build emits
+    # it as <image_id>.features.json, and since $dest doubles as the
+    # publisher's source dir here, keep that exact name -- the publisher
+    # looks it up as <product>.features.json (product = manifest
+    # .config.name = image_id).
+    cp "$OUTPUT_DIR/${image_id}.features.json" "$dest/"
 }
 
 if [[ "$SKIP_CAYO_BUILD" != 1 ]]; then

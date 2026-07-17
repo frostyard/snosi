@@ -200,6 +200,11 @@ build_profile() {
     cp --sparse=always "$ROOT_DIR/output/$PROFILE.efi" "$dest/"
     cp --sparse=always "$ROOT_DIR/output/$PROFILE.${IMAGE_ID}_@v.root.raw.raw" "$dest/"
     cp --sparse=always "$ROOT_DIR/output/$PROFILE.${IMAGE_ID}_@v.root-verity.raw.raw" "$dest/"
+    # The product-curated feature catalog (features-catalog.finalize) is a
+    # REQUIRED publication artifact since the sysext feature catalog landed
+    # (prepare-native-publication.sh hard-fails without it). The build emits
+    # it as <IMAGE_ID>.features.json, not <Output>-prefixed.
+    cp "$ROOT_DIR/output/${IMAGE_ID}.features.json" "$dest/$PROFILE.features.json"
     echo "Build done -> $dest (finished $(date -u +%FT%TZ))"
 }
 
@@ -213,6 +218,10 @@ prepare_version() {
     for suffix in manifest raw efi "${IMAGE_ID}_@v.root.raw.raw" "${IMAGE_ID}_@v.root-verity.raw.raw"; do
         ln -s "$build_dir/$PROFILE.$suffix" "$stage/$CHANNEL.$suffix"
     done
+    # The feature catalog is looked up as <product>.features.json, where
+    # product is the manifest's .config.name (= IMAGE_ID) -- NOT the
+    # channel-prefixed name the other staged artifacts use.
+    ln -s "$build_dir/$PROFILE.features.json" "$stage/${IMAGE_ID}.features.json"
     "$PUBLISH_DIR/prepare-native-publication.sh" --xz "$stage" "$CHANNEL" "$dest_root" >&2
     echo "$dest_root/$IMAGE_ID/x86-64"
 }
@@ -326,7 +335,7 @@ else
     build_profile "$BUILD_N1_DIR"
 fi
 
-for f in manifest raw efi "${IMAGE_ID}_@v.root.raw.raw" "${IMAGE_ID}_@v.root-verity.raw.raw"; do
+for f in manifest raw efi features.json "${IMAGE_ID}_@v.root.raw.raw" "${IMAGE_ID}_@v.root-verity.raw.raw"; do
     [[ -f "$BUILD_N_DIR/$PROFILE.$f" ]] || { echo "Error: missing N artifact: $f" >&2; exit 1; }
     [[ -f "$BUILD_N1_DIR/$PROFILE.$f" ]] || { echo "Error: missing N+1 artifact: $f" >&2; exit 1; }
 done
