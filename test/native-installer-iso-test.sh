@@ -243,6 +243,23 @@ assert_contains "initrd contains gpgv (signed index verification)" "$(cat "$init
 # that happened to end in that literal string.
 assert_true "initrd contains cryptsetup" grep -q "usr/sbin/cryptsetup$" "$initrd_list"
 assert_true "initrd contains mokutil" grep -q "usr/bin/mokutil$" "$initrd_list"
+
+# --- graphical setup stack (T3, docs/plans/2026-07-17-graphical-installer-
+# plan.md): the kiosk pieces and the picker data files snosi-setup degrades
+# without. The live cage/GTK boot is the e2e --graphical leg, not this test.
+assert_true "initrd contains cage" grep -q "usr/bin/cage$" "$initrd_list"
+assert_true "initrd contains the snosi-setup launcher" grep -q "usr/bin/snosi-setup$" "$initrd_list"
+assert_true "initrd contains the setup_gui model" grep -q "usr/lib/snosi-setup/setup_gui/model.py$" "$initrd_list"
+assert_true "initrd contains python3-gi" grep -qE "usr/lib/python3/dist-packages/gi/__init__.py$" "$initrd_list"
+assert_true "initrd contains the Adw GIR typelib" grep -qE "Adw-1.typelib$" "$initrd_list"
+assert_true "initrd contains snosi-setup.service" grep -q "usr/lib/systemd/system/snosi-setup.service$" "$initrd_list"
+assert_true "initrd contains the snosi-setup static wants link" \
+    grep -q "usr/lib/systemd/system/multi-user.target.wants/snosi-setup.service$" "$initrd_list"
+assert_true "initrd contains Mesa DRI drivers (llvmpipe fallback)" grep -qE "dri/.*_dri.so|dri/libgallium" "$initrd_list"
+assert_true "initrd contains the locale picker data (locales SUPPORTED)" grep -q "usr/share/i18n/SUPPORTED$" "$initrd_list"
+assert_true "initrd contains the keyboard picker data (xkb evdev.lst)" grep -q "usr/share/X11/xkb/rules/evdev.lst$" "$initrd_list"
+assert_true "initrd contains zoneinfo (timezone picker)" grep -q "usr/share/zoneinfo/UTC$" "$initrd_list"
+assert_true "initrd contains Cantarell" grep -qE "fonts.*[Cc]antarell" "$initrd_list"
 assert_true "initrd contains the product-aware CLI installer" \
     grep -q "usr/libexec/snosi-install$" "$initrd_list"
 # cpio -t (no -v) lists names only, not symlink targets -- -tv is needed to

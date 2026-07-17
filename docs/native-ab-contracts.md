@@ -339,6 +339,18 @@ Never Snosi-MOK-only for the ISO: the ISO boots before any Snosi MOK exists
 on the target machine's firmware and must validate on hardware that has never
 enrolled a Snosi certificate, with Secure Boot enforced.
 
+**Graphical setup (informative, not name-frozen):** the ISO carries a GTK4
+kiosk wizard (`snosi-setup`, launched by cage on tty1 via
+`snosi-setup.service`) that drives one `snosi-install --non-interactive
+--json-progress` invocation — it performs no privileged operation itself.
+It runs only when a DRM display device exists and `snosi.textmode=1` is not
+on the kernel command line; in every other case (no display, the cmdline
+escape hatch, or three kiosk crashes in 60s) tty1 belongs to getty exactly
+as before, and the serial console text flow is never affected. The
+machine-readable backend contract (`--print-defaults`, `--list-disks-json`,
+the `--json-progress` proto-1 event stream) is documented in the
+snosi-install usage text and CLAUDE.md, and versioned by its `proto` field.
+
 ## 9. Kernel module/firmware policy
 
 Release native profiles ship the complete packaged module and firmware set.

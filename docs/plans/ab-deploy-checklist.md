@@ -348,6 +348,11 @@ Full commands in runbook §"Candidate → verify → promote → purge procedure
 - [ ] Internal canary: install each product on internal hardware from the real
       ISO, take at least one real published update, and confirm
       `snosi-update-status` / `snosi-update-status --check` report correctly.
+      Include a **hands-on GRAPHICAL pass** once the snosi-setup kiosk ships
+      on the ISO: boot on a machine (or QEMU with virtio-vga + display) and
+      complete an install through the wizard — the model tests and boot smoke
+      (test/snosi-setup-boot-test.sh) prove logic and liveness, but only a
+      human sees the pixels, focus order, and keyboard behavior.
       Include a **hands-on interactive pass** (console login, no injected SSH
       keys, real HTTPS origin) — the 2026-07-16 human QEMU install found four
       ship-blockers (`login`, `ca-certificates`, `mount`, no first user; PR
