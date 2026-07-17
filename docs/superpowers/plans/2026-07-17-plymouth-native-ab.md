@@ -1,0 +1,456 @@
+# Plymouth Splash + Snow Theme Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Native A/B desktop images (snow-ab, snowfield-ab) boot with a graphical Snow-branded plymouth splash; all snow/snowfield images (bootc + native) ship the Snow theme.
+
+**Architecture:** Add `KernelCommandLine=splash` to the shared snow composition fragment (effective only on native profiles — bootc builds no UKI and already gets `rhgb quiet` from bootc at install time). Ship a Snow plymouth theme (two-step plugin, bgrt-style config reusing Debian's spinner assets, flower watermark) via a new `SkeletonTrees=` so it exists BEFORE package installation — initrd generation happens during package install (surface kernel: synchronous postinst; backports kernel: dpkg trigger in the same apt run), which is when plymouth-populate-initrd embeds the configured theme.
+
+**Tech Stack:** mkosi config fragments, plymouth two-step plugin, dracut, bash static tests, QEMU secure-boot harness.
+
+**Spec:** `docs/superpowers/specs/2026-07-17-plymouth-native-ab-design.md`
+
+## Global Constraints
+
+- `splash` only — never add `quiet` or `rhgb` to any native cmdline.
+- cayo profiles (cayo, cayo-ab, cayo-ab-raw) must remain completely untouched by every change.
+- Production native profiles (`mkosi.profiles/{snow-ab,snowfield-ab,cayo-ab}/mkosi.conf`) stay `[Config]/[Output]/[Include]`-only — do NOT edit them.
+- All new/changed shell in `test/` must pass shellcheck; scripts use `set -euo pipefail`.
+- The repo root is the worktree `/home/bjk/projects/frostyard/snosi/.claude/worktrees/brave-bartik-e17500` (branch `claude/snow-snowfield-plymouth-c85d3c`). All paths below are relative to it.
+- mkosi gotcha for any `cat-config`/`summary` capture: `sudo rm -f .mkosi-private/history/latest.json` first (History=yes caches `--profile` and silently overrides the CLI for `cat-config`).
+- The single committed binary is `watermark.png` (~256 px render of the flower SVG). No other binaries.
+
+---
+
+### Task 1: Skeleton tree, theme files, composition wiring, static test
+
+**Files:**
+- Modify: `test/native-ab-static-test.sh` (append a new check block near the end, before any final `echo`; the file is a flat `set -euo pipefail` assertion script — a failing grep/test aborts it)
+- Create: `shared/snow/skeleton/usr/share/plymouth/themes/snow/snow.plymouth`
+- Create: `shared/snow/skeleton/usr/share/plymouth/themes/spinner/watermark.png` (rendered, binary)
+- Create: `shared/snow/skeleton/etc/plymouth/plymouthd.conf`
+- Create: `shared/snow/skeleton/README.md`
+- Modify: `shared/composition/snow/mkosi.conf`
+
+**Interfaces:**
+- Produces: skeleton tree path `shared/snow/skeleton` (consumed by `SkeletonTrees=` and by Tasks 3/5 artifact checks); theme name `snow`; watermark at `/usr/share/plymouth/themes/spinner/watermark.png` in-image.
+
+- [ ] **Step 1: Write the failing static-test additions**
+
+Append to `test/native-ab-static-test.sh` (at the end of the file):
+
+```bash
+# Plymouth splash + Snow theme (docs/superpowers/specs/
+# 2026-07-17-plymouth-native-ab-design.md): the desktop composition fragment
+# carries the splash karg (bootc-inert -- no UKI is built there; native
+# profiles put it in the signed UKI .cmdline) and the SkeletonTrees= theme
+# delivery. Skeleton, not ExtraTrees: initrd generation runs DURING package
+# installation (surface kernel synchronously, backports via trigger), which
+# is when plymouth-populate-initrd embeds the configured theme.
+comp_snow="$root/shared/composition/snow/mkosi.conf"
+grep -q '^KernelCommandLine=splash$' "$comp_snow"
+grep -q '^SkeletonTrees=%D/shared/snow/skeleton$' "$comp_snow"
+skel="$root/shared/snow/skeleton"
+[[ -f "$skel/usr/share/plymouth/themes/snow/snow.plymouth" ]]
+[[ -f "$skel/usr/share/plymouth/themes/spinner/watermark.png" ]]
+[[ -f "$skel/etc/plymouth/plymouthd.conf" ]]
+grep -q '^ModuleName=two-step$' "$skel/usr/share/plymouth/themes/snow/snow.plymouth"
+grep -q '^ImageDir=/usr/share/plymouth/themes/spinner$' "$skel/usr/share/plymouth/themes/snow/snow.plymouth"
+grep -q '^Theme=snow$' "$skel/etc/plymouth/plymouthd.conf"
+# Servers stay text-mode: no splash may reach cayo through its fragments.
+if grep -q 'splash' "$root/shared/composition/cayo/mkosi.conf" \
+    "$root/shared/outformat/ab-root/mkosi.conf" \
+    "$root/shared/native-ab-secure/mkosi.conf"; then
+    echo "splash karg leaked into a cayo-reachable fragment" >&2
+    exit 1
+fi
+echo "ok - plymouth splash + Snow theme wiring"
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `bash test/native-ab-static-test.sh; echo rc=$?`
+Expected: aborts at the `grep -q '^KernelCommandLine=splash$'` line (silent grep failure under `set -e`), `rc=1`. Everything before the new block must still pass — if an EARLIER assertion fails, stop: something else is broken.
+
+- [ ] **Step 3: Render the watermark**
+
+```bash
+mkdir -p shared/snow/skeleton/usr/share/plymouth/themes/spinner \
+         shared/snow/skeleton/usr/share/plymouth/themes/snow \
+         shared/snow/skeleton/etc/plymouth
+python3 - <<'EOF'
+import gi
+gi.require_version('GdkPixbuf', '2.0')
+from gi.repository import GdkPixbuf
+src = '/home/bjk/projects/frostyard/first-setup/data/icons/hicolor/scalable/apps/org.frostyard.FirstSetup-flower.svg'
+dst = 'shared/snow/skeleton/usr/share/plymouth/themes/spinner/watermark.png'
+p = GdkPixbuf.Pixbuf.new_from_file_at_size(src, 256, 256)
+p.savev(dst, 'png', [], [])
+print('rendered', p.get_width(), 'x', p.get_height())
+EOF
+ls -l shared/snow/skeleton/usr/share/plymouth/themes/spinner/watermark.png
+```
+
+Expected: `rendered 256 x 238` (aspect-preserved) and a PNG well under 100 KB. If GdkPixbuf can't load SVG (`gdk-pixbuf` error), stop and report — do not substitute another renderer without checking its output visually.
+
+- [ ] **Step 4: Write the theme, config, and README files**
+
+`shared/snow/skeleton/usr/share/plymouth/themes/snow/snow.plymouth`:
+
+```ini
+[Plymouth Theme]
+Name=Snow
+Description=Snow Linux flower with the spinner throbber on a black background
+ModuleName=two-step
+
+[two-step]
+Font=Cantarell 12
+TitleFont=Cantarell Light 30
+# bgrt-style cross-theme ImageDir: reuse Debian's spinner assets (throbber
+# frames, password-entry art) instead of copying them into this repo. The
+# flower watermark.png is skeleton-injected into that same directory (the
+# two-step plugin loads watermark.png from ImageDir; the path is unowned by
+# any deb, so dpkg never touches it).
+ImageDir=/usr/share/plymouth/themes/spinner
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.65
+TitleHorizontalAlignment=.5
+TitleVerticalAlignment=.25
+HorizontalAlignment=.5
+VerticalAlignment=.75
+WatermarkHorizontalAlignment=.5
+WatermarkVerticalAlignment=.45
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x000000
+BackgroundEndColor=0x000000
+ProgressBarBackgroundColor=0x606060
+ProgressBarForegroundColor=0xffffff
+MessageBelowAnimation=true
+
+[boot-up]
+UseEndAnimation=false
+
+[shutdown]
+UseEndAnimation=false
+
+[reboot]
+UseEndAnimation=false
+
+[updates]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Installing Updates...
+SubTitle=Do not turn off your computer
+
+[system-upgrade]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Upgrading System...
+SubTitle=Do not turn off your computer
+```
+
+(Geometry rationale: flower centered slightly high at .45, throbber below at .75, password dialog at .65 so the entry box never overlaps the flower; title band at .25 is used only by the updates/system-upgrade modes.)
+
+`shared/snow/skeleton/etc/plymouth/plymouthd.conf`:
+
+```ini
+# snosi: select the Snow plymouth theme (shared/snow/skeleton/README.md).
+# This path is a dpkg conffile of the plymouth package -- because this file
+# exists BEFORE plymouth installs (SkeletonTrees=), dpkg treats it as a
+# locally-modified conffile and keeps it.
+[Daemon]
+Theme=snow
+ShowDelay=0
+DeviceTimeout=8
+```
+
+`shared/snow/skeleton/README.md`:
+
+```markdown
+# Snow plymouth theme skeleton
+
+Delivered via `SkeletonTrees=` in `shared/composition/snow/mkosi.conf` (all
+snow/snowfield images, bootc AND native A/B). Skeleton, not ExtraTrees,
+because initrd generation happens DURING package installation (the
+linux-surface kernel runs dracut synchronously in its postinst; the
+backports kernel via a dpkg trigger in the same apt run), and that is when
+plymouth-populate-initrd resolves the default theme and embeds its assets.
+Same reasoning as the 30-bootc-standard.conf SkeletonTrees fix in
+shared/outformat/ab-root/mkosi.conf.
+
+- `usr/share/plymouth/themes/snow/snow.plymouth` — two-step config,
+  bgrt-style cross-theme `ImageDir` pointing at Debian's spinner assets.
+- `usr/share/plymouth/themes/spinner/watermark.png` — the Snow flower,
+  rendered once from
+  `first-setup/data/icons/hicolor/scalable/apps/org.frostyard.FirstSetup-flower.svg`
+  at 256 px via GdkPixbuf/librsvg. Lives in the spinner directory because
+  the two-step plugin loads `watermark.png` from `ImageDir`; the path is
+  not owned by any deb. Re-render with the python snippet in
+  docs/superpowers/plans/2026-07-17-plymouth-native-ab.md (Task 1 Step 3).
+- `etc/plymouth/plymouthd.conf` — `Theme=snow`. dpkg conffile semantics
+  keep a pre-existing copy.
+
+The graphical splash only activates where `splash` is on the kernel
+command line: native A/B UKIs (via `KernelCommandLine=splash` in the
+composition fragment) and bootc installs (bootc injects `rhgb quiet`).
+The spec is docs/superpowers/specs/2026-07-17-plymouth-native-ab-design.md.
+```
+
+- [ ] **Step 5: Wire the composition fragment**
+
+In `shared/composition/snow/mkosi.conf`, insert after the line `ExtraTrees=%D/shared/snow/tree` (keeping the existing blank line after it):
+
+```ini
+# Snow plymouth theme + Theme=snow config, delivered as a SKELETON so it
+# exists before package installation -- initrd generation runs during the
+# kernel package's install (surface: synchronous postinst; backports: dpkg
+# trigger in the same apt run), when plymouth-populate-initrd embeds the
+# configured theme. See shared/snow/skeleton/README.md.
+SkeletonTrees=%D/shared/snow/skeleton
+# Graphical plymouth splash. Effective only on the native A/B profiles
+# (snow-ab/snowfield-ab), where it lands in the signed UKI .cmdline; inert
+# on the bootc profiles (no UKI is built -- bootc injects rhgb quiet at
+# install time instead). cayo never includes this fragment: servers stay
+# text-mode.
+KernelCommandLine=splash
+```
+
+- [ ] **Step 6: Run the static test to verify it passes**
+
+Run: `bash test/native-ab-static-test.sh`
+Expected: exits 0, last line `ok - plymouth splash + Snow theme wiring` (plus the file's earlier ok lines).
+
+- [ ] **Step 7: Run the other static gates**
+
+Run:
+```bash
+bash test/native-ab-contracts-test.sh
+shellcheck test/native-ab-static-test.sh
+```
+Expected: both exit 0. If the contracts test fails, read its message — nothing in this task touches frozen names, so a failure means an accidental edit; fix before continuing.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add test/native-ab-static-test.sh shared/snow/skeleton shared/composition/snow/mkosi.conf
+git commit -m "feat: plymouth splash + Snow theme for desktop images
+
+splash karg via composition/snow (native-effective, bootc-inert); Snow
+two-step theme + flower watermark delivered via SkeletonTrees so
+plymouth-populate-initrd embeds it during kernel package install."
+```
+
+---
+
+### Task 2: Config-resolution verification (no build, no commit)
+
+Verifies mkosi resolves the new settings exactly as intended before spending build time. This task is a gate; it produces no code.
+
+**Files:** none modified.
+
+- [ ] **Step 1: Clear the mkosi history gotcha**
+
+Run: `sudo rm -f .mkosi-private/history/latest.json`
+
+- [ ] **Step 2: Verify snow-ab picks up splash and the skeleton**
+
+```bash
+.mkosi/bin/mkosi --profile snow-ab summary 2>/dev/null | grep -E 'Kernel Command Line|Skeleton Trees' -A2 | head -20
+```
+Expected: the kernel command line shows `console=ttyS0 rd.luks=1 rd.etc.overlay=1`, `lockdown=integrity`, and `splash` (order per Include encounter; all three present); Skeleton Trees lists BOTH the existing `30-bootc-standard.conf` mapping AND `shared/snow/skeleton`.
+(If `mkosi summary` needs the tools tree and takes ~a minute, that is normal. If `--profile` is silently ignored — "Ignoring --profile from the CLI" — redo Step 1.)
+
+- [ ] **Step 3: Verify cayo-ab is untouched**
+
+```bash
+sudo rm -f .mkosi-private/history/latest.json
+.mkosi/bin/mkosi --profile cayo-ab summary 2>/dev/null | grep -E 'Kernel Command Line' -A2 | head -8
+```
+Expected: NO `splash` anywhere in cayo-ab's kernel command line.
+
+- [ ] **Step 4: Verify snowfield-ab matches snow-ab**
+
+```bash
+sudo rm -f .mkosi-private/history/latest.json
+.mkosi/bin/mkosi --profile snowfield-ab summary 2>/dev/null | grep -E 'Kernel Command Line' -A2 | head -8
+```
+Expected: `splash` present, same as snow-ab.
+
+---
+
+### Task 3: Build snow-ab and assert artifacts
+
+**Files:** none modified (build + inspection only).
+
+**Interfaces:**
+- Consumes: `output/snow-ab.efi` (UKI), `output/snow-ab.snow_@v.root.raw.raw` (root erofs split artifact) from the build.
+
+- [ ] **Step 1: Build**
+
+Run: `just snow-ab`
+Expected: clean mkosi build (this runs `mkosi clean` first; expect a long build, tens of minutes). Do not set `SNOSI_NATIVE_AUTOSTAGE` — not needed for these checks.
+
+- [ ] **Step 2: Assert splash in the signed UKI cmdline**
+
+```bash
+workdir=$(mktemp -d)
+objcopy --dump-section ".cmdline=$workdir/cmdline" output/snow-ab.efi "$workdir/uki.copy"
+cat "$workdir/cmdline"; echo
+grep -q 'splash' "$workdir/cmdline" && echo "ok - splash in UKI .cmdline"
+```
+Expected: cmdline contains `console=ttyS0 rd.luks=1 rd.etc.overlay=1`, `lockdown=integrity`, `splash`; prints the ok line. (objcopy gotcha from Phase 8: never dump a section to /dev/null — it always exits 1; use a real file.)
+
+- [ ] **Step 3: Assert the theme is embedded in the UKI's initrd**
+
+```bash
+objcopy --dump-section ".initrd=$workdir/initrd" output/snow-ab.efi "$workdir/uki.copy2"
+lsinitrd "$workdir/initrd" > "$workdir/initrd.list"
+grep -c 'usr/share/plymouth/themes/snow/snow.plymouth' "$workdir/initrd.list"
+grep -c 'usr/share/plymouth/themes/spinner/watermark.png' "$workdir/initrd.list"
+grep -c 'usr/share/plymouth/themes/spinner/throbber-0001.png' "$workdir/initrd.list"
+grep -c 'plymouthd' "$workdir/initrd.list"
+```
+Expected: every grep count ≥ 1. If snow.plymouth is present but watermark/throbber are missing, plymouth-populate-initrd did not follow ImageDir — stop and diagnose (check `lsinitrd` for `etc/plymouth/plymouthd.conf` and what theme dir DID get copied) before any boot test.
+
+- [ ] **Step 4: Assert Theme=snow in the image's pristine /etc**
+
+```bash
+mnt=$(mktemp -d)
+sudo mount -o ro,loop output/snow-ab.snow_@v.root.raw.raw "$mnt"
+grep -H 'Theme=snow' "$mnt/.etc.lower/plymouth/plymouthd.conf"
+sudo umount "$mnt"
+```
+Expected: the grep prints the `Theme=snow` line. (`/.etc.lower` is the renamed pristine /etc on native images — the finalize script's first act.)
+
+- [ ] **Step 5: Run the profile-neutral artifact test (regression)**
+
+```bash
+OUTPUT_NAME=snow-ab test/native-ab-secure-artifact-test.sh
+```
+Expected: passes exactly as before this change (the UKI grew a karg; nothing this test checks changed). If invocation needs explicit args, copy the exact invocation from `test/native-ab-secure-boot-test.sh`'s own call site.
+
+---
+
+### Task 4: QEMU secure-boot harness run (the empirical proof)
+
+Proves the serial LUKS-passphrase pump still works with splash active, plus first boot, TPM auto-unlock, GDM, and a signed update hop. The harness builds its own images (including N+1), so it validates the change end to end regardless of Task 3's build.
+
+**Files:** none modified.
+
+- [ ] **Step 1: Run the harness**
+
+Run: `sudo PROFILE=snow-ab test/native-ab-secure-boot-test.sh`
+Expected: all assertions green (default mode; snow-ab historically reports 58/58 with the per-boot NvPCR checks). Long-running: real builds + several QEMU boots — allow well over an hour. Requires root + KVM + swtpm + virt-fw-vars (all already working on this host per Phase 5/6 runs).
+
+- [ ] **Step 2: If the passphrase pump times out**
+
+That is the one predicted failure mode (plymouth switching the serial prompt shape under `splash`). Do NOT immediately retry. Capture the serial log path the harness prints, extract the actual prompt text around the wedge, and re-check the `prompt_re` matcher in `test/native-ab-secure-boot-test.sh` (it already accepts plymouth-details and raw-agent shapes — a third shape means plymouth's splash-mode serial output differs; extend the matcher to accept it, rerun, and record the new shape in the test's comments). This is a known-unknown from the spec's risk list, not a reason to revert the feature.
+
+- [ ] **Step 3: Commit any harness-matcher fix (only if Step 2 happened)**
+
+```bash
+git add test/native-ab-secure-boot-test.sh
+git commit -m "test: accept plymouth splash-mode serial prompt shape in console pump"
+```
+
+---
+
+### Task 5: bootc snow build + artifact checks
+
+Confirms the theme lands in the bootc transport too (Format=directory, so the built rootfs is directly inspectable).
+
+**Files:** none modified.
+
+- [ ] **Step 1: Build**
+
+Run: `just snow`
+Expected: clean build (also long — builds base + the snow profile; sysexts are not rebuilt thanks to the empty-Dependencies pattern).
+
+- [ ] **Step 2: Assert theme files and config in the rootfs**
+
+```bash
+test -f output/snow/usr/share/plymouth/themes/snow/snow.plymouth && echo ok-theme
+test -f output/snow/usr/share/plymouth/themes/spinner/watermark.png && echo ok-watermark
+grep -H 'Theme=snow' output/snow/etc/plymouth/plymouthd.conf
+```
+Expected: `ok-theme`, `ok-watermark`, and the Theme=snow line. The plymouthd.conf check doubles as the empirical conffile-semantics proof (skeleton file survived plymouth's package install).
+
+- [ ] **Step 3: Assert the bootc initrd embeds the theme**
+
+```bash
+initrd=$(sudo find output/snow/usr/lib/modules -maxdepth 2 -name 'initrd*' | head -1)
+echo "initrd: $initrd"
+sudo lsinitrd "$initrd" | grep -E 'themes/snow/snow.plymouth|themes/spinner/watermark.png' 
+```
+Expected: both paths listed. (bootc-style images carry the initrd under `/usr/lib/modules/<kver>/`; if `find` returns nothing, check `output/snow/boot/` instead and note the actual location in the task report.)
+
+---
+
+### Task 6: Documentation + wrap-up
+
+**Files:**
+- Modify: `CLAUDE.md` (Native A/B Update UX / composition area)
+- Modify: `yeti/OVERVIEW.md` (add a short section)
+
+- [ ] **Step 1: CLAUDE.md**
+
+In the "Payload composition (`shared/composition/`)" paragraph of CLAUDE.md, append after the sentence ending "so the two transports cannot drift apart.":
+
+```
+`shared/composition/snow/mkosi.conf` additionally carries the desktop
+plymouth wiring: `KernelCommandLine=splash` (effective only on the native
+A/B profiles, where it enters the signed UKI `.cmdline`; inert on bootc
+profiles, which build no UKI and get `rhgb quiet` from bootc at install
+time) and `SkeletonTrees=%D/shared/snow/skeleton` (Snow two-step plymouth
+theme + flower watermark + `Theme=snow` conffile). SKELETON, not
+ExtraTrees, because plymouth-populate-initrd embeds the configured theme
+during the kernel package's own install (surface: synchronous postinst;
+backports: dpkg trigger in the same apt run) — the same timing that forced
+the 30-bootc-standard.conf SkeletonTrees fix. cayo stays text-mode: no
+splash reaches any cayo-included fragment (enforced by
+test/native-ab-static-test.sh).
+```
+
+- [ ] **Step 2: yeti/OVERVIEW.md**
+
+Add a section (near other native A/B sections; adapt heading level to neighbors):
+
+```markdown
+## Plymouth splash + Snow theme (2026-07-17)
+
+Native A/B desktop images boot with plymouth's graphical splash; bootc
+always had it because bootc injects `rhgb quiet` kargs at install time
+(verified live on a bootc snow host) while the native UKI cmdline is baked
+at build time — the gap was the missing `splash` karg, not missing
+plymouth (the desktop package set always shipped it and the initrds always
+carried it, in text/details mode).
+
+Mechanics: `shared/composition/snow/mkosi.conf` carries
+`KernelCommandLine=splash` (bootc-inert) and
+`SkeletonTrees=%D/shared/snow/skeleton`. The skeleton ships
+`themes/snow/snow.plymouth` (two-step, bgrt-style cross-theme
+`ImageDir=/usr/share/plymouth/themes/spinner` reusing Debian's throbber and
+password-dialog assets), `themes/spinner/watermark.png` (the FirstSetup
+flower SVG rendered at 256px; injected into spinner's dir because two-step
+loads watermark.png from ImageDir; the path is deb-unowned), and
+`etc/plymouth/plymouthd.conf` with `Theme=snow` (dpkg conffile semantics
+keep a pre-existing file). Skeleton timing is load-bearing: initrd
+generation runs during kernel package install, so ExtraTrees would be too
+late — identical reasoning to the 30-bootc-standard.conf skeleton fix.
+Static checks live at the end of test/native-ab-static-test.sh, including
+a guard that no splash reaches cayo fragments.
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add CLAUDE.md yeti/OVERVIEW.md
+git commit -m "docs: plymouth splash + Snow theme wiring"
+```
+
+- [ ] **Step 4: Wrap up the branch**
+
+Use superpowers:finishing-a-development-branch (PR target: confirm with the user — repo default is `main`).
