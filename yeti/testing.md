@@ -128,6 +128,22 @@ build output is never itself named `cayo-ab`. Both scripts default to
 byte-equivalent behavior against `cayo`/`cayo-ab-raw`/`cayo-ab` when run with
 no overrides.
 
+Every harness that runs build outputs through
+`shared/native-ab/publish/prepare-native-publication.sh` (updateux,
+components, publication, secure-boot, installer-e2e) must stage the
+product-curated feature catalog alongside the split artifacts: since the
+sysext feature catalog landed (#430, df7bc6e) the publisher hard-fails
+without `<product>.features.json` in its source dir. The build emits it as
+`output/<IMAGE_ID>.features.json` (NOT `<Output>`-prefixed like the other
+split artifacts), and the staged name must be IMAGE_ID-based, not
+CHANNEL-based — the publisher derives product from the manifest's
+`.config.name`. Each harness's `build_profile` copies it as
+`$PROFILE.features.json` next to the other artifacts and its
+publish-staging step links it into the stage as
+`${IMAGE_ID}.features.json` (`native-installer-e2e-test.sh` is the
+exception: its build dir doubles as the publisher source dir, so
+`copy_build_artifacts` keeps the `<image_id>.features.json` name as-is).
+
 `native-ab-update-test.sh` uses four real `cayo-ab-raw` builds to exercise signed
 manifest rejection, N through N+3 updates, slot reuse, rollback, and boot-count
 fallback in QEMU.
