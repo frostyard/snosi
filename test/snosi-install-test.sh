@@ -341,6 +341,34 @@ run_installer "${BASE_ARGS[@]}" --product bogus-product
 assert_contains "invalid --product value is rejected" "$RUN_OUT" "must be one of"
 
 # ===========================================================================
+# 2b. append_group_member preserves the target file's mode + membership
+#     (regression: mktemp+mv clobbered /etc/group to 0600, breaking all
+#     non-root group-name resolution on a real install, 2026-07-17)
+# ===========================================================================
+echo "=== append_group_member mode preservation ==="
+GRP_FIXTURE="$WORK_DIR/group-fixture"
+cat >"$GRP_FIXTURE" <<'GRPEOF'
+root:x:0:
+sudo:x:27:existing
+video:x:44:
+GRPEOF
+chmod 0644 "$GRP_FIXTURE"
+call_fn append_group_member "$GRP_FIXTURE" sudo claude
+call_fn append_group_member "$GRP_FIXTURE" sudo claude   # idempotent
+call_fn append_group_member "$GRP_FIXTURE" video claude
+call_fn append_group_member "$GRP_FIXTURE" nonexistent claude   # no-op
+assert_eq "append_group_member preserves 0644 mode (not mktemp's 0600)" \
+    "$(stat -c '%a' "$GRP_FIXTURE")" "644"
+assert_eq "append_group_member added claude to sudo (kept existing member)" \
+    "$(awk -F: '$1=="sudo"{print $NF}' "$GRP_FIXTURE")" "existing,claude"
+assert_eq "append_group_member did not duplicate on re-add" \
+    "$(grep -c 'claude,claude\|claude.*claude' "$GRP_FIXTURE" || true)" "0"
+assert_eq "append_group_member added claude to an empty-member group" \
+    "$(awk -F: '$1=="video"{print $NF}' "$GRP_FIXTURE")" "claude"
+assert_eq "append_group_member is a no-op for an absent group" \
+    "$(grep -c '^nonexistent' "$GRP_FIXTURE" || true)" "0"
+
+# ===========================================================================
 # 3. restage-mok argument handling
 # ===========================================================================
 echo "=== restage-mok argument handling ==="

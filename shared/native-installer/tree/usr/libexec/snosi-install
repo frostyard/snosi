@@ -1006,6 +1006,14 @@ append_group_member() { # file group user
             if (!found) $NF = ($NF == "" ? u : $NF "," u)
         }
         { print }' "$file" >"$tmp"
+    # mktemp creates 0600 root:root; mv would then clobber the target's mode
+    # and owner. /etc/group must stay 0644 or NON-root group-name resolution
+    # breaks entirely (getent group empty, `id -nG` fails) even though numeric
+    # memberships survive -- shipped broken to a real install, 2026-07-17.
+    # gshadow must stay its root:shadow 0640. Carry the target's existing
+    # mode+owner onto the temp before the atomic rename.
+    chmod --reference="$file" "$tmp"
+    chown --reference="$file" "$tmp" 2>/dev/null || true
     mv "$tmp" "$file"
 }
 
@@ -1097,6 +1105,12 @@ seed_first_user() { # disk var_device bare_product version username password ful
     # /etc/skel is 0755, which silently undid the 0700 above (observed live
     # 2026-07-17: created home was world-readable).
     chmod 0700 "$varmnt/home/$username"
+
+    # Reassert the canonical account-db modes (defense in depth against any
+    # in-place rewrite above touching them -- see append_group_member).
+    chmod 0644 "$upper/passwd" "$upper/group"
+    chmod 0640 "$upper/shadow"
+    [[ ! -f "$upper/gshadow" ]] || chmod 0640 "$upper/gshadow"
 
     umount "$varmnt"; rmdir "$varmnt"
     umount "$rootmnt"; rmdir "$rootmnt"
