@@ -90,15 +90,28 @@
 #      relocation-symlink, and the NvPCR journal check all remain
 #      unconditional profile-neutral assertions regardless of HAS_DESKTOP.
 #   6. Secure update hop: publish N+1 through the real publication pipeline
-#      to a local HTTP origin signed with an ephemeral GPG key (the guest
-#      trusts it via the documented /etc/systemd/import-pubring.gpg
-#      override, same mechanism as test/native-ab-updateux-test.sh), run
+#      to a local HTTP origin signed with an ephemeral GPG key that the
+#      guest trusts via its SHIPPED vendor keyring ONLY -- the ephemeral
+#      public ring is baked into the built images at build time over the
+#      committed production pubring, at BOTH /usr/lib/systemd names, via
+#      two mkosi CLI --extra-tree flags (see build_profile), and NO
+#      /etc/systemd/import-pubring.* override is ever installed (asserted).
+#      This makes the hop verify through systemd 261's real vendor path,
+#      /usr/lib/systemd/import-pubring.pgp -- the exact link the 2026-07-17
+#      outage proved untested (commit 91718d7): every other harness boots
+#      cayo-ab-raw, whose Trixie systemd 257 still reads the old .gpg
+#      vendor name, and/or injects the /etc override. Then run
 #      /usr/libexec/snosi-sysupdate-stage, reboot with zero serial input
 #      (proving the signed PCR 11 policy survives a real UKI change -- the
 #      entire point of signed-vs-raw PCR policy), and assert N+1 booted
 #      under enforced Secure Boot with TPM auto-unlock intact, /etc upper +
 #      /var persistence markers survived, and the N rollback entry is still
 #      present (InstancesMax=2).
+#      6c. Negative half of the shipped-trust-path proof: a fabricated
+#      newer-version index signed by a VALID but untrusted key (fresh
+#      ephemeral "wrong" key) must be rejected through that same shipped
+#      keyring -- stager fails closed (outcome=failed, nothing staged,
+#      version unchanged), then the origin is restored to N+1's good index.
 #   7. Recovery unlock check (non-destructive): the recovery keyslot still
 #      opens the volume via `cryptsetup open --test-passphrase`.
 #
@@ -160,7 +173,10 @@
 # IMAGE_ID/CHANNEL (derived from PROFILE by default), SSH_PORT (2225),
 # SOURCE_PORT (18095), SSH_TIMEOUT/BOOT_TIMEOUT (300s), VM_MEMORY (4096),
 # VM_CPUS (4), KEEP_VM (0), SKIP_BUILD/BUILD_N_DIR/BUILD_N1_DIR (reuse
-# prebuilt artifacts, same contract as test/native-ab-updateux-test.sh),
+# prebuilt artifacts, same contract as test/native-ab-updateux-test.sh --
+# but SKIP_BUILD=1 here ALSO requires SIGNING_GNUPGHOME, the gnupg homedir
+# from the run that built those artifacts, since its public keyring is
+# baked into them; KEEP_VM=1 preserves it at <workdir>/gnupg),
 # BUILD_N2_DIR/BUILD_N3_DIR (same SKIP_BUILD=1 reuse contract, only
 # consulted with --full-window).
 set -euo pipefail
@@ -192,6 +208,7 @@ done
 : "${BUILD_N1_DIR:=}"
 : "${BUILD_N2_DIR:=}"
 : "${BUILD_N3_DIR:=}"
+: "${SIGNING_GNUPGHOME:=}"
 
 : "${PROFILE:=snow-ab}"
 if [[ -z "${IMAGE_ID:-}" ]]; then
@@ -362,7 +379,19 @@ build_profile() { # dest_dir
     mkdir -p "$dest"
     echo "Building $PROFILE -> $dest (started $(date -u +%FT%TZ))"
     "$MKOSI" clean -ff
-    "$MKOSI" --profile "$PROFILE" build
+    # Bake the ephemeral TEST keyring over the committed production pubring
+    # at BOTH shipped names (see the "shipped vendor keyring" comment in
+    # Step 6): CLI list-setting values append AFTER config-file values
+    # (.mkosi/mkosi/config.py finalize_value: `cfg_value + v`) and
+    # install_extra_trees copies trees in list order with plain overwriting
+    # `cp`, so these two pairs win over the committed pair from
+    # shared/outformat/ab-root/mkosi.conf. The committed file itself is
+    # never touched; the guest asserts the swap took (sha256 comparison)
+    # before the first stage.
+    "$MKOSI" --profile "$PROFILE" \
+        --extra-tree "$WORK_DIR/import-pubring.gpg:/usr/lib/systemd/import-pubring.gpg" \
+        --extra-tree "$WORK_DIR/import-pubring.gpg:/usr/lib/systemd/import-pubring.pgp" \
+        build
     cp --sparse=always "$ROOT_DIR/output/$PROFILE.manifest" "$dest/"
     cp --sparse=always "$ROOT_DIR/output/$PROFILE.raw" "$dest/"
     cp --sparse=always "$ROOT_DIR/output/$PROFILE.efi" "$dest/"
@@ -832,6 +861,27 @@ trap cleanup EXIT
 WORK_DIR="$(mktemp -d /var/tmp/native-ab-secure-boot-test.XXXXXX)"
 mkdir -p "$WORK_DIR/mnt" "$WORK_DIR/gnupg" "$WORK_DIR/publish-out" "$WORK_DIR/overrides" "$WORK_DIR/tests"
 chmod 700 "$WORK_DIR/gnupg"
+
+# The ephemeral update-signing key must exist BEFORE the builds:
+# build_profile bakes its public keyring into every built image over the
+# committed production pubring (whose private half is offline-only --
+# shared/native-ab/keys/README.md -- so the fixture origin can no longer be
+# signed with a key the stock shipped ring trusts). See the "shipped vendor
+# keyring" comment in Step 6 for the full trust-path rationale. With
+# SKIP_BUILD=1 the prebuilt images already contain SOME baked ring, so the
+# matching gnupg homedir must be supplied instead of generating a fresh key
+# that could never verify against them.
+if [[ "$SKIP_BUILD" == 1 ]]; then
+    [[ -n "$SIGNING_GNUPGHOME" ]] || {
+        echo "Error: SKIP_BUILD=1 requires SIGNING_GNUPGHOME (the gnupg homedir whose key was baked into the prebuilt images)" >&2
+        exit 1
+    }
+    cp -a "$SIGNING_GNUPGHOME/." "$WORK_DIR/gnupg/"
+else
+    gpg --homedir "$WORK_DIR/gnupg" --batch --passphrase '' --quick-generate-key \
+        'snosi native A/B secure-boot test <native-ab-secure-boot-test@invalid>' ed25519 sign 0
+fi
+gpg --homedir "$WORK_DIR/gnupg" --batch --export > "$WORK_DIR/import-pubring.gpg"
 
 echo "=== Step 0: build N and N+1 (this takes tens of minutes) ==="
 if [[ "$SKIP_BUILD" == 1 ]]; then
@@ -1402,14 +1452,9 @@ echo "=== Step 6: secure update hop (publish N+1, stage, reboot) ==="
 vm_ssh 'echo native-ab-secure-boot-test-var-marker > /var/lib/native-ab-secure-boot-test.marker'
 vm_ssh "printf '\nnative-ab-secure-boot-test etc marker\n' >> /etc/issue"
 
-# The ephemeral signing key MUST exist before publish_version's sign_sums
-# call below (it gpg-signs SHA256SUMS with whatever default secret key is
-# in this gnupg homedir) -- generate it first (observed live: publishing
-# before generating the key fails "no default secret key").
-gpg --homedir "$WORK_DIR/gnupg" --batch --passphrase '' --quick-generate-key \
-    'snosi native A/B secure-boot test <native-ab-secure-boot-test@invalid>' ed25519 sign 0
-gpg --homedir "$WORK_DIR/gnupg" --batch --export > "$WORK_DIR/import-pubring.gpg"
-
+# The ephemeral signing key already exists: it is generated (or restored
+# from SIGNING_GNUPGHOME under SKIP_BUILD=1) BEFORE the Step 0 builds, since
+# build_profile bakes its public half into every built image.
 publish_version "$BUILD_N1_DIR"
 
 cat > "$WORK_DIR/overrides/10-root-verity.transfer" <<EOF
@@ -1473,14 +1518,48 @@ TriesDone=0
 InstancesMax=2
 EOF
 
-vm_ssh 'mkdir -p /etc/sysupdate.d /etc/systemd'
+vm_ssh 'mkdir -p /etc/sysupdate.d'
 scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" \
     "$WORK_DIR/overrides/10-root-verity.transfer" \
     "$WORK_DIR/overrides/20-root.transfer" \
     "$WORK_DIR/overrides/90-uki.transfer" \
     root@localhost:/etc/sysupdate.d/
-scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" \
-    "$WORK_DIR/import-pubring.gpg" root@localhost:/etc/systemd/import-pubring.gpg
+
+# ---------------------------------------------------------------------------
+# Shipped vendor keyring (the reason THIS harness, not a cayo-ab-raw one,
+# carries this coverage): systemd 261 -- which only the production profiles
+# run -- reads the vendor update keyring at
+# /usr/lib/systemd/import-pubring.pgp, with NO legacy .gpg fallback for the
+# /usr path (commit 91718d7). Trixie's systemd 257, which cayo-ab-raw
+# boots, still reads the OLD /usr/lib/systemd/import-pubring.gpg name, so
+# no cayo-ab-raw harness (updateux/components/update/publication) can
+# exercise this link -- which is exactly how shipping only .gpg produced a
+# total signature-verification outage on real installs while every QEMU
+# harness passed via its /etc/systemd/import-pubring.gpg override. This
+# harness therefore installs NO /etc pubring override at all: the upcoming
+# stage must verify using ONLY the /usr vendor keyring baked at build time
+# (see build_profile), and Step 6c proves the negative (a wrong-key-signed
+# index is rejected through the same shipped ring).
+# ---------------------------------------------------------------------------
+assert_false "no /etc/systemd/import-pubring.gpg override (shipped trust path only)" \
+    vm_ssh 'test -e /etc/systemd/import-pubring.gpg'
+assert_false "no /etc/systemd/import-pubring.pgp override (shipped trust path only)" \
+    vm_ssh 'test -e /etc/systemd/import-pubring.pgp'
+ephemeral_ring_hash="$(sha256sum "$WORK_DIR/import-pubring.gpg")"
+ephemeral_ring_hash="${ephemeral_ring_hash%% *}"
+guest_pgp_hash="$(vm_ssh 'sha256sum /usr/lib/systemd/import-pubring.pgp 2>/dev/null' | awk '{print $1}' || true)"
+assert_eq "shipped /usr/lib/systemd/import-pubring.pgp is the baked ephemeral test ring" \
+    "$guest_pgp_hash" "$ephemeral_ring_hash"
+guest_gpg_hash="$(vm_ssh 'sha256sum /usr/lib/systemd/import-pubring.gpg 2>/dev/null' | awk '{print $1}' || true)"
+assert_eq "shipped /usr/lib/systemd/import-pubring.gpg twin matches the baked ring" \
+    "$guest_gpg_hash" "$ephemeral_ring_hash"
+# Canary for the 261 semantic itself: the import machinery that sysupdate
+# spawns must reference the vendor .pgp name. If a future systemd renames
+# the vendor path yet again, this pinpoints it instead of leaving only an
+# opaque verification failure.
+pull_refs_pgp="$(vm_ssh "grep -al 'import-pubring.pgp' /usr/lib/systemd/systemd-pull /usr/lib/systemd/systemd-sysupdate 2>/dev/null" || true)"
+assert_true "guest systemd's import machinery references the vendor .pgp name (261 semantics)" \
+    bash -c "[[ -n '$pull_refs_pgp' ]]"
 
 # Serve publish_dest itself (.../$IMAGE_ID/x86-64) as the HTTP root under
 # an "os" symlink so it matches the transfer files' Path=.../os/ exactly
@@ -1539,6 +1618,78 @@ assert_eq "N's root partition slot (rollback target) is still present" "$n_root_
 health="$(vm_ssh 'systemctl is-system-running --wait' || true)"
 assert_true "system health is running or degraded after the secure update" \
     bash -c "[[ '$health' == running || '$health' == degraded ]]"
+
+# ===========================================================================
+# Step 6c: wrong-key-signed index fails closed through the SAME shipped
+# vendor keyring. Negative half of the shipped-trust-path proof: Step 6
+# proved a pull verifies with no /etc override; this proves that success
+# was actual signature enforcement, not verification silently not
+# happening. This is the 2026-07-17 outage's exact failure-mode class -- a
+# structurally valid signature that no key in the effective keyring can
+# check ("gpg: Can't check signature: No public key").
+# ===========================================================================
+echo ""
+echo "=== Step 6c: index signed by an untrusted key is rejected via the shipped keyring ==="
+
+cp "$publish_dest/SHA256SUMS" "$WORK_DIR/sha256sums.n1-good"
+cp "$publish_dest/SHA256SUMS.gpg" "$WORK_DIR/sha256sums.gpg.n1-good"
+
+# Fabricate a version newer than the running N+1 by hardlinking N+1's own
+# published bytes under new names (test/native-ab-updateux-test.sh's Step 4
+# trick: no extra multi-gigabyte build, and check-new MUST attempt to trust
+# the index rather than silently no-opping as "nothing newer").
+wrong_fake_version="$(printf '%014d' "$((n1_version + 1))")"
+n1_root_real="$(find "$publish_dest" -maxdepth 1 -name "${CHANNEL}_${n1_version}_*.root.raw.xz")"
+n1_verity_real="$(find "$publish_dest" -maxdepth 1 -name "${CHANNEL}_${n1_version}_*.root-verity.raw.xz")"
+wrong_root_uuid="$(basename "$n1_root_real" | sed -E "s/^${CHANNEL}_${n1_version}_([0-9a-fA-F-]+)\.root\.raw\.xz\$/\\1/")"
+wrong_verity_uuid="$(basename "$n1_verity_real" | sed -E "s/^${CHANNEL}_${n1_version}_([0-9a-fA-F-]+)\.root-verity\.raw\.xz\$/\\1/")"
+ln "$n1_root_real" "$publish_dest/${CHANNEL}_${wrong_fake_version}_${wrong_root_uuid}.root.raw.xz"
+ln "$n1_verity_real" "$publish_dest/${CHANNEL}_${wrong_fake_version}_${wrong_verity_uuid}.root-verity.raw.xz"
+ln "$publish_dest/${CHANNEL}_${n1_version}.efi" "$publish_dest/${CHANNEL}_${wrong_fake_version}.efi"
+(cd "$publish_dest" && sha256sum \
+    "${CHANNEL}_${wrong_fake_version}_${wrong_root_uuid}.root.raw.xz" \
+    "${CHANNEL}_${wrong_fake_version}_${wrong_verity_uuid}.root-verity.raw.xz" \
+    "${CHANNEL}_${wrong_fake_version}.efi") >> "$publish_dest/SHA256SUMS"
+
+mkdir -p "$WORK_DIR/gnupg-wrong"
+chmod 700 "$WORK_DIR/gnupg-wrong"
+gpg --homedir "$WORK_DIR/gnupg-wrong" --batch --passphrase '' --quick-generate-key \
+    'snosi secure-boot test WRONG key <native-ab-secure-boot-test-wrong@invalid>' ed25519 sign 0
+gpg --homedir "$WORK_DIR/gnupg-wrong" --batch --yes --detach-sign \
+    -o "$publish_dest/SHA256SUMS.gpg" "$publish_dest/SHA256SUMS"
+# Distinguish this leg from a corrupted-bytes tamper case (updateux Step 4):
+# the signature must be cryptographically VALID -- just made by a key the
+# shipped vendor keyring does not contain.
+assert_true "wrong-key signature is itself a valid signature (by the wrong key)" \
+    gpg --homedir "$WORK_DIR/gnupg-wrong" --verify \
+    "$publish_dest/SHA256SUMS.gpg" "$publish_dest/SHA256SUMS"
+
+stager_out=""
+stager_rc=0
+stager_out="$(vm_ssh '/usr/libexec/snosi-sysupdate-stage' 2>&1)" || stager_rc=$?
+echo "$stager_out"
+assert_true "stager exits non-zero on the wrong-key-signed index" \
+    bash -c "[[ $stager_rc -ne 0 ]]"
+check_content="$(vm_ssh 'cat /run/snosi/update-check' 2>/dev/null || true)"
+assert_contains "update-check reports outcome=failed on the wrong-key index" \
+    "$check_content" "outcome=failed"
+assert_false "nothing staged from the wrong-key index" \
+    vm_ssh 'test -e /run/snosi/update-staged'
+layout_after_wrong_key="$(vm_ssh 'lsblk -J -o PARTLABEL' || echo "{}")"
+wrong_fake_count="$(jq --arg l "${IMAGE_ID}_${wrong_fake_version}_r" \
+    '[.. | objects | select(.partlabel? == $l)] | length' <<<"$layout_after_wrong_key")"
+assert_eq "no partition labeled with the wrong-key fake version" "$wrong_fake_count" "0"
+still_n1="$(guest_version)"
+assert_eq "running version unchanged after the wrong-key rejection" "$still_n1" "$n1_version"
+
+# Restore the origin to its known-good N+1 state: --full-window continues
+# from here (publish_version for N+2 would regenerate the index anyway, but
+# the fake hardlinks must not linger in the served directory either).
+rm -f "$publish_dest/${CHANNEL}_${wrong_fake_version}_${wrong_root_uuid}.root.raw.xz" \
+    "$publish_dest/${CHANNEL}_${wrong_fake_version}_${wrong_verity_uuid}.root-verity.raw.xz" \
+    "$publish_dest/${CHANNEL}_${wrong_fake_version}.efi"
+mv "$WORK_DIR/sha256sums.n1-good" "$publish_dest/SHA256SUMS"
+mv "$WORK_DIR/sha256sums.gpg.n1-good" "$publish_dest/SHA256SUMS.gpg"
 
 # ===========================================================================
 # Steps 8-11 (--full-window only): N+2, N+3, explicit rollback, boot-count
