@@ -27,7 +27,7 @@
 - Consumes: `$WORK_DIR/gnupg` (ephemeral signing homedir), `publish_dest` global set by `publish_version`, helpers `assert_eq`/`assert_true`/`assert_false`/`assert_contains`, `vm_ssh`, `guest_version`.
 - Produces: env var `SIGNING_GNUPGHOME` (required with `SKIP_BUILD=1`), `$WORK_DIR/import-pubring.gpg` (exported ephemeral public ring, now created BEFORE builds), Step 6c.
 
-- [ ] **Step 1: Move ephemeral keygen before the builds; add `SIGNING_GNUPGHOME`**
+- [x] **Step 1: Move ephemeral keygen before the builds; add `SIGNING_GNUPGHOME`**
 
 Add `: "${SIGNING_GNUPGHOME:=}"` to the env-default block (after `BUILD_N3_DIR`). Insert after the `mkdir -p "$WORK_DIR/..."`/`chmod 700 "$WORK_DIR/gnupg"` lines, before the `SKIP_BUILD` build block:
 
@@ -53,7 +53,7 @@ gpg --homedir "$WORK_DIR/gnupg" --batch --export > "$WORK_DIR/import-pubring.gpg
 
 Delete the old keygen block in Step 6 (the `gpg --quick-generate-key` + `--export` pair above `publish_version "$BUILD_N1_DIR"`), leaving a one-line comment pointing at the pre-build location.
 
-- [ ] **Step 2: Bake the ring in `build_profile`**
+- [x] **Step 2: Bake the ring in `build_profile`**
 
 ```bash
     "$MKOSI" --profile "$PROFILE" \
@@ -64,7 +64,7 @@ Delete the old keygen block in Step 6 (the `gpg --quick-generate-key` + `--expor
 
 with a comment explaining the CLI-appends-after-config + overwrite-in-order mechanism (verified in `.mkosi/mkosi/config.py` `finalize_value` and `__init__.py` `install_extra_trees`).
 
-- [ ] **Step 3: Remove the `/etc` pubring override; add shipped-trust-path assertions**
+- [x] **Step 3: Remove the `/etc` pubring override; add shipped-trust-path assertions**
 
 In Step 6: change `vm_ssh 'mkdir -p /etc/sysupdate.d /etc/systemd'` to `vm_ssh 'mkdir -p /etc/sysupdate.d'`; delete the second scp (`import-pubring.gpg` → `/etc/systemd/import-pubring.gpg`). After the transfers scp, add:
 
@@ -88,13 +88,13 @@ assert_true "guest systemd's import machinery references the vendor .pgp name (2
 
 (with the block comment explaining WHY this harness, and why the 257-based ones can't carry this.)
 
-- [ ] **Step 4: Add Step 6c (wrong-key negative) after Step 6b's health check, before the `FULL_WINDOW` gate**
+- [x] **Step 4: Add Step 6c (wrong-key negative) after Step 6b's health check, before the `FULL_WINDOW` gate**
 
 Save `SHA256SUMS`/`SHA256SUMS.gpg`, hardlink N+1's published root/verity/efi under `wrong_fake_version=$(printf '%014d' $((n1_version + 1)))`, append their hashes to `SHA256SUMS`, sign with a fresh `$WORK_DIR/gnupg-wrong` key, `gpg --verify` sanity-check the wrong-key signature is itself valid, run the stager: assert rc!=0, `outcome=failed`, no `/run/snosi/update-staged`, no `${IMAGE_ID}_${wrong_fake_version}_r` partition, running version still N+1. Then remove the fake hardlinks and restore the saved index pair. (Full code in the implementation; mirrors updateux Step 4's structure.)
 
-- [ ] **Step 5: Update the harness header** (step 6 narrative, new step 6c, env-overrides list gains `SIGNING_GNUPGHOME`) and run `shellcheck test/native-ab-secure-boot-test.sh`.
+- [x] **Step 5: Update the harness header** (step 6 narrative, new step 6c, env-overrides list gains `SIGNING_GNUPGHOME`) and run `shellcheck test/native-ab-secure-boot-test.sh`.
 
-- [ ] **Step 6: Commit** `test: secure-boot harness exercises the shipped vendor pubring (.pgp) trust path`
+- [x] **Step 6: Commit** `test: secure-boot harness exercises the shipped vendor pubring (.pgp) trust path`
 
 ### Task 2: Documentation
 
@@ -104,12 +104,12 @@ Save `SHA256SUMS`/`SHA256SUMS.gpg`, hardlink N+1's published root/verity/efi und
 - Modify: `yeti/OVERVIEW.md` (publication-test paragraph over-claims "exactly the same trust path a secure production profile would" — correct with the 257-vs-261 vendor-path distinction)
 - Modify: `shared/native-ab/keys/README.md` ("QEMU tests are unaffected" bullet)
 
-- [ ] **Step 1: Apply the four doc updates** — each states: 261 reads `.pgp` (no /usr `.gpg` fallback), 257 reads `.gpg`, only secure-boot-test boots 261, it now bakes the ephemeral ring at both /usr names via CLI `--extra-tree` and runs with NO `/etc` override, positive + wrong-key negative.
+- [x] **Step 1: Apply the four doc updates** — each states: 261 reads `.pgp` (no /usr `.gpg` fallback), 257 reads `.gpg`, only secure-boot-test boots 261, it now bakes the ephemeral ring at both /usr names via CLI `--extra-tree` and runs with NO `/etc` override, positive + wrong-key negative.
 
-- [ ] **Step 2: Commit** `docs: record the shipped-pubring trust-path coverage`
+- [x] **Step 2: Commit** `docs: record the shipped-pubring trust-path coverage`
 
 ### Task 3: Verification
 
-- [ ] **Step 1:** `shellcheck test/native-ab-secure-boot-test.sh` — clean. *(0 findings)*
-- [ ] **Step 2:** `bash -n test/native-ab-secure-boot-test.sh` — parses. *(pass)*
-- [ ] **Step 3:** Full run: `sudo PROFILE=cayo-ab test/native-ab-secure-boot-test.sh` (default mode, ~1h: two cayo-ab builds + QEMU SB/TPM boot + Step 6/6b/6c). Expect prior 47 assertions + 6 new Step-6 trust asserts + 6 new Step-6c asserts, 0 failed. **Result: 59/59 passed, 0 failed** (N=20260718014753 → N+1=20260718015500; includes +1 for the pre-existing conditional cayo netdev-owner assert). Baked-ring swap verified in-guest by sha256; systemd 261 `.pgp` string canary confirmed on systemd-pull; wrong-key index rejected with `outcome=failed`, nothing staged.
+- [x] **Step 1:** `shellcheck -S warning -x test/native-ab-secure-boot-test.sh` — clean at CI severity (3 pre-existing info-level findings, unchanged from before the edit).
+- [x] **Step 2:** `bash -n test/native-ab-secure-boot-test.sh` — parses.
+- [x] **Step 3:** Full run `sudo PROFILE=cayo-ab test/native-ab-secure-boot-test.sh` (default mode). **Result: 58 passed, 0 failed** (2026-07-17, N=20260717130251 → N+1=20260717130613) — the prior cayo-ab baseline of 47 plus the 11 new assertions (5 Step-6 shipped-keyring asserts, 6 Step-6c wrong-key asserts). Host-side pre-check on the built N artifact independently confirmed both `/usr` names carry the baked ephemeral ring and differ from the committed production ring. The first run attempt failed in `publish_version` on a PRE-EXISTING main breakage (the #430 feature catalog became a required publication artifact but no QEMU harness stages it); fixed here for this harness (`46a719f`), the other three harnesses flagged as a separate task.
