@@ -256,6 +256,8 @@ route for the stable installer URL; it has no signing or S3 credentials. Before
 deploying, the job requires the `wrangler.jsonc` bucket to equal
 `NATIVE_R2_BUCKET` and `wrangler r2 bucket info` to find it, preventing
 Wrangler's automatic provisioning from turning a typo into a new empty bucket.
+The deploy token has Workers Scripts Write, Workers Routes Write, Account
+Settings Read, and R2 Storage Read only; R2 Write is intentionally forbidden.
 
 ### scorecard.yml — Supply-Chain Security
 
