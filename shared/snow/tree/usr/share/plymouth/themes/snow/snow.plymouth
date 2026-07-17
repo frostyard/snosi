@@ -1,0 +1,52 @@
+[Plymouth Theme]
+Name=Snow
+Description=Snow Linux flower with the spinner throbber on a black background
+ModuleName=two-step
+
+[two-step]
+Font=Cantarell 12
+TitleFont=Cantarell Light 30
+# bgrt-style cross-theme ImageDir: reuse Debian's spinner assets (throbber
+# frames, password-entry art) instead of copying them into this repo. The
+# flower watermark.png ships into that same directory via the snow
+# ExtraTrees (the two-step plugin loads watermark.png from ImageDir; the
+# path is unowned by any deb, so dpkg never touches it).
+ImageDir=/usr/share/plymouth/themes/spinner
+DialogHorizontalAlignment=.5
+DialogVerticalAlignment=.65
+TitleHorizontalAlignment=.5
+TitleVerticalAlignment=.25
+HorizontalAlignment=.5
+VerticalAlignment=.75
+WatermarkHorizontalAlignment=.5
+WatermarkVerticalAlignment=.45
+Transition=none
+TransitionDuration=0.0
+BackgroundStartColor=0x000000
+BackgroundEndColor=0x000000
+ProgressBarBackgroundColor=0x606060
+ProgressBarForegroundColor=0xffffff
+MessageBelowAnimation=true
+
+[boot-up]
+UseEndAnimation=false
+
+[shutdown]
+UseEndAnimation=false
+
+[reboot]
+UseEndAnimation=false
+
+[updates]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Installing Updates...
+SubTitle=Do not turn off your computer
+
+[system-upgrade]
+SuppressMessages=true
+ProgressBarShowPercentComplete=true
+UseProgressBar=true
+Title=Upgrading System...
+SubTitle=Do not turn off your computer

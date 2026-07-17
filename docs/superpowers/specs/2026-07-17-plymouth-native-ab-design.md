@@ -1,7 +1,8 @@
 # Plymouth boot splash for snow-ab / snowfield-ab (+ Snow-branded theme)
 
 Date: 2026-07-17
-Status: approved
+Status: approved (amended — see "Amendment" at the end; delivery is
+ExtraTrees, not SkeletonTrees)
 
 ## Problem
 
@@ -135,3 +136,35 @@ package installs, covering both kernels and both transports.
   missing assets before any boot test.
 - bootc hosts changing appearance unexpectedly: accepted and intended
   (user-approved side effect).
+
+## Amendment (2026-07-17, after the first snow-ab build)
+
+Two of this spec's assumptions were empirically falsified by the first
+build; the delivery mechanism changed accordingly. Goals, theme design,
+karg, scoping, and validation are unchanged.
+
+1. **dpkg conffile semantics assumption was wrong.** A file pre-existing at
+   a conffile path does NOT get silently kept on first install: dpkg
+   prompts (`plymouthd.conf (Y/I/N/O/D/Z)`), and mkosi's non-interactive
+   apt run has no stdin, so dpkg dies with "end of file on stdin at
+   conffile prompt" and the build fails (`Errors were encountered while
+   processing: plymouth`). SkeletonTrees delivery of
+   `/etc/plymouth/plymouthd.conf` is therefore impossible.
+2. **The skeleton timing rationale was unnecessary anyway.** The initrd
+   that actually ships (native UKI via `$ARTIFACTDIR/io.mkosi.initrd`, and
+   the bootc image's `/usr/lib/modules/<kver>/initramfs.img`) is generated
+   by `shared/kernel/scripts/postinst/mkosi.postinst.chroot` — a
+   PostInstallationScript that runs AFTER ExtraTrees land. The dpkg-time
+   dracut runs (surface synchronous postinst, backports trigger) produce
+   only incidental artifacts; a wrong theme there breaks nothing. (The
+   `30-bootc-standard.conf` skeleton precedent solves a different problem:
+   that dpkg-time run *crashing* on a missing dracut module.)
+
+**Revised delivery:** the three payload files ship in the existing
+`shared/snow/tree` ExtraTrees (`usr/share/plymouth/themes/snow/snow.plymouth`,
+`usr/share/plymouth/themes/spinner/watermark.png`,
+`etc/plymouth/plymouthd.conf`); no `shared/snow/skeleton` exists, and the
+static test now asserts its ABSENCE. The ExtraTrees overwrite of the
+conffile happens after dpkg finishes — the standard way this repo ships
+`/etc` config — and plymouth-populate-initrd (inside the postinst dracut
+run) resolves `Theme=snow` from it.
