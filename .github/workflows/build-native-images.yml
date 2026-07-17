@@ -1276,6 +1276,15 @@ jobs:
             --expect-version "$ver" \
             https://repository.frostyard.org/isos/native/v1
 
+      - name: Verify stable installer download redirect
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          set -euo pipefail
+          ver="$(jq -r .version /var/tmp/native-publish/iso/publication-info.json)"
+          ./shared/native-ab/publish/verify-installer-redirect.sh \
+            https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso \
+            "$ver"
+
       - name: Remove OpenPGP update-signing key
         if: always()
         run: rm -rf /var/tmp/native-promote-secrets

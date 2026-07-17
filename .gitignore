@@ -12,6 +12,8 @@ mkosi.crt
 .snosi-private
 .mkosi/
 .envrc
+node_modules/
+.wrangler/
 mkosi.images/base/mkosi.extra/usr/share/homebrew.tar.zst
 mkosi.profiles/snow/mkosi.extra/usr/share/homebrew.tar.zst
 shared/snow/tree/usr/share/homebrew.tar.zst

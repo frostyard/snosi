@@ -18,6 +18,7 @@ The pipeline scripts live in `shared/native-ab/publish/`:
 | `verify-remote.sh` | Independently re-verifies every candidate object over HTTP (size, full SHA-256, range GETs) before anything is promoted. |
 | `promote.sh` | Copies verified candidates to their final public names, regenerates and signs `SHA256SUMS`, publishes signature-first/manifest-last. |
 | `withdraw.sh` | Restores a previously-archived signed index pair (incident response / bad-release rollback of the *index*, not the bits). |
+| `verify-installer-redirect.sh` | Confirms the stable installer URL redirects without caching to the expected promoted ISO and that the target is present in `SHA256SUMS`. Run only after `verify-published-index.sh` has authenticated that index. |
 
 All five scripts have `--help`, are `set -euo pipefail`, and are shellcheck
 (`-S warning -x`) clean. `shared/native-ab/publish/publish-lib.sh` is a
@@ -269,6 +270,52 @@ $ shared/native-ab/publish/withdraw.sh --dest-path isos/native/v1 \
 exercises this whole flow locally (tiny fixture files standing in for a real
 ISO) as part of the same fast, non-root, per-PR check.
 
+### Stable installer download URL
+
+The user-facing moving URL is:
+
+```text
+https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso
+```
+
+`workers/native-installer-redirect/` owns the exact-path Cloudflare Worker
+route. The Worker reads `isos/native/v1/SHA256SUMS` directly through an R2
+binding, requires exactly one filename matching
+`snosi-native-installer_<14-digit-version>_x86-64.iso`, confirms that object
+exists with an R2 `head()`, and returns an uncacheable `302` to the immutable
+public URL. Missing, oversized, malformed, or ambiguous indexes and missing
+target objects fail closed with `503`; only `GET` and `HEAD` are accepted. It
+does not list versions, retain a separate `latest` value, proxy ISO bytes, hash
+the ISO, or verify OpenPGP in the request path.
+
+That division is deliberate: the redirect is discovery convenience, while
+`SHA256SUMS.gpg` authenticates `SHA256SUMS` and the listed SHA-256 authenticates
+the downloaded ISO. Because `promote.sh` writes immutable bytes before the
+signature and writes `SHA256SUMS` last, a promotion keeps redirecting to the old
+ISO until the new publication is complete. Withdrawal uses the same
+signature-first/manifest-last ordering; do not declare withdrawal complete
+until both the signed-index check and redirect check pass:
+
+```console
+$ shared/native-ab/publish/verify-published-index.sh \
+    --expect-version "$RESTORED_VERSION" \
+    https://repository.frostyard.org/isos/native/v1
+$ shared/native-ab/publish/verify-installer-redirect.sh \
+    https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso \
+    "$RESTORED_VERSION"
+```
+
+The Worker deploys independently through
+`.github/workflows/deploy-native-installer-redirect.yml`; ISO promotion never
+redeploys edge code. The workflow runs the local R2 integration suite, generated
+type drift check, TypeScript check, and Wrangler dry-run before deployment. It
+uses the existing `NATIVE_R2_ACCOUNT_ID` and a dedicated
+`CF_WORKERS_API_TOKEN` in `native-promotion`; scope that token to Worker script
+and route edits for `frostyard.org`. The R2 bucket binding is configured in
+`wrangler.jsonc`, so no S3 access key is exposed to the Worker. After every ISO
+promotion, `build-native-images.yml` runs `verify-installer-redirect.sh` with
+the promoted version.
+
 ## Retention policy application
 
 Per `docs/native-ab-contracts.md` §13 and the plan's "R2 Retention And Cost
@@ -384,6 +431,7 @@ PR builds (which never promote) may cancel to save runner time.
 | `build-cayo` / `build-snow` / `build-snowfield` | Bootstraps pinned mkosi, builds the profile, runs the static artifact test(s), `prepare-native-publication.sh --xz`, `publish-candidate.sh` | `native-build` environment |
 | `test-public-origin` | `verify-remote.sh` against the real public URL, one matrix leg per product | -- (read-only, no secrets) |
 | `promote-cayo` / `promote-snow` / `promote-snowfield` | `promote.sh` | `native-promotion` environment |
+| `build-iso` / `test-public-origin-iso` / `promote-iso` | Builds the network installer, verifies its candidate, promotes its signed index, then verifies the stable redirect | `native-build` / `native-promotion` environments as appropriate |
 | `release-notes` | Non-blocking GitHub Release summarizing whichever products actually promoted | -- |
 
 Each `build-*`/`promote-*` triple is three independent jobs, not a matrix,
@@ -419,6 +467,7 @@ would, per the "never trust local disk" property described above.
 | `NATIVE_UPDATE_SIGNING_PASSPHRASE` | `native-promotion` | `promote.sh --passphrase-file` only | `/var/tmp/native-promote-secrets/passphrase` | Passphrase for the production signing key. The key is passphrase-protected, so `promote.sh` signs via `gpg --pinentry-mode loopback --passphrase-file`. Omit only if the key has no passphrase (not recommended); then `promote.sh` runs without `--passphrase-file`. |
 | `CF_ZONE_ID` | `native-promotion` | `cloudflare-purge.sh` env | never on disk (env only) | Cloudflare zone id for `repository.frostyard.org`. If unset, the promote step skips the edge purge (the no-store header + cache-bypass rule are the primary protection). |
 | `CF_API_TOKEN` | `native-promotion` | `cloudflare-purge.sh` env | never on disk (env only) | Cloudflare API token scoped to **Zone.Cache Purge** on that zone only. If unset, the promote step skips the edge purge. |
+| `CF_WORKERS_API_TOKEN` | `native-promotion` | `deploy-native-installer-redirect.yml` / Wrangler only | never on disk (env only) | Dedicated token scoped to deploy the redirect Worker and edit its `frostyard.org` route. It does not need the OpenPGP signing key or S3 credentials. |
 
 Every secret-consuming step writes key material to a runner-local file
 immediately before the one command that needs it, `chmod 600`s it, never

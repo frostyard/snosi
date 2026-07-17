@@ -1,0 +1,75 @@
+name: Deploy Native Installer Redirect
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "workers/native-installer-redirect/**"
+      - ".github/workflows/deploy-native-installer-redirect.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: native-promotion
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: workers/native-installer-redirect
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: workers/native-installer-redirect/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test and validate Worker
+        run: npm run check
+
+      - name: Validate deployment bundle
+        run: npm run deploy:dry-run
+
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.NATIVE_R2_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_WORKERS_API_TOKEN }}
+        run: npm run deploy
+
+      - name: Confirm route is active
+        run: |
+          set -euo pipefail
+          url=https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso
+          base=https://repository.frostyard.org/isos/native/v1
+          version=""
+          if sums="$(curl -fsS "$base/SHA256SUMS")"; then
+            version="$(awk '$2 ~ /^snosi-native-installer_[0-9]{14}_x86-64\.iso$/ {name=$2} END {sub(/^snosi-native-installer_/, "", name); sub(/_x86-64\.iso$/, "", name); print name}' <<<"$sums")"
+          fi
+          for attempt in 1 2 3 4 5 6; do
+            if [[ -n "$version" ]]; then
+              if ../../shared/native-ab/publish/verify-installer-redirect.sh "$url" "$version"; then
+                exit 0
+              fi
+            else
+              status="$(curl -sS -o /dev/null -w '%{http_code}' "$url")"
+              if [[ "$status" == 503 ]]; then
+                echo "Worker route active (HTTP 503 is expected before the first ISO promotion)."
+                exit 0
+              fi
+            fi
+            echo "attempt $attempt/6: route not ready" >&2
+            sleep 5
+          done
+          echo "Worker route did not become active" >&2
+          exit 1

@@ -201,6 +201,21 @@ nothing written) on a missing pair or a cryptographic mismatch — it never
 creates a new signature, only replays an already-signed one, per the plan's
 "restore ... using the same signature-first, manifest-last sequence".
 
+**Stable native-installer download.** The one moving user-facing URL,
+`/isos/native/v1/snosi-native-installer-latest-x86-64.iso`, is implemented by
+the isolated `workers/native-installer-redirect/` Cloudflare Worker. It reads
+the strongly-consistent R2 `isos/native/v1/SHA256SUMS` through a binding,
+strictly selects the one frozen installer filename, `head()`s the target, and
+returns `302` with `Cache-Control: no-store`; malformed/ambiguous state is a
+`503`, never a guessed version. It carries NO pointer of its own and never
+streams the ~700 MB ISO. This makes `promote.sh`'s existing manifest-last write
+the atomic redirect switch and makes `withdraw.sh`'s restored manifest the
+automatic rollback. The Worker does not verify OpenPGP: discovery and trust are
+deliberately separate, and clients still authenticate `SHA256SUMS.gpg` then the
+ISO hash. `.github/workflows/deploy-native-installer-redirect.yml` deploys edge
+code independently; `verify-installer-redirect.sh` is the mandatory
+post-promotion/post-withdrawal probe.
+
 `test/native-ab-publication-test.sh` is the full local end-to-end rehearsal:
 two real `cayo-ab-raw` builds (N, N+1) published under the real `cayo-ab`
 channel name (the by-now-established "stage build outputs under
@@ -1230,7 +1245,8 @@ Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GP
 |----------|---------|---------|
 | `build.yml` | Push/PR/dispatch | Build base + sysexts, publish to R2 |
 | `build-images.yml` | Push/PR/repository_dispatch/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, generate SBOMs, sign with Cosign |
-| `build-native-images.yml` | Push to main / dispatch ONLY (no PR, no fork) | Native A/B (`cayo-ab`/`snow-ab`/`snowfield-ab`) build, candidate publish, public-origin verify, protected promote (Phase 7) |
+| `build-native-images.yml` | Push/PR/repository_dispatch/dispatch; promotion excluded from PRs | Native A/B products + installer ISO build, candidate publish, public-origin verify, protected promote (Phase 7/8) |
+| `deploy-native-installer-redirect.yml` | Main changes under the Worker / dispatch | Test and deploy the R2-index-derived stable installer redirect |
 | `check-dependencies.yml` | Weekly (Mon 9am UTC) | Check external download updates, create PRs |
 | `check-packages.yml` | Daily (8am UTC) | Check APT package version updates, create PRs |
 | `validate.yml` | PR/push/dispatch | shellcheck + mkosi summary validation + profile dependency guard |

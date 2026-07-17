@@ -337,6 +337,10 @@ Full commands in runbook §"Candidate → verify → promote → purge procedure
       the public URL still pending a second published version — see §9 canary.)
 - [ ] Publish the installer ISO to `isos/native/v1/` (same candidate→verify→promote
       flow; runbook §"Installer ISO publication").
+- [ ] Deploy `workers/native-installer-redirect/` with the dedicated
+      `CF_WORKERS_API_TOKEN`, then require the stable URL to return an
+      uncacheable `302` to the promoted version via
+      `verify-installer-redirect.sh`.
 - [ ] Publish GitHub release notes linking the R2 URLs, GHCR digests, SHA-256s,
       update-key fingerprint, SBOM/provenance, and minimum disk sizes (runbook / plan
       §"GitHub Releases"). No OS blobs in the release — R2 is the only origin.
