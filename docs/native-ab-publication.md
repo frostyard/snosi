@@ -349,14 +349,31 @@ raw YAML steps are not.
 
 ### Trigger
 
-`workflow_dispatch` and pushes to `main` **only** -- never `pull_request`,
-never a fork-originated trigger, never an untrusted `repository_dispatch`.
-This is the "interim protected-builder constraints" rule below applied at
-the trigger level: a build job that will handle the Secure Boot/MOK and PCR
-signing private keys must never run against untrusted code. A single
-`concurrency` group (`build-native-images`, `cancel-in-progress: false`)
-ensures two runs can never interleave `promote.sh` invocations against the
-same product's live `SHA256SUMS`/`SHA256SUMS.gpg`.
+Builds run on **every push and PR to `main`** (mirroring `build-images.yml`,
+same sysext `paths-ignore`), plus `workflow_dispatch` and `repository_dispatch`.
+Building and publishing are gated separately:
+
+- **Build + public-origin verify** run on every trigger, including PRs.
+- **Promotion** (sign + mutate the live R2 index) is gated OUT of PRs at the
+  job level (`if: !cancelled() && github.event_name != 'pull_request'`), so a
+  PR builds and verifies but never publishes -- only `main` pushes and manual
+  `workflow_dispatch` promote. The `native-promotion` environment additionally
+  restricts to protected (`main`) branches, so a `workflow_dispatch` fired
+  from a feature branch cannot promote either.
+
+Custody trade-off (the approval gate was removed for velocity, 2026-07): the
+`native-build` environment no longer requires reviewer approval and is open to
+any branch, so **same-repo PR branches build with the Secure Boot/MOK + PCR
+signing keys** (fork PRs cannot access secrets, so their build jobs fail as
+expected). This relaxes the "interim protected-builder" posture below in
+exchange for CI-on-every-PR; the promotion (OpenPGP) key stays main-scoped via
+`native-promotion`. Revisit when mkosi gains split final-assembly-from-signing.
+
+The per-ref `concurrency` group
+(`build-native-images-${{ github.ref }}`, `cancel-in-progress` only for PRs)
+ensures two `main`/dispatch runs can never interleave `promote.sh` invocations
+against the same product's live `SHA256SUMS`/`SHA256SUMS.gpg`, while superseded
+PR builds (which never promote) may cancel to save runner time.
 
 ### Jobs
 

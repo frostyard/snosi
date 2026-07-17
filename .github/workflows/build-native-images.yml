@@ -13,45 +13,58 @@ name: Build Native Images
 # to one of those scripts is a defect -- see docs/native-ab-publication.md's
 # "CI publication flow" section for the full rationale.
 #
-# Trigger (interim protected-builder rule, docs/native-ab-publication.md
-# "Interim protected-builder constraints"): workflow_dispatch (manual, needs
-# write access) and a weekly schedule ONLY. Both run only on the main branch.
-# Native builds are deliberately NOT fired by every main push -- a full
-# 3-product build is heavy and publication must be an intentional act.
-# Never pull_request, never a fork-originated trigger, never
-# repository_dispatch from an untrusted source. Until mkosi supports split
-# final assembly from signing (docs/native-ab-contracts.md SS7 "Protected
-# signing architecture"), the build-* jobs below are themselves the accepted
-# interim "protected builder": they receive the Secure Boot/MOK
+# Trigger: builds run on every push and PR to main (mirroring build-images.yml
+# exactly, same sysext paths-ignore -- sysext-only metadata changes rebuild
+# via build.yml, not here), plus workflow_dispatch and repository_dispatch.
+# PUBLICATION is gated separately from building: the promote-* jobs carry
+# `github.event_name != 'pull_request'`, so a PR builds + verifies against the
+# public origin but NEVER signs or mutates the live R2 index -- only main
+# pushes (and manual dispatch) publish. The native-promotion GitHub
+# environment additionally restricts to protected (main) branches, so a
+# workflow_dispatch fired from a feature branch still cannot promote.
+#
+# Signing-key custody note: the build-* jobs receive the Secure Boot/MOK
 # (SecureBootKey/SecureBootCertificate) and PCR signing
 # (SignExpectedPcrKey/SignExpectedPcrCertificate) private key material as
-# environment-scoped secrets (environment: native-build, a protected
-# environment restricted to main-branch deployments), written to
-# runner-local files immediately before the one mkosi build step that
-# consumes them, never echoed, and removed by both an in-step trap and an
-# explicit `if: always()` cleanup step. This is an accepted INTERIM risk,
-# not the final custody model -- see docs/native-ab-publication.md for the
-# full checklist and what changes once mkosi gains native split-signing
-# support.
+# native-build environment secrets, written to runner-local files immediately
+# before the one mkosi build step that consumes them, never echoed, removed by
+# both an in-step trap and an `if: always()` cleanup. The approval gate on
+# that environment was removed for velocity; the environment is now open to
+# any branch, so same-repo PR branches build with these keys (fork PRs cannot
+# access secrets and their build jobs fail, as expected). This is an accepted
+# risk pending mkosi split final-assembly-from-signing support
+# (docs/native-ab-contracts.md SS7); the promotion (OpenPGP update-signing)
+# key stays main-branch-scoped via the native-promotion environment.
 on:
+  repository_dispatch:
+    types:
+      - build
+  push:
+    branches: [main]
+    paths-ignore:
+      # Sysext-only dependency metadata should rebuild/publish sysexts via
+      # build.yml without spending the native image matrix.
+      - "shared/download/package-versions.json"
+      - "latest-versions.txt"
+      - "shared/download/sysext-checksums.json"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "shared/download/package-versions.json"
+      - "latest-versions.txt"
+      - "shared/download/sysext-checksums.json"
   workflow_dispatch:
-  schedule:
-    # Weekly candidate build, Sundays 06:00 UTC. Promotion still requires
-    # manual approval in the native-promotion environment, so this uploads
-    # candidates and pauses -- it never publishes a live index unattended.
-    # (schedule runs only on the default branch.)
-    - cron: '0 6 * * 0'
 
 permissions: {}
 
-# One promotion in flight at a time: two interleaved runs racing promote.sh
-# against the same product's live SHA256SUMS/SHA256SUMS.gpg is exactly the
-# "short interval where an old manifest and new detached signature
-# disagree" the plan warns about, just self-inflicted instead of a client
-# race. Never cancel a run that may already be mid-promotion.
+# Serialize per-ref, never cancel a run that may be mid-promotion (two runs
+# racing promote.sh against the same product's live SHA256SUMS/SHA256SUMS.gpg
+# is the "old manifest + new detached signature disagree" window the plan
+# warns about). PR builds -- which never promote -- may cancel a superseded
+# run of the SAME PR to save runner time; push/dispatch runs never cancel.
 concurrency:
-  group: build-native-images
-  cancel-in-progress: false
+  group: build-native-images-${{ github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ---------------------------------------------------------------------
@@ -621,7 +634,7 @@ jobs:
 
   promote-cayo:
     needs: test-public-origin
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     environment: native-promotion
     permissions:
@@ -743,7 +756,7 @@ jobs:
 
   promote-snow:
     needs: test-public-origin
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     environment: native-promotion
     permissions:
@@ -865,7 +878,7 @@ jobs:
 
   promote-snowfield:
     needs: test-public-origin
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     environment: native-promotion
     permissions:
@@ -1148,7 +1161,7 @@ jobs:
 
   promote-iso:
     needs: test-public-origin-iso
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     environment: native-promotion
     permissions:
