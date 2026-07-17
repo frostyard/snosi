@@ -204,8 +204,8 @@ already-published bytes.
 
 **Profile rotation** (day-of-week, UTC): Sunday `snowfield-ab`; Tuesday/
 Thursday/Saturday `cayo-ab`; every other day `snow-ab` -- spreads the
-~40-70 minute deep run across all three products over a week instead of
-running all three nightly.
+~3-4 hour deep run (builds dominate) across all three products over a week
+instead of running all three nightly.
 
 **Zero-secret design (the load-bearing security property):** the workflow
 declares no GitHub environment and touches no repository secrets. Because

@@ -14,8 +14,8 @@ test/
 ├── bootc-install-test.sh      # Orchestrator script (headless, for CI)
 ├── bootc-update-test.sh       # Update/rollback orchestrator (headless)
 ├── native-ab-update-test.sh   # Native A/B N through N+3 QEMU test
-├── native-boot-smoke-test.sh  # Tier 1 boot gate: disk artifact boots to multi-user.target (build-native-images.yml promotion gate)
-├── native-iso-boot-smoke-test.sh # Tier 1 boot gate: installer ISO reaches a serial login prompt (same promotion gate)
+├── native-boot-smoke-test.sh  # boot-validation smoke gate: disk artifact boots to multi-user.target (build-native-images.yml promotion gate)
+├── native-iso-boot-smoke-test.sh # boot-validation smoke gate: installer ISO reaches a serial login prompt (same promotion gate)
 ├── native-ab-components-test.sh # Phase 1 exit-criterion QEMU test (masks, components, etc drift)
 ├── native-ab-static-test.sh   # Cheap A/B configuration invariants
 ├── native-publish-test.sh     # Publisher naming/derivation self-test (fixture GPT, no root)
