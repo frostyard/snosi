@@ -872,7 +872,35 @@ group — warns loudly if the image lacks it) plus the standard desktop set
 if the image defines it), and creates the skel-seeded home at var `home/`
 (image `/home` → `/var/home`). The wholesale passwd copy-up is the overlay
 steady state anyway — systemd-sysusers rewrites `/etc/passwd` on first boot,
-which copies it up regardless. `shared/native-ab/keys/mok-2026.crt`
+which copies it up regardless. **System settings + deferred first-boot
+provisioning** (Phase 1 of the first-boot design, 2026-07-16; the GTK
+installer frontend is the planned Phase 2): `--hostname`/`--locale`/
+`--timezone`/`--keyboard` (interactive prompts with defaults; `-` skips a
+setting) are plain `/etc`-overlay-upper writes at seed time (`hostname`,
+`locale.conf` `LANG=`, `timezone`+`localtime` symlink, `vconsole.conf` XKB
+triplet matching first-setup's format), while the two duties that NEED the
+booted target — sysext feature enablement and the core desktop Flatpak set —
+are only RECORDED at install time (`--enable-feature` repeatable,
+`--core-flatpaks`/`--no-core-flatpaks`; desktop products default to core
+flatpaks on, `cayo-ab` refuses the flag) into `/var/lib/snosi/first-boot.json`
+and performed by **`snosi-firstboot.service`** (`shared/outformat/ab-root/
+tree`, static-wants infra unit, `After=network-online.target`,
+`TimeoutStartSec=0`): `updex --silent features enable <f> --now` per feature
+(verified against updex 1.3.0 source — `features enable` reads the union of
+the legacy dir and every discovered component, so the per-component sysext
+migration needs no syntax change) plus flathub system remote + the core set
+read from snow-first-setup's OWN `core.json`
+(`/usr/share/org.frostyard.FirstSetup/snow_first_setup/core.json`, single
+source of truth with its Mode 3 wizard; deduplicated — the list has carried
+duplicates), skipping gracefully where flatpak/core.json are absent (cayo).
+Retry semantics: any failure exits 1 WITHOUT the
+`/var/lib/snosi/first-boot.done` marker so the unit re-runs next boot; every
+operation is idempotent. This division retires first-setup's Mode 2 on
+native installs (Mode 1/nbc is retired with nbc; Mode 3 per-user login
+wizard is unchanged and verified working on native).
+`test/snosi-firstboot-test.sh` (fixture, PATH-stubbed updex/flatpak, wired
+into `validate.yml`) covers the fan-out, dedup, retry, and no-op paths.
+`shared/native-ab/keys/mok-2026.crt`
 (committed public certificate — a plain copy of gitignored `mkosi.crt`, safe
 to commit for the same reason as `import-pubring.gpg`; shipped in-image at the
 version-neutral path `/usr/lib/snosi/mok.crt`) ships alongside the pubring via

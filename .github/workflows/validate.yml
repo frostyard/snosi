@@ -87,6 +87,13 @@ jobs:
         # 8.3), intentionally out of scope for this fast per-PR check.
         run: ./test/snosi-install-test.sh
 
+      - name: Validate snosi-firstboot provisioning script
+        # Fixture test with PATH-stubbed updex/flatpak: feature enablement
+        # fan-out, flathub remote + deduplicated core set, retry semantics
+        # (any failure -> exit 1, no done marker -> the unit retries next
+        # boot), and the no-op paths. No root, no network, no image build.
+        run: ./test/snosi-firstboot-test.sh
+
       - name: Validate snosi-etc-diff drift tooling
         # Static, non-root regression test driving the real script against
         # fixture trees via its SNOSI_ETC_DIFF_LIVE_ETC/PRISTINE_ETC test
