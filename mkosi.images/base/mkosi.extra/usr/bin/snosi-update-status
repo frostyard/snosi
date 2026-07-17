@@ -70,7 +70,7 @@ native_status() {
     channel="${image_id}-ab"
 
     echo "Running:    snosi ${running_version:-unknown} (native A/B: $channel)"
-    echo "Following:  $channel (native A/B; signed R2 index, docs/native-ab-contracts.md §5)"
+    echo "Following:  $channel (native A/B, signed updates)"
 
     if [[ -s "$CHECK" ]]; then
         outcome=$(key outcome "$CHECK")
@@ -92,7 +92,7 @@ native_status() {
             ;;
         esac
     else
-        echo "Last check: none recorded this boot (snosi-sysupdate-stage.timer runs hourly when enabled -- see docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md \"Activation policy\")"
+        echo "Last check: none recorded this boot (automatic staging runs hourly when enabled)"
     fi
 
     if [[ -s "$SEM" ]]; then

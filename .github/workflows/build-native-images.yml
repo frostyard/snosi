@@ -208,7 +208,14 @@ jobs:
 
       - name: Build image
         run: |
-          sudo TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile "$PROFILE" \
+          # SNOSI_NATIVE_AUTOSTAGE=1 makes shared/outformat/ab-root/finalize ship
+          # the snosi-sysupdate-stage.timer activation link, so installs from this
+          # image auto-stage published updates (applied on next reboot; never a
+          # forced reboot). Passed through sudo -- which otherwise strips the
+          # environment -- so mkosi's `Environment=SNOSI_NATIVE_AUTOSTAGE` forward
+          # reaches the finalize .chroot. Installer ISO build is unaffected (it
+          # uses a literal --profile native-installer and no ab-root finalize).
+          sudo SNOSI_NATIVE_AUTOSTAGE=1 TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile "$PROFILE" \
             --dependency= \
             --dependency=base \
             --image-version "$VERSION" \
@@ -351,7 +358,14 @@ jobs:
 
       - name: Build image
         run: |
-          sudo TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile "$PROFILE" \
+          # SNOSI_NATIVE_AUTOSTAGE=1 makes shared/outformat/ab-root/finalize ship
+          # the snosi-sysupdate-stage.timer activation link, so installs from this
+          # image auto-stage published updates (applied on next reboot; never a
+          # forced reboot). Passed through sudo -- which otherwise strips the
+          # environment -- so mkosi's `Environment=SNOSI_NATIVE_AUTOSTAGE` forward
+          # reaches the finalize .chroot. Installer ISO build is unaffected (it
+          # uses a literal --profile native-installer and no ab-root finalize).
+          sudo SNOSI_NATIVE_AUTOSTAGE=1 TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile "$PROFILE" \
             --dependency= \
             --dependency=base \
             --image-version "$VERSION" \
@@ -485,7 +499,14 @@ jobs:
 
       - name: Build image
         run: |
-          sudo TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile "$PROFILE" \
+          # SNOSI_NATIVE_AUTOSTAGE=1 makes shared/outformat/ab-root/finalize ship
+          # the snosi-sysupdate-stage.timer activation link, so installs from this
+          # image auto-stage published updates (applied on next reboot; never a
+          # forced reboot). Passed through sudo -- which otherwise strips the
+          # environment -- so mkosi's `Environment=SNOSI_NATIVE_AUTOSTAGE` forward
+          # reaches the finalize .chroot. Installer ISO build is unaffected (it
+          # uses a literal --profile native-installer and no ab-root finalize).
+          sudo SNOSI_NATIVE_AUTOSTAGE=1 TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile "$PROFILE" \
             --dependency= \
             --dependency=base \
             --image-version "$VERSION" \
