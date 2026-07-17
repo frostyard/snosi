@@ -855,7 +855,24 @@ feature). Root SSH key install writes into the persistent `/etc` overlay
 upperdir (`/root` is dm-verity-sealed read-only, always) via a new
 `AuthorizedKeysFile` drop-in shipped on the installed product,
 `shared/outformat/ab-root/tree/etc/ssh/sshd_config.d/
-10-snosi-authorized-keys.conf`. `shared/native-ab/keys/mok-2026.crt`
+10-snosi-authorized-keys.conf`. **First-user creation** (2026-07-16, found
+because a fresh native snow install boots to an unusable GDM greeter —
+`snow-first-setup` is an XDG *autostart*, post-login only, so nothing can
+create the FIRST user; the contract assigns that to the installer):
+interactive prompts (empty username skips, with a warning) or
+`--username`/`--user-password-file`(0600-checked, pre-download)/
+`--user-fullname`/`--no-create-user`. `seed_first_user()` ro-mounts the
+just-written root erofs for the image's pristine `/.etc.lower` baseline
+(uid/gid allocation from ≥1000, group existence, `/etc/skel`, the `shadow`
+group's numeric gid for file ownership), copies passwd/group/shadow/gshadow
+into the `/etc` overlay upper on var with the new account appended
+(SHA512-crypt via `openssl passwd -6 -stdin`), joins `sudo` (Debian's admin
+group — warns loudly if the image lacks it) plus the standard desktop set
+(adm cdrom dip video plugdev users netdev lpadmin scanner audio, each only
+if the image defines it), and creates the skel-seeded home at var `home/`
+(image `/home` → `/var/home`). The wholesale passwd copy-up is the overlay
+steady state anyway — systemd-sysusers rewrites `/etc/passwd` on first boot,
+which copies it up regardless. `shared/native-ab/keys/mok-2026.crt`
 (committed public certificate — a plain copy of gitignored `mkosi.crt`, safe
 to commit for the same reason as `import-pubring.gpg`; shipped in-image at the
 version-neutral path `/usr/lib/snosi/mok.crt`) ships alongside the pubring via
