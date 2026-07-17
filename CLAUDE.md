@@ -237,7 +237,13 @@ with the bootc profiles), so `shared/outformat/ab-root/tree/usr/lib/systemd/{sys
 masks each one with a same-named `/dev/null` symlink — the same mechanism used for
 `systemd-growfs-root.service`. Upstream's own `bootc-fetch-apply-updates.*` ships
 inside the `bootc` deb itself, which native profiles never install, so those two
-units need no mask. `test/native-ab-static-test.sh` asserts every mask exists.
+units need no mask. Native also masks `plymouth-read-write.service`: root is
+permanently read-only EROFS, so its `plymouth update-root-fs --read-write`
+notification is meaningless, and on minisnow it intermittently blocked forever
+before `sysinit.target` (solid cursor, no network, runtime watchdog still fed,
+Magic SysRq responsive). Failed boots started the unit without finishing it;
+successful boots completed it in 40-53 ms. `test/native-ab-static-test.sh`
+asserts every mask exists.
 `test/native-ab-update-test.sh` validates N to N+1 to N+2 to N+3 with four real
 mkosi builds: signed-manifest acceptance/rejection, missing UKI/verity and bad
 checksum rejection, inactive-slot reuse, dm-verity boot, explicit rollback,

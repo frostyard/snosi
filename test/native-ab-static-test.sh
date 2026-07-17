@@ -291,6 +291,11 @@ assert_masked() { # relpath-under-tree
     }
 }
 
+# Native root is permanently read-only EROFS. The distro unit's Plymouth
+# notification can block forever before sysinit.target while waiting for a
+# root transition that never exists (reproduced on minisnow, 2026-07-17).
+assert_masked system/plymouth-read-write.service
+
 for unit in system/bootc-update-stage.timer system/bootc-update-stage.service \
     system/nbc-update-download.timer system/nbc-update-download.service; do
     base_unit="$root/mkosi.images/base/mkosi.extra/usr/lib/systemd/$unit"
