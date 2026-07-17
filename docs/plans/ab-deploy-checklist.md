@@ -269,11 +269,18 @@ test/native-ab-secure-boot-test.sh --full-window` green (N→N+3, slot reuse,
   and ECC key attempts both failed exactly here at Step 4b). Remaining:
   snowfield-ab (parked; run before its publication, alongside the Surface
   hardware gate below).
-- [ ] **QEMU end-to-end install** — `sudo test/native-installer-e2e-test.sh`
+- [x] **QEMU end-to-end install** — `sudo test/native-installer-e2e-test.sh`
       green for cayo-ab + snow-ab (add `--with-snowfield` only when running on/for
       Surface). Confirms ISO boot on virgin varstore, own-boot-medium refusal in the
       real initramfs, signed install with stock pubring trust, pre-enrollment
       Security Violation, restage-mok, MOK-enrolled enforced/unattended boot.
+      Done: 75/75 (Phase 8 exit, 2026-07-15). Supplemented 2026-07-16/17 by a
+      **human-driven install** (interactive console, real HTTPS origin — two paths
+      the harness structurally substitutes away via SSH keys and a local HTTP
+      fixture), which found and fixed four ship-blockers the harness cannot see:
+      missing `login`, `ca-certificates`, `mount` (a forky transitive-dep drift),
+      and no first-user mechanism (`snosi-install` now creates the first admin
+      user; PR #417).
 - [ ] **Surface hardware gate (snowfield only, PENDING HUMAN GATE)** — cannot be
       done in QEMU. On a representative Surface device (CLAUDE.md "PENDING HUMAN
       GATE" has the full step list):
@@ -303,15 +310,31 @@ Full commands in runbook §"Candidate → verify → promote → purge procedure
       `snosi-sysupdate-stage.timer` activation link (runbook §6; the Phase 4
       mechanism). Until then, native images ship with automatic staging **off** and
       updates are manual only.
-- [ ] Run the pipeline against **real R2** (not the local rehearsal origin):
+- [~] Run the pipeline against **real R2** (not the local rehearsal origin):
       `prepare-native-publication.sh --xz` → `generate-sbom.sh` →
       `publish-candidate.sh` (candidate prefix) → `verify-remote.sh` (size/SHA/full
       GET/range GETs from the public URL) → `promote.sh --signing-key <prod key>
 --pubring <prod pubring> --purge-hook <cf-purge>` (signature-first,
       manifest-last, no-store, purge).
-- [ ] `test-public-origin` equivalent: from a clean machine, verify the promoted
+      **cayo + snow version 20260716200813 ARE LIVE** (2026-07-16): CI run
+      29530766658 did prepare→candidate→verify against real R2; promotion ran
+      locally with the identical scripts + production OpenPGP key after the CI
+      leg hit the verify-remote metadata-only bug (fixed, #416). Served indexes
+      gpgv-verified, metadata `no-store`, payloads `immutable`. Remaining for
+      `[x]`: one fully-CI run end to end (dispatched post-#417, in flight —
+      hardening fixes found on the way: `.snosi-private/history` #412, host
+      prep #413, test tools #414).
+- [x] `test-public-origin` equivalent: from a clean machine, verify the promoted
       index with the **shipped** production pubring and confirm a real install/update
       succeeds from the public URL.
+      Done 2026-07-16/17, the strong form: human-driven QEMU install of snow-ab
+      from the live public URL on a virgin never-enrolled varstore — stock
+      shipped pubring trust, streamed hash-verified disk write, LUKS `/var` +
+      recovery key, TPM enrollment from the disk's own UKI, hands-on MokManager
+      enrollment, unattended TPM-unlocked boot to a usable GNOME desktop as the
+      installer-created first user. `lsblk` and GNOME Settings confirmed the
+      contract layout and Image Version 20260716200813. (In-place UPDATE from
+      the public URL still pending a second published version — see §9 canary.)
 - [ ] Publish the installer ISO to `isos/native/v1/` (same candidate→verify→promote
       flow; runbook §"Installer ISO publication").
 - [ ] Publish GitHub release notes linking the R2 URLs, GHCR digests, SHA-256s,
@@ -325,6 +348,11 @@ Full commands in runbook §"Candidate → verify → promote → purge procedure
 - [ ] Internal canary: install each product on internal hardware from the real
       ISO, take at least one real published update, and confirm
       `snosi-update-status` / `snosi-update-status --check` report correctly.
+      Include a **hands-on interactive pass** (console login, no injected SSH
+      keys, real HTTPS origin) — the 2026-07-16 human QEMU install found four
+      ship-blockers (`login`, `ca-certificates`, `mount`, no first user; PR
+      #417) that the automated e2e harness structurally cannot see, because it
+      substitutes SSH for the console and a local HTTP fixture for TLS.
 - [ ] Confirm the withdrawal path works against real R2: `withdraw.sh --purge-hook
 <cmd>` restores the previous matched `SHA256SUMS`+`.gpg` pair and un-offers a
       bad release (runbook §"Withdrawal").
