@@ -87,6 +87,13 @@ jobs:
         # 8.3), intentionally out of scope for this fast per-PR check.
         run: ./test/snosi-install-test.sh
 
+      - name: Validate snosi-setup GUI model
+        # Pure-python test of setup_gui/model.py (validation, argv assembly,
+        # proto-1 event parsing, disk-list/typed-confirm handling) against an
+        # embedded --print-defaults fixture plus a live-drift check against
+        # the real snosi-install. No GTK, no display, no root.
+        run: python3 ./test/snosi-setup-model-test.py
+
       - name: Validate snosi-firstboot provisioning script
         # Fixture test with PATH-stubbed updex/flatpak: feature enablement
         # fan-out, flathub remote + deduplicated core set, retry semantics

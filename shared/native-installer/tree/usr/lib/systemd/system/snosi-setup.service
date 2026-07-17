@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Graphical setup kiosk for the network-installer ISO (T3,
+# docs/plans/2026-07-17-graphical-installer-plan.md): cage running exactly
+# one client, snosi-setup, on tty1. The text-mode path is unaffected and
+# always available: serial-getty@ttyS0 is untouched, and this unit yields
+# tty1 back to getty whenever it cannot or should not run --
+#
+#   - no display hardware        -> ConditionPathExistsGlob fails, getty runs
+#   - snosi.textmode=1 cmdline   -> ConditionKernelCommandLine fails, getty runs
+#   - crashes 3x in 60s          -> start limit trips, OnFailure starts getty
+#
+# LIBSEAT_BACKEND=builtin: the ISO environment runs everything as root with
+# no logind session for this service; wlroots' builtin seat takes DRM/input
+# directly, avoiding seatd/PAM session choreography entirely.
+# WLR_NO_HARDWARE_CURSORS=1: virtio-vga/llvmpipe render without a hardware
+# cursor plane; without this the pointer is invisible on QEMU.
+[Unit]
+Description=snosi graphical setup (cage kiosk)
+ConditionPathExistsGlob=/dev/dri/card*
+ConditionKernelCommandLine=!snosi.textmode=1
+Conflicts=getty@tty1.service
+After=getty@tty1.service systemd-user-sessions.service
+OnFailure=getty@tty1.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/cage -- /usr/bin/snosi-setup
+Restart=on-failure
+RestartSec=2
+TTYPath=/dev/tty1
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+Environment=LIBSEAT_BACKEND=builtin
+Environment=WLR_NO_HARDWARE_CURSORS=1
+RuntimeDirectory=snosi-setup
+Environment=XDG_RUNTIME_DIR=/run/snosi-setup
