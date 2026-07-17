@@ -182,7 +182,7 @@ class NetworkPage(Page):
         self.spinner.stop()
         self.spinner.set_visible(False)
         if ok:
-            self.status.set_icon_name("emblem-ok-symbolic")
+            self.status.set_icon_name("object-select-symbolic")
             self.status.set_title("Download server reachable")
             self.state.network_skipped = False
             self.window.set_ready(True)
@@ -841,7 +841,7 @@ class ProgressPage(Page):
         self._stdout_eof = False
         self._exited = False
         self._exit_ok = False
-        self.status = Adw.StatusPage(icon_name="emblem-synchronizing-symbolic",
+        self.status = Adw.StatusPage(icon_name="content-loading-symbolic",
                                      title="Installing…", description="")
         self.progress = Gtk.ProgressBar(show_text=False)
         buf = Gtk.TextBuffer()
@@ -1003,7 +1003,7 @@ class DonePage(Page):
     no_next_button = True
 
     def build(self):
-        self.status = Adw.StatusPage(icon_name="emblem-ok-symbolic",
+        self.status = Adw.StatusPage(icon_name="object-select-symbolic",
                                      title="Installation Complete",
                                      description="")
         self.key_label = Gtk.Label(label="", selectable=True, wrap=True,

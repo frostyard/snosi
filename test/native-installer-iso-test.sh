@@ -260,6 +260,30 @@ assert_true "initrd contains the locale picker data (locales SUPPORTED)" grep -q
 assert_true "initrd contains the keyboard picker data (xkb evdev.lst)" grep -q "usr/share/X11/xkb/rules/evdev.lst$" "$initrd_list"
 assert_true "initrd contains zoneinfo (timezone picker)" grep -q "usr/share/zoneinfo/UTC$" "$initrd_list"
 assert_true "initrd contains Cantarell" grep -qE "fonts.*[Cc]antarell" "$initrd_list"
+# Icon rendering: the Adwaita theme, and CRITICALLY the gdk-pixbuf SVG loader
+# (librsvg2-common) -- without it every symbolic (SVG) icon in the GTK4/Adw
+# app renders broken (found live 2026-07-17; librsvg is only a libgtk-4-1
+# Recommends and mkosi builds recommends-off). Loader is libpixbufloader_svg
+# (underscore) on trixie.
+assert_true "initrd contains the Adwaita icon theme" grep -qE "usr/share/icons/Adwaita/index.theme$" "$initrd_list"
+assert_true "initrd contains the gdk-pixbuf SVG loader (symbolic icons)" \
+    grep -qE "gdk-pixbuf-2.0/.*/loaders/libpixbufloader_svg.so$" "$initrd_list"
+assert_true "initrd contains org.gnome.desktop.interface schema (libadwaita settings)" \
+    grep -qE "org.gnome.desktop.interface.gschema.xml$" "$initrd_list"
+assert_true "initrd contains compiled gsettings schemas" \
+    grep -qE "glib-2.0/schemas/gschemas.compiled$" "$initrd_list"
+# Every symbolic icon-name the wizard references MUST resolve to a real icon
+# in the packed Adwaita theme -- a stale name (e.g. the dropped emblem-ok-
+# symbolic / emblem-synchronizing-symbolic) renders as a blank/broken icon
+# with no error, invisible to every test but a human's eyes (found live
+# 2026-07-17 on the "Download server reachable" page). This closes that gap:
+# it fails the build if the code names an icon the shipped theme lacks.
+missing_icons=""
+while IFS= read -r icon; do
+    [[ -n "$icon" ]] || continue
+    grep -qE "icons/Adwaita/.*/${icon}\.(svg|png)$" "$initrd_list" || missing_icons+=" $icon"
+done < <(grep -rohE "[a-z0-9-]+-symbolic" "$ROOT_DIR/shared/native-installer/setup-gui/setup_gui/pages.py" | sort -u)
+assert_eq "every snosi-setup icon-name resolves in the packed Adwaita theme" "${missing_icons# }" ""
 assert_true "initrd contains the product-aware CLI installer" \
     grep -q "usr/libexec/snosi-install$" "$initrd_list"
 # cpio -t (no -v) lists names only, not symlink targets -- -tv is needed to

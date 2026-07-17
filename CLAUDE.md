@@ -947,8 +947,12 @@ emit an `add` then a `bind` uevent and the `bind` drops `:systemd:` from the
 device's CURRENT_TAGS at coldplug, so the `.device` unit never pulled the
 kiosk on a real boot (it worked only on a manual `udevadm trigger`). The ISO
 gains the cage/GTK4/Mesa-llvmpipe/python3-gi/cantarell stack plus the picker
-data files (`locales`/`xkb-data`/`tzdata`, else the pickers silently degrade),
-taking it to ~1.1–1.3 GB. `test/snosi-setup-boot-test.sh` (local, root+KVM,
+data files (`locales`/`xkb-data`/`tzdata`, else the pickers silently degrade).
+The ~1.6 GB uncompressed rootfs zstd-compresses to a ~590 MB packed
+initramfs, so the GUI ISO is ~700 MB — only ~100 MB more than the ~600 MB
+text-only ISO. **ISO size is NOT a reliable text-vs-GUI discriminator**
+(they are ~100 MB apart); check for `usr/bin/snosi-setup` in the packed
+initramfs instead. `test/snosi-setup-boot-test.sh` (local, root+KVM,
 not in CI) boots the real ISO twice under enforced Secure Boot — virtio-vga
 (kiosk up: cage + the GTK app, getty yielded, no crash loop) and no-display
 (getty fallback, Condition-skipped cleanly) — 13/13; the serial text flow is
