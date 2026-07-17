@@ -212,6 +212,41 @@ run_installer "${ARGS_NO_MOK[@]}"
 assert_true "missing --mok-password-file (no --skip-mok): exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
 assert_contains "missing --mok-password-file: clear error" "$RUN_OUT" "requires --mok-password-file"
 
+# --- first-user flags ---
+echo hunter2 >"$WORK_DIR/user-password.txt"
+chmod 600 "$WORK_DIR/user-password.txt"
+
+run_installer "${BASE_ARGS[@]}" --username bjk
+assert_true "--username without --user-password-file (non-interactive): exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
+assert_contains "--username without password file: clear error" "$RUN_OUT" "requires --user-password-file"
+
+run_installer "${BASE_ARGS[@]}" --user-password-file "$WORK_DIR/user-password.txt"
+assert_true "--user-password-file without --username: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
+assert_contains "--user-password-file without --username: clear error" "$RUN_OUT" "requires --username"
+
+run_installer "${BASE_ARGS[@]}" --username bjk --user-password-file "$WORK_DIR/user-password.txt" --no-create-user
+assert_true "--username with --no-create-user: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
+assert_contains "--username with --no-create-user: clear error" "$RUN_OUT" "conflicts with --no-create-user"
+
+run_installer "${BASE_ARGS[@]}" --username 'Bad.User' --user-password-file "$WORK_DIR/user-password.txt"
+assert_true "invalid username: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
+assert_contains "invalid username: clear error" "$RUN_OUT" "invalid username"
+
+run_installer "${BASE_ARGS[@]}"
+assert_contains "non-interactive without --username warns about missing user" "$RUN_OUT" "NO user account"
+
+run_installer "${BASE_ARGS[@]}" --no-create-user
+assert_not_contains "--no-create-user silences the missing-user warning" "$RUN_OUT" "NO user account"
+
+chmod 644 "$WORK_DIR/user-password.txt"
+run_installer "${BASE_ARGS[@]}" --username bjk --user-password-file "$WORK_DIR/user-password.txt"
+assert_true "world-readable --user-password-file: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
+assert_contains "world-readable --user-password-file: refused with chmod hint" "$RUN_OUT" "chmod 600"
+chmod 600 "$WORK_DIR/user-password.txt"
+
+run_installer "${BASE_ARGS[@]}" --username bjk --user-password-file "$WORK_DIR/user-password.txt"
+assert_contains "valid first-user args pass validation (reach root check)" "$RUN_OUT" "must run as root"
+
 # --insecure-raw-var must NOT demand recovery-key-file/ack.
 mapfile -t ARGS_RAW_VAR < <(without_flag --recovery-key-file 1)
 run_installer "${ARGS_RAW_VAR[@]}" --insecure-raw-var

@@ -153,6 +153,13 @@ Install mode options:
                                 (default: /usr/lib/snosi/mok.crt)
   --ssh-authorized-key PATH     Install a root SSH public key for initial
                                 diagnostics
+  --username NAME               Create this first user account (admin: sudo +
+                                desktop groups). Interactive mode prompts when
+                                omitted; empty input skips creation.
+  --user-password-file PATH     Non-interactive: the first user's password
+                                (first line; file must be chmod 600)
+  --user-fullname NAME          Optional GECOS full name for --username
+  --no-create-user              Explicitly skip first-user creation
   --reboot                      Reboot when finished (never automatic
                                 otherwise, in either mode)
   --non-interactive             Fully non-interactive; requires every
@@ -815,6 +822,151 @@ seed_var() { # var_device product channel version arch ssh_key_path(optional)
 }
 
 # ---------------------------------------------------------------------------
+# First-user creation (interactive default; --username/--user-password-file
+# non-interactive). The root filesystem is dm-verity-sealed, so the account
+# lands where all mutable state lives: passwd/group/shadow/gshadow go into
+# the /etc overlay UPPER on the var partition (they override the image's
+# /.etc.lower copies wholesale -- the same state the files reach anyway the
+# first time systemd-sysusers or any user-management tool rewrites them on a
+# booted system), and the home directory goes to var's home/ (the image
+# ships /home as a symlink into /var/home, bootc-style). The image's pristine
+# /etc (uid/gid baseline, group membership targets, /etc/skel) is read by
+# ro-mounting the freshly-written root erofs partition -- authoritative, not
+# synthesized.
+# ---------------------------------------------------------------------------
+
+USERNAME_RE='^[a-z][a-z0-9_-]{0,31}$'
+
+# user_password_twice -- interactive prompt, validated twice. Sets
+# USER_PASSWORD. Same shape as mok_password_twice.
+user_password_twice() { # username
+    local p1 p2
+    while true; do
+        read -r -s -p "Password for '$1': " p1
+        echo >&2
+        read -r -s -p "Confirm password: " p2
+        echo >&2
+        if [[ -z "$p1" ]]; then
+            echo "Password must not be empty." >&2
+            continue
+        fi
+        if [[ "$p1" != "$p2" ]]; then
+            echo "Passwords do not match, try again." >&2
+            continue
+        fi
+        USER_PASSWORD="$p1"
+        return
+    done
+}
+
+# append_group_member file group user -- appends user to the member list of
+# an existing group line (last :-field), in a passwd-style file. No-op if
+# the group is absent; never duplicates a member.
+append_group_member() { # file group user
+    local file="$1" group="$2" user="$3" tmp
+    tmp="$(mktemp "$file.XXXXXX")"
+    awk -v g="$group" -v u="$user" -F: 'BEGIN{OFS=":"}
+        $1 == g {
+            n = split($NF, m, ",")
+            found = 0
+            for (i = 1; i <= n; i++) if (m[i] == u) found = 1
+            if (!found) $NF = ($NF == "" ? u : $NF "," u)
+        }
+        { print }' "$file" >"$tmp"
+    mv "$tmp" "$file"
+}
+
+# seed_first_user disk var_device bare_product version username password fullname
+#
+# Mounts the installed root (erofs, ro) for the pristine /etc baseline and
+# the var filesystem for the overlay upper + home. Group membership: 'sudo'
+# (Debian's admin group -- polkit's 51-debian-sudo also keys on it) plus the
+# standard desktop convenience set, each only if it exists in the image.
+seed_first_user() { # disk var_device bare_product version username password fullname
+    local disk="$1" var_dev="$2" bare_product="$3" version="$4"
+    local username="$5" password="$6" fullname="$7"
+    local root_part rootmnt varmnt lower upper
+    local uid gid shadow_gid hash lastchg g
+
+    root_part="$(lsblk -nrpo NAME,PARTLABEL "$disk" |
+        awk -v l="${bare_product}_${version}_r" '$2 == l {print $1; exit}')"
+    [[ -n "$root_part" ]] || die "no root partition labeled ${bare_product}_${version}_r on $disk"
+
+    rootmnt="$(mktemp -d /var/tmp/snosi-install-root.XXXXXX)"
+    mount -t erofs -o ro "$root_part" "$rootmnt"
+    lower="$rootmnt/.etc.lower"
+    [[ -f "$lower/passwd" && -f "$lower/group" && -f "$lower/shadow" ]] ||
+        { umount "$rootmnt"; rmdir "$rootmnt"; die "image /etc baseline not found at $lower"; }
+
+    if awk -F: -v u="$username" '$1 == u {exit 1}' "$lower/passwd"; then :; else
+        umount "$rootmnt"; rmdir "$rootmnt"
+        die "username '$username' already exists in the image"
+    fi
+
+    # First free uid/gid >= 1000 (the image may already reserve e.g. 1000).
+    uid="$(awk -F: '$3 >= 1000 && $3 < 60000 {if ($3 >= m) m = $3 + 1} END {print (m ? m : 1000)}' "$lower/passwd")"
+    gid="$(awk -F: -v want="$uid" '$3 == want {want = want + 1} END {print want}' "$lower/group")"
+    uid="$gid"  # keep uid == gid; both verified free below
+    awk -F: -v id="$uid" '$3 == id {exit 1}' "$lower/passwd" ||
+        { umount "$rootmnt"; rmdir "$rootmnt"; die "internal error: uid $uid is taken"; }
+    awk -F: -v id="$gid" '$3 == id {exit 1}' "$lower/group" ||
+        { umount "$rootmnt"; rmdir "$rootmnt"; die "internal error: gid $gid is taken"; }
+    shadow_gid="$(awk -F: '$1 == "shadow" {print $3; exit}' "$lower/group")"
+
+    hash="$(printf '%s\n' "$password" | openssl passwd -6 -stdin)"
+    [[ "$hash" == '$6$'* ]] || { umount "$rootmnt"; rmdir "$rootmnt"; die "password hashing failed"; }
+    lastchg=$(( $(date +%s) / 86400 ))
+    fullname="${fullname//:/ }"; fullname="${fullname//$'\n'/ }"
+
+    varmnt="$(mktemp -d /var/tmp/snosi-install-var.XXXXXX)"
+    mount -t ext4 "$var_dev" "$varmnt"
+    upper="$varmnt/lib/snosi/etc-overlay/upper"
+    install -d -m 0755 "$upper"
+
+    # Copy-up the four account databases from the image baseline, then edit
+    # the copies. Modes/ownership mirror Debian's (shadow group by NUMERIC
+    # gid from the image -- the installer environment's own group db is
+    # irrelevant to the installed system).
+    install -m 0644 -o 0 -g 0 "$lower/passwd" "$upper/passwd"
+    install -m 0644 -o 0 -g 0 "$lower/group" "$upper/group"
+    install -m 0640 -o 0 -g "${shadow_gid:-0}" "$lower/shadow" "$upper/shadow"
+    printf '%s:x:%s:%s:%s:/home/%s:/bin/bash\n' \
+        "$username" "$uid" "$gid" "$fullname" "$username" >>"$upper/passwd"
+    printf '%s:x:%s:\n' "$username" "$gid" >>"$upper/group"
+    printf '%s:%s:%s:0:99999:7:::\n' "$username" "$hash" "$lastchg" >>"$upper/shadow"
+    if [[ -f "$lower/gshadow" ]]; then
+        install -m 0640 -o 0 -g "${shadow_gid:-0}" "$lower/gshadow" "$upper/gshadow"
+        printf '%s:!::\n' "$username" >>"$upper/gshadow"
+    fi
+
+    # sudo first (the admin group), then the Debian desktop convenience set;
+    # each only where the image actually defines it.
+    local -a member_groups=(sudo adm cdrom dip video plugdev users netdev lpadmin scanner audio)
+    local -a joined=()
+    for g in "${member_groups[@]}"; do
+        if awk -F: -v g="$g" '$1 == g {exit 1}' "$upper/group"; then continue; fi
+        append_group_member "$upper/group" "$g" "$username"
+        [[ ! -f "$upper/gshadow" ]] || append_group_member "$upper/gshadow" "$g" "$username"
+        joined+=("$g")
+    done
+    [[ " ${joined[*]} " == *" sudo "* ]] ||
+        warn "image defines no 'sudo' group; '$username' has NO admin rights"
+
+    # Home on the var partition (image /home -> /var/home), seeded from the
+    # image's own /etc/skel.
+    install -d -m 0755 "$varmnt/home"
+    install -d -m 0700 "$varmnt/home/$username"
+    if [[ -d "$lower/skel" ]]; then
+        cp -a "$lower/skel/." "$varmnt/home/$username/"
+    fi
+    chown -R "$uid:$gid" "$varmnt/home/$username"
+
+    umount "$varmnt"; rmdir "$varmnt"
+    umount "$rootmnt"; rmdir "$rootmnt"
+    log "Created first user '$username' (uid $uid, groups: ${joined[*]:-none})"
+}
+
+# ---------------------------------------------------------------------------
 # MOK enrollment (plan steps 16-17) + --restage-mok recovery
 # ---------------------------------------------------------------------------
 
@@ -995,6 +1147,7 @@ main() {
     local no_tpm=0 mok_password_file="" skip_mok=0 mok_cert="$MOK_CERT_DEFAULT"
     local ssh_key="" do_reboot=0 non_interactive=0 allow_file=0
     local restage_mode=0
+    local username="" user_password_file="" user_fullname="" no_create_user=0
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1012,6 +1165,10 @@ main() {
             --skip-mok) skip_mok=1; shift ;;
             --mok-cert) [[ $# -ge 2 ]] || usage; mok_cert="$2"; shift 2 ;;
             --ssh-authorized-key) [[ $# -ge 2 ]] || usage; ssh_key="$2"; shift 2 ;;
+            --username) [[ $# -ge 2 ]] || usage; username="$2"; shift 2 ;;
+            --user-password-file) [[ $# -ge 2 ]] || usage; user_password_file="$2"; shift 2 ;;
+            --user-fullname) [[ $# -ge 2 ]] || usage; user_fullname="$2"; shift 2 ;;
+            --no-create-user) no_create_user=1; shift ;;
             --reboot) do_reboot=1; shift ;;
             --non-interactive) non_interactive=1; shift ;;
             --allow-file) allow_file=1; shift ;;
@@ -1041,6 +1198,21 @@ main() {
         if [[ "$skip_mok" != 1 ]]; then
             [[ -n "$mok_password_file" ]] || die "--non-interactive requires --mok-password-file (or --skip-mok)"
         fi
+        if [[ -n "$username" ]]; then
+            [[ -n "$user_password_file" ]] || die "--username requires --user-password-file in --non-interactive mode"
+        elif [[ "$no_create_user" != 1 ]]; then
+            warn "no --username given; the installed system will have NO user account (pass --no-create-user to silence this)"
+        fi
+    fi
+    [[ -z "$user_password_file" || -n "$username" ]] || die "--user-password-file requires --username"
+    [[ -z "$username" || "$no_create_user" != 1 ]] || die "--username conflicts with --no-create-user"
+    [[ -z "$username" ]] || [[ "$username" =~ $USERNAME_RE ]] ||
+        die "invalid username '$username' (need: $USERNAME_RE)"
+    # Fail on an unusable password file HERE, before need_root and long
+    # before the download -- not deep into the install.
+    if [[ -n "$user_password_file" ]]; then
+        [[ -f "$user_password_file" ]] || die "--user-password-file not found: $user_password_file"
+        check_secret_file_perms "$user_password_file" "--user-password-file"
     fi
 
     local -a valid
@@ -1065,7 +1237,10 @@ main() {
     local channel="$product" bare_product="${product%-ab}"
 
     need_root
-    for cmd in curl jq gpgv sfdisk lsblk blockdev udevadm blkid wipefs xz mkfs.ext4 objcopy openssl mokutil; do
+    # Every external command this script invokes anywhere -- an absence must
+    # fail HERE with a clear message, never mid-install (mount was absent from
+    # the ISO and died at ESP-mount time deep into an install, 2026-07-16).
+    for cmd in curl jq gpgv sfdisk lsblk blockdev udevadm blkid wipefs xz mkfs.ext4 objcopy openssl mokutil mount umount findmnt dd cryptsetup systemd-cryptenroll awk chown cp; do
         command -v "$cmd" >/dev/null || die "required command not found: $cmd"
     done
 
@@ -1161,6 +1336,33 @@ main() {
     [[ -z "$recovery_key_file" || ! -e "$recovery_key_file" ]] || die "recovery key file already exists: $recovery_key_file"
 
     # -----------------------------------------------------------------
+    # First user (gathered up front, before the long download; created
+    # after /var exists). Interactive: empty username skips.
+    # -----------------------------------------------------------------
+    local user_password=""
+    if [[ "$non_interactive" != 1 && "$no_create_user" != 1 && -z "$username" ]]; then
+        while true; do
+            read -r -p "First user account name (empty to skip creating a user): " username
+            [[ -n "$username" ]] || { warn "no user will be created; the desktop login screen will be unusable until one exists"; break; }
+            [[ "$username" =~ $USERNAME_RE ]] && break
+            echo "Invalid username (lowercase letter first, then lowercase/digits/_/-, max 32)." >&2
+        done
+    fi
+    if [[ -n "$username" ]]; then
+        if [[ -n "$user_password_file" ]]; then
+            # Existence/permissions were validated up front, pre-download.
+            user_password="$(head -1 "$user_password_file")"
+            [[ -n "$user_password" ]] || die "--user-password-file is empty"
+        else
+            user_password_twice "$username"
+            user_password="$USER_PASSWORD"
+        fi
+        if [[ "$non_interactive" != 1 && -z "$user_fullname" ]]; then
+            read -r -p "Full name for '$username' (optional): " user_fullname
+        fi
+    fi
+
+    # -----------------------------------------------------------------
     # Download + write (plan steps 8-9)
     # -----------------------------------------------------------------
     local disk_url="$INDEX_BASE_URL/$disk_name"
@@ -1235,6 +1437,20 @@ main() {
     # -----------------------------------------------------------------
     log "Recording install metadata..."
     seed_var "$var_device" "$bare_product" "$channel" "$version" "$arch" "$ssh_key"
+
+    # -----------------------------------------------------------------
+    # First user (see the prompt block above; state gathered pre-download)
+    # -----------------------------------------------------------------
+    if [[ -n "$username" ]]; then
+        if [[ "$allow_file" == 1 ]]; then
+            warn "first-user creation requires a real block device target; skipping (--allow-file test mode)."
+        else
+            log "Creating first user '$username'..."
+            seed_first_user "$RESOLVED_DISK_PATH" "$var_device" "$bare_product" "$version" \
+                "$username" "$user_password" "$user_fullname"
+        fi
+    fi
+    unset user_password USER_PASSWORD || true
     close_var_mapper
 
     # -----------------------------------------------------------------
