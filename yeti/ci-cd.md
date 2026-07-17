@@ -252,7 +252,12 @@ workflow changes, plus manual dispatch. Installs the locked Node dependencies,
 runs TypeScript/generated-binding/Vitest checks and `wrangler deploy --dry-run`,
 then deploys with `CF_WORKERS_API_TOKEN` from `native-promotion`. The Worker has
 a direct read binding to the publication R2 bucket and an exact-path-guarded
-route for the stable installer URL; it has no signing or S3 credentials.
+route for the stable installer URL; it has no signing or S3 credentials. Before
+deploying, the job requires the `wrangler.jsonc` bucket to equal
+`NATIVE_R2_BUCKET` and `wrangler r2 bucket info` to find it, preventing
+Wrangler's automatic provisioning from turning a typo into a new empty bucket.
+The deploy token has Workers Scripts Write, Workers Routes Write, Account
+Settings Read, and R2 Storage Read only; R2 Write is intentionally forbidden.
 
 ### scorecard.yml — Supply-Chain Security
 

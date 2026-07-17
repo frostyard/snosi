@@ -12,7 +12,7 @@
   "r2_buckets": [
     {
       "binding": "REPOSITORY",
-      "bucket_name": "frostyard-repository"
+      "bucket_name": "frostyardrepo"
     }
   ],
   "observability": {

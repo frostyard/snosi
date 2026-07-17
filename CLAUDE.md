@@ -1029,6 +1029,15 @@ ISO alias, or a hardcoded version. The redirect is discovery only:
 deploys separately via `deploy-native-installer-redirect.yml`; every ISO
 promotion and withdrawal must run `verify-installer-redirect.sh` only AFTER
 `verify-published-index.sh` authenticates the served index.
+The binding's production bucket is `frostyardrepo` (the same value as
+`NATIVE_R2_BUCKET`); the deploy workflow compares config to that secret and
+requires `wrangler r2 bucket info` to succeed before deployment. This guard is
+load-bearing because Wrangler 4 auto-provisions a missing named bucket -- a
+stale `frostyard-repository` example created an empty wrong bucket during the
+first deployment and left the Worker returning `503`.
+`CF_WORKERS_API_TOKEN` deliberately has R2 Storage READ, never WRITE: it needs
+to inspect the existing bucket during preflight, while missing-resource
+provisioning must fail at authorization even if the config/secret guard regresses.
 
 ### Phase 8 exit: real ISO install proof
 

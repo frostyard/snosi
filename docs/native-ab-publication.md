@@ -131,7 +131,7 @@ $ shared/native-ab/publish/prepare-native-publication.sh --xz \
 # 5-6: upload to the R2 candidate prefix, Cache-Control: public/immutable
 # on payloads (plan steps 5-6)
 $ shared/native-ab/publish/publish-candidate.sh \
-    /var/tmp/publish-out/cayo/x86-64 rclone:r2:frostyard-repository
+    /var/tmp/publish-out/cayo/x86-64 rclone:r2:frostyardrepo
 
 # 7: independently re-verify every candidate object over HTTP (plan step 7)
 $ shared/native-ab/publish/verify-remote.sh \
@@ -147,7 +147,7 @@ $ shared/native-ab/publish/promote.sh \
     --purge-hook /path/to/cloudflare-purge.sh \
     /var/tmp/publish-out/cayo/x86-64 \
     https://repository.frostyard.org/os/native/v1/cayo/x86-64 \
-    rclone:r2:frostyard-repository
+    rclone:r2:frostyardrepo
 ```
 
 ### 14-15: Cloudflare purge
@@ -202,7 +202,7 @@ already on disk, and systems that already installed the bad version need a
 **new, higher-versioned repair release** -- never a server-side downgrade.
 
 ```console
-$ shared/native-ab/publish/withdraw.sh cayo 20260714150036 rclone:r2:frostyard-repository
+$ shared/native-ab/publish/withdraw.sh cayo 20260714150036 rclone:r2:frostyardrepo
 ```
 
 This only works if `promote.sh` archived that version's signed index pair
@@ -242,12 +242,12 @@ $ shared/native-installer/tools/build-iso.sh output/native-installer output "$VE
 
 $ shared/native-ab/publish/prepare-iso-publication.sh \
     "output/snosi-native-installer_${VERSION}_x86-64.iso" "$VERSION" /var/tmp/iso-publish-out
-$ shared/native-ab/publish/publish-candidate.sh /var/tmp/iso-publish-out rclone:r2:frostyard-repository
+$ shared/native-ab/publish/publish-candidate.sh /var/tmp/iso-publish-out rclone:r2:frostyardrepo
 $ shared/native-ab/publish/verify-remote.sh /var/tmp/iso-publish-out \
     https://repository.frostyard.org/isos/native/v1
 $ shared/native-ab/publish/promote.sh --signing-key .snosi-private/os-update-signing.key \
     /var/tmp/iso-publish-out https://repository.frostyard.org/isos/native/v1 \
-    rclone:r2:frostyard-repository
+    rclone:r2:frostyardrepo
 ```
 
 `publication-info.json`'s `product`/`channel` are both
@@ -263,7 +263,7 @@ path explicitly:
 
 ```console
 $ shared/native-ab/publish/withdraw.sh --dest-path isos/native/v1 \
-    snosi-native-installer 20260714150036 rclone:r2:frostyard-repository
+    snosi-native-installer 20260714150036 rclone:r2:frostyardrepo
 ```
 
 `test/native-publication-pipeline-test.sh`'s "ISO-shaped fixture leg"
@@ -462,12 +462,12 @@ would, per the "never trust local disk" property described above.
 | `NATIVE_R2_ACCOUNT_ID` | (repo-level) | `publish-candidate.sh`, `promote.sh` (via `rclone`) | `RCLONE_CONFIG_R2_ENDPOINT` env var | Upload authorization only -- never a substitute for the OpenPGP signature (`docs/native-ab-contracts.md` SS7). |
 | `NATIVE_R2_ACCESS_KEY_ID` | (repo-level) | same | `RCLONE_CONFIG_R2_ACCESS_KEY_ID` env var | Same scope. Use a dedicated R2 API token scoped only to the native publication bucket/prefix -- do not reuse the `R2_ACCESS_KEY_ID` token `build.yml`/`build-images.yml` already use for sysexts/manifests. |
 | `NATIVE_R2_SECRET_ACCESS_KEY` | (repo-level) | same | `RCLONE_CONFIG_R2_SECRET_ACCESS_KEY` env var | Same scope. |
-| `NATIVE_R2_BUCKET` | (repo-level) | same | `rclone:r2:<bucket>` dest argument | Bucket name behind `repository.frostyard.org`; not itself sensitive, kept as a secret only to avoid hardcoding it in the workflow before the bucket is finalized. |
+| `NATIVE_R2_BUCKET` | (repo-level) | publication jobs and redirect-Worker preflight | `rclone:r2:<bucket>` dest argument / deploy assertion | Finalized bucket name behind `repository.frostyard.org` (`frostyardrepo`). The Worker config must match this secret; CI verifies the named bucket exists before Wrangler can auto-provision resources. |
 | `NATIVE_UPDATE_SIGNING_KEY` | `native-promotion` | `promote.sh --signing-key` only | `/var/tmp/native-promote-secrets/os-update-signing.key` | OpenPGP update-signing private key (armored `gpg --export-secret-keys`). Never leaves this environment. Rotation: overlap window, both keys in the shipped pubring -- see "Production key ceremony" above. |
 | `NATIVE_UPDATE_SIGNING_PASSPHRASE` | `native-promotion` | `promote.sh --passphrase-file` only | `/var/tmp/native-promote-secrets/passphrase` | Passphrase for the production signing key. The key is passphrase-protected, so `promote.sh` signs via `gpg --pinentry-mode loopback --passphrase-file`. Omit only if the key has no passphrase (not recommended); then `promote.sh` runs without `--passphrase-file`. |
 | `CF_ZONE_ID` | `native-promotion` | `cloudflare-purge.sh` env | never on disk (env only) | Cloudflare zone id for `repository.frostyard.org`. If unset, the promote step skips the edge purge (the no-store header + cache-bypass rule are the primary protection). |
 | `CF_API_TOKEN` | `native-promotion` | `cloudflare-purge.sh` env | never on disk (env only) | Cloudflare API token scoped to **Zone.Cache Purge** on that zone only. If unset, the promote step skips the edge purge. |
-| `CF_WORKERS_API_TOKEN` | `native-promotion` | `deploy-native-installer-redirect.yml` / Wrangler only | never on disk (env only) | Dedicated token scoped to deploy the redirect Worker and edit its `frostyard.org` route. It does not need the OpenPGP signing key or S3 credentials. |
+| `CF_WORKERS_API_TOKEN` | `native-promotion` | `deploy-native-installer-redirect.yml` / Wrangler only | never on disk (env only) | Dedicated token: Account Workers Scripts Write + Account Workers R2 Storage Read + Account Settings Read, and Zone Workers Routes Write scoped only to `frostyard.org`. Do NOT grant R2 Storage Write: the preflight only reads bucket metadata, and a typoed binding must fail rather than let Wrangler auto-create another bucket. It does not need the OpenPGP signing key, S3 credentials, KV, Tail, DNS, or Cache Purge permissions. |
 
 Every secret-consuming step writes key material to a runner-local file
 immediately before the one command that needs it, `chmod 600`s it, never
