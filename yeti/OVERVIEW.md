@@ -358,7 +358,14 @@ units unconditionally for the bootc profiles, and on native boot (no
 `ConditionKernelCommandLine=!composefs` is true, so nbc would otherwise run
 against a GPT layout it does not understand. Upstream's own
 `bootc-fetch-apply-updates.*` ships inside the `bootc` deb, which native
-profiles never install, so it needs no mask. The installer grows only the final `var` partition. OS transfers use `Verify=yes`,
+profiles never install, so it needs no mask. The same native tree masks
+`plymouth-read-write.service`: native root is permanently read-only EROFS, and
+the distro unit's infinite-timeout `plymouth update-root-fs --read-write`
+occasionally blocked before `sysinit.target` on minisnow (2026-07-17). PID 1
+continued feeding the hardware watchdog and the kernel handled Magic SysRq,
+but no later target was dispatched; every failed boot lacked the unit's
+completion message while successful boots completed it in 40-53 ms. The
+installer grows only the final `var` partition. OS transfers use `Verify=yes`,
 but unattended updates stay disabled until the dedicated OS OpenPGP keyring
 and signed publication pipeline exist. Partition payloads use XZ because the
 Debian systemd 257 `systemd-pull` build does not support Zstandard; unsupported
