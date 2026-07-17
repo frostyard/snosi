@@ -845,12 +845,21 @@ seed_var() { # var_device product channel version arch ssh_key_path(optional)
         ln -sfn "../usr/share/zoneinfo/$set_timezone" "$upper/localtime"
     fi
     if [[ -n "$set_keyboard" ]]; then
+        # Debian images ship /etc/vconsole.conf as a SYMLINK to
+        # default/keyboard (keyboard-configuration owns the keymap;
+        # console-setup.service reasserts that shape on first boot --
+        # observed live 2026-07-17: a plain-file vconsole.conf write was
+        # replaced by the symlink on the installed system's first boot).
+        # Write the file the symlink resolves to, in its keyboard(5) format.
         IFS=: read -r kb_layout kb_variant kb_model <<<"$set_keyboard"
+        install -d -m 0755 "$upper/default"
         {
-            printf 'XKBLAYOUT=%s\n' "$kb_layout"
-            [[ -z "${kb_variant:-}" ]] || printf 'XKBVARIANT=%s\n' "$kb_variant"
-            [[ -z "${kb_model:-}" ]] || printf 'XKBMODEL=%s\n' "$kb_model"
-        } >"$upper/vconsole.conf"
+            printf 'XKBMODEL="%s"\n' "${kb_model:-pc105}"
+            printf 'XKBLAYOUT="%s"\n' "$kb_layout"
+            printf 'XKBVARIANT="%s"\n' "${kb_variant:-}"
+            printf 'XKBOPTIONS=""\n'
+            printf 'BACKSPACE="guess"\n'
+        } >"$upper/default/keyboard"
     fi
     if [[ ${#enable_features[@]} -gt 0 || "${core_flatpaks:-0}" == 1 ]]; then
         features_json="[]"
@@ -1012,6 +1021,10 @@ seed_first_user() { # disk var_device bare_product version username password ful
         cp -a "$lower/skel/." "$varmnt/home/$username/"
     fi
     chown -R "$uid:$gid" "$varmnt/home/$username"
+    # cp -a src/. applies the source DIRECTORY's own mode to the target;
+    # /etc/skel is 0755, which silently undid the 0700 above (observed live
+    # 2026-07-17: created home was world-readable).
+    chmod 0700 "$varmnt/home/$username"
 
     umount "$varmnt"; rmdir "$varmnt"
     umount "$rootmnt"; rmdir "$rootmnt"
