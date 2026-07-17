@@ -314,7 +314,7 @@ done
 # ExtraTrees land), and a SkeletonTrees copy of the plymouthd.conf conffile
 # hard-fails the build (dpkg conffile prompt + non-interactive stdin = EOF).
 comp_snow="$root/shared/composition/snow/mkosi.conf"
-grep -q '^KernelCommandLine=splash plymouth\.ignore-serial-consoles$' "$comp_snow"
+grep -q '^KernelCommandLine=splash plymouth\.ignore-serial-consoles quiet$' "$comp_snow"
 # The splash runs from the real root only: native initrds must omit the
 # plymouth dracut module (details-forcing/DRM-race with console=ttyS0 --
 # see the comment in the ab-root 30-bootc-standard.conf), while the bootc
@@ -342,6 +342,8 @@ if grep -q 'console=tty0' "$root/shared/native-ab/channels/cayo/mkosi.conf"; the
     echo "cayo channel must not carry console=tty0" >&2
     exit 1
 fi
+grep -q 'udevadm wait /dev/dri/card0' \
+    "$root/shared/snow/tree/usr/lib/systemd/system/plymouth-start.service.d/10-wait-drm.conf"
 [[ -f "$ab/tree/usr/lib/systemd/system/snosi-ask-password-serial.service" ]]
 [[ -f "$ab/tree/usr/lib/systemd/system/snosi-ask-password-serial.path" ]]
 [[ -L "$ab/tree/usr/lib/systemd/system/sysinit.target.wants/snosi-ask-password-serial.path" ]]
