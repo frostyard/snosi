@@ -989,6 +989,278 @@ jobs:
   # release-notes: non-blocking, human-facing summary of whichever
   # products actually promoted this run (plan "GitHub Releases").
   # ---------------------------------------------------------------------
+  # ===========================================================================
+  # build-iso / test-public-origin-iso / promote-iso
+  #
+  # The network-installer ISO through the same candidate -> verify -> promote
+  # pipeline as the OS products, into the flat isos/native/v1/ namespace
+  # (docs/native-ab-contracts.md §5; runbook "Installer ISO publication").
+  # The ISO build itself needs NO snosi signing material -- its boot chain is
+  # entirely Debian-signed (contract §8) -- so the native-build environment
+  # here gates only the R2 upload credentials. Versioned with the same
+  # prepare-job version as the products, so one dispatched run publishes a
+  # coherent set.
+  # ===========================================================================
+  build-iso:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: native-build
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+
+      - name: Redirect temp to /mnt
+        run: |
+          sudo mkdir -p /mnt/tmp /mnt/var-tmp
+          sudo chmod 1777 /mnt/tmp /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap pinned mkosi
+        run: ./shared/native-ab/ci/bootstrap-mkosi.sh .mkosi
+
+      - name: Assert mkosi pin matches build.yml
+        run: ./shared/native-ab/ci/check-mkosi-pin.sh .mkosi
+
+      - name: Prepare mkosi build host
+        # Same host prep as the product build jobs (see build-cayo); the ISO
+        # rootfs build hits the identical Ubuntu-runner gaps.
+        run: |
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_userns=0
+          sudo aa-teardown || true
+          sudo apt-get remove -y apparmor || true
+          sudo mkdir -p /var/lib/ca-certificates
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debian-archive-keyring \
+            dracut-core binutils file python3-cryptography xorriso mtools dosfstools zstd
+
+      - name: Build installer rootfs
+        run: sudo TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile native-installer build
+
+      - name: Assemble ISO
+        run: sudo PATH="$PATH" ./shared/native-installer/tools/build-iso.sh output/native-installer output "$VERSION"
+
+      - name: Prepare ISO publication
+        run: |
+          ./shared/native-ab/publish/prepare-iso-publication.sh \
+            "output/snosi-native-installer_${VERSION}_x86-64.iso" "$VERSION" \
+            /var/tmp/native-publish/iso
+
+      - name: Publish candidate objects to R2
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.NATIVE_R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.NATIVE_R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_R2_ACL: private
+          RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+        run: |
+          sudo apt-get install -y rclone
+          ./shared/native-ab/publish/publish-candidate.sh \
+            /var/tmp/native-publish/iso \
+            "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
+
+      - name: Upload prepared publication metadata
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-prepared-iso
+          path: |
+            /var/tmp/native-publish/iso/publication-info.json
+            /var/tmp/native-publish/iso/SHA256SUMS
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: cleanup build output
+        if: always()
+        run: sudo -E .mkosi/bin/mkosi clean
+
+  test-public-origin-iso:
+    # Mirror of test-public-origin for the ISO's flat namespace. Separate job
+    # (not a matrix leg) so the proven product legs stay untouched;
+    # verify-remote.sh runs in its metadata-only mode -- the ISO blob is
+    # re-downloaded once from the public URL and byte-verified.
+    needs: build-iso
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Redirect /var/tmp to /mnt
+        run: |
+          sudo mkdir -p /mnt/var-tmp
+          sudo chmod 1777 /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+
+      - name: Download prepared publication metadata
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-prepared-iso
+          path: /var/tmp/native-publish/iso
+
+      - name: Skip (build did not produce ISO candidate objects this run)
+        if: steps.download.outcome != 'success'
+        run: |
+          echo "::notice::No native-prepared-iso artifact found -- build-iso did not complete successfully this run. Skipping public-origin verification for the ISO."
+
+      - name: Verify candidate objects against the public origin
+        if: steps.download.outcome == 'success'
+        id: verify
+        run: |
+          ./shared/native-ab/publish/verify-remote.sh \
+            /var/tmp/native-publish/iso \
+            https://repository.frostyard.org/isos/native/v1
+
+      - name: Record verified marker
+        if: steps.verify.outcome == 'success'
+        run: |
+          mkdir -p /var/tmp/native-verified
+          echo "iso verified $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/tmp/native-verified/iso
+
+      - name: Upload verified marker
+        if: steps.verify.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-verified-iso
+          path: /var/tmp/native-verified/iso
+          retention-days: 3
+          if-no-files-found: error
+
+  promote-iso:
+    needs: test-public-origin-iso
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    environment: native-promotion
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Redirect /var/tmp to /mnt
+        run: |
+          sudo mkdir -p /mnt/var-tmp
+          sudo chmod 1777 /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+
+      - name: Download verified marker
+        id: marker
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-verified-iso
+          path: /var/tmp/native-verified
+
+      - name: Download prepared publication metadata
+        id: prepared
+        if: steps.marker.outcome == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-prepared-iso
+          path: /var/tmp/native-publish/iso
+
+      - name: Skip (ISO did not pass public-origin verification this run)
+        if: steps.marker.outcome != 'success' || steps.prepared.outcome != 'success'
+        run: |
+          echo "::notice::the ISO has no verified candidate this run -- skipping promotion."
+
+      - name: Install rclone
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: sudo apt-get install -y rclone
+
+      - name: Write OpenPGP update-signing key
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        env:
+          NATIVE_UPDATE_SIGNING_KEY: ${{ secrets.NATIVE_UPDATE_SIGNING_KEY }}
+          NATIVE_UPDATE_SIGNING_PASSPHRASE: ${{ secrets.NATIVE_UPDATE_SIGNING_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          [[ -n "$NATIVE_UPDATE_SIGNING_KEY" ]] || { echo "::error::secrets.NATIVE_UPDATE_SIGNING_KEY is not set in the native-promotion environment -- see docs/native-ab-publication.md 'Production key ceremony'" >&2; exit 1; }
+          umask 077
+          mkdir -p /var/tmp/native-promote-secrets
+          printf '%s' "$NATIVE_UPDATE_SIGNING_KEY" > /var/tmp/native-promote-secrets/os-update-signing.key
+          chmod 600 /var/tmp/native-promote-secrets/os-update-signing.key
+          if [[ -n "${NATIVE_UPDATE_SIGNING_PASSPHRASE:-}" ]]; then
+            printf '%s' "$NATIVE_UPDATE_SIGNING_PASSPHRASE" > /var/tmp/native-promote-secrets/passphrase
+            chmod 600 /var/tmp/native-promote-secrets/passphrase
+          fi
+
+      - name: Promote the installer ISO
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.NATIVE_R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.NATIVE_R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_R2_ACL: private
+          RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          args=(--signing-key /var/tmp/native-promote-secrets/os-update-signing.key)
+          [[ -f /var/tmp/native-promote-secrets/passphrase ]] && \
+            args+=(--passphrase-file /var/tmp/native-promote-secrets/passphrase)
+          if [[ -n "${CF_ZONE_ID:-}" && -n "${CF_API_TOKEN:-}" ]]; then
+            args+=(--purge-hook "$PWD/shared/native-ab/publish/cloudflare-purge.sh")
+          fi
+          ./shared/native-ab/publish/promote.sh "${args[@]}" \
+            /var/tmp/native-publish/iso \
+            https://repository.frostyard.org/isos/native/v1 \
+            "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
+
+      - name: Verify ISO published index (served bytes, not just purge API 200)
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          set -euo pipefail
+          ver="$(jq -r .version /var/tmp/native-publish/iso/publication-info.json)"
+          ./shared/native-ab/publish/verify-published-index.sh \
+            --expect-version "$ver" \
+            https://repository.frostyard.org/isos/native/v1
+
+      - name: Remove OpenPGP update-signing key
+        if: always()
+        run: rm -rf /var/tmp/native-promote-secrets
+
+      - name: Record promoted marker
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          mkdir -p /var/tmp/native-promoted
+          echo "iso promoted $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/tmp/native-promoted/iso
+
+      - name: Upload promoted marker
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-promoted-iso
+          path: /var/tmp/native-promoted/iso
+          retention-days: 90
+          if-no-files-found: error
+
   release-notes:
     needs: [prepare, promote-cayo, promote-snow, promote-snowfield]
     if: github.ref == 'refs/heads/main' && !cancelled()
