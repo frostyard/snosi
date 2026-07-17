@@ -1065,7 +1065,10 @@ main() {
     local channel="$product" bare_product="${product%-ab}"
 
     need_root
-    for cmd in curl jq gpgv sfdisk lsblk blockdev udevadm blkid wipefs xz mkfs.ext4 objcopy openssl mokutil; do
+    # Every external command this script invokes anywhere -- an absence must
+    # fail HERE with a clear message, never mid-install (mount was absent from
+    # the ISO and died at ESP-mount time deep into an install, 2026-07-16).
+    for cmd in curl jq gpgv sfdisk lsblk blockdev udevadm blkid wipefs xz                mkfs.ext4 objcopy openssl mokutil mount umount findmnt dd                cryptsetup systemd-cryptenroll; do
         command -v "$cmd" >/dev/null || die "required command not found: $cmd"
     done
 
