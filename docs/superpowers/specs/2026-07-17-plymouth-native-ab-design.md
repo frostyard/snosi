@@ -168,3 +168,78 @@ static test now asserts its ABSENCE. The ExtraTrees overwrite of the
 conffile happens after dpkg finishes — the standard way this repo ships
 `/etc` config — and plymouth-populate-initrd (inside the postinst dracut
 run) resolves `Theme=snow` from it.
+
+## Amendment 2 (2026-07-17, after visual verification in QEMU)
+
+`splash` alone produced NO visible splash. Root-caused with
+`plymouth.debug=file:/dev/ttyS1` on a second QEMU serial port:
+
+1. **A configured serial console suppresses the splash entirely.** The
+   shared native cmdline carries `console=ttyS0`; plymouthd (24.004.60)
+   sees the serial console in `/sys/class/tty/console/active` and logs
+   `serial consoles detected, managing them with details forced` — details
+   mode globally, and DRM devices are never probed. This applies to real
+   hardware identically (the cmdline is baked into the signed UKI).
+   `plymouth.force-splash` does not help (no graphical device is ever
+   attached).
+2. **`plymouth.ignore-serial-consoles` restores DRM probing, but the
+   INITRD then loses a race**: virtio-gpu's card0 emits a premature udev
+   `change` event before its devnode exists; plymouthd's open fails with
+   ENOENT, it permanently falls back to the text splash, and the real
+   `add` event milliseconds later is never re-tried. Reproduced with both
+   virtio-vga and virtio-gpu-pci (the harness's device). Debian's kernel
+   ships no simpledrm (only builtin simplefb, which plymouth ignores), so
+   there is no instant boot-time DRM device to prevent the race.
+
+**Final design:** the splash runs from the REAL ROOT only, with the VT as
+the preferred console.
+
+- `shared/composition/snow/mkosi.conf`:
+  `KernelCommandLine=splash plymouth.ignore-serial-consoles`.
+- The native-only dracut override
+  (`shared/outformat/ab-root/tree/.../30-bootc-standard.conf`) adds
+  `omit_dracutmodules+=" plymouth "` — no plymouth in native initrds
+  (no-op for cayo, which never installs plymouth). The real root's
+  `plymouth-start.service` (statically wanted by sysinit.target in the
+  plymouth deb) starts after DRM is long up — deterministic graphical
+  splash on QEMU and hardware.
+- bootc images keep initrd plymouth (their base dracut conf is unchanged;
+  the static test asserts the omit stays native-only).
+
+## Amendment 3 (2026-07-17, after the real-root plymouthd segfault)
+
+Amendment 2's design crashed plymouthd in the real root:
+`ply_terminal_set_disabled_input` SIGSEGV via the DRM renderer's
+`open_input_source` — a known upstream NULL-terminal bug (Ubuntu
+LP#2103533; NULL guards first released in plymouth 26.134.222; Fedora
+backports them; Debian — including sid's 24.004.60-5.2 — does not).
+Trigger in our images: `plymouth.ignore-serial-consoles` + `/dev/console`
+being the (ignored) serial console + XKB config present in the real root
+leaves plymouthd's local console terminal NULL; the initrd never crashed
+only because it lacks `/etc/default/keyboard`.
+
+**Fix, proven by screendump (the flower renders, no crash):** make the VT
+the preferred console on desktop natives — `KernelCommandLine=console=tty0`
+in `shared/native-ab/channels/{snow,snowfield}/mkosi.conf` (the channel is
+the only desktop fragment `[Include]`d after ab-root, so tty0 lands after
+`console=ttyS0` and wins `/dev/console`). cayo's channel stays serial-only.
+
+Consequence handled: `/dev/console`=tty0 moves
+`systemd-ask-password-console`'s LUKS prompt off the serial port, which
+the QEMU harnesses' console pump depends on. Restored by
+`snosi-ask-password-serial.{service,path}` (ab-root tree, static
+sysinit.target.wants link, `install_items` into the native initrd via the
+same dracut conf): `systemd-tty-ask-password-agent --watch
+--console=/dev/ttyS0`, Condition-gated on BOTH `console=tty0` (desktop
+natives only) and `console=ttyS0` + `/dev/ttyS0` existing. Prompts appear
+on the VT (visible on hardware — an improvement over the old serial-only
+prompt) AND on serial (pump-compatible, raw-agent shape). Kernel printk
+still reaches serial (printk goes to every registered console); systemd
+status output moves to tty0 (hidden behind the splash).
+
+Known cosmetic trade-off: without `quiet`, kernel messages are now visible
+on the hardware screen for the few seconds before the real-root splash
+starts (the earlier "kernel messages never hit the screen" rationale for
+skipping `quiet` was invalidated by `console=tty0`). Flagged for a
+follow-up decision rather than silently added — `quiet` was explicitly
+declined during design.

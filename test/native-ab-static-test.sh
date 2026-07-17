@@ -314,7 +314,39 @@ done
 # ExtraTrees land), and a SkeletonTrees copy of the plymouthd.conf conffile
 # hard-fails the build (dpkg conffile prompt + non-interactive stdin = EOF).
 comp_snow="$root/shared/composition/snow/mkosi.conf"
-grep -q '^KernelCommandLine=splash$' "$comp_snow"
+grep -q '^KernelCommandLine=splash plymouth\.ignore-serial-consoles$' "$comp_snow"
+# The splash runs from the real root only: native initrds must omit the
+# plymouth dracut module (details-forcing/DRM-race with console=ttyS0 --
+# see the comment in the ab-root 30-bootc-standard.conf), while the bootc
+# base copy must NOT omit it (bootc installs get rhgb and use initrd
+# plymouth as before).
+grep -q '^omit_dracutmodules+=" plymouth "$' \
+    "$ab/tree/usr/lib/dracut/dracut.conf.d/30-bootc-standard.conf"
+if grep -q 'omit_dracutmodules.*plymouth' \
+    "$root/mkosi.images/base/mkosi.extra/usr/lib/dracut/dracut.conf.d/30-bootc-standard.conf"; then
+    echo "bootc base dracut conf must not omit plymouth" >&2
+    exit 1
+fi
+# Desktop channels must put console=tty0 LAST on the cmdline (the channel
+# is the only desktop fragment included after ab-root's console=ttyS0):
+# /dev/console on the VT keeps plymouthd's local terminal non-NULL (avoids
+# the 24.004.60 DRM-input-path segfault under
+# plymouth.ignore-serial-consoles) and is what makes the graphical splash
+# actually render. cayo's channel must NOT have it (server /dev/console
+# stays serial). The serial LUKS prompt that console=tty0 would otherwise
+# remove is restored by snosi-ask-password-serial.* -- units, static wants
+# link, and their install_items ride into the native initrd.
+grep -q '^KernelCommandLine=console=tty0$' "$root/shared/native-ab/channels/snow/mkosi.conf"
+grep -q '^KernelCommandLine=console=tty0$' "$root/shared/native-ab/channels/snowfield/mkosi.conf"
+if grep -q 'console=tty0' "$root/shared/native-ab/channels/cayo/mkosi.conf"; then
+    echo "cayo channel must not carry console=tty0" >&2
+    exit 1
+fi
+[[ -f "$ab/tree/usr/lib/systemd/system/snosi-ask-password-serial.service" ]]
+[[ -f "$ab/tree/usr/lib/systemd/system/snosi-ask-password-serial.path" ]]
+[[ -L "$ab/tree/usr/lib/systemd/system/sysinit.target.wants/snosi-ask-password-serial.path" ]]
+grep -q 'install_items.*snosi-ask-password-serial' \
+    "$ab/tree/usr/lib/dracut/dracut.conf.d/30-bootc-standard.conf"
 if [[ -e "$root/shared/snow/skeleton" ]]; then
     echo "shared/snow/skeleton must not exist: theme files ship via the snow ExtraTrees (skeleton conffile copies break plymouth's dpkg install)" >&2
     exit 1
