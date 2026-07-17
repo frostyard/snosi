@@ -41,6 +41,22 @@ jobs:
       - name: Validate deployment bundle
         run: npm run deploy:dry-run
 
+      - name: Verify production R2 bucket binding
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.NATIVE_R2_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_WORKERS_API_TOKEN }}
+          EXPECTED_R2_BUCKET: ${{ secrets.NATIVE_R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          configured="$(node --input-type=module -e \
+            'import fs from "node:fs"; const c = JSON.parse(fs.readFileSync("wrangler.jsonc", "utf8")); process.stdout.write(c.r2_buckets[0].bucket_name)')"
+          [[ -n "$EXPECTED_R2_BUCKET" ]] || { echo "::error::NATIVE_R2_BUCKET is not set" >&2; exit 1; }
+          [[ "$configured" == "$EXPECTED_R2_BUCKET" ]] || {
+            echo "::error::wrangler.jsonc R2 bucket does not match NATIVE_R2_BUCKET" >&2
+            exit 1
+          }
+          npx wrangler r2 bucket info "$configured" >/dev/null
+
       - name: Deploy Worker
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.NATIVE_R2_ACCOUNT_ID }}

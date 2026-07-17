@@ -215,6 +215,10 @@ deliberately separate, and clients still authenticate `SHA256SUMS.gpg` then the
 ISO hash. `.github/workflows/deploy-native-installer-redirect.yml` deploys edge
 code independently; `verify-installer-redirect.sh` is the mandatory
 post-promotion/post-withdrawal probe.
+The production binding is the existing `frostyardrepo` bucket. The deploy job
+parses `wrangler.jsonc`, compares it with the repository's `NATIVE_R2_BUCKET`
+secret, and verifies the bucket exists before deployment; this is specifically
+to defeat Wrangler 4's automatic provisioning of typoed/missing resources.
 
 `test/native-ab-publication-test.sh` is the full local end-to-end rehearsal:
 two real `cayo-ab-raw` builds (N, N+1) published under the real `cayo-ab`
