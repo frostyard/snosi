@@ -14,6 +14,8 @@ test/
 ├── bootc-install-test.sh      # Orchestrator script (headless, for CI)
 ├── bootc-update-test.sh       # Update/rollback orchestrator (headless)
 ├── native-ab-update-test.sh   # Native A/B N through N+3 QEMU test
+├── native-boot-smoke-test.sh  # Tier 1 boot gate: disk artifact boots to multi-user.target (build-native-images.yml promotion gate)
+├── native-iso-boot-smoke-test.sh # Tier 1 boot gate: installer ISO reaches a serial login prompt (same promotion gate)
 ├── native-ab-components-test.sh # Phase 1 exit-criterion QEMU test (masks, components, etc drift)
 ├── native-ab-static-test.sh   # Cheap A/B configuration invariants
 ├── native-publish-test.sh     # Publisher naming/derivation self-test (fixture GPT, no root)
@@ -555,6 +557,109 @@ several tool-diagnostic streams to stdout instead of stderr, dumped a UKI sectio
 to `/dev/null` (objcopy always exits 1 doing that), and left the LUKS mapper close
 un-retried — see CLAUDE.md "Native A/B Prototype".
 
+## Boot Smoke Tests (Tier 1 of Tiered Boot Validation, 2026-07-17)
+
+`test/native-boot-smoke-test.sh` and `test/native-iso-boot-smoke-test.sh` are
+the promotion gate added by `docs/plans/2026-07-17-native-boot-validation-
+design.md`/`...-plan.md`: `build-native-images.yml`'s `test-public-origin`/
+`test-public-origin-iso` jobs run them, against the SAME re-verified candidate
+bytes `verify-remote.sh` just checked, immediately before recording the
+`native-verified-<product>`/`native-verified-iso` marker that `promote-*`
+requires -- an image that re-verifies over HTTP but does not boot can no
+longer be promoted. Neither test enforces Secure Boot or TPM (no MOK
+enrollment, no vTPM); that deeper chain is `native-nightly.yml`'s job (Tier
+2, non-blocking) via the pre-existing `test/native-ab-secure-boot-test.sh`.
+
+`native-boot-smoke-test.sh` boots a native A/B product's disk artifact:
+
+```bash
+sudo test/native-boot-smoke-test.sh <prepared-dir> [base-url]
+```
+
+`prepared-dir` is a `prepare-native-publication.sh` output dir (needs
+`publication-info.json` + `SHA256SUMS`; the disk blob itself is optional --
+CI passes only metadata between jobs, so when it's absent the script
+downloads it from `<base-url>/.candidate/<version>/<disk-name>` and verifies
+its sha256 against `SHA256SUMS` either way). `SMOKE_CONSOLE_COPY=<path>`
+copies the QEMU serial log out on both pass and fail so CI can upload it as
+an artifact; `SSH_TIMEOUT` (default 600s) accounts for a true systemd first
+boot applying presets before sshd even has host keys. It asserts, in order:
+`systemctl is-system-running --wait` equals `running` (dumping `systemctl
+--failed` on any other value), `multi-user.target` is `active`, `/etc/
+os-release`'s `IMAGE_ID`/`IMAGE_VERSION` match the candidate's own product/
+version, `/usr/lib/snosi/native-ab` is present (booted the right artifact
+class), and a `systemctl poweroff` completes within 120s. Root and verity
+partitions boot byte-pristine -- nothing is written to them.
+
+**SSH-seeding mechanism (and why it has to be this way):** the script
+loop-mounts the disk's `var` partition (by `PARTLABEL=var`, found via
+`lsblk`) and writes an ephemeral ed25519 public key to `lib/snosi/
+etc-overlay/upper/ssh/authorized_keys.d/root` on it, then unmounts before
+ever booting the VM -- exactly the path `snosi-install`'s own `seed_var()`
+uses to seed the FIRST user's authorized_keys on a real install, and read
+at boot through the `AuthorizedKeysFile` drop-in
+(`shared/outformat/ab-root/tree/etc/ssh/sshd_config.d/
+10-snosi-authorized-keys.conf`). This is required because `/root` itself
+lives on the sealed, read-only, dm-verity-protected root -- unlike
+`bootc-install-test.sh`'s composefs `state/os/default/var/roothome/.ssh/
+authorized_keys` injection trick (see "Orchestrator" above), there is no
+writable `/root` equivalent to inject into on a native A/B image; `var` is
+the only writable partition, and it's exactly the partition a real install
+recreates from scratch anyway, so seeding it here doesn't paper over
+anything a real boot wouldn't also have.
+
+`native-iso-boot-smoke-test.sh` boots the published network-installer ISO:
+
+```bash
+sudo test/native-iso-boot-smoke-test.sh <prepared-dir> [base-url]
+```
+
+Same `prepared-dir`/`base-url`/local-blob-or-download shape, but against a
+`prepare-iso-publication.sh` output dir and its `iso` artifact. Plain
+(non-Secure-Boot) OVMF -- Secure Boot enforcement of the ISO chain is
+`test/native-installer-iso-test.sh`'s job, not this one's. There is no SSH
+assertion at all: the published ISO's rootfs is never touched before boot
+(unlike `native-installer-iso-test.sh` Step 1, which injects a key into the
+rootfs before assembly specifically for its own SSH-based checks -- doing
+that here would mean testing bytes the harness modified, not the bytes a
+user downloads), so the only assertion is a `grep -aq "login:"` poll of the
+serial console log within `ISO_BOOT_TIMEOUT` (default 420s). `SMOKE_CONSOLE_
+COPY` behaves identically to the disk test.
+
+**Local-proof recipe** (both scripts, verified live 2026-07-17): build the
+product (`just cayo-ab`, `mkosi --profile native-installer build` +
+`build-iso.sh` for the ISO), run it through `prepare-native-publication.sh`
+(no `--xz` -- the fast local-iteration path, unsuffixed filenames) or
+`prepare-iso-publication.sh`, then point the smoke script straight at that
+output dir with no `base-url`. Positive runs passed clean on the first try
+for both scripts (`cayo` `20260717160535` for the disk test; installer ISO
+`20260717230838` for the ISO test, observed login line `snosi-installer
+login:`), and the download-path leg (metadata-only dir + `test/lib/
+range-http-server.py <port> <directory>` -- note the two POSITIONAL args,
+no `--directory` flag) also passed unmodified, proving the exact CI code
+path.
+
+**Negative-proof gotcha (disk test only, real finding from local
+verification):** corrupting the disk at a fixed mid-partition byte offset
+(e.g. 2 GiB into the disk, deep inside the ~5 GiB root partition) does
+**not** reliably fail the boot. dm-verity only computes/checks a hash for a
+block when that block is actually *read*, and a headless boot to
+`multi-user.target` reads only what systemd/core libs/loaded units need --
+nowhere near the full erofs content (docs, locales, unused binaries never
+get touched). A corruption landing outside whatever the boot path happens
+to read is invisible to verity and the image boots clean on damaged bytes,
+which looks like a false negative in the test but is actually correct
+verity semantics. The reliable target is the **first bytes of the root
+partition** (the erofs superblock), which `mount()` always reads
+immediately on every boot: corrupting there produces a genuine, guaranteed
+failure -- `Buffer I/O error on dev dm-0, logical block 0, async page read`
+on the console, the initrd's `etc-overlay` module refusing to continue,
+and the script's `wait_for_ssh` timing out and `die()`-ing with the console
+tail attached, exit 1, `SMOKE_CONSOLE_COPY` still populated. For the ISO
+test, a simple truncation (`head -c 10M`) is sufficient and fails at GRUB
+itself (`attempt to read or write outside of disk`) before the kernel ever
+loads.
+
 ## Test Tiers
 
 ### Tier 1 — Installation Validation (01-installation.sh)
@@ -649,6 +754,16 @@ non-root, no image build. The destructive rotation test and build-dependent
 artifact tests (including the QEMU `native-ab-update-test.sh` and
 `native-ab-components-test.sh`) remain manual because CI does not provision
 MOK, a persistent vTPM, signing material, or the large real-build artifacts.
+
+Two boot-validation tests now DO run automatically as of 2026-07-17 (see
+"Boot Smoke Tests" above): `build-native-images.yml`'s `test-public-origin`/
+`test-public-origin-iso` jobs run `native-boot-smoke-test.sh`/
+`native-iso-boot-smoke-test.sh` on every build that reaches promotion, and
+`native-nightly.yml` runs `native-ab-secure-boot-test.sh` in default mode
+nightly (rotating `cayo-ab`/`snow-ab`/`snowfield-ab`), with no GitHub
+environment or repository secrets -- it generates its own ephemeral Secure
+Boot/MOK and PCR-signing keys per run. `--full-window` and the other
+destructive/rotation harnesses remain manual-only.
 
 The `test-install.yml` workflow runs these tests on manual dispatch:
 1. Sets up KVM-enabled runner
