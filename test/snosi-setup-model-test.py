@@ -241,6 +241,37 @@ eq("installable subset", [x.path for x in disks if x.installable],
 eq("human_bytes GiB", model.human_bytes(34359738368), "32.0 GiB")
 
 # ---------------------------------------------------------------------------
+# 3b. Feature-catalog parsing (--print-features, proto 1)
+# ---------------------------------------------------------------------------
+FIXTURE_FEATURES = """{
+  "proto": 1, "product": "snow",
+  "features": [
+    {"name": "docker", "description": "Docker Containers",
+     "documentation": "https://frostyard.org", "default": false},
+    {"name": "tailscale", "description": "Tailscale VPN", "default": false,
+     "x-future-key": "receivers must tolerate unknown keys"},
+    {"name": "bare"}
+  ]
+}"""
+feats = model.parse_features(FIXTURE_FEATURES)
+eq("three features parsed", len(feats), 3)
+eq("feature name", feats[0].name, "docker")
+eq("feature description", feats[0].description, "Docker Containers")
+ok("feature default off", not feats[0].default)
+ok("unknown keys tolerated", feats[1].name == "tailscale")
+eq("bare feature description falls back to name", feats[2].description, "bare")
+try:
+    model.parse_features('{"proto": 2, "features": []}')
+    ok("wrong proto rejected", False)
+except ValueError:
+    ok("wrong proto rejected", True)
+try:
+    model.parse_features('{"proto": 1, "features": "nope"}')
+    ok("non-array features rejected", False)
+except ValueError:
+    ok("non-array features rejected", True)
+
+# ---------------------------------------------------------------------------
 # 4. Typed-confirmation matcher (CLI confirm_typed_matches port)
 # ---------------------------------------------------------------------------
 ok("confirm matches path", model.confirm_matches("/dev/vda", "/dev/vda",

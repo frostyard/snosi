@@ -287,6 +287,30 @@ sbom_tmp="$NEW_TMPFILE"
 commit_tmpfile "$sbom_tmp" "$dest/$sbom_name"
 
 # ---------------------------------------------------------------------------
+# Feature catalog -- generated at image build time by
+# shared/outformat/ab-root/finalize/features-catalog.finalize as
+# <IMAGE_ID>.features.json in the mkosi output dir (product-curated: only
+# features whose X-Snosi-Products includes this product). Published under
+# the frozen public name so installers fetch it hash-verified via the
+# signed index. REQUIRED: every current native build produces it; a missing
+# file means the build predates the catalog or the finalize regressed.
+# ---------------------------------------------------------------------------
+
+features_src="$OUTPUT_DIR/$product.features.json"
+[[ -f "$features_src" ]] || { echo "Error: feature catalog not found: $features_src (features-catalog.finalize did not run?)" >&2; exit 1; }
+jq -e '.proto == 1 and .product == $p and (.features | type == "array")' \
+    --arg p "$product" "$features_src" >/dev/null || {
+    echo "Error: $features_src is not a valid proto-1 feature catalog for $product" >&2
+    exit 1
+}
+features_name="${channel}_${version}.features.json"
+echo "Writing $dest/$features_name"
+new_tmpfile "$dest/$features_name"
+features_tmp="$NEW_TMPFILE"
+cp "$features_src" "$features_tmp"
+commit_tmpfile "$features_tmp" "$dest/$features_name"
+
+# ---------------------------------------------------------------------------
 # SHA256SUMS -- unsigned. Signing (SHA256SUMS.gpg) is the Phase 7 protected
 # promotion step (docs/native-ab-contracts.md §4, §7); this script only
 # prepares candidate bytes.
@@ -296,7 +320,7 @@ sums_file="$dest/SHA256SUMS"
 new_tmpfile "$sums_file"
 sums_tmp="$NEW_TMPFILE"
 : > "$sums_tmp"
-for name in "$root_name" "$verity_name" "$disk_name" "$efi_name" "$manifest_name" "$sbom_name"; do
+for name in "$root_name" "$verity_name" "$disk_name" "$efi_name" "$manifest_name" "$sbom_name" "$features_name"; do
     (cd "$dest" && sha256sum "$name") >> "$sums_tmp"
 done
 commit_tmpfile "$sums_tmp" "$sums_file"

@@ -45,8 +45,20 @@ failures=0
 
 # --- sysext features -------------------------------------------------------
 mapfile -t features < <(jq -r '.features[]? // empty' "$SEED")
+# Known-feature set, resolved ONCE on the booted target. A seeded feature the
+# image does not define (stale installer catalog, removed sysext) is warned
+# and SKIPPED WITHOUT counting as a failure -- otherwise the unit would retry
+# forever on every boot chasing a feature that can never exist. Transient
+# enable failures (network, download) still count and still retry.
+# `|| true`: an updex that cannot even list (transient) must not abort the
+# whole provisioning under set -e/pipefail -- empty known = skip the check.
+known="$(updex --silent features list 2>/dev/null | awk 'NR > 1 {print $1}' || true)"
 for f in "${features[@]+"${features[@]}"}"; do
-    [[ "$f" =~ ^[A-Za-z0-9._-]+$ ]] || { warn "skipping invalid feature name: $f"; failures=$((failures + 1)); continue; }
+    [[ "$f" =~ ^[A-Za-z0-9._-]+$ ]] || { warn "skipping invalid feature name: $f"; continue; }
+    if [[ -n "$known" ]] && ! grep -qx "$f" <<<"$known"; then
+        warn "feature '$f' is not defined by this image; skipping (enable it later if a future update adds it)"
+        continue
+    fi
     log "enabling sysext feature: $f"
     if ! updex --silent features enable "$f" --now; then
         warn "failed to enable feature: $f"

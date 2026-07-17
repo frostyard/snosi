@@ -110,6 +110,10 @@ PYEOF
     printf 'verity payload\n' > "$dir/$profile_output_name.${product}_@v.root-verity.raw.raw"
     printf 'efi payload\n' > "$dir/$profile_output_name.efi"
     truncate -s 2M "$dir/$profile_output_name.raw"
+    # Feature catalog artifact (features-catalog.finalize's output shape --
+    # REQUIRED by prepare since the catalog publication landed).
+    printf '{"proto": 1, "product": "%s", "features": [{"name": "docker", "description": "Docker Containers", "documentation": "", "default": false}]}\n' \
+        "$product" > "$dir/$product.features.json"
 
     cat > "$dir/sfdisk-script.txt" <<EOF
 label: gpt
@@ -142,6 +146,10 @@ PYEOF
     printf 'verity payload\n' > "$dir/$profile_output_name.${product}_@v.root-verity.raw.raw"
     printf 'efi payload\n' > "$dir/$profile_output_name.efi"
     truncate -s 2M "$dir/$profile_output_name.raw"
+    # Feature catalog artifact (features-catalog.finalize's output shape --
+    # REQUIRED by prepare since the catalog publication landed).
+    printf '{"proto": 1, "product": "%s", "features": [{"name": "docker", "description": "Docker Containers", "documentation": "", "default": false}]}\n' \
+        "$product" > "$dir/$product.features.json"
 
     cat > "$dir/sfdisk-script.txt" <<EOF
 label: gpt
@@ -181,6 +189,7 @@ assert_file_exists "no-xz: disk artifact present, no .xz suffix" \
     "$pub_dir1/cayo-ab_20260714150000.disk.raw"
 assert_file_exists "no-xz: efi artifact present" "$pub_dir1/cayo-ab_20260714150000.efi"
 assert_file_exists "no-xz: manifest.json artifact present" "$pub_dir1/cayo-ab_20260714150000.manifest.json"
+assert_file_exists "no-xz: features.json artifact present (frozen name)" "$pub_dir1/cayo-ab_20260714150000.features.json"
 assert_file_exists "no-xz: SHA256SUMS present" "$pub_dir1/SHA256SUMS"
 assert_file_absent "no-xz: SHA256SUMS.gpg NOT produced (unsigned; Phase 7 promotion step)" \
     "$pub_dir1/SHA256SUMS.gpg"
@@ -235,6 +244,10 @@ verity_name="cayo-ab_20260714150000_${verity_uuid}.root-verity.raw.xz"
 disk_name="cayo-ab_20260714150000.disk.raw.xz"
 efi_name="cayo-ab_20260714150000.efi"
 manifest_name="cayo-ab_20260714150000.manifest.json"
+assert_file_exists "--xz: features.json present" "$pub_dir2/cayo-ab_20260714150000.features.json"
+grep -q "cayo-ab_20260714150000.features.json" "$pub_dir2/SHA256SUMS" &&
+    pass "--xz: features.json listed in SHA256SUMS" ||
+    fail "--xz: features.json listed in SHA256SUMS"
 
 assert_file_exists "--xz: root.raw.xz present" "$pub_dir2/$root_name"
 assert_file_exists "--xz: root-verity.raw.xz present" "$pub_dir2/$verity_name"

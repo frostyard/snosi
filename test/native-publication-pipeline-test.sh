@@ -172,6 +172,10 @@ PYEOF
     printf 'verity payload %s\n' "$version" >"$dir/$profile_output_name.${product}_@v.root-verity.raw.raw"
     printf 'efi payload %s\n' "$version" >"$dir/$profile_output_name.efi"
     truncate -s 2M "$dir/$profile_output_name.raw"
+    # Feature catalog artifact (features-catalog.finalize's shape; REQUIRED
+    # by prepare-native-publication since catalog publication landed).
+    printf '{"proto": 1, "product": "%s", "features": [{"name": "docker", "description": "Docker Containers", "documentation": "", "default": false}]}\n' \
+        "$product" >"$dir/$product.features.json"
 
     cat >"$dir/sfdisk-script.txt" <<EOF
 label: gpt
