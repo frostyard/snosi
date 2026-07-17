@@ -272,6 +272,55 @@ run_installer "${BASE_ARGS[@]}" --hostname myhost --locale en_US.UTF-8 \
     --enable-feature tailscale
 assert_contains "valid system-settings args pass validation (reach root check)" "$RUN_OUT" "must run as root"
 
+# --- GUI contract query modes ---
+run_installer --print-defaults
+assert_eq "--print-defaults exits 0" "$RUN_RC" "0"
+PD_JSON="$RUN_OUT"
+assert_true "--print-defaults emits valid JSON" bash -c 'jq -e . >/dev/null <<<"$1"' _ "$PD_JSON"
+assert_eq "--print-defaults proto is 1" "$(jq -r .proto <<<"$PD_JSON")" "1"
+assert_eq "--print-defaults lists 3 products" "$(jq '.products | length' <<<"$PD_JSON")" "3"
+assert_eq "--print-defaults: cayo core flatpaks not allowed" \
+    "$(jq -r '.products[] | select(.name == "cayo-ab") | .core_flatpaks_allowed' <<<"$PD_JSON")" "false"
+assert_eq "--print-defaults: snow core flatpaks default on" \
+    "$(jq -r '.products[] | select(.name == "snow-ab") | .core_flatpaks_default' <<<"$PD_JSON")" "true"
+assert_eq "--print-defaults: snow minimum disk matches minimum_disk_bytes" \
+    "$(jq -r '.products[] | select(.name == "snow-ab") | .minimum_disk_bytes' <<<"$PD_JSON")" \
+    "$(call_fn minimum_disk_bytes snow)"
+assert_true "--print-defaults carries the username regex" \
+    bash -c "jq -e '.regexes.username | length > 0' >/dev/null <<<'$PD_JSON'"
+
+run_installer --list-disks-json
+assert_true "--list-disks-json without --product: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
+assert_contains "--list-disks-json without --product: clear error" "$RUN_OUT" "requires --product"
+
+run_installer --list-disks-json --product bogus
+assert_contains "--list-disks-json bogus product rejected" "$RUN_OUT" "must be one of"
+
+# Minimal lsblk fixture, scoped to this block (the main disk-refusal fixture
+# is created later in this file).
+cat >"$WORK_DIR/ldj-lsblk.json" <<'LDJEOF'
+{"blockdevices": [
+  {"name": "sdz", "path": "/dev/sdz", "type": "disk", "model": "TestDisk",
+   "serial": "LDJ123", "size": 64000000000, "tran": "sata", "rm": false, "ro": false},
+  {"name": "sdy", "path": "/dev/sdy", "type": "disk", "model": "TinyDisk",
+   "serial": "LDJ124", "size": 2000000000, "tran": "usb", "rm": true, "ro": false}
+]}
+LDJEOF
+set +e
+LDJ_OUT="$(SNOSI_INSTALL_LSBLK_JSON="$WORK_DIR/ldj-lsblk.json" "$INSTALLER" --list-disks-json --product cayo-ab 2>/dev/null)"
+LDJ_RC=$?
+set -e
+assert_eq "--list-disks-json (fixture) exits 0" "$LDJ_RC" "0"
+assert_true "--list-disks-json emits a JSON array" bash -c 'jq -e "type == \"array\"" >/dev/null <<<"$1"' _ "$LDJ_OUT"
+assert_eq "--list-disks-json lists both fixture disks" "$(jq length <<<"$LDJ_OUT")" "2"
+assert_eq "--list-disks-json: big disk installable (refusal null)" \
+    "$(jq -r '.[] | select(.path == "/dev/sdz") | .refusal' <<<"$LDJ_OUT")" "null"
+assert_true "--list-disks-json: tiny disk carries a refusal reason" \
+    bash -c 'jq -e ".[] | select(.path == \"/dev/sdy\") | .refusal | length > 0" >/dev/null <<<"$1"' _ "$LDJ_OUT"
+
+run_installer --json-progress "${BASE_ARGS[@]}" --product bogus-product
+assert_contains "--json-progress: die emits an error event" "$RUN_OUT" '{"event":"error"'
+
 # --insecure-raw-var must NOT demand recovery-key-file/ack.
 mapfile -t ARGS_RAW_VAR < <(without_flag --recovery-key-file 1)
 run_installer "${ARGS_RAW_VAR[@]}" --insecure-raw-var

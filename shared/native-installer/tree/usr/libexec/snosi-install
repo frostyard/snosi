@@ -92,9 +92,75 @@ PUBRING="${SNOSI_INSTALL_PUBRING:-$PUBRING_DEFAULT}"
 # ---------------------------------------------------------------------------
 # Small helpers
 # ---------------------------------------------------------------------------
-log()  { printf '%s\n' "$*"; }
-warn() { printf 'Warning: %s\n' "$*" >&2; }
-die()  { printf 'Error: %s\n' "$*" >&2; exit 1; }
+# --json-progress (GUI contract, docs/plans/2026-07-17-graphical-installer-
+# plan.md): line-delimited JSON events on stdout, protocol 1. Grammar:
+#   {"event":"start","proto":1,"product":...,"version":...}
+#   {"event":"phase","id":...,"title":...}
+#   {"event":"log","level":"info"|"warning","message":...}
+#   {"event":"error","message":...}   (then exit non-zero)
+#   {"event":"done","product":...,"version":...,"disk":...}
+# Byte-level download progress is deliberately NOT part of proto 1 (the
+# download is a 5-stage shell pipeline with no clean byte hook); receivers
+# must ignore unknown event types so it can be added compatibly.
+JSON_PROGRESS=0
+json_event() { # jq-args...
+    [[ "$JSON_PROGRESS" == 1 ]] || return 0
+    jq -cn "$@"
+}
+log()  {
+    if [[ "$JSON_PROGRESS" == 1 ]]; then
+        jq -cn --arg m "$*" '{event:"log",level:"info",message:$m}'
+    else
+        printf '%s\n' "$*"
+    fi
+}
+warn() {
+    [[ "$JSON_PROGRESS" != 1 ]] || jq -cn --arg m "$*" '{event:"log",level:"warning",message:$m}'
+    printf 'Warning: %s\n' "$*" >&2
+}
+die()  {
+    [[ "$JSON_PROGRESS" != 1 ]] || jq -cn --arg m "$*" '{event:"error",message:$m}'
+    printf 'Error: %s\n' "$*" >&2
+    exit 1
+}
+json_phase() { # id title
+    json_event --arg id "$1" --arg title "$2" '{event:"phase",id:$id,title:$title}'
+}
+
+# print_defaults -- the GUI contract's static metadata document (products,
+# capacity floors, interactive defaults, validation regexes). Everything the
+# frontend needs so it never hardcodes what this script already knows.
+print_defaults() {
+    local p bare cf products="[]"
+    for p in "${VALID_PRODUCTS[@]}"; do
+        bare="${p%-ab}"
+        cf=true; [[ "$p" != "cayo-ab" ]] || cf=false
+        products="$(jq -cn --argjson acc "$products" --arg name "$p" --arg bare "$bare" \
+            --argjson min "$(minimum_disk_bytes "$bare")" --argjson cf "$cf" \
+            '$acc + [{name:$name, bare:$bare, minimum_disk_bytes:$min,
+                      core_flatpaks_default:$cf, core_flatpaks_allowed:$cf}]')"
+    done
+    jq -n --argjson products "$products" \
+        --arg origin "$ORIGIN_DEFAULT" --arg mok_cert "$MOK_CERT_DEFAULT" \
+        --arg u "$USERNAME_RE" --arg h "$HOSTNAME_RE" --arg l "$LOCALE_RE" \
+        --arg t "$TIMEZONE_RE" --arg k "$KEYBOARD_RE" --arg f "$FEATURE_RE" \
+        '{proto: 1, products: $products,
+          defaults: {locale: "en_US.UTF-8", timezone: "UTC", keyboard: "us"},
+          origin_default: $origin, mok_cert_default: $mok_cert,
+          regexes: {username: $u, hostname: $h, locale: $l,
+                    timezone: $t, keyboard: $k, feature: $f}}'
+}
+
+# list_disks_json min_bytes self_device -- list_installable_disks as JSON
+# (refusal: null means installable). Read-only; usable without root wherever
+# lsblk is.
+list_disks_json() { # min_bytes self_device
+    list_installable_disks "$1" "$2" |
+        jq -Rn '[inputs | split("|") |
+                 {path: .[0], model: .[1], serial: .[2],
+                  size_bytes: (.[3] | tonumber), transport: .[4],
+                  refusal: (if (.[5] // "") == "" then null else .[5] end)}]'
+}
 
 # rereadpt_settle disk -- tells the kernel to reread disk's partition table
 # (blockdev --rereadpt) and waits for udev to finish processing the
@@ -173,6 +239,12 @@ Install mode options:
                                 otherwise, in either mode)
   --non-interactive             Fully non-interactive; requires every
                                 security-relevant flag above
+  --json-progress               Emit line-delimited JSON events on stdout
+                                (GUI frontend contract, protocol 1)
+  --print-defaults              Print the GUI metadata document (products,
+                                defaults, validation regexes) as JSON; no install
+  --list-disks-json             Print installable disks (+ refusal reasons) as
+                                JSON; requires --product; no install
   --allow-file                  TEST ONLY: install target may be a regular
                                 file instead of a whole block device
   -h, --help                    Show this help
@@ -1213,6 +1285,7 @@ main() {
     local ssh_key="" do_reboot=0 non_interactive=0 allow_file=0
     local restage_mode=0
     local username="" user_password_file="" user_fullname="" no_create_user=0
+    local print_defaults_mode=0 list_disks_mode=0
     local set_hostname="" set_locale="" set_timezone="" set_keyboard=""
     local core_flatpaks=""
     local -a enable_features=()
@@ -1246,6 +1319,9 @@ main() {
             --no-core-flatpaks) core_flatpaks=0; shift ;;
             --reboot) do_reboot=1; shift ;;
             --non-interactive) non_interactive=1; shift ;;
+            --json-progress) JSON_PROGRESS=1; shift ;;
+            --print-defaults) print_defaults_mode=1; shift ;;
+            --list-disks-json) list_disks_mode=1; shift ;;
             --allow-file) allow_file=1; shift ;;
             -h|--help) usage ;;
             --) shift; break ;;
@@ -1256,6 +1332,20 @@ main() {
 
     if [[ "$restage_mode" == 1 ]]; then
         restage_mok "$non_interactive" "$mok_cert" "$mok_password_file" "$do_reboot" "$disk"
+        return
+    fi
+
+    # GUI-contract query modes: metadata only, no install, no root.
+    if [[ "$print_defaults_mode" == 1 ]]; then
+        print_defaults
+        return
+    fi
+    if [[ "$list_disks_mode" == 1 ]]; then
+        [[ -n "$product" ]] || die "--list-disks-json requires --product (capacity floor is product-shaped)"
+        local lp ok=0
+        for lp in "${VALID_PRODUCTS[@]}"; do [[ "$lp" == "$product" ]] && ok=1; done
+        [[ "$ok" -eq 1 ]] || die "--product must be one of: ${VALID_PRODUCTS[*]}"
+        list_disks_json "$(minimum_disk_bytes "${product%-ab}")" "$(self_boot_device)"
         return
     fi
 
@@ -1362,10 +1452,13 @@ main() {
     # shellcheck disable=SC2064 # intentional: expand $workdir NOW, see above
     trap "close_var_mapper; rm -rf '$workdir'" EXIT
 
+    json_phase index "Fetching and verifying the signed release index"
     fetch_verified_index "$origin" "$channel" "$workdir"
     local version
     version="$(latest_channel_version "$INDEX_FILE" "$channel")"
     [[ -n "$version" ]] || die "no published version found for $channel in the verified index"
+    json_event --arg product "$channel" --arg version "$version" \
+        '{event:"start",proto:1,product:$product,version:$version}'
 
     local disk_name disk_sha256
     disk_name="${channel}_${version}.disk.raw.xz"
@@ -1525,6 +1618,7 @@ main() {
     # -----------------------------------------------------------------
     # Download + write (plan steps 8-9)
     # -----------------------------------------------------------------
+    json_phase download "Downloading and writing the disk image"
     local disk_url="$INDEX_BASE_URL/$disk_name"
     log "Downloading and writing $disk_url to $RESOLVED_DISK_PATH..."
     stream_download_verify "$disk_url" "$disk_sha256" "$RESOLVED_DISK_PATH" ||
@@ -1548,6 +1642,7 @@ main() {
     # -----------------------------------------------------------------
     # Post-write layout sanity check, BEFORE any partition surgery
     # -----------------------------------------------------------------
+    json_phase layout "Validating and growing the partition layout"
     log "Validating the written disk's partition layout..."
     validate_disk_image_layout "$RESOLVED_DISK_PATH"
 
@@ -1569,6 +1664,7 @@ main() {
         die "--acknowledge-recovery-saved is required with /var encryption in --non-interactive mode"
     fi
 
+    json_phase var "Creating encrypted /var"
     log "Formatting /var..."
     local var_device
     var_device="$(format_var "$var_part" "$encrypt_var" "$recovery_key_file")"
@@ -1576,6 +1672,7 @@ main() {
     # -----------------------------------------------------------------
     # TPM enrollment (plan step 15)
     # -----------------------------------------------------------------
+    json_phase tpm "Enrolling TPM unlock"
     if [[ "$encrypt_var" == 1 ]]; then
         if [[ "$no_tpm" == 1 ]]; then
             log "Skipping TPM enrollment (--no-tpm). /var is only unlockable with the recovery passphrase."
@@ -1595,6 +1692,7 @@ main() {
     # -----------------------------------------------------------------
     # Record install metadata + optional SSH key (plan steps 18-19)
     # -----------------------------------------------------------------
+    json_phase seed "Applying system configuration"
     log "Recording install metadata..."
     seed_var "$var_device" "$bare_product" "$channel" "$version" "$arch" "$ssh_key"
 
@@ -1616,6 +1714,7 @@ main() {
     # -----------------------------------------------------------------
     # MOK enrollment (plan steps 16-17)
     # -----------------------------------------------------------------
+    json_phase mok "Staging Secure Boot MOK enrollment"
     if [[ "$skip_mok" == 1 ]]; then
         log "Skipping MOK enrollment (--skip-mok). Run 'snosi-install --restage-mok' before rebooting into the installed OS, or the MOK-signed boot chain will not be trusted."
     elif [[ "$allow_file" == 1 ]]; then
@@ -1641,6 +1740,8 @@ main() {
     # -----------------------------------------------------------------
     # Summary + reboot (plan steps 20-21)
     # -----------------------------------------------------------------
+    json_event --arg product "$channel" --arg version "$version" --arg disk "$RESOLVED_DISK_PATH" \
+        '{event:"done",product:$product,version:$version,disk:$disk}'
     log ""
     log "=== Install complete ==="
     log "Product:   $channel $version ($arch)"
