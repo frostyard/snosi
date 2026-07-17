@@ -1,0 +1,79 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Generates the sysext feature CATALOG for this native image: the
+# machine-readable list the graphical/text installer shows as a checkbox
+# list (name + description per feature), so users never have to know sysext
+# ids by heart.
+#
+# Non-chroot FinalizeScript (the var-audit.finalize pattern): reads
+# $BUILDROOT/usr/lib/sysupdate.<name>.d/<name>.feature files directly and
+# writes TWO copies of the same JSON:
+#
+#   $BUILDROOT/usr/share/snosi/features.json   -- in-image (introspection on
+#                                                  the installed system)
+#   $OUTPUTDIR/$IMAGE_ID.features.json         -- build artifact, picked up
+#                                                  by prepare-native-
+#                                                  publication.sh and
+#                                                  published as the frozen
+#                                                  <channel>_<version>.
+#                                                  features.json, covered by
+#                                                  the signed SHA256SUMS
+#
+# Product curation: a feature file may carry `X-Snosi-Products=` (comma-
+# separated bare product names, e.g. "snow,snowfield"). Absent key = the
+# feature applies to every product. A feature whose list does not include
+# this build's $IMAGE_ID is EXCLUDED from that product's catalog entirely.
+# The key is ignored cleanly by both consumers of .feature files (verified
+# live 2026-07-17: systemd-sysupdate 261 parses with zero warnings even at
+# debug level; updex 1.3.0's ini parser reads only the keys it knows).
+set -euo pipefail
+
+[[ -n "${BUILDROOT:-}" && -n "${OUTPUTDIR:-}" && -n "${IMAGE_ID:-}" ]] || {
+    echo "features-catalog.finalize: BUILDROOT/OUTPUTDIR/IMAGE_ID must be set" >&2
+    exit 1
+}
+
+python3 - "$BUILDROOT" "$OUTPUTDIR" "$IMAGE_ID" <<'PYEOF'
+import configparser
+import glob
+import json
+import os
+import sys
+
+buildroot, outputdir, image_id = sys.argv[1], sys.argv[2], sys.argv[3]
+
+features = []
+for path in sorted(glob.glob(os.path.join(buildroot, "usr/lib/sysupdate.*.d/*.feature"))):
+    name = os.path.basename(path).removesuffix(".feature")
+    cp = configparser.ConfigParser(interpolation=None)
+    cp.read(path)
+    if "Feature" not in cp:
+        continue
+    sec = cp["Feature"]
+    products = [p.strip() for p in sec.get("X-Snosi-Products", "").split(",") if p.strip()]
+    if products and image_id not in products:
+        continue
+    features.append({
+        "name": name,
+        "description": sec.get("Description", name),
+        "documentation": sec.get("Documentation", ""),
+        # Contract: sysexts default disabled on native production candidates
+        # (accepted-risk note in CLAUDE.md); the catalog reflects the file.
+        "default": sec.getboolean("Enabled", fallback=False),
+    })
+
+doc = {"proto": 1, "product": image_id, "features": features}
+payload = json.dumps(doc, indent=2, sort_keys=True) + "\n"
+
+in_image = os.path.join(buildroot, "usr/share/snosi/features.json")
+os.makedirs(os.path.dirname(in_image), exist_ok=True)
+with open(in_image, "w") as f:
+    f.write(payload)
+
+artifact = os.path.join(outputdir, f"{image_id}.features.json")
+with open(artifact, "w") as f:
+    f.write(payload)
+
+print(f"features-catalog: {len(features)} feature(s) for {image_id} -> {artifact}")
+PYEOF

@@ -474,14 +474,28 @@ class FeaturesPage(Page):
     name = model.PAGE_FEATURES
     title = "Extensions"
 
+    # Checkbox list from the product's build-time feature catalog, fetched
+    # hash-verified via the signed index (`snosi-install --print-features`) --
+    # nobody should have to know sysext ids by heart. When the catalog is
+    # unavailable (release predating catalog publication, or offline), fall
+    # back to the original manual-entry rows with an explanatory banner.
+
     def build(self):
-        self._features = []
-        status = Adw.StatusPage(
+        self._features = []          # manual-entry names (fallback mode)
+        self._selected = set()       # checkbox selections (catalog mode)
+        self._switch_rows = []       # (name, Adw.SwitchRow)
+        self._catalog_loaded_for = None
+        self.status = Adw.StatusPage(
             icon_name="application-x-addon-symbolic",
             title="System Extensions",
-            description="Optional sysext features to enable on first boot "
-                        "(e.g. docker, tailscale, vscode). Leave empty to "
-                        "add none.")
+            description="Optional features to enable on first boot. "
+                        "Everything here can also be enabled later.")
+        self.spinner = Gtk.Spinner(spinning=False, halign=Gtk.Align.CENTER)
+        self.catalog_group = Adw.PreferencesGroup()
+        self.catalog_group.set_visible(False)
+        self.fallback_banner = Gtk.Label(
+            label="", halign=Gtk.Align.CENTER, wrap=True, visible=False)
+        self.fallback_banner.add_css_class("dim-label")
         entry_group = Adw.PreferencesGroup()
         self.entry = Adw.EntryRow(title="Feature name")
         self.entry.connect("entry-activated", self._on_add)
@@ -492,11 +506,79 @@ class FeaturesPage(Page):
         add_btn.connect("clicked", self._on_add)
         self.entry.add_suffix(add_btn)
         entry_group.add(self.entry)
+        self.entry_group = entry_group
+        self.entry_group.set_visible(False)
         self.list_group = Adw.PreferencesGroup(title="Enabled at first boot")
         self.list_group.set_visible(False)
         self._rows = []
-        status.set_child(_clamped(entry_group, self.list_group))
-        self.set_child(status)
+        self.status.set_child(_clamped(
+            self.spinner, self.catalog_group, self.fallback_banner,
+            self.entry_group, self.list_group))
+        self.set_child(self.status)
+
+    def set_page_active(self):
+        product = self.state.product.name if self.state.product else None
+        if product and self._catalog_loaded_for != product:
+            self._fetch_catalog(product)
+
+    def _fetch_catalog(self, product):
+        self.spinner.set_visible(True)
+        self.spinner.start()
+        argv = [self.window.installer, "--print-features", "--product", product]
+        if self.state.origin is not None:
+            argv += ["--origin", self.state.origin]
+        try:
+            proc = Gio.Subprocess.new(
+                argv,
+                Gio.SubprocessFlags.STDOUT_PIPE |
+                Gio.SubprocessFlags.STDERR_SILENCE)
+        except GLib.Error:
+            self._enter_fallback("Could not run the feature catalog query.")
+            return
+        proc.communicate_utf8_async(None, None, self._on_catalog, product)
+
+    def _on_catalog(self, proc, result, product):
+        self.spinner.stop()
+        self.spinner.set_visible(False)
+        try:
+            _ok, stdout, _stderr = proc.communicate_utf8_finish(result)
+            if proc.get_exit_status() != 0:
+                raise ValueError("catalog query failed")
+            feats = model.parse_features(stdout)
+        except (GLib.Error, ValueError, KeyError) as e:
+            self._enter_fallback(
+                "The feature catalog could not be loaded (%s). Enter feature "
+                "names manually, or enable features after installation." % e)
+            return
+        self._catalog_loaded_for = product
+        for _name, row in self._switch_rows:
+            self.catalog_group.remove(row)
+        self._switch_rows = []
+        for feat in feats:
+            row = Adw.SwitchRow(title=feat.name, subtitle=feat.description)
+            row.set_active(feat.name in self._selected or feat.default)
+            row.connect("notify::active", self._on_toggle, feat.name)
+            self.catalog_group.add(row)
+            self._switch_rows.append((feat.name, row))
+        self.catalog_group.set_visible(bool(self._switch_rows))
+        self.fallback_banner.set_visible(False)
+        self.entry_group.set_visible(False)
+        self.list_group.set_visible(False)
+
+    def _on_toggle(self, row, _pspec, name):
+        if row.get_active():
+            self._selected.add(name)
+        else:
+            self._selected.discard(name)
+
+    def _enter_fallback(self, message):
+        self.spinner.stop()
+        self.spinner.set_visible(False)
+        self.catalog_group.set_visible(False)
+        self.fallback_banner.set_label(message)
+        self.fallback_banner.set_visible(True)
+        self.entry_group.set_visible(True)
+        self.list_group.set_visible(bool(self._rows))
 
     def _validate_entry(self):
         text = self.entry.get_text()
@@ -531,7 +613,12 @@ class FeaturesPage(Page):
         self.list_group.set_visible(bool(self._rows))
 
     def finish(self):
-        self.state.features = list(self._features)
+        if self._catalog_loaded_for is not None:
+            # Catalog mode: exactly the checked switches, in catalog order.
+            self.state.features = [n for n, row in self._switch_rows
+                                   if row.get_active()]
+        else:
+            self.state.features = list(self._features)
         return True
 
 

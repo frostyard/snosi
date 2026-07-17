@@ -21,6 +21,7 @@ fail() { echo "not ok - $1${2:+ ($2)}"; FAIL=$((FAIL + 1)); }
 assert_eq() { [[ "$2" == "$3" ]] && pass "$1" || fail "$1" "expected '$3', got '$2'"; }
 assert_file() { [[ -f "$2" ]] && pass "$1" || fail "$1" "missing $2"; }
 assert_no_file() { [[ ! -f "$2" ]] && pass "$1" || fail "$1" "unexpected $2"; }
+assert_contains() { [[ "$2" == *"$3"* ]] && pass "$1" || fail "$1" "expected to find: $3"; }
 
 WORK_DIR="$(mktemp -d /var/tmp/snosi-firstboot-test.XXXXXX)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -31,6 +32,15 @@ cat >"$WORK_DIR/bin/updex" <<EOF
 #!/bin/bash
 echo "updex \$*" >>"$WORK_DIR/calls.log"
 [[ ! -f "$WORK_DIR/updex-fail" ]] || exit 1
+# "features list" answers with a fixed known set (header + names), so the
+# script's unknown-feature pre-check has something real to match against.
+# (No backticks in this unquoted heredoc -- they would command-substitute.)
+if [[ "\$*" == *"features list"* ]]; then
+    printf 'FEATURE  DESCRIPTION  ENABLED  TRANSFERS\n'
+    printf 'docker   Docker       no       -\n'
+    printf 'tailscale Tailscale   no       -\n'
+    printf 'incus    Incus        no       -\n'
+fi
 EOF
 cat >"$WORK_DIR/bin/flatpak" <<EOF
 #!/bin/bash
@@ -102,6 +112,21 @@ run_fb "$WORK_DIR/seed.json"
 assert_eq "flatpak failure: exit 1" "$RUN_RC" "1"
 assert_no_file "flatpak failure: done marker NOT written" "$WORK_DIR/done"
 rm -f "$WORK_DIR/flatpak-fail"
+
+echo "=== unknown-feature skip (stale catalog resilience) ==="
+rm -f "$WORK_DIR/done"
+cat >"$WORK_DIR/seed3.json" <<'EOF3'
+{"features": ["docker", "ghost-feature"], "core_flatpaks": false}
+EOF3
+run_fb "$WORK_DIR/seed3.json"
+assert_eq "unknown feature: exit 0 (skipped, not failed)" "$RUN_RC" "0"
+assert_file "unknown feature: done marker written (no retry-forever)" "$WORK_DIR/done"
+assert_eq "unknown feature: known feature still enabled" \
+    "$(grep -c '^updex --silent features enable docker --now$' "$WORK_DIR/calls.log")" "1"
+assert_eq "unknown feature: ghost-feature never passed to enable" \
+    "$(grep -c 'enable ghost-feature' "$WORK_DIR/calls.log" || true)" "0"
+assert_contains "unknown feature: warning names it" "$RUN_OUT" "ghost-feature"
+rm -f "$WORK_DIR/done"
 
 echo "=== features-only seed (cayo shape) ==="
 cat >"$WORK_DIR/seed2.json" <<'EOF'

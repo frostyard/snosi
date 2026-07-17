@@ -952,7 +952,22 @@ The ~1.6 GB uncompressed rootfs zstd-compresses to a ~590 MB packed
 initramfs, so the GUI ISO is ~700 MB — only ~100 MB more than the ~600 MB
 text-only ISO. **ISO size is NOT a reliable text-vs-GUI discriminator**
 (they are ~100 MB apart); check for `usr/bin/snosi-setup` in the packed
-initramfs instead. `test/snosi-setup-boot-test.sh` (local, root+KVM,
+initramfs instead. **Feature catalog (2026-07-17):** the wizard's
+sysext page is a checkbox list, not a type-the-id field. Source of truth:
+each product build generates a product-curated catalog
+(`shared/outformat/ab-root/finalize/features-catalog.finalize`, non-chroot,
+reads `$BUILDROOT/usr/lib/sysupdate.*.d/*.feature`) written in-image at
+`/usr/share/snosi/features.json` AND published as the frozen
+`<channel>_<version>.features.json` (contract §4, listed in the signed
+SHA256SUMS). Curation via `X-Snosi-Products=` in a `.feature` file
+(comma-separated bare products; absent = all — six desktop-only features
+carry `snow,snowfield`); verified live that systemd-sysupdate 261 (zero
+warnings at debug) and updex ≥1.3.0 both ignore the key cleanly.
+`snosi-install --print-features --product X` fetches it hash-verified via
+the signed index (GUI page + the text-mode numbered prompt both use it);
+releases predating the catalog fall back to manual entry, and
+`snosi-firstboot` skips seeded features the installed image doesn't define
+(warn, no retry-forever). `test/snosi-setup-boot-test.sh` (local, root+KVM,
 not in CI) boots the real ISO twice under enforced Secure Boot — virtio-vga
 (kiosk up: cage + the GTK app, getty yielded, no crash loop) and no-display
 (getty fallback, Condition-skipped cleanly) — 13/13; the serial text flow is

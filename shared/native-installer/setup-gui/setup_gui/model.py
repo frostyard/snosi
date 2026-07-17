@@ -122,6 +122,33 @@ def parse_disks(text):
     return [Disk(d) for d in json.loads(text)]
 
 
+# ---------------------------------------------------------------------------
+# --print-features document (proto 1): the product-curated sysext feature
+# catalog, generated at image build time and fetched hash-verified via the
+# signed index. Receivers tolerate unknown keys (forward compatibility).
+# ---------------------------------------------------------------------------
+
+
+class Feature:
+    def __init__(self, obj):
+        self.name = obj["name"]
+        self.description = obj.get("description") or obj["name"]
+        self.documentation = obj.get("documentation") or ""
+        self.default = bool(obj.get("default", False))
+
+
+def parse_features(text):
+    """Parse a `snosi-install --print-features` catalog. Raises ValueError on
+    a document that is not a proto-1 feature catalog."""
+    doc = json.loads(text)
+    if doc.get("proto") != 1:
+        raise ValueError("feature catalog proto %r is not 1" % (doc.get("proto"),))
+    feats = doc.get("features")
+    if not isinstance(feats, list):
+        raise ValueError("feature catalog has no features array")
+    return [Feature(f) for f in feats]
+
+
 def human_bytes(n):
     """Binary-unit pretty printer for disk sizes (display only)."""
     n = float(n)

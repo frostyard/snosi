@@ -296,6 +296,13 @@ assert_contains "--list-disks-json without --product: clear error" "$RUN_OUT" "r
 run_installer --list-disks-json --product bogus
 assert_contains "--list-disks-json bogus product rejected" "$RUN_OUT" "must be one of"
 
+run_installer --print-features
+assert_true "--print-features without --product: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
+assert_contains "--print-features without --product: clear error" "$RUN_OUT" "requires --product"
+
+run_installer --print-features --product bogus
+assert_contains "--print-features bogus product rejected" "$RUN_OUT" "must be one of"
+
 # Minimal lsblk fixture, scoped to this block (the main disk-refusal fixture
 # is created later in this file).
 cat >"$WORK_DIR/ldj-lsblk.json" <<'LDJEOF'

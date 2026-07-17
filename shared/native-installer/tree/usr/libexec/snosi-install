@@ -245,6 +245,9 @@ Install mode options:
                                 defaults, validation regexes) as JSON; no install
   --list-disks-json             Print installable disks (+ refusal reasons) as
                                 JSON; requires --product; no install
+  --print-features              Fetch and print the product's feature catalog
+                                (hash-verified via the signed index) as JSON;
+                                requires --product; no install
   --allow-file                  TEST ONLY: install target may be a regular
                                 file instead of a whole block device
   -h, --help                    Show this help
@@ -309,6 +312,26 @@ fetch_verified_index() { # origin channel workdir
 # `name` from a verified SHA256SUMS, or nothing if absent.
 index_object_sha256() { # index_file name
     awk -v n="$2" '$2 == n {print $1}' "$1"
+}
+
+# fetch_verified_features index_file base_url channel version workdir --
+# downloads the product's feature CATALOG (<channel>_<version>.features.json,
+# generated at image build time, listed in the signed index) and verifies its
+# hash against that index. Prints the local path on success. Returns 1 --
+# with nothing printed -- when the index has no catalog entry (a release
+# predating the catalog): callers fall back to manual feature entry.
+fetch_verified_features() { # index_file base_url channel version workdir
+    local index_file="$1" base_url="$2" channel="$3" version="$4" workdir="$5"
+    local name sha out
+    name="${channel}_${version}.features.json"
+    sha="$(index_object_sha256 "$index_file" "$name")"
+    [[ -n "$sha" ]] || return 1
+    out="$workdir/features.json"
+    curl -fsSL --connect-timeout 10 --max-time 60 "$base_url/$name" -o "$out" ||
+        die "could not fetch $base_url/$name (listed in the signed index)"
+    [[ "$(sha256sum "$out" | cut -d' ' -f1)" == "$sha" ]] ||
+        die "feature catalog $name does not match the signed index hash"
+    printf '%s\n' "$out"
 }
 
 # latest_channel_version index_file channel -- the numeric MAXIMUM 14-digit
@@ -1299,7 +1322,7 @@ main() {
     local ssh_key="" do_reboot=0 non_interactive=0 allow_file=0
     local restage_mode=0
     local username="" user_password_file="" user_fullname="" no_create_user=0
-    local print_defaults_mode=0 list_disks_mode=0
+    local print_defaults_mode=0 list_disks_mode=0 print_features_mode=0
     local set_hostname="" set_locale="" set_timezone="" set_keyboard=""
     local core_flatpaks=""
     local -a enable_features=()
@@ -1336,6 +1359,7 @@ main() {
             --json-progress) JSON_PROGRESS=1; shift ;;
             --print-defaults) print_defaults_mode=1; shift ;;
             --list-disks-json) list_disks_mode=1; shift ;;
+            --print-features) print_features_mode=1; shift ;;
             --allow-file) allow_file=1; shift ;;
             -h|--help) usage ;;
             --) shift; break ;;
@@ -1360,6 +1384,27 @@ main() {
         for lp in "${VALID_PRODUCTS[@]}"; do [[ "$lp" == "$product" ]] && ok=1; done
         [[ "$ok" -eq 1 ]] || die "--product must be one of: ${VALID_PRODUCTS[*]}"
         list_disks_json "$(minimum_disk_bytes "${product%-ab}")" "$(self_boot_device)"
+        return
+    fi
+    if [[ "$print_features_mode" == 1 ]]; then
+        # Networked query mode: fetch + verify the signed index, then the
+        # hash-verified product feature catalog. No root, no install.
+        [[ -n "$product" ]] || die "--print-features requires --product"
+        local fp ok2=0
+        for fp in "${VALID_PRODUCTS[@]}"; do [[ "$fp" == "$product" ]] && ok2=1; done
+        [[ "$ok2" -eq 1 ]] || die "--product must be one of: ${VALID_PRODUCTS[*]}"
+        local fworkdir fversion fcatalog
+        fworkdir="$(mktemp -d /var/tmp/snosi-features.XXXXXX)"
+        # shellcheck disable=SC2064 # expand now, matching the main trap rationale
+        trap "rm -rf '$fworkdir'" EXIT
+        fetch_verified_index "$origin" "$product" "$fworkdir"
+        fversion="$(latest_channel_version "$INDEX_FILE" "$product")"
+        [[ -n "$fversion" ]] || die "no published version found for $product in the verified index"
+        if fcatalog="$(fetch_verified_features "$INDEX_FILE" "$INDEX_BASE_URL" "$product" "$fversion" "$fworkdir")"; then
+            cat "$fcatalog"
+        else
+            die "the published $product release ($fversion) has no feature catalog (predates catalog publication)"
+        fi
         return
     fi
 
@@ -1612,12 +1657,48 @@ main() {
             done
         fi
         if [[ ${#enable_features[@]} -eq 0 ]]; then
-            read -r -p "Sysext features to enable at first boot (comma-separated, empty for none): " answer
-            if [[ -n "$answer" ]]; then
-                IFS=, read -ra enable_features <<<"${answer// /}"
-                for feat in "${enable_features[@]}"; do
-                    [[ "$feat" =~ $FEATURE_RE ]] || die "invalid feature name '$feat'"
+            # The signed index is already fetched by this point; ride along
+            # and offer the product's catalog as a numbered list so nobody
+            # has to know sysext ids by heart. Fallback (release predating
+            # the catalog): the old comma-separated manual entry.
+            local catalog=""
+            catalog="$(fetch_verified_features "$INDEX_FILE" "$INDEX_BASE_URL" "$channel" "$version" "$workdir" || true)"
+            if [[ -n "$catalog" ]]; then
+                log ""
+                log "Optional features available for $bare_product:"
+                local -a cat_names=()
+                mapfile -t cat_names < <(jq -r '.features[].name' "$catalog")
+                local i=1 cat_desc
+                for feat in "${cat_names[@]}"; do
+                    cat_desc="$(jq -r --arg n "$feat" '.features[] | select(.name == $n) | .description' "$catalog")"
+                    printf '  %2d) %-16s %s\n' "$i" "$feat" "$cat_desc"
+                    i=$((i + 1))
                 done
+                read -r -p "Features to enable (numbers or names, space/comma separated, empty for none): " answer
+                if [[ -n "$answer" ]]; then
+                    local -a picks=()
+                    IFS=', ' read -ra picks <<<"$answer"
+                    for feat in "${picks[@]}"; do
+                        [[ -n "$feat" ]] || continue
+                        if [[ "$feat" =~ ^[0-9]+$ ]]; then
+                            [[ "$feat" -ge 1 && "$feat" -le ${#cat_names[@]} ]] ||
+                                die "no feature numbered $feat (1-${#cat_names[@]})"
+                            enable_features+=("${cat_names[$((feat - 1))]}")
+                        else
+                            [[ " ${cat_names[*]} " == *" $feat "* ]] ||
+                                die "unknown feature '$feat' (not in this release's catalog)"
+                            enable_features+=("$feat")
+                        fi
+                    done
+                fi
+            else
+                read -r -p "Sysext features to enable at first boot (comma-separated, empty for none): " answer
+                if [[ -n "$answer" ]]; then
+                    IFS=, read -ra enable_features <<<"${answer// /}"
+                    for feat in "${enable_features[@]}"; do
+                        [[ "$feat" =~ $FEATURE_RE ]] || die "invalid feature name '$feat'"
+                    done
+                fi
             fi
         fi
         if [[ -z "$core_flatpaks" ]]; then
