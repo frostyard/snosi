@@ -177,6 +177,14 @@ dest_copy_object() { # src-relpath dst-relpath [cache-control]
         dest_put_file "$DEST_LOCAL_ROOT/$src_rel" "$dst_rel" "$cache_control"
         ;;
     rclone)
+        # rclone copyto of a MISSING source exits 0 on bucket backends
+        # (empty-prefix semantics, same as dest_object_exists above) --
+        # a silent no-op copy. Mirror the local branch's explicit
+        # source-exists refusal instead.
+        dest_object_exists "$src_rel" || {
+            echo "Error: source object missing, cannot copy: $DEST_RCLONE_TARGET/$src_rel" >&2
+            exit 1
+        }
         local -a args=(copyto "$DEST_RCLONE_TARGET/$src_rel" "$DEST_RCLONE_TARGET/$dst_rel")
         [[ -z "$cache_control" ]] || args+=(--header-upload "Cache-Control: $cache_control")
         rclone "${args[@]}"
@@ -187,6 +195,10 @@ dest_copy_object() { # src-relpath dst-relpath [cache-control]
 # dest_read_object relpath outfile -- fetch DEST/relpath's bytes into
 # outfile, without going through HTTP (used by withdraw.sh to gpgv-verify an
 # archived pair directly against the storage backend, not the public edge).
+# Fails (and leaves no outfile) when the object is missing, on every
+# backend: `rclone cat`/`copyto` of a nonexistent object exit 0 on bucket
+# backends (see dest_object_exists below), so success is judged by the
+# copy actually producing outfile, not by rclone's exit status.
 dest_read_object() { # relpath outfile
     local relpath="$1" outfile="$2"
     case "$DEST_KIND" in
@@ -195,11 +207,21 @@ dest_read_object() { # relpath outfile
         cp "$DEST_LOCAL_ROOT/$relpath" "$outfile"
         ;;
     rclone)
-        rclone cat "$DEST_RCLONE_TARGET/$relpath" >"$outfile"
+        rm -f "$outfile"
+        rclone copyto "$DEST_RCLONE_TARGET/$relpath" "$outfile" || return 1
+        [[ -f "$outfile" ]]
         ;;
     esac
 }
 
+# dest_object_exists relpath -- true iff an object exists at DEST/relpath.
+# rclone's exit code is BACKEND-DEPENDENT for a missing object: directory
+# backends (local) exit 3, but bucket backends (S3/R2) have no real
+# directories, so `rclone lsf` of a nonexistent object is just an empty
+# prefix listing -- exit 0, empty output. Trusting the exit code alone made
+# this return true for missing objects on R2 (promote.sh's archive block
+# took the wrong branch on a first promotion, observed live 2026-07-16), so
+# existence is judged by lsf actually printing the object's name.
 dest_object_exists() { # relpath
     local relpath="$1"
     case "$DEST_KIND" in
@@ -207,7 +229,7 @@ dest_object_exists() { # relpath
         [[ -f "$DEST_LOCAL_ROOT/$relpath" ]]
         ;;
     rclone)
-        rclone lsf "$DEST_RCLONE_TARGET/$relpath" >/dev/null 2>&1
+        [[ "$(rclone lsf "$DEST_RCLONE_TARGET/$relpath" 2>/dev/null)" == "$(basename "$relpath")" ]]
         ;;
     esac
 }
