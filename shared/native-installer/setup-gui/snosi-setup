@@ -1,0 +1,18 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# snosi-setup -- GTK4/libadwaita kiosk frontend for the snosi native
+# installer ISO (T2, docs/plans/2026-07-17-graphical-installer-plan.md).
+# Launched by cage on tty1; drives ONE `snosi-install --non-interactive
+# --json-progress` invocation. All logic lives in the adjacent setup_gui
+# package so this wrapper works both installed and straight from the tree.
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+
+from setup_gui.app import main  # noqa: E402
+
+if __name__ == "__main__":
+    sys.exit(main())
