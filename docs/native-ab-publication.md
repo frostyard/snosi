@@ -217,6 +217,11 @@ sees.
 
 ## Installer ISO publication
 
+> **Size note:** since the graphical setup wizard landed (GTK4/cage/Mesa
+> stack + picker data), the ISO is roughly 1.1–1.3 GB rather than the
+> original ~550 MB. Candidate upload, `verify-remote`'s full re-download,
+> and promotion re-hashing all scale with it; budget CI time accordingly.
+
 The network-installer ISO (`docs/native-ab-contracts.md` "Installer ISO",
 §5's flat `isos/native/v1/` namespace -- no per-product/x86-64 subpath, since
 there is exactly one installer, not one per product) goes through the

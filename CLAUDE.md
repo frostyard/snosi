@@ -918,6 +918,43 @@ image defeat the check, while a raw `dd`/`cp` of the ISO preserves it and is
 correctly detected. Full design notes: `yeti/OVERVIEW.md` "snosi-install CLI
 (Task 8.2)".
 
+**Graphical setup wizard (`shared/native-installer/setup-gui/`, 2026-07-17):**
+`snosi-install` now also carries a machine-readable GUI contract —
+`--print-defaults` (products with capacity floors + per-product core-flatpaks
+policy, interactive defaults, every validation regex), `--list-disks-json`
+(installable disks + refusal reasons), and `--json-progress` (line-delimited
+proto-1 event stream: `start`/`phase`/`log`/`error`/`done` at main()'s nine
+section boundaries; byte-level download progress is deliberately NOT in proto
+1 — the download is a five-stage pipeline with no clean byte hook, and
+receivers must ignore unknown events so it can be added compatibly). The GTK4/
+libadwaita kiosk `snosi-setup` (in-tree Python/GI package, installed to
+`/usr/lib/snosi-setup`, launcher symlink `/usr/bin/snosi-setup`; GTK-free
+`setup_gui/model.py` holds all logic — validation, argv assembly, event-stream
+parsing — with `test/snosi-setup-model-test.py` covering it, wired into
+`validate.yml`) drives exactly one `snosi-install --non-interactive
+--json-progress` invocation and performs no privileged operation itself.
+**Activation is a static wants link + unit Conditions** (`snosi-setup.service`,
+`ConditionPathExistsGlob=/dev/dri/card*`,
+`ConditionKernelCommandLine=!snosi.textmode=1`), with `getty@tty1` stopped
+IMPERATIVELY in `ExecStartPre`, never via `Conflicts=`: Conflicts stops the
+conflicting unit at transaction-build time, BEFORE this unit's Conditions
+evaluate, so a statically-wanted unit with Conflicts kills getty even on the
+no-display boot where its own Condition then fails — ExecStartPre runs only
+after Conditions pass, i.e. only when the kiosk really starts, so the
+text-mode fallback never loses getty (and `OnFailure=getty@tty1` restores it
+on a crash-loop). A udev DRM device-pull was tried and abandoned: DRM cards
+emit an `add` then a `bind` uevent and the `bind` drops `:systemd:` from the
+device's CURRENT_TAGS at coldplug, so the `.device` unit never pulled the
+kiosk on a real boot (it worked only on a manual `udevadm trigger`). The ISO
+gains the cage/GTK4/Mesa-llvmpipe/python3-gi/cantarell stack plus the picker
+data files (`locales`/`xkb-data`/`tzdata`, else the pickers silently degrade),
+taking it to ~1.1–1.3 GB. `test/snosi-setup-boot-test.sh` (local, root+KVM,
+not in CI) boots the real ISO twice under enforced Secure Boot — virtio-vga
+(kiosk up: cage + the GTK app, getty yielded, no crash loop) and no-display
+(getty fallback, Condition-skipped cleanly) — 13/13; the serial text flow is
+never affected either way. Design/plan: `docs/plans/2026-07-17-graphical-
+installer-plan.md`.
+
 The Phase 7 candidate/verify/promote/withdraw publication pipeline
 (`shared/native-ab/publish/`) now also publishes this ISO, under the flat
 `isos/native/v1/` namespace (docs/native-ab-contracts.md §5) via a new

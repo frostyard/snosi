@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Graphical setup kiosk for the network-installer ISO (T3,
+# docs/plans/2026-07-17-graphical-installer-plan.md): cage running exactly
+# one client, snosi-setup, on tty1.
+#
+# Activation is a STATIC wants link + unit Conditions (not a udev device
+# pull). Two conditions gate it, both evaluated when the statically-wanted
+# unit is about to start -- by which point udev coldplug has settled and
+# /dev/dri/card* exists if any display does:
+#   - no DRM device      -> ConditionPathExistsGlob fails -> getty runs
+#   - snosi.textmode=1    -> ConditionKernelCommandLine fails -> getty runs
+#
+# getty@tty1 is stopped IMPERATIVELY in ExecStartPre, NOT via Conflicts=:
+# Conflicts stops the conflicting unit at TRANSACTION build time, before this
+# unit's Conditions are evaluated, so a statically-wanted unit with Conflicts
+# kills getty even on the no-display boot where its own Condition then fails
+# (root-caused live 2026-07-17 across four activation designs;
+# test/snosi-setup-boot-test.sh leg 2 is the regression guard). ExecStartPre
+# runs only AFTER the Conditions pass, i.e. only when the kiosk really starts,
+# so the fallback boot never loses getty. A later kiosk crash that trips the
+# start limit hands tty1 back via OnFailure.
+#
+# LIBSEAT_BACKEND=builtin: the ISO runs everything as root with no logind
+# session here; wlroots' builtin seat takes DRM/input directly.
+# WLR_NO_HARDWARE_CURSORS=1: virtio-vga/llvmpipe have no hardware cursor plane.
+[Unit]
+Description=snosi graphical setup (cage kiosk)
+ConditionPathExistsGlob=/dev/dri/card*
+ConditionKernelCommandLine=!snosi.textmode=1
+After=getty@tty1.service systemd-user-sessions.service
+OnFailure=getty@tty1.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/systemctl stop getty@tty1.service
+ExecStart=/usr/bin/cage -- /usr/bin/snosi-setup
+Restart=on-failure
+RestartSec=2
+TTYPath=/dev/tty1
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+Environment=LIBSEAT_BACKEND=builtin
+Environment=WLR_NO_HARDWARE_CURSORS=1
+RuntimeDirectory=snosi-setup
+Environment=XDG_RUNTIME_DIR=/run/snosi-setup
