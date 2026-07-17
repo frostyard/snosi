@@ -424,18 +424,33 @@ stager's probe) reference it explicitly; existing broken installs remediate
 with `cp /usr/lib/systemd/import-pubring.gpg /etc/systemd/import-pubring.gpg`
 (remove that copy after crossing to a fixed build — it shadows the vendor
 ring across future key rotations). `test/native-ab-static-test.sh` asserts
-both ExtraTrees pairs.
-The committed public keyring is a DEV-only ed25519 key
-(`shared/native-ab/keys/import-pubring.gpg`, see
-`shared/native-ab/keys/README.md`); its private half is
-`.snosi-private/os-update-signing.key` (gitignored, never committed, never
-printed — nothing in-repo signs with it yet, since dev/local `SHA256SUMS`
-stay unsigned per `docs/native-ab-contracts.md` §7). This satisfies
-`check-native-publication-guard.sh`'s pubring-committed check ahead of the
-real Phase 7 signing pipeline; QEMU update tests generate their own
-ephemeral keys and are unaffected. **Rotate this key before first production
-publication** — see the README and contract §7 for the real key-ceremony
-procedure.
+both ExtraTrees pairs. The shipped-vendor-keyring trust path is now also
+exercised LIVE by `test/native-ab-secure-boot-test.sh` — the only harness
+that can: the `.pgp`-reading systemd 261 runs only on the production
+profiles it boots, while Trixie's systemd 257 (what `cayo-ab-raw` boots,
+i.e. every other update harness including `native-ab-publication-test.sh`'s
+existing no-override leg) still reads the OLD `/usr` `.gpg` name (verified
+via `strings` on `systemd-pull`) and so structurally cannot cover the
+`.pgp` link. That harness installs NO `/etc/systemd/import-pubring.*`
+override; it bakes its ephemeral test keyring over the committed pair at
+BOTH `/usr` names via two mkosi CLI `--extra-tree` flags (CLI list-setting
+values append after config-file values and ExtraTrees overwrite in install
+order — needed because the committed pubring is the production key, whose
+private half is offline-only), asserts the swap and the `/etc`-override
+absence in-guest, verifies its Step 6 signed update hop through the vendor
+`.pgp` path, and proves enforcement by rejecting a wrong-key-signed index
+through the same shipped ring (Step 6c). Its `SKIP_BUILD=1` mode therefore
+also requires `SIGNING_GNUPGHOME` (the homedir whose key the prebuilt
+images embed).
+The committed public keyring carries the PRODUCTION update-signing key
+(`shared/native-ab/keys/import-pubring.gpg`, ed25519; fingerprint, custody,
+and rotation procedure in `shared/native-ab/keys/README.md`); its private
+half is offline-only (for CI, the `native-promotion` environment's
+`NATIVE_UPDATE_SIGNING_KEY` secret) and is never committed and never placed
+in `.snosi-private/`. QEMU update tests generate their own ephemeral keys —
+injected at `/etc/systemd/import-pubring.gpg` (the `cayo-ab-raw` harnesses)
+or baked over the `/usr` pair at build time
+(`test/native-ab-secure-boot-test.sh`, above) — and never need this key.
 
 **Accepted risk — unsigned sysexts on native installs:** native production
 candidates (`cayo-ab`, `snow-ab`, `snowfield-ab`) ship every sysext transfer

@@ -212,10 +212,20 @@ than the secure `cayo-ab` profile: `shared/native-ab/keys/README.md`
 documents that the update-signing pubring ships at `/usr/lib/systemd/import-pubring.gpg`
 on **every** native A/B image via the shared `shared/outformat/ab-root/
 mkosi.conf` fragment, `cayo-ab-raw` included, so booting it and never
-touching `/etc/systemd/import-pubring.gpg` exercises exactly the same
+touching `/etc/systemd/import-pubring.gpg` exercises the
 "verify a promotion signature against the stock shipped pubring" trust path
-a secure production profile would, without paying for OVMF Secure Boot + MOK
-enrollment (orthogonal Phase 6 machinery). The QEMU leg: boot N, `/etc/
+without paying for OVMF Secure Boot + MOK enrollment (orthogonal Phase 6
+machinery). CAVEAT (learned from the 2026-07-17 `.pgp` outage, commit
+91718d7): this is NOT byte-identical to a production profile's trust path —
+`cayo-ab-raw` runs Trixie's systemd 257, whose vendor keyring is the OLD
+`/usr/lib/systemd/import-pubring.gpg` name, while the production profiles'
+Forky systemd 261 reads `/usr/lib/systemd/import-pubring.pgp` with no
+`/usr` `.gpg` fallback. This leg therefore proves the promotion-signature
+half (signed index vs. shipped ring) but could not, and did not, catch
+shipping the ring under only the 257 name; the 261 `.pgp` vendor path is
+covered by `test/native-ab-secure-boot-test.sh`, which bakes an ephemeral
+ring over both `/usr` names at build time and runs with no `/etc` override
+(see `yeti/testing.md`). The QEMU leg: boot N, `/etc/
 sysupdate.d` origin override (same documented whole-file-replacement
 mechanism as `native-ab-updateux-test.sh`) pointed at the local rehearsal
 origin, stage promoted N+1 via `snosi-sysupdate-stage`, reboot, assert N+1.

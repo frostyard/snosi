@@ -19,9 +19,16 @@ index. It carries the **production** update-signing public key and satisfies
   image via a `file:target` `ExtraTrees=` pair in the generic
   `shared/outformat/ab-root/mkosi.conf` fragment (consumed by all native
   profiles, including the never-published `cayo-ab-raw` dev fixture).
-- **QEMU tests are unaffected:** `test/native-ab-update-test.sh` and the
-  other QEMU harnesses generate and inject their own ephemeral signing keys
-  via `--definitions` overrides; they never rely on this key.
+- **QEMU tests never need the private half:** every harness generates its
+  own ephemeral signing key. The `cayo-ab-raw`-based harnesses
+  (`test/native-ab-update-test.sh` etc.) inject the ephemeral public ring
+  at `/etc/systemd/import-pubring.gpg` (systemd's documented user
+  override); `test/native-ab-secure-boot-test.sh` instead bakes its
+  ephemeral ring OVER this committed file's in-image copies at both
+  `/usr/lib/systemd` names via mkosi CLI `--extra-tree` flags — the
+  committed file itself is never modified — so its update hop verifies
+  through systemd 261's real vendor path
+  (`/usr/lib/systemd/import-pubring.pgp`) with no `/etc` override at all.
 
 **Rotation** follows `docs/native-ab-contracts.md` §7 / the runbook's overlap
 window: export both the outgoing and incoming public keys into this same

@@ -370,13 +370,38 @@ image(s))" otherwise).
 
 The secure update hop publishes N+1 through the real
 `prepare-native-publication.sh --xz` pipeline to a local HTTP origin signed
-with an ephemeral GPG key (same `/etc/systemd/import-pubring.gpg` override
-mechanism as `native-ab-updateux-test.sh`), runs
-`/usr/libexec/snosi-sysupdate-stage`, and reboots with zero serial input —
-proving the signed PCR 11 policy survives a REAL UKI change (the entire point
-of signed-vs-raw PCR policy), that `/var` and `/etc`-overlay persistence
-markers survive, and that the N rollback entry is still present
-(`InstancesMax=2`). Finishes with a non-destructive recovery-keyslot check
+with an ephemeral GPG key that the guest trusts via its SHIPPED vendor
+keyring ONLY — since 2026-07-17 this harness installs NO
+`/etc/systemd/import-pubring.*` override (the mechanism every other update
+harness uses). The ephemeral public ring is baked into the built images at
+build time over the committed production pubring (whose private half is
+offline-only), at BOTH `/usr/lib/systemd/import-pubring.{gpg,pgp}` names,
+via two mkosi CLI `--extra-tree` flags in `build_profile` (CLI list-setting
+values append AFTER config-file values and ExtraTrees overwrite in install
+order, so the ephemeral pair wins; the committed file is never modified).
+This is the ONLY harness that can exercise the `.pgp` vendor path that
+commit 91718d7's outage proved untested: systemd 261 (production profiles)
+reads `/usr/lib/systemd/import-pubring.pgp` with no `/usr` `.gpg` fallback,
+while Trixie's systemd 257 (`cayo-ab-raw`, i.e. every other update harness
+including `native-ab-publication-test.sh`'s no-override leg) still reads
+the old `.gpg` name (verified via `strings` on `systemd-pull`). Before
+staging, the harness asserts no `/etc` override exists, both `/usr` names
+match the baked ring by sha256, and the guest's import binaries reference
+the `.pgp` name (a canary against a future vendor-path rename). It then
+runs `/usr/libexec/snosi-sysupdate-stage` and reboots with zero serial
+input — proving the signed PCR 11 policy survives a REAL UKI change (the
+entire point of signed-vs-raw PCR policy), that `/var` and `/etc`-overlay
+persistence markers survive, and that the N rollback entry is still present
+(`InstancesMax=2`). Step 6c then proves the positive result was actual
+signature enforcement: a fabricated newer-version index (updateux's
+hardlink trick) signed by a VALID but untrusted key — the outage's exact
+failure-mode class — must fail closed through the same shipped ring
+(stager rc!=0, `outcome=failed`, nothing staged, version unchanged),
+after which the origin is restored to the good N+1 index. Because the
+baked ring must match the signing key, `SKIP_BUILD=1` additionally
+requires `SIGNING_GNUPGHOME` (the gnupg homedir of the run that built the
+artifacts; `KEEP_VM=1` preserves it at `<workdir>/gnupg`). Finishes with a
+non-destructive recovery-keyslot check
 (`cryptsetup open --test-passphrase`), never a destructive token wipe.
 **NvPCR journal errors are asserted per boot** via a shared
 `assert_nvpcr_journal_clean` helper called after EVERY boot that reaches SSH
