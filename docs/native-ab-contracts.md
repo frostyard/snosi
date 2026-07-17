@@ -287,7 +287,10 @@ lockdown.
 
 The public update key is committed in-repo at
 `shared/native-ab/keys/import-pubring.gpg` and shipped at
-`/usr/lib/systemd/import-pubring.gpg`. (This path was created in Phase 3 as a
+`/usr/lib/systemd/import-pubring.gpg` AND `/usr/lib/systemd/import-pubring.pgp`
+(the latter is the name systemd 261's pull verification actually reads --
+its vendor path has no legacy `.gpg` fallback; both ship from the same
+committed source). (This path was created in Phase 3 as a
 DEV-only key — see `shared/native-ab/keys/README.md` — to unblock the
 publication guard ahead of schedule; the protected signing pipeline that
 replaces it with the real production key lands in Phase 7.)

@@ -33,6 +33,12 @@ pubring="$root/shared/native-ab/keys/import-pubring.gpg"
 [[ -s "$pubring" ]]
 grep -q '^ExtraTrees=%D/shared/native-ab/keys/import-pubring.gpg:/usr/lib/systemd/import-pubring.gpg$' \
     "$ab/mkosi.conf"
+# systemd 261 renamed the vendor keyring to import-pubring.pgp with NO legacy
+# .gpg fallback for the /usr path (only /etc keeps a legacy name) -- shipping
+# only .gpg made every real systemd-sysupdate pull fail "No public key"
+# (minisnow, 2026-07-17). Both names must ship from the same committed source.
+grep -q '^ExtraTrees=%D/shared/native-ab/keys/import-pubring.gpg:/usr/lib/systemd/import-pubring.pgp$' \
+    "$ab/mkosi.conf"
 [[ -f "$root/shared/native-ab/keys/README.md" ]]
 
 # Regression guard (Task 3.2): the ExtraTrees= shadow of 30-bootc-standard.conf

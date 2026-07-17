@@ -406,11 +406,25 @@ shipped NvPCR definition plus the product/login writers. Keep TPM SRK setup and
 the signed-PCR-11 LUKS path enabled. Do not delete/recreate the anchor or TPM NV
 indexes as a key-rotation shortcut; that changes the attestation baseline.
 
-**Dev update signing pubring (Phase 3):** every native image (including
-`cayo-ab-raw`) ships `/usr/lib/systemd/import-pubring.gpg` via a `file:target`
-`ExtraTrees=` pair in `shared/outformat/ab-root/mkosi.conf` (the pinned
-mkosi's `install_tree()` copies a single file when a target is given, not
-only directories/tar archives — confirmed in `.mkosi/mkosi/__init__.py`).
+**Update signing pubring (Phase 3; .pgp fix 2026-07-17):** every native image
+(including `cayo-ab-raw`) ships the committed pubring at BOTH
+`/usr/lib/systemd/import-pubring.gpg` AND `/usr/lib/systemd/import-pubring.pgp`
+via `file:target` `ExtraTrees=` pairs in `shared/outformat/ab-root/mkosi.conf`
+(the pinned mkosi's `install_tree()` copies a single file when a target is
+given — confirmed in `.mkosi/mkosi/__init__.py`). **The `.pgp` name is the one
+systemd 261 actually reads** (meson: `VENDOR_KEYRING_PATH =
+libexecdir/import-pubring.pgp`; pull verification has NO legacy `.gpg`
+fallback for the /usr path — only `/etc/systemd/import-pubring.gpg` keeps a
+legacy name). Shipping only `.gpg` made every REAL `systemd-sysupdate` pull
+fail with `gpg: Can't check signature: No public key` — root-caused live on
+minisnow 2026-07-17, the first-ever pull against the real origin; every QEMU
+harness injects the `/etc` legacy override and so never saw it. The `.gpg`
+copy stays because snosi's own tools (`snosi-update-status --check`, the
+stager's probe) reference it explicitly; existing broken installs remediate
+with `cp /usr/lib/systemd/import-pubring.gpg /etc/systemd/import-pubring.gpg`
+(remove that copy after crossing to a fixed build — it shadows the vendor
+ring across future key rotations). `test/native-ab-static-test.sh` asserts
+both ExtraTrees pairs.
 The committed public keyring is a DEV-only ed25519 key
 (`shared/native-ab/keys/import-pubring.gpg`, see
 `shared/native-ab/keys/README.md`); its private half is
