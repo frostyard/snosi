@@ -37,7 +37,7 @@ The serial console keeps the exact text-mode flow that exists today.
 | 1 | Compositor | **cage** (Wayland kiosk) | runs exactly one client, no session infra, tiny; crash → respawn, no display → getty as today |
 | 2 | Toolkit | **GTK4 + libadwaita + Python/GI** | matches first-setup, whose language/keyboard/timezone views and localegen data port nearly verbatim |
 | 3 | Frontend↔backend contract | GUI collects everything, then runs one `snosi-install --non-interactive … --json-progress` | single source of truth for validation + operations; progress rendered from a line-delimited JSON event stream |
-| 4 | ISO budget | accept ~0.5 GB growth (~550 MB → ~1.1 GB) | user-approved; python3 is NOT currently on the ISO, so the stack is Mesa + cage + GTK4/libadwaita + python3(-gi) + fonts |
+| 4 | ISO budget | ~+100 MB (text ~600 MB → GUI ~700 MB; measured, the earlier ~1.1 GB estimate was the *uncompressed* rootfs, not the zstd-packed ISO) | Mesa + cage + GTK4/libadwaita + python3(-gi) + fonts + librsvg + icon themes/schemas |
 | 5 | Code location | **in-tree**: `shared/native-installer/setup-gui/` | frontend and backend flags stay atomically in sync while the surface stabilizes; can graduate to a package later |
 
 ## Architecture
