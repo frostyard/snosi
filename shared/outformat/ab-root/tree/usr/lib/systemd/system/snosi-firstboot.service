@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Runs the deferred half of snosi-install's provisioning on the first boot of
+# a native A/B install: sysext feature enablement (updex) and the core desktop
+# Flatpak set -- both need the booted target's stack and network, so the
+# installer only records the choices (/var/lib/snosi/first-boot.json) and this
+# unit performs them. Retries on every boot until it fully succeeds (the done
+# marker is only written on complete success; every operation is idempotent).
+#
+# STATIC activation (no [Install], static wants link in /usr) per the snosi
+# infrastructure-unit pattern -- see CLAUDE.md "Enablement lives in presets".
+# Override with `systemctl mask`, not disable.
+[Unit]
+Description=snosi first-boot provisioning (sysext features + core flatpaks)
+ConditionPathExists=/var/lib/snosi/first-boot.json
+ConditionPathExists=!/var/lib/snosi/first-boot.done
+Wants=network-online.target
+After=network-online.target var.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/snosi-firstboot
+# Flatpak runtime downloads are GBs on slow links; never kill mid-provision.
+TimeoutStartSec=0

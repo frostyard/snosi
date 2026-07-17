@@ -247,6 +247,31 @@ chmod 600 "$WORK_DIR/user-password.txt"
 run_installer "${BASE_ARGS[@]}" --username bjk --user-password-file "$WORK_DIR/user-password.txt"
 assert_contains "valid first-user args pass validation (reach root check)" "$RUN_OUT" "must run as root"
 
+# --- system settings + first-boot seed flags ---
+run_installer "${BASE_ARGS[@]}" --hostname 'bad host!'
+assert_contains "invalid --hostname rejected" "$RUN_OUT" "invalid --hostname"
+
+run_installer "${BASE_ARGS[@]}" --locale ';rm -rf /'
+assert_contains "invalid --locale rejected" "$RUN_OUT" "invalid --locale"
+
+run_installer "${BASE_ARGS[@]}" --timezone 'America/../../etc'
+assert_contains "invalid --timezone rejected" "$RUN_OUT" "invalid --timezone"
+
+run_installer "${BASE_ARGS[@]}" --keyboard 'us;evil'
+assert_contains "invalid --keyboard rejected" "$RUN_OUT" "invalid --keyboard"
+
+run_installer "${BASE_ARGS[@]}" --enable-feature 'bad/feature'
+assert_contains "invalid --enable-feature rejected" "$RUN_OUT" "invalid --enable-feature"
+
+run_installer "${BASE_ARGS[@]}" --core-flatpaks
+assert_true "--core-flatpaks on cayo-ab: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
+assert_contains "--core-flatpaks on cayo-ab: clear error" "$RUN_OUT" "cayo-ab has no desktop"
+
+run_installer "${BASE_ARGS[@]}" --hostname myhost --locale en_US.UTF-8 \
+    --timezone America/New_York --keyboard 'us:intl' --enable-feature docker \
+    --enable-feature tailscale
+assert_contains "valid system-settings args pass validation (reach root check)" "$RUN_OUT" "must run as root"
+
 # --insecure-raw-var must NOT demand recovery-key-file/ack.
 mapfile -t ARGS_RAW_VAR < <(without_flag --recovery-key-file 1)
 run_installer "${ARGS_RAW_VAR[@]}" --insecure-raw-var

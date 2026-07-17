@@ -1,0 +1,94 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# First-boot provisioning for native A/B installs: performs the deferred,
+# needs-the-booted-target half of what snosi-install records at install time
+# in /var/lib/snosi/first-boot.json (the seed) -- sysext feature enablement
+# (updex, needs the target's sysupdate component tree + network) and the core
+# desktop Flatpak set (flatpak, needs the system installation in /var +
+# network). The install-time half (hostname/locale/timezone/keyboard, first
+# user) never involves this script -- those are plain /etc-overlay writes.
+#
+# Semantics:
+#   - No seed file          -> nothing to do (unit ConditionPathExists also
+#                              guards this; the check here keeps manual runs
+#                              safe).
+#   - Any item fails        -> every remaining item is still attempted, then
+#                              exit 1 WITHOUT writing the done marker, so the
+#                              unit retries on the next boot. All operations
+#                              are idempotent (enable is a no-op when enabled,
+#                              flatpak runs --or-update, remote-add uses
+#                              --if-not-exists).
+#   - Everything succeeds   -> /var/lib/snosi/first-boot.done is written and
+#                              the unit's ConditionPathExists=! stops future
+#                              runs.
+#
+# The core Flatpak list is owned by the snow-first-setup package (single
+# source of truth with its per-user Mode 3 wizard); this script reads the
+# list straight from that package's core.json and skips gracefully when the
+# package is not installed (cayo).
+#
+# Env overrides exist for the unit test only (test/snosi-firstboot-test.sh).
+set -euo pipefail
+
+SEED="${SNOSI_FIRSTBOOT_SEED:-/var/lib/snosi/first-boot.json}"
+DONE="${SNOSI_FIRSTBOOT_DONE:-/var/lib/snosi/first-boot.done}"
+CORE_JSON="${SNOSI_FIRSTBOOT_CORE_JSON:-/usr/share/org.frostyard.FirstSetup/snow_first_setup/core.json}"
+
+log()  { printf 'snosi-firstboot: %s\n' "$*"; }
+warn() { printf 'snosi-firstboot: warning: %s\n' "$*" >&2; }
+
+[[ -f "$SEED" ]] || { log "no seed at $SEED; nothing to do"; exit 0; }
+[[ ! -f "$DONE" ]] || { log "already completed ($DONE); nothing to do"; exit 0; }
+
+failures=0
+
+# --- sysext features -------------------------------------------------------
+mapfile -t features < <(jq -r '.features[]? // empty' "$SEED")
+for f in "${features[@]+"${features[@]}"}"; do
+    [[ "$f" =~ ^[A-Za-z0-9._-]+$ ]] || { warn "skipping invalid feature name: $f"; failures=$((failures + 1)); continue; }
+    log "enabling sysext feature: $f"
+    if ! updex --silent features enable "$f" --now; then
+        warn "failed to enable feature: $f"
+        failures=$((failures + 1))
+    fi
+done
+
+# --- core desktop flatpaks -------------------------------------------------
+if [[ "$(jq -r '.core_flatpaks // false' "$SEED")" == "true" ]]; then
+    if ! command -v flatpak >/dev/null; then
+        warn "seed requests core flatpaks but flatpak is not installed"
+        failures=$((failures + 1))
+    elif [[ ! -f "$CORE_JSON" ]]; then
+        warn "seed requests core flatpaks but $CORE_JSON is missing (snow-first-setup not installed?)"
+        failures=$((failures + 1))
+    else
+        log "adding flathub system remote"
+        if ! flatpak remote-add --system --if-not-exists flathub \
+                https://dl.flathub.org/repo/flathub.flatpakrepo; then
+            warn "failed to add the flathub remote"
+            failures=$((failures + 1))
+        else
+            # sort -u: the list is human-maintained and has carried duplicates.
+            mapfile -t core_ids < <(jq -r '.core[].id' "$CORE_JSON" | sort -u)
+            for id in "${core_ids[@]+"${core_ids[@]}"}"; do
+                log "installing core flatpak: $id"
+                if ! flatpak install --system --noninteractive --or-update -y flathub "$id"; then
+                    warn "failed to install core flatpak: $id"
+                    failures=$((failures + 1))
+                fi
+            done
+        fi
+    fi
+fi
+
+if [[ "$failures" -gt 0 ]]; then
+    warn "$failures item(s) failed; done marker NOT written -- will retry next boot"
+    exit 1
+fi
+
+printf 'completed_at=%s\nfeatures=%s\ncore_flatpaks=%s\n' \
+    "$(date -u +%FT%TZ)" \
+    "$(jq -c '.features // []' "$SEED")" \
+    "$(jq -r '.core_flatpaks // false' "$SEED")" >"$DONE"
+log "first-boot provisioning complete"

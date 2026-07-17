@@ -160,6 +160,15 @@ Install mode options:
                                 (first line; file must be chmod 600)
   --user-fullname NAME          Optional GECOS full name for --username
   --no-create-user              Explicitly skip first-user creation
+  --hostname NAME               System hostname (interactive default: product)
+  --locale LOCALE               System locale, e.g. en_US.UTF-8
+  --timezone TZ                 Timezone, e.g. America/New_York (or UTC)
+  --keyboard SPEC               Console/XKB keyboard: LAYOUT[:VARIANT[:MODEL]]
+  --enable-feature NAME         Sysext feature to enable on first boot
+                                (repeatable; performed by snosi-firstboot)
+  --core-flatpaks               Install the core desktop Flatpak set on first
+                                boot (snow/snowfield default; invalid on cayo)
+  --no-core-flatpaks            Skip the core Flatpak set
   --reboot                      Reboot when finished (never automatic
                                 otherwise, in either mode)
   --non-interactive             Fully non-interactive; requires every
@@ -817,6 +826,43 @@ seed_var() { # var_device product channel version arch ssh_key_path(optional)
         install -m 0600 "$ssh_key" "$mnt/lib/snosi/etc-overlay/upper/ssh/authorized_keys.d/root"
     fi
 
+    # System settings (installer-owned: hostname/locale/timezone/keyboard)
+    # into the /etc overlay upper, plus the first-boot seed consumed by
+    # snosi-firstboot.service on the installed system (sysext features, core
+    # flatpaks -- deferred because they need the booted target's stack).
+    # Reads main()'s locals via bash dynamic scoping: set_hostname,
+    # set_locale, set_timezone, set_keyboard, enable_features[],
+    # core_flatpaks. All empty/0 -> writes nothing.
+    local upper="$mnt/lib/snosi/etc-overlay/upper"
+    local kb_layout kb_variant kb_model features_json core_json_bool
+    if [[ -n "$set_hostname$set_locale$set_timezone$set_keyboard" ]]; then
+        install -d -m 0755 "$upper"
+    fi
+    [[ -z "$set_hostname" ]] || printf '%s\n' "$set_hostname" >"$upper/hostname"
+    [[ -z "$set_locale" ]] || printf 'LANG=%s\n' "$set_locale" >"$upper/locale.conf"
+    if [[ -n "$set_timezone" ]]; then
+        printf '%s\n' "$set_timezone" >"$upper/timezone"
+        ln -sfn "../usr/share/zoneinfo/$set_timezone" "$upper/localtime"
+    fi
+    if [[ -n "$set_keyboard" ]]; then
+        IFS=: read -r kb_layout kb_variant kb_model <<<"$set_keyboard"
+        {
+            printf 'XKBLAYOUT=%s\n' "$kb_layout"
+            [[ -z "${kb_variant:-}" ]] || printf 'XKBVARIANT=%s\n' "$kb_variant"
+            [[ -z "${kb_model:-}" ]] || printf 'XKBMODEL=%s\n' "$kb_model"
+        } >"$upper/vconsole.conf"
+    fi
+    if [[ ${#enable_features[@]} -gt 0 || "${core_flatpaks:-0}" == 1 ]]; then
+        features_json="[]"
+        [[ ${#enable_features[@]} -eq 0 ]] ||
+            features_json="$(printf '%s\n' "${enable_features[@]}" | jq -R . | jq -sc .)"
+        core_json_bool=false
+        [[ "${core_flatpaks:-0}" != 1 ]] || core_json_bool=true
+        jq -n --argjson features "$features_json" --argjson core_flatpaks "$core_json_bool" \
+            '{features: $features, core_flatpaks: $core_flatpaks}' \
+            >"$mnt/lib/snosi/first-boot.json"
+    fi
+
     umount "$mnt"
     rmdir "$mnt"
 }
@@ -836,6 +882,12 @@ seed_var() { # var_device product channel version arch ssh_key_path(optional)
 # ---------------------------------------------------------------------------
 
 USERNAME_RE='^[a-z][a-z0-9_-]{0,31}$'
+HOSTNAME_RE='^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$'
+LOCALE_RE='^[A-Za-z][A-Za-z0-9_.@-]*$'
+TIMEZONE_RE='^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$'
+# LAYOUT[:VARIANT[:MODEL]], matching first-setup's XKB triplet.
+KEYBOARD_RE='^[a-z0-9,]+(:[A-Za-z0-9,_-]*(:[A-Za-z0-9_-]+)?)?$'
+FEATURE_RE='^[A-Za-z0-9._-]+$'
 
 # user_password_twice -- interactive prompt, validated twice. Sets
 # USER_PASSWORD. Same shape as mok_password_twice.
@@ -1148,6 +1200,9 @@ main() {
     local ssh_key="" do_reboot=0 non_interactive=0 allow_file=0
     local restage_mode=0
     local username="" user_password_file="" user_fullname="" no_create_user=0
+    local set_hostname="" set_locale="" set_timezone="" set_keyboard=""
+    local core_flatpaks=""
+    local -a enable_features=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -1169,6 +1224,13 @@ main() {
             --user-password-file) [[ $# -ge 2 ]] || usage; user_password_file="$2"; shift 2 ;;
             --user-fullname) [[ $# -ge 2 ]] || usage; user_fullname="$2"; shift 2 ;;
             --no-create-user) no_create_user=1; shift ;;
+            --hostname) [[ $# -ge 2 ]] || usage; set_hostname="$2"; shift 2 ;;
+            --locale) [[ $# -ge 2 ]] || usage; set_locale="$2"; shift 2 ;;
+            --timezone) [[ $# -ge 2 ]] || usage; set_timezone="$2"; shift 2 ;;
+            --keyboard) [[ $# -ge 2 ]] || usage; set_keyboard="$2"; shift 2 ;;
+            --enable-feature) [[ $# -ge 2 ]] || usage; enable_features+=("$2"); shift 2 ;;
+            --core-flatpaks) core_flatpaks=1; shift ;;
+            --no-core-flatpaks) core_flatpaks=0; shift ;;
             --reboot) do_reboot=1; shift ;;
             --non-interactive) non_interactive=1; shift ;;
             --allow-file) allow_file=1; shift ;;
@@ -1214,6 +1276,20 @@ main() {
         [[ -f "$user_password_file" ]] || die "--user-password-file not found: $user_password_file"
         check_secret_file_perms "$user_password_file" "--user-password-file"
     fi
+    # System-settings / first-boot-seed flag validation (format only; all
+    # writes are plain /etc-overlay or seed-file content).
+    [[ -z "$set_hostname" ]] || [[ "$set_hostname" =~ $HOSTNAME_RE ]] ||
+        die "invalid --hostname '$set_hostname'"
+    [[ -z "$set_locale" ]] || [[ "$set_locale" =~ $LOCALE_RE ]] ||
+        die "invalid --locale '$set_locale'"
+    [[ -z "$set_timezone" ]] || [[ "$set_timezone" =~ $TIMEZONE_RE ]] ||
+        die "invalid --timezone '$set_timezone' (expect Area/City or UTC)"
+    [[ -z "$set_keyboard" ]] || [[ "$set_keyboard" =~ $KEYBOARD_RE ]] ||
+        die "invalid --keyboard '$set_keyboard' (expect LAYOUT[:VARIANT[:MODEL]])"
+    local feat
+    for feat in "${enable_features[@]+"${enable_features[@]}"}"; do
+        [[ "$feat" =~ $FEATURE_RE ]] || die "invalid --enable-feature name '$feat'"
+    done
 
     local -a valid
     valid=("${VALID_PRODUCTS[@]}")
@@ -1235,6 +1311,16 @@ main() {
         [[ "$ok" -eq 1 ]] || die "--product must be one of: ${valid[*]}"
     fi
     local channel="$product" bare_product="${product%-ab}"
+
+    # Core-flatpak policy is product-shaped: cayo has no desktop, so the seed
+    # never requests flatpaks there; the desktop products default to the core
+    # set unless explicitly opted out.
+    if [[ "$product" == "cayo-ab" ]]; then
+        [[ "$core_flatpaks" != 1 ]] || die "--core-flatpaks: cayo-ab has no desktop (core flatpaks are snow/snowfield only)"
+        core_flatpaks=0
+    elif [[ -z "$core_flatpaks" && "$non_interactive" == 1 ]]; then
+        core_flatpaks=1
+    fi
 
     need_root
     # Every external command this script invokes anywhere -- an absence must
@@ -1359,6 +1445,67 @@ main() {
         fi
         if [[ "$non_interactive" != 1 && -z "$user_fullname" ]]; then
             read -r -p "Full name for '$username' (optional): " user_fullname
+        fi
+    fi
+
+    # -----------------------------------------------------------------
+    # System settings + first-boot choices (interactive; all gathered
+    # before the download, all applied at seed time). Empty answers keep
+    # the shown default; "-" skips the setting entirely (image default).
+    # -----------------------------------------------------------------
+    if [[ "$non_interactive" != 1 ]]; then
+        local answer
+        if [[ -z "$set_hostname" ]]; then
+            while true; do
+                read -r -p "Hostname [$bare_product]: " answer
+                answer="${answer:-$bare_product}"
+                [[ "$answer" == "-" ]] && break
+                [[ "$answer" =~ $HOSTNAME_RE ]] && { set_hostname="$answer"; break; }
+                echo "Invalid hostname." >&2
+            done
+        fi
+        if [[ -z "$set_locale" ]]; then
+            while true; do
+                read -r -p "Locale [en_US.UTF-8]: " answer
+                answer="${answer:-en_US.UTF-8}"
+                [[ "$answer" == "-" ]] && break
+                [[ "$answer" =~ $LOCALE_RE ]] && { set_locale="$answer"; break; }
+                echo "Invalid locale." >&2
+            done
+        fi
+        if [[ -z "$set_timezone" ]]; then
+            while true; do
+                read -r -p "Timezone (Area/City) [UTC]: " answer
+                answer="${answer:-UTC}"
+                [[ "$answer" == "-" ]] && break
+                [[ "$answer" =~ $TIMEZONE_RE ]] && { set_timezone="$answer"; break; }
+                echo "Invalid timezone." >&2
+            done
+        fi
+        if [[ -z "$set_keyboard" ]]; then
+            while true; do
+                read -r -p "Keyboard layout (LAYOUT[:VARIANT[:MODEL]]) [us]: " answer
+                answer="${answer:-us}"
+                [[ "$answer" == "-" ]] && break
+                [[ "$answer" =~ $KEYBOARD_RE ]] && { set_keyboard="$answer"; break; }
+                echo "Invalid keyboard spec." >&2
+            done
+        fi
+        if [[ ${#enable_features[@]} -eq 0 ]]; then
+            read -r -p "Sysext features to enable at first boot (comma-separated, empty for none): " answer
+            if [[ -n "$answer" ]]; then
+                IFS=, read -ra enable_features <<<"${answer// /}"
+                for feat in "${enable_features[@]}"; do
+                    [[ "$feat" =~ $FEATURE_RE ]] || die "invalid feature name '$feat'"
+                done
+            fi
+        fi
+        if [[ -z "$core_flatpaks" ]]; then
+            if confirm_yes_no "Install the core desktop Flatpak set on first boot?"; then
+                core_flatpaks=1
+            else
+                core_flatpaks=0
+            fi
         fi
     fi
 
