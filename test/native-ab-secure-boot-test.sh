@@ -1250,47 +1250,29 @@ set +e
 presets_out="$(vm_ssh 'TEST_LIB_DIR=/tmp/test-lib bash /tmp/05-firstboot-presets.sh' 2>&1)"
 set -e
 echo "$presets_out"
-# test/tests/05-firstboot-presets.sh was written for the bootc profiles and
-# requires EVERY manifest-recorded enablement symlink to be recreated by
-# presets. Reusing it verbatim against a native secure profile surfaces
-# three EXPECTED misses, confirmed live and root-caused (not weakened away,
-# not assumed):
-#   - timers.target.wants/bootc-update-stage.timer,
-#     timers.target.wants/nbc-update-download.timer: permanently MASKED on
-#     every native profile (docs/native-ab-contracts.md, native updater
-#     isolation; confirmed elsewhere in this suite by
-#     test/native-ab-components-test.sh's check_masked_timer) -- a masked
-#     unit's .wants/ symlink can never be recreated by a preset pass, by
-#     design, regardless of what the manifest (captured generically for
-#     every profile) expects.
-#   - local-fs.target.wants/run-lock.mount: this profile's Forky systemd
-#     261 (shared/native-ab-secure/mkosi.conf) no longer ships a
-#     run-lock.mount unit at all -- confirmed live (`dpkg -L systemd` on
-#     the booted image has no run-lock.mount, and /run/lock is already a
-#     plain directory under the API-mounted /run tmpfs, no separate mount
-#     needed). The shared enablement-manifest.txt was captured against
-#     whatever systemd version was in the tree at that finalize step; a
-#     unit newer systemd no longer ships can never be recreated either.
-# Assert the missing set is EXACTLY these three (not merely a subset, and
-# not "any failure is fine") and that they are the ONLY failure the shared
-# script reported -- any other regression still fails this test.
-expected_missing=$'/etc/systemd/system/local-fs.target.wants/run-lock.mount\n/etc/systemd/system/timers.target.wants/bootc-update-stage.timer\n/etc/systemd/system/timers.target.wants/nbc-update-download.timer'
-actual_missing="$(grep '^# MISSING: ' <<<"$presets_out" | sed 's/^# MISSING: //' | LC_ALL=C sort)"
-assert_eq "05-firstboot-presets.sh's missing set is exactly the three known native/Forky exceptions" \
-    "$actual_missing" "$expected_missing"
-assert_eq "05-firstboot-presets.sh reports exactly 1 failure (only the known exceptions)" \
-    "$(grep -oE '[0-9]+ failed' <<<"$presets_out" | grep -oE '^[0-9]+')" "1"
-# The run-lock.mount allowlist entry above is a string match against
-# 05-firstboot-presets.sh's MISSING report -- that alone can't distinguish
-# "this Forky systemd genuinely ships no run-lock.mount unit" from "some
-# unrelated preset regression happens to produce the same path string".
-# Re-confirm structurally, in the guest, that the unit file itself is
-# absent from the booted systemd package (not merely un-enabled):
-run_lock_unit_count="$(vm_ssh 'dpkg -L systemd | grep -c "/run-lock\.mount$"' || true)"
-assert_eq "systemd package ships no run-lock.mount unit on this Forky build (structural re-check, not just the MISSING string)" \
-    "$run_lock_unit_count" "0"
-assert_false "run-lock.mount unit file does not exist anywhere under /usr/lib/systemd/system" \
-    vm_ssh 'test -e /usr/lib/systemd/system/run-lock.mount'
+# test/tests/05-firstboot-presets.sh now passes verbatim on native secure
+# profiles: the enablement-manifest generation
+# (shared/outformat/image/finalize/mkosi.finalize.chroot) drops entries
+# presets cannot recreate — wants links resolving to /dev/null (the
+# bootc-update-stage.timer/nbc-update-download.timer masks live in
+# /usr/lib/systemd, shipped by the ab-root tree) and dangling wants links
+# (run-lock.mount, removed by the secure fragment's Forky systemd 261
+# upgrade after base's Trixie systemd preset-enabled it). Before that fix
+# these three were an exact-set allowlist here; now zero misses is the
+# expectation, so ANY missing entry fails this test.
+# zero matches is the EXPECTED case now — grep's exit 1 must not trip
+# set -e/pipefail on this assignment.
+actual_missing="$(grep '^# MISSING: ' <<<"$presets_out" | sed 's/^# MISSING: //' | LC_ALL=C sort || true)"
+assert_eq "05-firstboot-presets.sh reports no missing manifest entries" \
+    "$actual_missing" ""
+assert_eq "05-firstboot-presets.sh reports 0 failures" \
+    "$(grep -oE '[0-9]+ failed' <<<"$presets_out" | grep -oE '^[0-9]+')" "0"
+# Gate the finalize-side filtering directly, not only via the parity
+# script: the shipped manifest must not carry entries for the /usr-masked
+# native updater units or the Forky-removed run-lock.mount.
+manifest_filtered_count="$(vm_ssh 'grep -cE "bootc-update-stage\.timer|nbc-update-download\.timer|run-lock\.mount" /usr/share/snosi/enablement-manifest.txt' || true)"
+assert_eq "enablement manifest excludes /usr-masked updater timers and the removed run-lock.mount" \
+    "$manifest_filtered_count" "0"
 
 # ===========================================================================
 # Step 4: in-guest TPM enrollment mirroring native-ab-secure-rotation-test.sh
