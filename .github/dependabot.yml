@@ -8,3 +8,9 @@ updates:
       interval: weekly
     commit-message:
       prefix: "chore"
+  - package-ecosystem: npm
+    directory: /workers/native-installer-redirect
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "chore"

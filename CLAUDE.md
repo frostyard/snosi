@@ -1017,6 +1017,19 @@ outgoing-index archival regex that only matched `*.manifest.json` entries,
 silently killing `promote.sh` via `set -e`+`pipefail` on the second
 promotion of any publication type with none — the ISO has none).
 
+**Stable installer download URL:**
+`https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso`
+is an uncacheable `302` served by `workers/native-installer-redirect/`. The
+Worker reads the live `isos/native/v1/SHA256SUMS` through a direct R2 binding,
+strictly selects its single frozen installer filename, confirms the target
+exists, and redirects to the immutable object; it has no separate latest state
+and never proxies ISO bytes. Do not replace this with bucket listing, a mutable
+ISO alias, or a hardcoded version. The redirect is discovery only:
+`SHA256SUMS.gpg` plus the listed SHA-256 remain the trust boundary. Edge code
+deploys separately via `deploy-native-installer-redirect.yml`; every ISO
+promotion and withdrawal must run `verify-installer-redirect.sh` only AFTER
+`verify-published-index.sh` authenticates the served index.
+
 ### Phase 8 exit: real ISO install proof
 
 `test/native-installer-e2e-test.sh` is the Phase 8 exit criterion — the sole

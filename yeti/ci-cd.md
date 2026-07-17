@@ -245,6 +245,15 @@ Tests full bootc installation and boot cycle:
 4. Resolves the requested mutable tag to a digest, verifies that immutable ref with `cosign verify --key cosign.pub`, then pulls the verified ref (into root's podman storage)
 5. Runs `sudo test/bootc-install-test.sh` — installs to virtual disk, boots in QEMU, runs test suite via SSH. Root is required: `bootc install` refuses to run under rootless podman (`/proc/1 is owned by 65534`); this was why every run of this workflow failed before 2026-07
 
+### deploy-native-installer-redirect.yml — Stable ISO Discovery
+
+**Trigger:** Push to `main` when `workers/native-installer-redirect/**` or the
+workflow changes, plus manual dispatch. Installs the locked Node dependencies,
+runs TypeScript/generated-binding/Vitest checks and `wrangler deploy --dry-run`,
+then deploys with `CF_WORKERS_API_TOKEN` from `native-promotion`. The Worker has
+a direct read binding to the publication R2 bucket and an exact-path-guarded
+route for the stable installer URL; it has no signing or S3 credentials.
+
 ### scorecard.yml — Supply-Chain Security
 
 **Trigger:** Weekly (Monday 12:17 UTC)
@@ -268,3 +277,4 @@ Runs OpenSSF Scorecard analysis for supply-chain security assessment. Publishes 
 | Desktop/server OCI images | ghcr.io/frostyard/ | buildah push + cosign sign + SBOM via ORAS |
 | Manifests | R2 manifests bucket | Direct upload |
 | Native A/B images (cayo-ab/snow-ab/snowfield-ab) | repository.frostyard.org/os/native/v1/\<product\>/x86-64/ | `rclone` candidate upload + independent HTTP re-verify + `promote.sh` (OpenPGP-signed `SHA256SUMS`/`SHA256SUMS.gpg`) via `build-native-images.yml`; production upload not yet exercised, see `docs/native-ab-publication.md` |
+| Native installer stable URL | repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso | Cloudflare Worker derives an uncacheable redirect from the live R2 `SHA256SUMS`; immutable ISO publication remains in `build-native-images.yml` |

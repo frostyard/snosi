@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "snosi-native-installer-redirect",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-17",
+  "routes": [
+    {
+      "pattern": "https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso*",
+      "zone_name": "frostyard.org"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "REPOSITORY",
+      "bucket_name": "frostyard-repository"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

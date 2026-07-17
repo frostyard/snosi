@@ -10,6 +10,35 @@ on:
 permissions: {}
 
 jobs:
+  installer-redirect-worker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: workers/native-installer-redirect
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: workers/native-installer-redirect/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test and validate Worker
+        run: npm run check
+
+      - name: Validate deployment bundle
+        run: npm run deploy:dry-run
+
   shell-lint:
     runs-on: ubuntu-latest
     permissions:
