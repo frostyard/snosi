@@ -111,7 +111,12 @@ fi
 #     desktop trees ship it as a static /usr alias symlink instead
 #   - wants/requires entries whose target unit is MASKED in the image
 #     (preset-all skips masked units; a dangling wants for a masked unit
-#     is inert anyway)
+#     is inert anyway) — masks in /etc AND masks shipped under
+#     /usr/lib/systemd (the native ab-root tree masks the bootc/nbc
+#     updater units there)
+#   - entries whose symlink dangles: the unit file is no longer shipped
+#     at all (e.g. a profile-stage systemd upgrade dropping a unit that
+#     base's preset pass had enabled — Forky 261 removed run-lock.mount)
 mkdir -p /usr/share/snosi
 manifest=/usr/share/snosi/enablement-manifest.txt
 : > "$manifest"
@@ -130,13 +135,32 @@ for scope in system user; do
 done
 sed -i -e '/^system ctrl-alt-del.target$/d' \
        -e '/^system display-manager.service$/d' "$manifest"
-# Drop entries pointing at units masked in the image /etc.
+# Drop entries pointing at units masked in the image /etc. This is a
+# by-NAME scan: an /etc mask shadows a real unit file elsewhere, so the
+# wants link may still resolve to that real file — the resolution check
+# below cannot catch this case.
 for scope in system user; do
     find /etc/systemd/$scope -maxdepth 1 -type l -lname /dev/null \
          -printf '%f\n' 2>/dev/null | while read -r masked; do
         sed -i "\#^$scope .*/$masked\$#d" "$manifest"
     done
 done
+# Drop entries first-boot presets cannot recreate: links that resolve to
+# /dev/null (the unit path itself became a mask — e.g. the native ab-root
+# tree masks bootc-update-stage.timer/nbc-update-download.timer in
+# /usr/lib/systemd, invisible to the /etc scan above) and dangling links
+# (the unit file is gone — e.g. the native secure profiles' Forky systemd
+# upgrade removed run-lock.mount after base's preset pass enabled it).
+# Checking the recorded symlink itself, rather than looking the unit name
+# up across the search path, keeps template instances (foo@bar.service ->
+# foo@.service) resolving naturally.
+filtered=$(mktemp)
+while read -r scope rel; do
+    link="/etc/systemd/$scope/$rel"
+    [[ -e "$link" && "$(readlink -f "$link")" != /dev/null ]] || continue
+    printf '%s %s\n' "$scope" "$rel"
+done < "$manifest" > "$filtered"
+mv "$filtered" "$manifest"
 # C collation: the parity test comm(1)s against this file inside the guest.
 LC_ALL=C sort -o "$manifest" "$manifest"
 

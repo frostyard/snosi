@@ -359,12 +359,20 @@ a real bug found and fixed while building this harness: its old marker-only
 gate could not distinguish a real native install's true first boot from live
 media), and `test/tests/05-firstboot-presets.sh` is reused VERBATIM via the
 same `TEST_LIB_DIR`/`lib/helpers.sh` remote-execution pattern
-`bootc-install-test.sh` already uses — reusing a bootc-authored check against
-a native/secure profile surfaces 3 fully-explained, expected differences
-(`bootc-update-stage.timer`/`nbc-update-download.timer` are permanently
-masked by native updater isolation; `run-lock.mount` no longer exists in the
-secure profile's Forky systemd 261 at all), asserted to be EXACTLY that set,
-not "any failure is fine" — a real regression anywhere else still fails hard.
+`bootc-install-test.sh` already uses — asserted to pass with ZERO missing
+manifest entries. (Until 2026-07-17 this reuse surfaced 3 expected misses,
+carried as an exact-set allowlist here: `bootc-update-stage.timer`/
+`nbc-update-download.timer` are permanently masked by native updater
+isolation — but in `/usr/lib/systemd`, which the manifest generator's
+masked-unit filter didn't scan — and `run-lock.mount` no longer exists in
+the secure profile's Forky systemd 261 at all, leaving a dangling wants
+link recorded from base's Trixie preset pass. The manifest generation in
+`shared/outformat/image/finalize/mkosi.finalize.chroot` now drops entries
+whose recorded symlink dangles or resolves to `/dev/null`, so the parity
+script passes verbatim on native; the harness also asserts the shipped
+manifest excludes those three names outright. A regression anywhere still
+fails hard — the expectation is now zero misses, stricter than the old
+allowlist.)
 
 In-guest TPM enrollment mirrors `native-ab-secure-rotation-test.sh`'s
 `enroll_token` EXACTLY (`--tpm2-pcrs=` empty raw-PCR set,
