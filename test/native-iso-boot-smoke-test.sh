@@ -71,7 +71,9 @@ cleanup() {
         kill "$QEMU_PID" 2>/dev/null || true
     fi
     if [[ -n "${SMOKE_CONSOLE_COPY:-}" && -f "$CONSOLE_LOG" ]]; then
-        cp "$CONSOLE_LOG" "$SMOKE_CONSOLE_COPY" || true
+        # install -m 0644, not cp: root-created 0640 copies are unreadable
+        # by CI's unprivileged upload-artifact step (EACCES, seen live).
+        install -m 0644 "$CONSOLE_LOG" "$SMOKE_CONSOLE_COPY" || true
     fi
     rm -rf "$WORK_DIR"
     exit "$rc"

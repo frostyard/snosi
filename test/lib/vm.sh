@@ -173,6 +173,13 @@ vm_start() {
 
     # virtio-gpu-pci: GDM (desktop images) needs a DRM node to bind to even
     # with -display none, or systemctl is-system-running reports "degraded".
+    # -vga none is REQUIRED alongside it: without it QEMU also adds its
+    # default stdvga, the guest gets TWO DRM cards (bochs card0 primary +
+    # virtio card1), and plymouthd 24.004.60 SEGVs in its DRM renderer on
+    # that layout (root-caused 2026-07-18 via guest journal: plymouth-start
+    # "code=killed, status=11/SEGV" -> degraded -> smoke gate failure on
+    # every desktop image). Same virtio-gpu + -vga none idiom as
+    # test/native-ab-secure-boot-test.sh's vm_start_secure.
     qemu-system-x86_64 \
         -machine q35 \
         -enable-kvm -cpu host \
@@ -183,6 +190,7 @@ vm_start() {
         -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT}-:22" \
         -device virtio-net-pci,netdev=net0 \
         -device virtio-gpu-pci \
+        -vga none \
         -display none \
         -monitor none \
         -chardev "file,id=serial0,path=$consolelog" \

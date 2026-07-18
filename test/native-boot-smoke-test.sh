@@ -83,7 +83,10 @@ cleanup() {
     [[ -n "$MOUNTED" ]] && umount "$MOUNTED" 2>/dev/null || true
     [[ -n "$LOOP_DEV" ]] && losetup -d "$LOOP_DEV" 2>/dev/null || true
     if [[ -n "${SMOKE_CONSOLE_COPY:-}" && -n "${QEMU_CONSOLE_LOG:-}" && -f "$QEMU_CONSOLE_LOG" ]]; then
-        cp "$QEMU_CONSOLE_LOG" "$SMOKE_CONSOLE_COPY" || true
+        # install -m 0644, not cp: this script runs as root and QEMU creates
+        # the chardev log 0640 root:root -- an unreadable copy makes CI's
+        # unprivileged upload-artifact step fail with EACCES (seen live).
+        install -m 0644 "$QEMU_CONSOLE_LOG" "$SMOKE_CONSOLE_COPY" || true
     fi
     rm -rf "$WORK_DIR"
     exit "$rc"
