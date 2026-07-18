@@ -125,7 +125,29 @@ the mechanical job-by-job summary.
    `continue-on-error: true` and no-ops if absent (that product's build
    didn't finish), otherwise runs `verify-remote.sh` against the REAL
    public `https://repository.frostyard.org/os/native/v1/<product>/x86-64`
-   URL and uploads a `native-verified-<product>` marker on success
+   URL, then (2026-07-17, "boot validation") installs QEMU/OVMF and runs
+   `test/native-boot-smoke-test.sh` against the same re-verified candidate
+   bytes -- boots the disk in QEMU/KVM and asserts `multi-user.target`
+   active, `systemctl is-system-running --wait` = `running`, os-release
+   `IMAGE_ID`/`IMAGE_VERSION` match the candidate, the `/usr/lib/snosi/
+   native-ab` marker present, and a clean poweroff -- and only THEN uploads
+   a `native-verified-<product>` marker on success. The smoke step's serial
+   console log is uploaded as a `native-smoke-console-<product>` artifact
+   (`if: always() && steps.smoke.outcome == 'failure'`) so a boot failure is
+   debuggable without re-running the job locally. An equivalent
+   `test-public-origin-iso` job does the same for the installer ISO leg
+   (`verify-remote.sh` against `isos/native/v1`, then `test/
+   native-iso-boot-smoke-test.sh` -- plain OVMF, no Secure Boot, polls the
+   serial log for a login prompt -- then the `native-verified-iso` marker).
+   **The smoke test is now the actual promotion gate**: both the "Record
+   verified marker" and "Upload verified marker" steps require
+   `steps.smoke.outcome == 'success'` in addition to `steps.verify.outcome
+   == 'success'`, so a candidate that re-verifies over HTTP but fails to
+   boot is never promoted. Secure Boot/TPM fidelity is deliberately NOT
+   covered here (no MOK enrollment, no vTPM) -- that belongs to the deep,
+   non-blocking `native-nightly.yml` workflow below. See
+   `docs/plans/2026-07-17-native-boot-validation-design.md` for the
+   two-tier rationale.
 5. `promote-cayo` / `promote-snow` / `promote-snowfield` -- independent
    jobs, each gated on the `native-promotion` protected GitHub environment
    (holds `NATIVE_UPDATE_SIGNING_KEY`, the OpenPGP update-signing private
@@ -161,6 +183,57 @@ dedicated upload-only token, never the sysext/manifest token `build.yml`/
 exercised through this workflow** -- only local rehearsal and the
 workflow's structure (actionlint-clean, every script reference
 hand-verified) have been.
+
+### native-nightly.yml — Nightly Deep Secure-Boot Validation (Tier 2, 2026-07-17)
+
+**Trigger:** Scheduled (`0 6 * * *` UTC), manual dispatch with a `profile`
+input (`rotate` default, or force one of `cayo-ab`/`snow-ab`/`snowfield-ab`).
+`concurrency: {group: native-nightly, cancel-in-progress: false}`.
+
+This is Tier 2 of the two-tier boot-validation design
+(`docs/plans/2026-07-17-native-boot-validation-design.md`): where
+`build-native-images.yml`'s Tier 1 smoke test proves the exact promoted
+bytes boot at all (no Secure Boot, no TPM), this workflow runs the full
+deep secure chain -- install, enforced Secure Boot, TPM enrollment/
+auto-unlock, boot, and a signed N→N+1 update hop -- by driving `test/
+native-ab-secure-boot-test.sh` in its default (non-`--full-window`) mode
+on a hosted `ubuntu-latest` runner with KVM, swtpm, and virt-firmware
+installed at job time. It builds its own images from the checked-out
+commit, so it is a genuine deep regression signal, not a re-check of
+already-published bytes.
+
+**Profile rotation** (day-of-week, UTC): Sunday `snowfield-ab`; Tuesday/
+Thursday/Saturday `cayo-ab`; every other day `snow-ab` -- spreads the
+~3-4 hour deep run (builds dominate) across all three products over a week
+instead of running all three nightly.
+
+**Zero-secret design (the load-bearing security property):** the workflow
+declares no GitHub environment and touches no repository secrets. Because
+the harness builds its own throwaway images, all key material is generated
+fresh, in-job, immediately before the run: an ephemeral RSA-4096 Secure
+Boot/MOK keypair and an ephemeral RSA-2048 (default exponent 65537) PCR
+signing keypair -- RSA-2048 specifically, per `docs/native-ab-contracts.md`
+§7, the only algorithm the full TPM unlock chain accepts (RSA-4096 fails
+`Esys_LoadExternal`, ECC fails `Esys_VerifySignature`). The harness itself
+generates its own ephemeral OpenPGP update-signing key internally, so
+nothing durable or production-facing is ever read by this workflow.
+
+**`KEEP_VM=1` is required, not optional:** the harness's `cleanup()` trap
+`rm -rf`s its `$WORK_DIR` unconditionally on EXIT -- including on a failed
+run -- unless `KEEP_VM=1` is set, in which case it returns early and leaves
+the workdir (with `console.log`/`http.log`/`swtpm.log`) in place without
+blocking the script's own exit code. Without this, the `Upload harness
+logs` step's artifact glob would never match anything on a failure, since
+the very directory it wants to upload would already be gone by the time
+the step runs. `TMPDIR` is passed through explicitly for the same
+CI-disk-exhaustion reasons as every other native build job.
+
+**Non-blocking, by design:** nothing in the release/promotion pipeline
+depends on this workflow succeeding or even running -- the actual
+promotion gate remains the Tier 1 smoke test inside
+`build-native-images.yml`. A nightly failure is a signal to investigate,
+not a blocker; `if: failure()` uploads `nightly-harness-logs-<profile>`
+for exactly that purpose.
 
 ### check-dependencies.yml — Direct Download Updates
 

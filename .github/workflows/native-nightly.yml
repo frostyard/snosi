@@ -1,0 +1,151 @@
+name: Native Nightly Boot Validation
+
+# Tier 2 of docs/plans/2026-07-17-native-boot-validation-design.md: runs the
+# existing deep secure-chain harness (test/native-ab-secure-boot-test.sh,
+# default mode: install -> enforced Secure Boot -> TPM enroll -> boot ->
+# signed N->N+1 update hop) nightly on a hosted runner, rotating profiles by
+# day of week. NON-BLOCKING: nothing in the release pipeline depends on this
+# workflow; the promotion gate is the Tier 1 smoke test in
+# build-native-images.yml.
+#
+# SECURITY PROPERTY: this workflow references NO GitHub environment and NO
+# repository secrets. The harness builds its own images, so all key material
+# is ephemeral and generated per-run below (the PCR signing key MUST be
+# RSA-2048 with the default exponent -- the only algorithm the full TPM
+# unlock chain accepts, docs/native-ab-contracts.md §7). The harness
+# generates its own ephemeral update-signing GPG key internally.
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Profile to validate"
+        required: false
+        default: rotate
+        type: choice
+        options: [rotate, cayo-ab, snow-ab, snowfield-ab]
+
+permissions: {}
+
+concurrency:
+  group: native-nightly
+  cancel-in-progress: false
+
+jobs:
+  deep-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    permissions:
+      contents: read
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+
+      - name: Redirect temp to /mnt
+        run: |
+          sudo mkdir -p /mnt/tmp /mnt/var-tmp
+          sudo chmod 1777 /mnt/tmp /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap pinned mkosi
+        run: ./shared/native-ab/ci/bootstrap-mkosi.sh .mkosi
+
+      - name: Assert mkosi pin matches build.yml
+        run: ./shared/native-ab/ci/check-mkosi-pin.sh .mkosi
+
+      - name: Prepare mkosi build host
+        # Same recipe as build-native-images.yml's build jobs, PLUS the
+        # QEMU/swtpm/virt-firmware stack the harness needs.
+        run: |
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_userns=0
+          sudo aa-teardown || true
+          sudo apt-get remove -y apparmor || true
+          sudo mkdir -p /var/lib/ca-certificates
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debian-archive-keyring \
+            dracut-core binutils file python3-cryptography cryptsetup \
+            qemu-system-x86 qemu-utils ovmf swtpm swtpm-tools
+          pip3 install --user virt-firmware
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | \
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Select profile
+        id: profile
+        env:
+          PROFILE_INPUT: ${{ inputs.profile }}
+        run: |
+          if [[ -n "$PROFILE_INPUT" && "$PROFILE_INPUT" != "rotate" ]]; then
+            profile="$PROFILE_INPUT"
+          else
+            # Mon/Wed/Fri snow-ab, Tue/Thu/Sat cayo-ab, Sun snowfield-ab
+            case "$(date -u +%u)" in
+              7) profile=snowfield-ab ;;
+              2|4|6) profile=cayo-ab ;;
+              *) profile=snow-ab ;;
+            esac
+          fi
+          echo "Selected profile: $profile"
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
+
+      - name: Generate ephemeral key material
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p .snosi-private/history
+          openssl req -x509 -newkey rsa:4096 -nodes -days 7 \
+            -keyout mkosi.key -out mkosi.crt \
+            -subj "/CN=snosi nightly ephemeral Secure Boot"
+          # RSA-2048, default exponent 65537 -- MANDATORY, see header comment.
+          openssl req -x509 -newkey rsa:2048 -nodes -days 7 \
+            -keyout .snosi-private/pcr-signing.key -out .snosi-private/pcr-signing.crt \
+            -subj "/CN=snosi nightly ephemeral PCR"
+          openssl x509 -in .snosi-private/pcr-signing.crt -pubkey -noout \
+            > .snosi-private/pcr-signing.pub
+
+      - name: Run deep secure-boot harness
+        env:
+          PROFILE: ${{ steps.profile.outputs.profile }}
+        run: |
+          # GitHub's default `run:` shell is `bash -e {0}` with no pipefail,
+          # so a failed harness piped into `tee` would otherwise exit 0 (tee's
+          # own exit code) and this step -- and the whole nightly run -- would
+          # report green regardless of the harness's actual result.
+          set -o pipefail
+          # KEEP_VM=1: the harness's cleanup() trap (test/native-ab-secure-boot-test.sh)
+          # rm -rf's $WORK_DIR unconditionally on EXIT -- including on failure --
+          # unless KEEP_VM=1, in which case it returns early and leaves the
+          # workdir (and its console.log/http.log/swtpm.log) in place without
+          # blocking script exit. Without this, the log-upload glob below would
+          # never match anything on a failed run.
+          sudo PROFILE="$PROFILE" TMPDIR="$TMPDIR" KEEP_VM=1 \
+            ./test/native-ab-secure-boot-test.sh |& tee /var/tmp/nightly-harness.log
+
+      - name: Make harness logs readable for upload
+        if: failure()
+        run: sudo chmod -R a+rX /var/tmp/native-ab-secure-boot-test.* 2>/dev/null || true
+
+      - name: Upload harness logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: nightly-harness-logs-${{ steps.profile.outputs.profile }}
+          path: |
+            /var/tmp/nightly-harness.log
+            /var/tmp/native-ab-secure-boot-test.*/**/*.log
+          retention-days: 14
+          if-no-files-found: ignore

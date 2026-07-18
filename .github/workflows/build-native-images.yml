@@ -23,6 +23,12 @@ name: Build Native Images
 # environment additionally restricts to protected (main) branches, so a
 # workflow_dispatch fired from a feature branch still cannot promote.
 #
+# Boot validation: test-public-origin and test-public-origin-iso also boot
+# the re-verified candidate bytes in QEMU (test/native-boot-smoke-test.sh /
+# test/native-iso-boot-smoke-test.sh) before the verified marker -- the
+# promotion gate -- is recorded (docs/plans/2026-07-17-native-boot-validation-
+# design.md Tier 1).
+#
 # Signing-key custody note: the build-* jobs receive the Secure Boot/MOK
 # (SecureBootKey/SecureBootCertificate) and PCR signing
 # (SignExpectedPcrKey/SignExpectedPcrCertificate) private key material as
@@ -627,14 +633,45 @@ jobs:
             "/var/tmp/native-publish/${{ matrix.product }}/x86-64" \
             "https://repository.frostyard.org/os/native/v1/${{ matrix.product }}/x86-64"
 
-      - name: Record verified marker
+      - name: Enable KVM and install QEMU
+        if: steps.download.outcome == 'success'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | \
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 ovmf xz-utils jq
+
+      - name: Boot smoke test (must reach multi-user.target)
+        # The published bytes must BOOT before the verified marker (the
+        # promotion gate) is earned -- design doc
+        # docs/plans/2026-07-17-native-boot-validation-design.md Tier 1.
         if: steps.verify.outcome == 'success'
+        id: smoke
+        run: |
+          sudo SMOKE_CONSOLE_COPY=/var/tmp/smoke-console.log \
+            ./test/native-boot-smoke-test.sh \
+            "/var/tmp/native-publish/${{ matrix.product }}/x86-64" \
+            "https://repository.frostyard.org/os/native/v1/${{ matrix.product }}/x86-64"
+
+      - name: Upload smoke console log
+        if: always() && steps.smoke.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-smoke-console-${{ matrix.product }}
+          path: /var/tmp/smoke-console.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Record verified marker
+        if: steps.verify.outcome == 'success' && steps.smoke.outcome == 'success'
         run: |
           mkdir -p /var/tmp/native-verified
           echo "${{ matrix.product }} verified $(date -u +%Y-%m-%dT%H:%M:%SZ)" > "/var/tmp/native-verified/${{ matrix.product }}"
 
       - name: Upload verified marker
-        if: steps.verify.outcome == 'success'
+        if: steps.verify.outcome == 'success' && steps.smoke.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: native-verified-${{ matrix.product }}
@@ -1165,14 +1202,42 @@ jobs:
             /var/tmp/native-publish/iso \
             https://repository.frostyard.org/isos/native/v1
 
-      - name: Record verified marker
+      - name: Enable KVM and install QEMU
+        if: steps.download.outcome == 'success'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | \
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 ovmf jq
+
+      - name: Boot smoke test (ISO must reach a serial login prompt)
         if: steps.verify.outcome == 'success'
+        id: smoke
+        run: |
+          sudo SMOKE_CONSOLE_COPY=/var/tmp/smoke-console.log \
+            ./test/native-iso-boot-smoke-test.sh \
+            /var/tmp/native-publish/iso \
+            https://repository.frostyard.org/isos/native/v1
+
+      - name: Upload smoke console log
+        if: always() && steps.smoke.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-smoke-console-iso
+          path: /var/tmp/smoke-console.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Record verified marker
+        if: steps.verify.outcome == 'success' && steps.smoke.outcome == 'success'
         run: |
           mkdir -p /var/tmp/native-verified
           echo "iso verified $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/tmp/native-verified/iso
 
       - name: Upload verified marker
-        if: steps.verify.outcome == 'success'
+        if: steps.verify.outcome == 'success' && steps.smoke.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: native-verified-iso
