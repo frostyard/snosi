@@ -171,6 +171,8 @@ vm_start() {
     local pidfile="${disk%.raw}.pid"
     local consolelog="${disk%.raw}-console.log"
 
+    # virtio-gpu-pci: GDM (desktop images) needs a DRM node to bind to even
+    # with -display none, or systemctl is-system-running reports "degraded".
     qemu-system-x86_64 \
         -machine q35 \
         -enable-kvm -cpu host \
@@ -180,6 +182,7 @@ vm_start() {
         -drive "file=$disk,format=raw,if=virtio" \
         -netdev "user,id=net0,hostfwd=tcp::${SSH_PORT}-:22" \
         -device virtio-net-pci,netdev=net0 \
+        -device virtio-gpu-pci \
         -display none \
         -monitor none \
         -chardev "file,id=serial0,path=$consolelog" \

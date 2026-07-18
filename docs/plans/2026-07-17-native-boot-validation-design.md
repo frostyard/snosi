@@ -1,7 +1,7 @@
 # Native A/B Boot Validation in CI — Design
 
 Date: 2026-07-17
-Status: Approved design, pending implementation plan
+Status: Implemented (see docs/plans/2026-07-17-native-boot-validation-plan.md)
 
 ## Problem
 
@@ -44,11 +44,14 @@ Root + KVM required. Follows existing harness conventions (`set -euo pipefail`,
 sources `test/lib/vm.sh` and `test/lib/ssh.sh`, cleanup trap, numbered
 assertions with a final tally).
 
-Usage: `sudo test/native-boot-smoke-test.sh <candidate-dir> <product> <version>`
+Usage: `sudo test/native-boot-smoke-test.sh <prepared-dir> [base-url]`
 
-where `<candidate-dir>` is the directory `verify-remote.sh` just verified
+where `<prepared-dir>` is the directory `verify-remote.sh` just verified
 (contains `publication-info.json`, `SHA256SUMS`, and the downloaded candidate
-objects).
+objects); product and version are derived from `publication-info.json`, not
+passed on the command line. `base-url` is only required when the disk blob
+itself is not present locally (e.g. CI ships only the verified metadata
+between jobs), in which case it is downloaded from the candidate subpath.
 
 Steps:
 
@@ -103,8 +106,11 @@ New steps, all conditional on the existing `steps.download.outcome ==
    `99-kvm4all.rules` udev rule, `qemu-system-x86 qemu-utils ovmf`).
 2. **Boot smoke test** — after "Verify candidate objects against the public
    origin", before "Record verified marker":
-   `sudo ./test/native-boot-smoke-test.sh /var/tmp/native-publish/<product>/x86-64 <product> <version>`
-   (version read from `publication-info.json`).
+   `sudo ./test/native-boot-smoke-test.sh /var/tmp/native-publish/<product>/x86-64 <base-url>`
+   (product and version are derived from the directory's own
+   `publication-info.json`, not passed as separate arguments; `<base-url>` is
+   the product's public `os/native/v1/<product>/x86-64` origin, used to
+   re-fetch the disk blob when it isn't already present locally).
 3. **Upload console log on failure** (`if: failure()`, `actions/upload-artifact`,
    e.g. `native-smoke-console-<product>`).
 

@@ -66,11 +66,8 @@ DISK_NAME="$(jq -r .artifacts.disk.name "$PREPARED_DIR/publication-info.json")"
 WORK_DIR="$(mktemp -d /var/tmp/native-boot-smoke.XXXXXX)"
 LOOP_DEV=""
 MOUNTED=""
-FAILED_MSG=""
 
 die() {
-    # shellcheck disable=SC2034
-    FAILED_MSG="$1"
     echo "FAIL: $1" >&2
     if [[ -n "${QEMU_CONSOLE_LOG:-}" && -f "$QEMU_CONSOLE_LOG" ]]; then
         echo "--- last 60 serial console lines ---" >&2

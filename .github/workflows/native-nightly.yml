@@ -73,7 +73,7 @@ jobs:
           sudo mkdir -p /var/lib/ca-certificates
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends debian-archive-keyring \
-            dracut-core binutils file python3-cryptography \
+            dracut-core binutils file python3-cryptography cryptsetup \
             qemu-system-x86 qemu-utils ovmf swtpm swtpm-tools
           pip3 install --user virt-firmware
 
@@ -121,6 +121,11 @@ jobs:
         env:
           PROFILE: ${{ steps.profile.outputs.profile }}
         run: |
+          # GitHub's default `run:` shell is `bash -e {0}` with no pipefail,
+          # so a failed harness piped into `tee` would otherwise exit 0 (tee's
+          # own exit code) and this step -- and the whole nightly run -- would
+          # report green regardless of the harness's actual result.
+          set -o pipefail
           # KEEP_VM=1: the harness's cleanup() trap (test/native-ab-secure-boot-test.sh)
           # rm -rf's $WORK_DIR unconditionally on EXIT -- including on failure --
           # unless KEEP_VM=1, in which case it returns early and leaves the
@@ -130,6 +135,10 @@ jobs:
           sudo PROFILE="$PROFILE" TMPDIR="$TMPDIR" KEEP_VM=1 \
             ./test/native-ab-secure-boot-test.sh |& tee /var/tmp/nightly-harness.log
 
+      - name: Make harness logs readable for upload
+        if: failure()
+        run: sudo chmod -R a+rX /var/tmp/native-ab-secure-boot-test.* 2>/dev/null || true
+
       - name: Upload harness logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -137,6 +146,6 @@ jobs:
           name: nightly-harness-logs-${{ steps.profile.outputs.profile }}
           path: |
             /var/tmp/nightly-harness.log
-            /var/tmp/native-ab-secure-boot-test.*/*.log
+            /var/tmp/native-ab-secure-boot-test.*/**/*.log
           retention-days: 14
           if-no-files-found: ignore
