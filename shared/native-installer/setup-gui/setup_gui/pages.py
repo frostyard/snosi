@@ -517,6 +517,9 @@ class FeaturesPage(Page):
         self.set_child(self.status)
 
     def set_page_active(self):
+        # Everything on this page is optional, so Next is enabled
+        # unconditionally -- before and independent of the catalog fetch.
+        super().set_page_active()
         product = self.state.product.name if self.state.product else None
         if product and self._catalog_loaded_for != product:
             self._fetch_catalog(product)

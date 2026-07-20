@@ -970,7 +970,15 @@ libadwaita kiosk `snosi-setup` (in-tree Python/GI package, installed to
 parsing — with `test/snosi-setup-model-test.py` covering it, wired into
 `validate.yml`) drives exactly one `snosi-install --non-interactive
 --json-progress` invocation and performs no privileged operation itself.
-**Activation is a static wants link + unit Conditions** (`snosi-setup.service`,
+**Page-protocol gotcha:** `SetupWindow._show` disables Next on every page
+transition; each page's `set_page_active()` must re-enable it (the `Page`
+base does `set_ready(True)`), so an override that forgets leaves Next
+permanently disabled — the features page shipped exactly that bug when its
+catalog-fetch override landed (fixed 2026-07-20: the page is fully optional,
+so it enables Next unconditionally via `super().set_page_active()`).
+`test/snosi-setup-pages-test.py` (widget-level, wired into `validate.yml`,
+skips cleanly with exit 0 where GTK4/libadwaita or a display is missing)
+regression-tests it. **Activation is a static wants link + unit Conditions** (`snosi-setup.service`,
 `ConditionPathExistsGlob=/dev/dri/card*`,
 `ConditionKernelCommandLine=!snosi.textmode=1`), with `getty@tty1` stopped
 IMPERATIVELY in `ExecStartPre`, never via `Conflicts=`: Conflicts stops the
