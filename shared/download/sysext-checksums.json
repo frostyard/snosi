@@ -15,14 +15,14 @@
     "version": "3.0.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_150.0.4078.65-1_amd64.deb",
-    "sha256": "9adf1fc7a8091393c616230b79c789e6b98b9b09905dac71ed563cc8f210ab21",
-    "version": "150.0.4078.65-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_150.0.4078.83-1_amd64.deb",
+    "sha256": "b939fafdfe10f5e89f689af9fd4ea2eca98902d24ac4779a52c755fa899caa54",
+    "version": "150.0.4078.83-1"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.128.0/code-server_4.128.0_amd64.deb",
-    "sha256": "c0f6e3706c4285f06bb2350274576f289262e6a9962a70e3c31c6d3ea17a29d2",
-    "version": "4.128.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.129.0/code-server_4.129.0_amd64.deb",
+    "sha256": "66160d99431595b0e9f4245abae8d0f472289fb77c97007ce79f2d64d06507f8",
+    "version": "4.129.0"
   },
   "coder": {
     "url": "https://github.com/coder/coder/releases/download/v2.34.6/coder_2.34.6_linux_amd64.deb",
@@ -30,8 +30,8 @@
     "version": "2.34.6"
   },
   "lemonade": {
-    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v10.10.0/lemonade-server_10.10.0-debian13_amd64.deb",
-    "sha256": "2680fb4c920855f766d52c764b40e621058209dd06fc65b7cb3875187f55986b",
-    "version": "10.10.0"
+    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.0.0/lemonade-server_11.0.0-debian13_amd64.deb",
+    "sha256": "dd904bfead7ecc0a82fd8cd16b8ee482f909b39b97dd0051740f9730a79d7d3c",
+    "version": "11.0.0"
   }
 }
