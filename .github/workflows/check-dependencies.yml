@@ -89,6 +89,15 @@ jobs:
             echo "lemonade_version=$LATEST_LEM" >> $GITHUB_OUTPUT
           fi
 
+          # Check Pilothouse (Snosi web administration console)
+          CURRENT_PH=$(jq -r '.pilothouse.version' "$CHECKSUMS")
+          LATEST_PH=$(gh_api https://api.github.com/repos/frostyard/pilothouse/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_PH" && "$LATEST_PH" != "null" ]] && ver_gt "$LATEST_PH" "$CURRENT_PH"; then
+            UPDATES="${UPDATES}pilothouse: $CURRENT_PH -> $LATEST_PH\n"
+            echo "pilothouse_update=true" >> $GITHUB_OUTPUT
+            echo "pilothouse_version=$LATEST_PH" >> $GITHUB_OUTPUT
+          fi
+
           # Check Microsoft Azure VPN Client
           CURRENT_AZ=$(jq -r '.["microsoft-azurevpnclient"].version' "$CHECKSUMS")
           LATEST_AZ=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
@@ -139,6 +148,8 @@ jobs:
           CODER_VERSION: ${{ steps.check.outputs.coder_version }}
           LEMONADE_UPDATE: ${{ steps.check.outputs.lemonade_update }}
           LEMONADE_VERSION: ${{ steps.check.outputs.lemonade_version }}
+          PILOTHOUSE_UPDATE: ${{ steps.check.outputs.pilothouse_update }}
+          PILOTHOUSE_VERSION: ${{ steps.check.outputs.pilothouse_version }}
           AZUREVPN_UPDATE: ${{ steps.check.outputs.azurevpn_update }}
           AZUREVPN_VERSION: ${{ steps.check.outputs.azurevpn_version }}
           EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
@@ -192,6 +203,18 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.lemonade.url=$u | .lemonade.sha256=$s | .lemonade.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$PILOTHOUSE_UPDATE" == "true" ]]; then
+            VER="$PILOTHOUSE_VERSION"
+            URL="https://github.com/frostyard/pilothouse/releases/download/v${VER}/frostyard-pilothouse_${VER}_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.pilothouse.url=$u | .pilothouse.sha256=$s | .pilothouse.version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi

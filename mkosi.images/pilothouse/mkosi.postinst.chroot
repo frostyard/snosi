@@ -1,0 +1,17 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+source "$SRCDIR/shared/download/verified-download.sh"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "pilothouse" "$DEBS/pilothouse.deb"
+
+# The deb has no Depends (static Go binaries). It ships its own sysusers.d
+# fragment in /usr (creates the pilothouse user/group at boot) and a PAM
+# config at /etc/pam.d/pilothouse, which is stripped from the sysext delta —
+# mkosi.finalize captures it to factory defaults for tmpfiles to restore.
+dpkg -i "$DEBS/pilothouse.deb"

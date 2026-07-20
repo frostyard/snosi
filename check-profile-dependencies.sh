@@ -14,6 +14,7 @@ sysexts=(
     docker
     incus
     nix
+    pilothouse
     podman
     tailscale
 )
