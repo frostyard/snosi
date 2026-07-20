@@ -1,0 +1,14 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+set -euo pipefail
+
+# Capture the deb's PAM config to factory defaults for tmpfiles.d to restore
+# at boot. pilothoused authenticates admin actions via PAM ("pilothouse"
+# service name); sysexts cannot ship /etc, so the file is injected from
+# /usr/share/factory/etc when the sysext is merged.
+mkdir -p "$BUILDROOT/usr/share/factory/etc/pam.d"
+
+if [ -f "$BUILDROOT/etc/pam.d/pilothouse" ]; then
+    cp --archive --update=none "$BUILDROOT/etc/pam.d/pilothouse" \
+       "$BUILDROOT/usr/share/factory/etc/pam.d/"
+fi

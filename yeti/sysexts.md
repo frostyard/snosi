@@ -31,6 +31,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF, virt-viewer |
 | **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
+| **pilothouse** | frostyard-pilothouse | Pilothouse local web administration console for Snosi (pilothouse web UI + pilothoused root broker) — downloaded via `verified_download()` from frostyard/pilothouse GitHub releases |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
 | **tailscale** | tailscale | Tailscale VPN client |
 | **vscode** | code | Visual Studio Code desktop application (from packages.microsoft.com) |
@@ -194,6 +195,14 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/systemd/system/multi-user.target.d/10-nix.conf` — `Upholds=nix.mount nix-daemon.socket nix-daemon.service` drop-in for reliable boot activation
 - `usr/lib/sysusers.d/nix.conf` — Nix user/group
 - `usr/lib/tmpfiles.d/nix.conf` — `/nix` hierarchy + factory config injection
+
+### pilothouse
+- `mkosi.postinst.chroot` — Downloads the frostyard-pilothouse .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Static Go binaries (no Depends), everything ships natively under `/usr`; no relocation
+- `mkosi.finalize` — Captures `/etc/pam.d/pilothouse` to factory defaults; `pilothoused` authenticates admin actions through the "pilothouse" PAM service and sysexts cannot ship `/etc`
+- The deb's own `usr/lib/sysusers.d/pilothouse.conf` creates the `pilothouse` user/group at boot (ships in `/usr`, so it survives the delta — no extra sysusers fragment needed)
+- `usr/lib/tmpfiles.d/pilothouse.conf` — Factory PAM config injection
+- `usr/lib/systemd/system-preset/40-pilothouse.preset` — Enables `pilothoused.service` (root broker on `/run/pilothouse/broker.sock`) and `pilothouse.service` (web UI on 127.0.0.1:8888)
+- `usr/lib/systemd/system/multi-user.target.d/10-pilothouse.conf` — `Upholds=pilothoused.service pilothouse.service` drop-in for reliable boot activation
 
 ### tailscale
 - `mkosi.finalize` — Captures `/etc/default/tailscaled` to factory defaults (tailscaled requires the EnvironmentFile)

@@ -1,0 +1,13 @@
+# pilothouse sysext: installed via verified_download + dpkg -i in postinst
+/usr/bin/pilothouse
+/usr/bin/pilothoused
+/usr/lib/systemd/system/pilothouse.service
+/usr/lib/systemd/system/pilothoused.service
+# Deb-shipped sysusers fragment (creates the pilothouse user/group at boot)
+/usr/lib/sysusers.d/pilothouse.conf
+# Factory copy of /etc/pam.d/pilothouse (injected at boot by tmpfiles)
+/usr/share/factory/etc/pam.d/pilothouse
+# Boot-time config injection and activation
+/usr/lib/tmpfiles.d/pilothouse.conf
+/usr/lib/systemd/system-preset/40-pilothouse.preset
+/usr/lib/systemd/system/multi-user.target.d/10-pilothouse.conf

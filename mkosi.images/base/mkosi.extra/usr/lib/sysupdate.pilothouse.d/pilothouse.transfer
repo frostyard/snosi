@@ -1,0 +1,20 @@
+[Transfer]
+Features=pilothouse
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/pilothouse/
+MatchPattern=pilothouse_@v_%w_%a.raw.zst \
+             pilothouse_@v_%w_%a.raw.xz \
+             pilothouse_@v_%w_%a.raw.gz \
+             pilothouse_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=pilothouse_@v_%w_%a.raw.zst \
+             pilothouse_@v_%w_%a.raw.xz \
+             pilothouse_@v_%w_%a.raw.gz \
+             pilothouse_@v_%w_%a.raw
+CurrentSymlink=pilothouse.raw
