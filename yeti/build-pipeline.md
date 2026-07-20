@@ -110,6 +110,21 @@ Consumers of the update state:
   observed on the first real desktop bootc host 2026-07-07); the per-digest ack
   keeps the repeat triggers harmless.
 
+**Recommends-split companion binaries (recurring pattern):** the image build
+installs without Recommends, so a transitively-pulled library package can ship
+config that references a helper binary living in a Recommends-only companion
+package — which silently never installs. Two confirmed instances: `libnotify4`
+vs `libnotify-bin` (above), and `libmtp-common` (pulled via `gvfs-backends` →
+`libmtp9t64`) whose udev rule `69-libmtp.rules` calls
+`/usr/lib/udev/mtp-probe` from the never-installed `libmtp-runtime` — every
+USB hotplug logged a udev-worker "Failed to find and pin callout binary"
+error and MTP devices missed `ID_MTP_DEVICE` tagging, breaking gvfs MTP
+automount (root-caused live on a snow-ab install 2026-07-20; fixed by adding
+`libmtp-runtime` to the graphical package set). When a shipped udev rule,
+unit, or script references a binary, verify the binary's owning package is
+actually in the package set — `Recommends:` in a dependent package is not
+enough.
+
 This mirrors the previous nbc-style download-only semantics: the staged deployment applies at the next normal reboot. The podman transfer path is also the current workaround for bootc registry-transport composefs pull failures noted in `docs/plans/2026-07-03-bootc-update-validation-plan.md`.
 
 Runtime units shipped in `mkosi.extra/` must not self-disable, call `systemctl preset`, or otherwise delete shipped `/etc` state. For run-once behavior, use a persistent `/var` marker (`ConditionPathExists=!/var/lib/<unit>.done` and a final `touch`) so bootc can merge `/etc` cleanly when the next staged deployment finalizes.
