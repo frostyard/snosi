@@ -10,9 +10,9 @@
     "version": "2026.6.1"
   },
   "microsoft-azurevpnclient": {
-    "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_3.0.0_amd64.deb",
-    "sha256": "9e5d360433d1d374d9a1051bb29a65103e81ca74ebeaa35155d1f0e9fc94577b",
-    "version": "3.0.0"
+    "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_3.1.0_amd64.deb",
+    "sha256": "636c829e1bc8aef3e71adc6c729971bd7c09deab2ccdb82c6c7ce4185b35e861",
+    "version": "3.1.0"
   },
   "microsoft-edge-stable": {
     "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_150.0.4078.83-1_amd64.deb",
@@ -35,8 +35,8 @@
     "version": "11.0.0"
   },
   "pilothouse": {
-    "url": "https://github.com/frostyard/pilothouse/releases/download/v0.2.2/frostyard-pilothouse_0.2.2_amd64.deb",
-    "sha256": "b3350b456a8bf5b7218ceeecab284a3b5e069e2b1b0e67d2bbff6b3375b8031f",
-    "version": "0.2.2"
+    "url": "https://github.com/frostyard/pilothouse/releases/download/v0.4.0/frostyard-pilothouse_0.4.0_amd64.deb",
+    "sha256": "c2490ab0b0c88586175b4ea227b40f67de6f29ecfb5ab4aa1c50c91b3af9b257",
+    "version": "0.4.0"
   }
 }
