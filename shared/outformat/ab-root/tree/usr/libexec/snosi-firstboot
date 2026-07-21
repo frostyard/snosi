@@ -52,7 +52,11 @@ mapfile -t features < <(jq -r '.features[]? // empty' "$SEED")
 # enable failures (network, download) still count and still retry.
 # `|| true`: an updex that cannot even list (transient) must not abort the
 # whole provisioning under set -e/pipefail -- empty known = skip the check.
-known="$(updex --silent features list 2>/dev/null | awk 'NR > 1 {print $1}' || true)"
+# Parse `features list --json` (an array of {name,...} objects) rather than
+# the human table: the JSON contract is stable (always an array, `[]` when
+# empty) whereas the table's header/columns are not. jq tolerates empty/`[]`
+# output; a non-JSON blob from a transient failure yields empty `known`.
+known="$(updex --silent features list --json 2>/dev/null | jq -r '.[]?.name' 2>/dev/null || true)"
 for f in "${features[@]+"${features[@]}"}"; do
     [[ "$f" =~ ^[A-Za-z0-9._-]+$ ]] || { warn "skipping invalid feature name: $f"; continue; }
     if [[ -n "$known" ]] && ! grep -qx "$f" <<<"$known"; then
