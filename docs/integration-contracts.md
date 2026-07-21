@@ -407,6 +407,13 @@ staged_at=<iso-8601>          staged_at=<iso-8601>
    constraints that need coordinated releases — keep them in each repo's
    release checklist.
 
+The strategic question of whether these boundaries should be replaced by a
+single schema-owning daemon (updex daemon-mode + snosi update-status
+aggregation over one versioned socket) is analyzed in
+`docs/plans/2026-07-20-update-api-daemon-design.md`. Its conclusion: worth it
+in that narrow scope only if the update/sysext surface gains more consumers;
+recommendations #1–#4 above should ship now regardless.
+
 ---
 
 ## 9. Maintenance note
