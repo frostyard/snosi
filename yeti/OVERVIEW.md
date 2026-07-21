@@ -4,6 +4,19 @@
 
 snosi is a bootable container image build system that uses [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). It outputs OCI desktop/server images deployed via bootc/systemd-boot with atomic updates, plus EROFS sysext overlays distributed through systemd-sysupdate.
 
+## Cross-tool integration contracts
+
+The explicit and implicit contracts between the Frostyard tools that ship in
+(or produce) snosi images — updex, chairlift, pilothouse, nbc, first-setup,
+bootc-debian, repogen — and snosi's own scripts are mapped in
+`docs/integration-contracts.md`. It catalogs every producer→consumer boundary
+(CLI JSON, Go SDK, text tables, `/run/snosi/*` key=value state files, `.feature`/
+`.transfer` discovery, and the `repository.frostyard.org` naming/signing
+layout), each with a fragility rating. Its §3 dissects the `null`-vs-`[]`
+serialization hazard class (the updex `features check` nil-slice bug that broke
+pilothouse) and lists every other site with the same exposure. Read it before
+changing any tool's output shape.
+
 ## Outputs
 
 ### Desktop Images (OCI, pushed to ghcr.io)
