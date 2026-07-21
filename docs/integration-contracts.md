@@ -402,10 +402,17 @@ staged_at=<iso-8601>          staged_at=<iso-8601>
 4. **Migrate snosi-firstboot off the text table (§4.3).** Use
    `updex --silent features list --json` (already `[]`-safe) + `jq` instead of
    `awk 'NR>1'`, removing a 🔴 implicit column/header dependency.
-5. **Version-couple carefully:** the updex ≥1.3.0 component-discovery
-   requirement (§4.4) and the chairlift↔updex SDK lockstep (§4.2) are ordering
-   constraints that need coordinated releases — keep them in each repo's
-   release checklist.
+ 5. **Version-couple carefully:** the updex ≥1.3.0 component-discovery
+    requirement (§4.4) and the chairlift↔updex SDK lockstep (§4.2) are ordering
+    constraints that need coordinated releases — keep them in each repo's
+    release checklist.
+
+The strategic question of whether these boundaries should be replaced by a
+single schema-owning daemon (updex daemon-mode + snosi update-status
+aggregation over one versioned socket) is analyzed in
+`docs/plans/2026-07-20-update-api-daemon-design.md`. Its conclusion: worth it
+in that narrow scope only if the update/sysext surface gains more consumers;
+recommendations #1–#4 above should ship now regardless.
 
 ---
 
