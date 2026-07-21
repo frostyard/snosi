@@ -66,7 +66,7 @@ completeness and excluded from the contract catalog below.
 ```
 updex ──CLI(--json)──────────► pilothouse   (features check / list / update / enable / disable)
 updex ──Go SDK───────────────► chairlift    (Features / CheckFeatures / Enable / Disable / UpdateFeatures)
-updex ──CLI(text table)──────► snosi-firstboot (features list, features enable --now)
+updex ──CLI(--json)──────────► snosi-firstboot (features list --json, features enable --now)
 updex ──.feature/.transfer───► systemd-sysupdate + updex itself (component discovery)
 
 systemd-sysupdate ──CLI──────► snosi-sysupdate-stage, snosi-update-status
@@ -245,19 +245,19 @@ Each entry: **Producer** → **Consumer**, transport, contract, fragility.
 - **Contract:** SDK signatures `Features/Components/EnableFeature/DisableFeature/UpdateFeatures/CheckFeatures`. Version lockstep matters: chairlift must track updex's SDK API, not just its CLI.
 - **Fragility:** 🟢 for shape; 🟡 for version coupling (a breaking SDK change requires a coordinated chairlift bump).
 
-### 4.3 updex CLI text table → snosi-firstboot
-- **Producer:** `updex --silent features list` (human table, **not** JSON).
-- **Consumer:** `snosi/shared/outformat/ab-root/tree/usr/libexec/snosi-firstboot:55`
-  — `awk 'NR > 1 {print $1}'` (skip header, take column 1).
-- **Contract (implicit):** first line is a discardable header; feature name is
-  whitespace-delimited column 1. Empty list and command failure are
-  deliberately conflated (`|| true`, `known=""` disables the stale check).
-  Also depends on `updex features enable "$f" --now` exit code (0=ok,
-  nonzero=retry next boot) — `snosi-firstboot:63`.
-- **Fragility:** 🔴 — pure text-table dependency; breaks if updex reorders
-  columns, drops the header, or prints diagnostics to stdout before the header.
-  **Recommendation:** migrate to `updex --silent features list --json` (which
-  is `[]`-safe) and parse with `jq`.
+### 4.3 updex CLI JSON → snosi-firstboot
+- **Producer:** `updex --silent features list --json` (array of `{name,...}` objects; `[]`-safe when empty, §3.1).
+- **Consumer:** `snosi/shared/outformat/ab-root/tree/usr/libexec/snosi-firstboot:59`
+  — `jq -r '.[]?.name'` (extract every feature name).
+- **Contract:** JSON array of feature objects, each with a `name` field. Empty
+  list (`[]`), missing/`null`, or a non-JSON blob from a transient failure all
+  collapse to empty `known` via `2>/dev/null || true`, which disables the
+  stale-feature pre-check (fail-open). Also depends on
+  `updex features enable "$f" --now` exit code (0=ok, nonzero=retry next boot)
+  — `snosi-firstboot:67`.
+- **Fragility:** 🟢 — array-typed JSON on a stable field; the previous 🔴
+  text-table dependency (`awk 'NR>1'` on the header + column 1) was retired in
+  favor of `--json` + `jq`.
 
 ### 4.4 .feature / .transfer files → updex + systemd-sysupdate
 - **Producer:** snosi base image ships `usr/lib/sysupdate.<name>.d/<name>.{feature,transfer}` per sysext (`snosi/mkosi.images/base/mkosi.extra/...`).
@@ -399,13 +399,13 @@ staged_at=<iso-8601>          staged_at=<iso-8601>
 3. **Adopt an ecosystem convention:** *producers always emit `[]`, never
    `null`; consumers always accept both.* snosi's `first-boot.json` producer and
    `setup-gui` consumer already model this — hold them up as the standard.
-4. **Migrate snosi-firstboot off the text table (§4.3).** Use
-   `updex --silent features list --json` (already `[]`-safe) + `jq` instead of
-   `awk 'NR>1'`, removing a 🔴 implicit column/header dependency.
- 5. **Version-couple carefully:** the updex ≥1.3.0 component-discovery
-    requirement (§4.4) and the chairlift↔updex SDK lockstep (§4.2) are ordering
-    constraints that need coordinated releases — keep them in each repo's
-    release checklist.
+4. **~~Migrate snosi-firstboot off the text table (§4.3).~~ Done** — it now
+   uses `updex --silent features list --json` (`[]`-safe) + `jq -r '.[]?.name'`
+   instead of `awk 'NR>1'`, removing the 🔴 column/header dependency.
+5. **Version-couple carefully:** the updex ≥1.3.0 component-discovery
+   requirement (§4.4) and the chairlift↔updex SDK lockstep (§4.2) are ordering
+   constraints that need coordinated releases — keep them in each repo's
+   release checklist.
 
 The strategic question of whether these boundaries should be replaced by a
 single schema-owning daemon (updex daemon-mode + snosi update-status
