@@ -35,8 +35,8 @@
     "version": "11.0.0"
   },
   "pilothouse": {
-    "url": "https://github.com/frostyard/pilothouse/releases/download/v0.5.0/frostyard-pilothouse_0.5.0_amd64.deb",
-    "sha256": "3ba40cea7a7ff2cfdc83258e0a5a0ea9c9f9f0f923ea111e56db1da977b82253",
-    "version": "0.5.0"
+    "url": "https://github.com/frostyard/pilothouse/releases/download/v0.5.1/frostyard-pilothouse_0.5.1_amd64.deb",
+    "sha256": "750612ea0b9f55799012451b1e3a99c003323ead3de2c1989bc0711bc000b7df",
+    "version": "0.5.1"
   }
 }
