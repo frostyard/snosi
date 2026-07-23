@@ -30,9 +30,9 @@
     "version": "2.34.6"
   },
   "lemonade": {
-    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.0.0/lemonade-server_11.0.0-debian13_amd64.deb",
-    "sha256": "dd904bfead7ecc0a82fd8cd16b8ee482f909b39b97dd0051740f9730a79d7d3c",
-    "version": "11.0.0"
+    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.5.0/lemonade-server_11.5.0-debian13_amd64.deb",
+    "sha256": "cd7448b1b577815a75b4596a9611d29a37db737c036dd9bc9b18d258ddd4204e",
+    "version": "11.5.0"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.6.0/frostyard-pilothouse_0.6.0_amd64.deb",
