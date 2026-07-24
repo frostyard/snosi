@@ -89,6 +89,15 @@ jobs:
             echo "lemonade_version=$LATEST_LEM" >> $GITHUB_OUTPUT
           fi
 
+          # Check Paseo desktop app
+          CURRENT_PASEO=$(jq -r '.paseo.version' "$CHECKSUMS")
+          LATEST_PASEO=$(gh_api https://api.github.com/repos/getpaseo/paseo/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_PASEO" && "$LATEST_PASEO" != "null" ]] && ver_gt "$LATEST_PASEO" "$CURRENT_PASEO"; then
+            UPDATES="${UPDATES}paseo: $CURRENT_PASEO -> $LATEST_PASEO\n"
+            echo "paseo_update=true" >> $GITHUB_OUTPUT
+            echo "paseo_version=$LATEST_PASEO" >> $GITHUB_OUTPUT
+          fi
+
           # Check Pilothouse (Snosi web administration console)
           CURRENT_PH=$(jq -r '.pilothouse.version' "$CHECKSUMS")
           LATEST_PH=$(gh_api https://api.github.com/repos/frostyard/pilothouse/releases/latest | jq -r '.tag_name' | sed 's/^v//')
@@ -148,6 +157,8 @@ jobs:
           CODER_VERSION: ${{ steps.check.outputs.coder_version }}
           LEMONADE_UPDATE: ${{ steps.check.outputs.lemonade_update }}
           LEMONADE_VERSION: ${{ steps.check.outputs.lemonade_version }}
+          PASEO_UPDATE: ${{ steps.check.outputs.paseo_update }}
+          PASEO_VERSION: ${{ steps.check.outputs.paseo_version }}
           PILOTHOUSE_UPDATE: ${{ steps.check.outputs.pilothouse_update }}
           PILOTHOUSE_VERSION: ${{ steps.check.outputs.pilothouse_version }}
           AZUREVPN_UPDATE: ${{ steps.check.outputs.azurevpn_update }}
@@ -203,6 +214,18 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.lemonade.url=$u | .lemonade.sha256=$s | .lemonade.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$PASEO_UPDATE" == "true" ]]; then
+            VER="$PASEO_VERSION"
+            URL="https://github.com/getpaseo/paseo/releases/download/v${VER}/Paseo-${VER}-amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.paseo.url=$u | .paseo.sha256=$s | .paseo.version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi

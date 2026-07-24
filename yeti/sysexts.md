@@ -31,6 +31,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF, virt-viewer |
 | **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
+| **paseo** | paseo | Paseo coding agent workspace desktop app (pinned .deb via verified_download from getpaseo/paseo GitHub releases, relocated from /opt) |
 | **pilothouse** | frostyard-pilothouse | Pilothouse local web administration console for Snosi (pilothouse web UI + pilothoused root broker) — downloaded via `verified_download()` from frostyard/pilothouse GitHub releases |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
 | **tailscale** | tailscale | Tailscale VPN client |
@@ -110,7 +111,7 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server`, `coder`, `edge`, `bitwarden`, and `azurevpn` are the current exceptions to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file Exec rewrite, deps via `Include=`.
+`code-server`, `coder`, `edge`, `bitwarden`, `paseo`, and `azurevpn` are the current exceptions to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file Exec rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
 
 ## Sysext-Specific Extra Files
 
@@ -135,6 +136,14 @@ Some sysexts include extra files via `mkosi.extra/`:
 - No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/bitwarden/`)
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
 - Ships hicolor icons — depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below)
+
+### paseo
+- No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/paseo/`)
+- Electron app: `/opt/Paseo` relocated to `/usr/lib/Paseo`, SUID `chrome-sandbox`, desktop-file `Exec=` rewritten off `/opt`
+- The deb's postinst registers `/usr/bin/Paseo` via `update-alternatives` (i.e. through `/etc/alternatives`, stripped from a sysext), so the postinst repoints it straight at `/usr/lib/Paseo/Paseo` — same fix as `edge`
+- `/usr/bin/paseo` symlinks the bundled CLI wrapper (`resources/bin/paseo`), which resolves symlinks back into the bundle itself
+- Its postinst's AppArmor block is a no-op in the buildroot, and would only write to `/etc` (stripped) anyway
+- Desktop app with no systemd service: no preset, no `Upholds=` drop-in; ships hicolor icons → `sysext-strip-icon-cache.sh` required
 
 ### claude-desktop
 - No `mkosi.extra/` and no postinst — the Anthropic `claude-desktop` deb (apt repo at `downloads.claude.ai/claude-desktop/apt/stable`, registered in `mkosi.sandbox`) installs natively under `/usr` (`/usr/lib/claude-desktop` + `/usr/bin/claude-desktop` symlink), so no relocation is needed

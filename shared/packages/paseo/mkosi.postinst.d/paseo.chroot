@@ -1,0 +1,40 @@
+#!/bin/bash
+# Post-install script for the paseo sysext
+# Installs the pinned Paseo .deb and relocates it out of /opt.
+
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+if [[ "${UID}" == "0" ]]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+
+source "$SRCDIR/shared/download/verified-download.sh"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "paseo" "$DEBS/paseo.deb"
+
+dpkg -i "$DEBS/paseo.deb"
+
+# /opt is a bind mount to /var/opt at runtime and is shadowed by sysext
+# overlays, so the Electron bundle must live under /usr.
+${SUDO} mv /opt/Paseo /usr/lib/Paseo
+# /opt itself must stay: it is the mountpoint for opt.mount (bind to /var/opt)
+${SUDO} rm -rf /opt/Paseo
+${SUDO} mkdir -p /usr/bin
+
+# The deb's postinst registers /usr/bin/Paseo through update-alternatives, so
+# it points into /etc/alternatives — which is STRIPPED from a sysext (sysexts
+# carry only /usr) and would dangle on the target system. Repoint it at the
+# real binary, exactly like the edge sysext does.
+${SUDO} ln -sf /usr/lib/Paseo/Paseo /usr/bin/Paseo
+# Lowercase CLI entry point: the bundled wrapper resolves symlinks back into
+# the app bundle, so a plain symlink is enough.
+${SUDO} ln -sf /usr/lib/Paseo/resources/bin/paseo /usr/bin/paseo
+
+${SUDO} chmod 4755 /usr/lib/Paseo/chrome-sandbox
+${SUDO} sed -i 's|^Exec=/opt/Paseo/Paseo|Exec=/usr/bin/Paseo|' /usr/share/applications/Paseo.desktop
