@@ -999,7 +999,7 @@ installed), plus a first-promotion assertion that `promote.sh` prints
 
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
-1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, lemonade, nix, pilothouse, podman, tailscale, vscode
+1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, lemonade, nix, paseo, pilothouse, podman, tailscale, vscode
 
 ## Architecture
 
@@ -1009,7 +1009,7 @@ installed), plus a first-promotion assertion that `promote.sh` prints
 mkosi.conf                  # Root config: distribution, dependencies, build settings
 mkosi.version               # Version tag script (date-based, overridden by CI IMAGE_VERSION)
 mkosi.clean                 # Clean script (rm -rf output/*)
-mkosi.images/               # Image definitions (base + 18 sysexts)
+mkosi.images/               # Image definitions (base + 19 sysexts)
   base/                     # Foundation image: systemd, bootc/ostree (frostyard debs), firmware, core utils
     mkosi.extra/            # Base filesystem overlay (dracut, systemd units/timers, sysupdate, tmpfiles, sysusers)
       usr/lib/sysupdate.<name>.d/  # per-sysext .transfer + .feature component dirs (one pair each, 18 total)
@@ -1306,7 +1306,7 @@ Use build-time enablement/presets for desired service state. For run-once runtim
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 18 sysexts
+just sysexts            # Build base + all 19 sysexts
 just snow               # Build snow desktop
 just snowfield          # Build snowfield (Surface)
 just cayo               # Build cayo server
