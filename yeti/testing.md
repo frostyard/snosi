@@ -58,6 +58,24 @@ Boots an image in a QEMU graphical window (GTK display). Loads the image, instal
 
 **Defaults:** 50G disk (via Justfile), 4G RAM, 2 CPUs. Configurable via `DISK_SIZE`, `VM_MEMORY`, `VM_CPUS` env vars.
 
+## Optional bcvk Testing
+
+bcvk is a supplemental local test option for OCI bootc images, not a
+replacement for `bootc-install-test.sh`, `just test-install`, or
+`test-install.yml`. The images carry `bubblewrap` because bcvk 0.18 executes
+`bwrap` from the target image; `virtiofsd` is already present in the base
+image. bcvk intentionally runs Podman with `--pull=never`, so callers must
+first pull the image into their own Podman storage. Native A/B profiles
+intentionally do not include this OCI-only bcvk dependency.
+
+Use `bcvk libvirt run` with `--composefs-backend --filesystem btrfs` after
+that pull. OCI bootc profiles use root `SecureBoot=no` and omit the native A/B
+MOK-signing configuration, so their failure under bcvk's enrolled-key Secure
+Boot firmware is expected. Use `--firmware uefi-insecure` only to test bcvk
+installation mechanics. This limitation is specific to the optional bcvk path;
+it does not change the existing bootc installation harness or native A/B
+Secure Boot tests.
+
 ## Orchestrator (bootc-install-test.sh)
 
 **Usage:**

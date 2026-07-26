@@ -46,7 +46,7 @@ Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependen
 3. Build profile image via mkosi with dependencies reset to `base` only (produces directory output)
 4. Package OCI image via `buildah-package.sh` (preserves SUID, xattrs)
 5. Optimize layers via `chunkah-package.sh` (skipped on pull_request)
-6. **Smoke test:** Validates SUID bit on `/usr/bin/sudo` (mode 4755) — catches metadata loss
+6. **Smoke test:** Validates SUID bit on `/usr/bin/sudo` (mode 4755) to catch metadata loss, plus every bcvk target-image executable (`bwrap`, `systemctl`, `objcopy`, `ssh`, `ssh-keygen`) for optional OCI-image compatibility
 7. Generate SBOM via Syft (scans mkosi output directory, syft-json format; skipped on pull_request)
 8. Push timestamp and `latest` tags to ghcr.io (skipped on pull_request)
 9. Attach SBOM to image via ORAS (`application/vnd.syft+json` artifact type)

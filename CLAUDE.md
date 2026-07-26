@@ -25,6 +25,17 @@ just run-qemu           # Run image in QEMU
 
 All `just` targets run `mkosi clean` first (clean build every time).
 
+**Optional bcvk testing:** bcvk is a local convenience for exercising the OCI
+bootc images and does not replace `just test-install` or its CI workflow. OCI
+profiles include `bubblewrap` because bcvk runs `bwrap` from the target image;
+`virtiofsd` already ships in base. bcvk 0.18 requires an explicit host-side
+`podman pull` before `bcvk libvirt run` (`--pull=never`). OCI bootc profiles
+use `SecureBoot=no` and do not build or enroll the native A/B MOK signing
+chain, so they do not currently boot under bcvk's enrolled-key Secure Boot
+firmware. Use `--firmware uefi-insecure` only for bcvk install-mechanics
+testing. Do not represent this as Secure Boot validation or change the
+established bootc installation/testing path because of it.
+
 ## Architecture
 
 ### Configuration Composition
