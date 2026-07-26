@@ -138,25 +138,25 @@ jobs:
           "$IMAGE:${{ steps.version.outputs.tag }}" \
           "$SOURCE_EPOCH"
 
-      - name: Smoke test - verify SUID bit on sudo
+      - name: Smoke test - verify SUID bit and bcvk requirements
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
         run: |
-          mode=$(sudo podman run --rm "$IMAGE:${{ steps.version.outputs.tag }}" stat -c '%a' /usr/bin/sudo)
-          echo "sudo permissions: $mode"
-          if [[ "$mode" != "4755" ]]; then
-            echo "::error::SUID bit not set on /usr/bin/sudo (expected 4755, got $mode)"
-            exit 1
-          fi
+          sudo podman run --rm "$IMAGE:${{ steps.version.outputs.tag }}" sh -ec '
+            mode=$(stat -c "%a" /usr/bin/sudo)
+            echo "sudo permissions: $mode"
+            if [ "$mode" != "4755" ]; then
+              echo "::error::SUID bit not set on /usr/bin/sudo (expected 4755, got $mode)"
+              exit 1
+            fi
 
-      - name: Smoke test - verify bcvk image requirement
-        env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
-        run: |
-          if ! sudo podman run --rm "$IMAGE:${{ steps.version.outputs.tag }}" test -x /usr/bin/bwrap; then
-            echo "::error::Missing /usr/bin/bwrap required for optional bcvk testing"
-            exit 1
-          fi
+            for required in bwrap systemctl objcopy ssh ssh-keygen; do
+              if ! command -v "$required" >/dev/null; then
+                echo "::error::Missing $required required for optional bcvk testing"
+                exit 1
+              fi
+            done
+          '
 
       - name: Setup Syft
         id: setup-syft

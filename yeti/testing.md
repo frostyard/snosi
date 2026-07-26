@@ -65,15 +65,16 @@ replacement for `bootc-install-test.sh`, `just test-install`, or
 `test-install.yml`. The images carry `bubblewrap` because bcvk 0.18 executes
 `bwrap` from the target image; `virtiofsd` is already present in the base
 image. bcvk intentionally runs Podman with `--pull=never`, so callers must
-first pull the image into their own Podman storage.
+first pull the image into their own Podman storage. Native A/B profiles
+intentionally do not include this OCI-only bcvk dependency.
 
 Use `bcvk libvirt run` with `--composefs-backend --filesystem btrfs` after
-that pull. As verified against cayo, bcvk's default enrolled-key Secure Boot
-firmware creates the domain but the installed bootc image does not reach SSH.
-Use `--firmware uefi-insecure` only to test bcvk installation mechanics until
-this bcvk enrolled-key firmware limitation is understood and validated. This
-limitation is specific to the optional bcvk path; it does not change the
-existing bootc installation harness or native A/B Secure Boot tests.
+that pull. OCI bootc profiles use root `SecureBoot=no` and omit the native A/B
+MOK-signing configuration, so their failure under bcvk's enrolled-key Secure
+Boot firmware is expected. Use `--firmware uefi-insecure` only to test bcvk
+installation mechanics. This limitation is specific to the optional bcvk path;
+it does not change the existing bootc installation harness or native A/B
+Secure Boot tests.
 
 ## Orchestrator (bootc-install-test.sh)
 

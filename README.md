@@ -406,12 +406,14 @@ bcvk libvirt ssh test-cayo
 
 The OCI profiles ship `bubblewrap` for bcvk and already ship `virtiofsd`.
 The host still needs bcvk, Podman, libvirt, QEMU/KVM, and UEFI firmware.
+Native A/B profiles intentionally do not inherit this OCI-only bcvk dependency.
 
-**Secure Boot status:** cayo did not reach SSH when tested with bcvk's default
-enrolled-key UEFI firmware. Use `--firmware uefi-insecure` only for bcvk
-mechanics testing until this bcvk enrolled-key firmware limitation is
-understood; this is not Secure Boot validation. Native A/B Secure Boot
-validation and the established bootc install/test workflow are unaffected.
+**Secure Boot status:** OCI bootc profiles use `SecureBoot=no` and do not build
+or enroll the MOK signing chain used by native A/B profiles. They therefore do
+not currently boot under bcvk's enrolled-key Secure Boot firmware. Use
+`--firmware uefi-insecure` only for bcvk mechanics testing; this is not Secure
+Boot validation. Native A/B Secure Boot validation and the established bootc
+install/test workflow are unaffected.
 
 ### Build Process
 
