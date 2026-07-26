@@ -386,6 +386,33 @@ just test-install
 just run-qemu
 ```
 
+### Optional bcvk Testing
+
+[bcvk](https://github.com/bootc-dev/bcvk) is an optional local convenience for
+testing the OCI bootc images. It does not replace the supported installation
+and test path, `just test-install`, or its CI workflow. bcvk 0.18 does not
+pull images itself, so pull the image into the same user's Podman storage
+first:
+
+```bash
+podman pull ghcr.io/frostyard/cayo:latest
+bcvk libvirt run --name test-cayo \
+  --detach --ssh-wait \
+  --firmware uefi-insecure \
+  --composefs-backend --filesystem btrfs \
+  ghcr.io/frostyard/cayo:latest
+bcvk libvirt ssh test-cayo
+```
+
+The OCI profiles ship `bubblewrap` for bcvk and already ship `virtiofsd`.
+The host still needs bcvk, Podman, libvirt, QEMU/KVM, and UEFI firmware.
+
+**Secure Boot status:** cayo did not reach SSH when tested with bcvk's default
+enrolled-key UEFI firmware. Use `--firmware uefi-insecure` only for bcvk
+mechanics testing until this bcvk enrolled-key firmware limitation is
+understood; this is not Secure Boot validation. Native A/B Secure Boot
+validation and the established bootc install/test workflow are unaffected.
+
 ### Build Process
 
 1. **Base Build**: The `base` image is built first and cached in `output/base/`

@@ -149,6 +149,15 @@ jobs:
             exit 1
           fi
 
+      - name: Smoke test - verify bcvk image requirement
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          if ! sudo podman run --rm "$IMAGE:${{ steps.version.outputs.tag }}" test -x /usr/bin/bwrap; then
+            echo "::error::Missing /usr/bin/bwrap required for optional bcvk testing"
+            exit 1
+          fi
+
       - name: Setup Syft
         id: setup-syft
         if: github.event_name != 'pull_request'
