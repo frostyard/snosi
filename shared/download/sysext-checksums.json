@@ -5,9 +5,9 @@
     "version": "8.12.28"
   },
   "bitwarden": {
-    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.6.1/Bitwarden-2026.6.1-amd64.deb",
-    "sha256": "421bfc6d787d842406909d393c2a9044791e957aa234718ae5670e87ae4deba7",
-    "version": "2026.6.1"
+    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.7.0/Bitwarden-2026.7.0-amd64.deb",
+    "sha256": "17523257c367f299a76d3670c7e329941fdaf14a4f9321cf38b347e35453ae64",
+    "version": "2026.7.0"
   },
   "microsoft-azurevpnclient": {
     "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_3.1.0_amd64.deb",
@@ -15,14 +15,14 @@
     "version": "3.1.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_150.0.4078.83-1_amd64.deb",
-    "sha256": "b939fafdfe10f5e89f689af9fd4ea2eca98902d24ac4779a52c755fa899caa54",
-    "version": "150.0.4078.83-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_150.0.4078.99-1_amd64.deb",
+    "sha256": "46a83dcaf910e22ba72d3b3d6eb54fd155afe5db74a439b4f465c623b672665c",
+    "version": "150.0.4078.99-1"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.129.0/code-server_4.129.0_amd64.deb",
-    "sha256": "66160d99431595b0e9f4245abae8d0f472289fb77c97007ce79f2d64d06507f8",
-    "version": "4.129.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.130.0/code-server_4.130.0_amd64.deb",
+    "sha256": "2df0f7718a1e6ac090fa39226c1a291453403e3ca2e636804695648cdb24a851",
+    "version": "4.130.0"
   },
   "coder": {
     "url": "https://github.com/coder/coder/releases/download/v2.34.6/coder_2.34.6_linux_amd64.deb",
@@ -35,9 +35,9 @@
     "version": "11.5.0"
   },
   "paseo": {
-    "url": "https://github.com/getpaseo/paseo/releases/download/v0.2.1/Paseo-0.2.1-amd64.deb",
-    "sha256": "83209d71839e2916e6204e4993ce9c3cb7e09a23feb1abca6ae6aadfc07877b0",
-    "version": "0.2.1"
+    "url": "https://github.com/getpaseo/paseo/releases/download/v0.2.2/Paseo-0.2.2-amd64.deb",
+    "sha256": "773163ac07451f239a004dfff4eb49a04e111c3feb2e7b01499a32a84fdaf6ec",
+    "version": "0.2.2"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.6.0/frostyard-pilothouse_0.6.0_amd64.deb",
