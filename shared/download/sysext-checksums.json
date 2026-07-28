@@ -1,8 +1,8 @@
 {
   "1password": {
-    "url": "https://downloads.1password.com/linux/debian/amd64/pool/main/1/1password/1password-8.12.28.amd64.deb",
-    "sha256": "3f531f0b86969cbb04756d7bf3be48e84086721791e3e34779e845993d3185f8",
-    "version": "8.12.28"
+    "url": "https://downloads.1password.com/linux/debian/amd64/pool/main/1/1password/1password-8.12.30.amd64.deb",
+    "sha256": "735cce651746099ec63e2213a3138dfd1f907721e2841cc45e8689cc341b06b8",
+    "version": "8.12.30"
   },
   "bitwarden": {
     "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.7.0/Bitwarden-2026.7.0-amd64.deb",
@@ -25,9 +25,9 @@
     "version": "4.130.0"
   },
   "coder": {
-    "url": "https://github.com/coder/coder/releases/download/v2.34.6/coder_2.34.6_linux_amd64.deb",
-    "sha256": "809e4b044c221aa0d13a542257ed3600d017b0d64e1b777a3411ed582aed6bf9",
-    "version": "2.34.6"
+    "url": "https://github.com/coder/coder/releases/download/v2.34.7/coder_2.34.7_linux_amd64.deb",
+    "sha256": "a23cc8ceb36b881c341fd4d3bba217bf1b9f1097b5f462ba62da9a58c11d8870",
+    "version": "2.34.7"
   },
   "lemonade": {
     "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.5.0/lemonade-server_11.5.0-debian13_amd64.deb",
