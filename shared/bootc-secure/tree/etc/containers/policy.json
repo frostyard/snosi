@@ -1,0 +1,45 @@
+{
+  "default": [
+    {
+      "type": "reject"
+    }
+  ],
+  "transports": {
+    "docker": {
+      "ghcr.io/frostyard/cayo": [
+        {
+          "type": "sigstoreSigned",
+          "keyPath": "/usr/lib/snosi/cosign.pub",
+          "signedIdentity": {
+            "type": "matchRepository"
+          }
+        }
+      ],
+      "ghcr.io/frostyard/snow": [
+        {
+          "type": "sigstoreSigned",
+          "keyPath": "/usr/lib/snosi/cosign.pub",
+          "signedIdentity": {
+            "type": "matchRepository"
+          }
+        }
+      ],
+      "ghcr.io/frostyard/snowfield": [
+        {
+          "type": "sigstoreSigned",
+          "keyPath": "/usr/lib/snosi/cosign.pub",
+          "signedIdentity": {
+            "type": "matchRepository"
+          }
+        }
+      ]
+    },
+    "containers-storage": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    }
+  }
+}

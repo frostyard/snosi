@@ -16,7 +16,8 @@ set -euo pipefail
 # without reading the journal. Consumed by the motd hook
 # (/etc/update-motd.d/86-bootc-update-staged) and snosi-update-status.
 # Lives in /run: stale results do not survive a reboot.
-CHECK=/run/snosi/update-check
+RUN_DIR=${SNOSI_RUN_DIR:-/run/snosi}
+CHECK="$RUN_DIR/update-check"
 
 running_version=""
 if [[ -r /usr/lib/os-release ]]; then
@@ -24,12 +25,13 @@ if [[ -r /usr/lib/os-release ]]; then
 fi
 
 write_check() { # outcome
-    mkdir -p /run/snosi
+    mkdir -p "$RUN_DIR"
     printf 'outcome=%s\nchecked_at=%s\nimage=%s\nrunning_version=%s\nremote_version=%s\n' \
         "$1" "$(date --iso-8601=seconds)" "${image:-}" "$running_version" \
         "${remote_version:-}" >"$CHECK"
 }
 
+# A real staged semaphore may coexist with outcome=failed when a later check fails.
 # Any failure (podman pull, bootc, the post-stage digest verify) records
 # outcome=failed; a broken checker must not be indistinguishable from an
 # up-to-date system.
@@ -49,6 +51,12 @@ booted=$(jq -r '.status.booted.image.imageDigest // empty' <<<"$status")
 staged=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$status")
 rollback=$(jq -r '.status.rollback.image.imageDigest // empty' <<<"$status")
 
+write_staged_semaphore() {
+    mkdir -p "$RUN_DIR"
+    printf 'image=%s\ndigest=%s\nstaged_at=%s\n' \
+        "$image" "$1" "$(date --iso-8601=seconds)" >"$RUN_DIR/update-staged"
+}
+
 # Prune BEFORE pulling, not only after a successful switch: a previous run's
 # cached image (or a tag that :latest moved away from) otherwise sits in
 # /var/lib/containers and the pull needs image-size headroom on top of it —
@@ -56,7 +64,16 @@ rollback=$(jq -r '.status.rollback.image.imageDigest // empty' <<<"$status")
 # re-pullable; only the current tag's image is worth keeping between runs.
 podman image prune -f >/dev/null || true
 
-podman pull --quiet "$image" >/dev/null
+# A failed pull does not invalidate a real deployment staged earlier. Reassert
+# it when bootc reports one; otherwise remove a stale runtime semaphore.
+if ! podman pull --quiet "$image" >/dev/null; then
+    if [[ -n "$staged" ]]; then
+        write_staged_semaphore "$staged"
+    else
+        rm -f "$RUN_DIR/update-staged"
+    fi
+    exit 1
+fi
 pulled=$(podman image inspect --format '{{.Id}}' "$image")
 pulled="sha256:${pulled#sha256:}"
 
@@ -74,16 +91,6 @@ if [[ "$pulled" == "$booted" ]]; then
     write_check current
     exit 0
 fi
-# Semaphore for "reboot pending": consumed by the motd hook
-# (/etc/update-motd.d/86-bootc-update-staged) and the desktop notification
-# (bootc-update-notify.path/.service, user scope). Lives in /run so the
-# reboot that applies the update clears it automatically.
-write_staged_semaphore() {
-    mkdir -p /run/snosi
-    printf 'image=%s\ndigest=%s\nstaged_at=%s\n' \
-        "$image" "$1" "$(date --iso-8601=seconds)" >/run/snosi/update-staged
-}
-
 if [[ "$pulled" == "$staged" ]]; then
     echo "$image ($pulled) is already staged; will apply at next reboot."
     # Re-assert the semaphore: it is runtime state and this covers updates

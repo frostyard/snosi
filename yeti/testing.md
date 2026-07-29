@@ -13,6 +13,7 @@ hops, deployment continuity, persistence, rollback, and failure handling.
 test/
 ├── bootc-install-test.sh      # Orchestrator script (headless, for CI)
 ├── bootc-update-test.sh       # Update/rollback orchestrator (headless)
+├── bootc-container-policy-test.sh # OCI policy contract; RUN_LIVE=1 proves signed Cayo pull then containers-storage consumption
 ├── native-ab-update-test.sh   # Native A/B N through N+3 QEMU test
 ├── native-boot-smoke-test.sh  # boot-validation smoke gate: disk artifact boots to multi-user.target (build-native-images.yml promotion gate)
 ├── native-iso-boot-smoke-test.sh # boot-validation smoke gate: installer ISO reaches a serial login prompt (same promotion gate)
@@ -75,6 +76,190 @@ Boot firmware is expected. Use `--firmware uefi-insecure` only to test bcvk
 installation mechanics. This limitation is specific to the optional bcvk path;
 it does not change the existing bootc installation harness or native A/B
 Secure Boot tests.
+
+## Bootc Secure UKI Feasibility Gate
+
+`test/bootc-secure-spike-test.sh` is the Tasks 1-2 gated proof. Its
+always-runnable fixture mode checks MOK/PCR credential validation, one-kernel
+discovery, pre-existing-UKI refusal, the `/boot/EFI/Linux/<kernel>.efi`
+destination, the 1 GiB ESP/x86-64 DPS LUKS2/Btrfs layout, and Type #2-only BLS
+metadata (rejecting raw `linux`/`initrd` fallback):
+
+```bash
+test/bootc-secure-spike-test.sh --fixtures
+```
+
+Both PR/push bootc-secure contract jobs invoke this fixture command, the
+root-required `test/task2-recovery-key-bytes-test.sh` disposable-LUKS
+regression (after installing `cryptsetup`), and
+`python3 test/task3-console-pump-test.py`. They intentionally do not invoke
+the default live QEMU/OVMF/swtpm proof.
+
+The default mode additionally requires a built `output/cayo`, `bootc`, `ukify`,
+`sbverify`, Buildah, and disposable credentials in `BOOTC_SECURE_MOK_KEY`,
+`BOOTC_SECURE_MOK_CERT`, and `BOOTC_SECURE_PCR_KEY`. Missing inputs print
+`BLOCKED:` and exit 2; this is intentionally not a passing security result.
+
+Source inspection of pinned bootc 1.16.3 identifies `bootc container ukify
+--rootfs ROOT -- <ukify-options>` as the interface that discovers the kernel,
+initramfs, command line, and os-release, computes the composefs SHA-512 image
+ID, and forwards trailing arguments to ukify. The live pinned-stack gate
+observed that interface against the cayo rootfs. The spike independently calls
+`bootc container
+compute-composefs-digest ROOT`, creates the UKI outside `/boot`, then copies it
+to `/boot/EFI/Linux` and requires the recomputed digest to remain byte-identical
+to the `.cmdline` `composefs=` value. It also compares `.linux`/`.initrd` with
+the rootfs inputs, validates `.pcrpkey`/`.pcrsig`, verifies the MOK signature,
+and repeats the checks after `buildah-package.sh`. Live pinned-stack evidence shows the
+directory-rootfs invocation with `--allow-missing-verity` emits
+`composefs=?<128-hex-digest>`; composefs-rs uses the leading `?` as the
+insecure/missing-fsverity marker. The harness strips that marker only to compare
+the digest, so this mode can prove digest binding only and does not prove
+production fs-verity enforcement.
+The `.linux` and `.initrd` checks use `cmp`: a byte mismatch is fail-closed and
+is an investigation gate rather than a value the harness rewrites or accepts.
+
+Task 2 sources `test/lib/vm.sh` to create and clean up an external loopback
+layout: GPT ESP (exactly 1 GiB), x86-64 DPS root partition, LUKS2 opened with a
+disposable recovery key, and Btrfs. It invokes the pinned container through
+`bootc install to-filesystem --composefs-backend --bootloader systemd
+--root-mount-spec ""` with no `--karg`; source inspection confirms an empty
+mount spec suppresses root discovery arguments and Type #2 setup rejects CLI
+kargs. The directory digest cannot seal this OCI install: it preserves mounted
+directory metadata while OCI reconstruction normalizes it. The live gate instead
+packages a pristine first-pass OCI image, derives its ID with hidden
+`bootc container compute-composefs-digest-from-storage`, directly builds a
+signed ukify UKI bound to that ID, injects it only below `/boot/EFI/Linux`, and
+requires the final OCI ID to remain byte-identical before installation. The
+observed first-pass, final, and installed ID is
+`97dcccf026688eddbe0d4503a9528ef35b31ce15144b5aed3ab6f662b2997e0471e34a66642e1d1aeeb5d1621a0ce6ad5632e07fae9aa13d1a10ea610538afbb`.
+The installed ESP has only `efi` BLS metadata plus the Type #2 UKI; its exact
+kernel/initrd/PCR/MOK sections validate. This is a build-layer feasibility
+result, not a production interface: hidden bootc CLI and duplicated ukify
+assembly require a supported upstream/bootc-debian interface or an explicit
+maintained compatibility contract before Task 5 can claim support. The
+installer never rewrites the UKI or adds machine-specific kernel arguments.
+Both the storage-digest container invocation and `to-filesystem` execute the
+bootc binary from the temporary cayo OCI image (observed 1.16.3). Current bootc
+writes a BLS `efi=` entry naming
+`/EFI/Linux/bootc/bootc_composefs-<deployment-id>.efi`; the harness intentionally
+pins and validates this feasibility shape, including the absence of raw
+`linux`/`initrd` fallback entries. Task 2 stops after artifact installation and
+does not boot the disk; Task 3 is responsible for a boot proof. The DPS helper
+uses a per-process mapper name and recursively unmounts only its recorded root
+with bounded retries before closing that mapper and detaching that recorded loop
+device. `test/dps-luks-cleanup-test.sh` is the root-only regression: it mounts a
+tmpfs below the target root and requires teardown to leave no target mount,
+mapper, or loop device.
+
+Task 3 adds `test/task3-console-pump-test.py`, a UNIX-socket fixture for the
+exact DPS-root prompt followed by serial progress output. The Task 3 worker
+waits for 0.6 seconds of quiet before sending one key and preserves the full
+console on failure. Live evidence confirms that DPS discovery creates
+`systemd-cryptsetup@root` and the worker sends the key; the subsequent
+cryptsetup rejection remains BLOCKED because the Task 2 keyfile has a trailing
+newline that the interactive pump strips. This is not a missing-initrd-module
+or unsupported-DPS result; do not add root/LUKS kernel arguments pending a
+focused recovery-key byte test.
+`test/task2-recovery-key-bytes-test.sh` subsequently proved the byte mismatch
+against a disposable LUKS2 header, so Task 2 now emits the recovery key with
+`printf '%s'`. The live gate then proves cryptsetup, `/dev/gpt-auto-root`, Btrfs,
+and bootc switch-root, but blocks later in real-root first boot: `/etc` is
+read-only while presets are populated, and TPM setup/drift report/logind fail
+before SSH comes up. Treat that as a separate post-switch-root failure; this
+gate must not change `/etc` semantics or services speculatively.
+The subsequent direct-ukify `rw` fixture requires exactly `rw` plus composefs
+and rejects every root/LUKS identifier. Its live proof reaches SSH, confirming
+the immutable `rw` addition fixes first-boot `/etc` writes. Task 3 now avoids
+changing the external layout's persistent ESP policy: fixture-covered pure
+logic derives the booted root's LUKS backing partition, requires exactly one
+EFI System Partition sibling (zero and multiple candidates fail), and the
+guest assertion mounts only that ESP read-only at `/run/task3-esp`. It runs
+`bootctl --esp-path=/run/task3-esp --no-pager status` and requires `Secure
+Boot: enabled`, `Measured UKI: yes`, and the expected
+`/EFI/Linux/bootc/bootc_composefs-<deployment-id>.efi` path; a guest EXIT trap
+unmounts it on success or failure. `bootctl status` may return nonzero when an
+optional status source such as EFI-variable boot entries is unavailable even
+though it prints the required evidence, so the harness preserves that output
+and treats the three explicit content checks as the fail-closed result. The
+live proof passes this assertion, enrolls the LUKS root with the UKI's signed
+PCR-11 public key, requires exactly one resulting systemd-tpm2 token, creates
+its transferred recovery file under umask 077, and shreds both guest enrollment
+credentials after use. Before reboot it records
+`/proc/sys/kernel/random/boot_id`; readiness requires
+a different boot ID, preventing the pre-reboot sshd from satisfying the poll.
+The second boot reaches SSH without another console key submission, proving TPM
+auto-unlock, and `cryptsetup open --test-passphrase` proves the original
+recovery key remains valid. No mount policy, fstab, boot mount spec, or
+root/LUKS kernel argument was added. This is a complete Task 3 feasibility
+result, not approval to move the hidden storage-digest/direct-ukify assembly
+into production.
+
+`test/lib/secure-vm.sh` is also consumed by the native secure-boot harness for
+OVMF copying, MOK injection, and persistent swtpm startup/stop. Native wrappers
+retain that harness's existing assertions, logging, and QEMU lifecycle while
+the stateful primitives have one implementation shared with this spike.
+
+## Task 9 Secure Install Harness
+
+The normative operations status and recovery/evidence rules are in
+[`docs/bootc-secure-operations.md`](../docs/bootc-secure-operations.md); this
+section describes the harness interface and its fixture/live boundary only.
+
+`test/bootc-secure-install-test.sh --fixtures` covers the pure acceptance
+contract for the external Fisherman/bootc-installer/Dakota path: only the
+three production profiles and immutable matching GHCR digest references are
+accepted; recovery credentials must be nonempty mode 0600; Type #2-only BLS,
+composefs binding, and exactly one signed-PCR-11 token are required. It also
+proves incomplete live inputs yield `BLOCKED` rather than a false pass.
+
+Live mode consumes `DAKOTA_ISO`, `OCI_REF`, `MOK_CERT`, `PCR_PUBLIC`,
+`RECOVERY_KEY`, `TARGET_DISK`, `BOOTC_SECURE_INSTALLER`, and
+`BOOTC_SECURE_NEGATIVE_COMMAND`, and `BOOTC_SECURE_RECOVERY_COMMAND`. The installer runner receives a generated
+non-interactive recipe and owns booting its fresh ISO through its documented
+test path; Snosi owns the Microsoft-only rejection, same-varstore MOK
+enrollment, OVMF/swtpm boot evidence, guest assertions, and bounded cleanup.
+The negative runner must emit the exact case-specific rejection marker for unsigned, wrong-key, wrong-repository,
+false-capability, wrong-MOK, composefs mismatch, ESP-full, interrupted
+finalization/reconciliation, TPM replacement, and recovery-reenrollment
+fixtures. TPM replacement and recovery reenrollment use the separate positive
+recovery runner and must prove a new token, retained recovery unlock, and a
+distinct unattended reboot. Current public external documentation describes only the generic
+Dakota autoinstall route, not this secure contract, so normal live invocation
+is expected to exit 2 until Task 8's external runner and artifacts exist. A
+snowfield run remains insufficient without the explicit Surface hardware gate.
+The recovery runner receives `--state` pointing at a mode-0600, path-only
+manifest created before QEMU/swtpm stop, plus `--iso`, the recipe, and the
+recovery file. The final update handoff copies that same manifest semantics.
+
+## Task 9 Secure Update Harness
+
+`test/bootc-secure-update-test.sh --fixtures` validates the mode-0600
+install-state handoff, non-secret path-only schema, immutable N+1/N+2 refs and
+their distinct 14-digit image versions,
+exact publisher/negative markers, and no-op rejection without privileged
+artifacts. Live mode starts QEMU and swtpm only from the retained handoff,
+uses `/usr/libexec/bootc-update-stage` for the first switch and steady-state
+upgrade, then verifies staged/booted/rollback continuity, secure runtime
+invariants, and the persistence matrix after every boot. Its marked negative
+runner must prove each rejection, newly-created failed update state after the
+harness clears the prior runtime files, cleared semaphore, and
+continued bootability. Live mode is deliberately BLOCKED pending external
+runners and authorized signed secure N/N+1/N+2/transition OCI fixtures.
+Fixture success proves only the harness protocol and fail-closed behavior; it
+is not live Task 9/10 evidence. The published 2026-07-27 `latest` images were
+inspected without `io.snosi.bootc.secureboot-capable`, so they are correctly
+rejected as live secure fixtures. Fisherman now carries the recipe's
+same-repository tracking tag while its provenance retains the accepted-N
+immutable digest. Snowfield still needs representative Surface hardware
+validation.
+The handoff's TPM state/socket paths are passed exactly to the shared starter.
+Every Task 9 cryptsetup check first derives exactly one backing `/dev` path from
+`cryptsetup status root`; recovery bytes travel only through SSH stdin. Guest
+UKI checks use `/usr/lib/snosi/mok.crt` and compare its public fingerprint with
+the host handoff certificate. A live negative runner may use registry and SSH
+only and never directly opens or mutates the target disk, OVMF vars, TPM state,
+or TPM socket.
 
 ## Orchestrator (bootc-install-test.sh)
 
@@ -790,6 +975,17 @@ nightly (rotating `cayo-ab`/`snow-ab`/`snowfield-ab`), with no GitHub
 environment or repository secrets -- it generates its own ephemeral Secure
 Boot/MOK and PCR-signing keys per run. `--full-window` and the other
 destructive/rotation harnesses remain manual-only.
+
+Bootc secure validation has separate tiers. `validate.yml` and
+`test-bootc-secure.yml` run no-secret fixture and static contracts on PRs;
+`build-images.yml` PR jobs exercise explicitly insecure local mechanics only.
+Protected candidate publication validates the immutable digest before `latest`
+promotion. `bootc-secure-nightly.yml` runs the same fixtures and attempts a
+self-hosted Task 9/10 full window, visibly returning `BLOCKED` when its
+runner-owned state is absent. A manual self-hosted full-window run and the
+manual Snowfield hardware tier are the only routes to their respective live
+evidence. None of these tiers converts fixture success into production Secure
+Boot support.
 
 The `test-install.yml` workflow runs these tests on manual dispatch:
 1. Sets up KVM-enabled runner

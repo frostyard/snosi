@@ -36,28 +36,23 @@ Push/PR events ignore sysext-only dependency metadata
 `shared/download/package-versions.json`, `latest-versions.txt`) when those are
 the only changed paths.
 
-Matrix build of all 3 profiles (snow, snowfield, cayo).
+Both the PR `mechanics-build` path and protected `secure-build` path iterate the
+three profiles (snow, snowfield, cayo); only the latter can publish.
 
 Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependency=base`). This prevents the root sysext dependency list from being appended into every profile build. The sysext publishing set is built once by `build.yml`; profile image jobs build only `base` plus the selected main image.
 
-**Steps:**
-1. Free runner disk, mount BTRFS for container storage, and redirect `TMPDIR` to `/mnt/tmp`
-2. Run `check-duplicate-packages.sh`
-3. Build profile image via mkosi with dependencies reset to `base` only (produces directory output)
-4. Package OCI image via `buildah-package.sh` (preserves SUID, xattrs)
-5. Optimize layers via `chunkah-package.sh` (skipped on pull_request)
-6. **Smoke test:** Validates SUID bit on `/usr/bin/sudo` (mode 4755) to catch metadata loss, plus every bcvk target-image executable (`bwrap`, `systemctl`, `objcopy`, `ssh`, `ssh-keygen`) for optional OCI-image compatibility
-7. Generate SBOM via Syft (scans mkosi output directory, syft-json format; skipped on pull_request)
-8. Push timestamp and `latest` tags to ghcr.io (skipped on pull_request)
-9. Attach SBOM to image via ORAS (`application/vnd.syft+json` artifact type)
-10. Sign SBOM artifact with Cosign
-11. Attest build provenance (GitHub Actions attestation)
-12. Sign image with Cosign
-13. Upload manifests to R2
+**Jobs:** `mechanics-build` runs on pull requests with read-only permissions. It performs the three-profile disk preparation, build, insecure local package, smoke test, and cleanup path without secrets or registry writes. `secure-build` runs only on `main` non-PR events inside the protected `native-build` environment.
+
+**Protected publication steps:**
+1. Transiently materialize the durable production MOK/PCR signing credentials supplied by the four `NATIVE_*` secrets, then build and package each profile. The supplied MOK certificate and derived PCR public key must byte-match the committed public identities; runner-local credential files are removed unconditionally after local artifact validation and before registry writes. The distinct disposable PR keys remain ephemeral.
+2. Chunk, smoke test, and generate the SBOM, then use root Buildah's stdin login to push only the immutable timestamp tag and capture its digest.
+3. Use the Docker credential context to sign `IMAGE@DIGEST`, verify its remote digest/secure labels and Cosign signature, and copy it through the restrictive repository policy before validating the copied UKI/composefs artifact.
+4. Copy the verified immutable digest registry-to-registry to `latest`, and assert that `latest` resolves to that same digest. No local Buildah bytes are pushed under the mutable tag.
+5. Only after promotion, record Snow's release tag, attach/sign the SBOM, attest provenance, and upload manifests to R2.
 
 #### release job — Automated GitHub Releases
 
-After the matrix completes, a self-contained `release` job runs on main-branch pushes only and creates a GitHub Release summarising what changed in the build. It uses `!cancelled()` so it can still run after a matrix leg fails, but only proceeds when the `snow` leg uploaded its tag artifact. Release failures are visible; the job is not `continue-on-error`.
+After `secure-build` completes, a self-contained `release` job runs on main-branch pushes only and creates a GitHub Release summarising what changed in the build. It uses `!cancelled()` so it can still run after a matrix leg fails, but only proceeds when the `snow` leg uploaded its post-promotion tag artifact. Release failures are visible; the job is not `continue-on-error`.
 
 **Resolution:** The `snow` matrix leg writes the just-pushed timestamp tag to a short-lived artifact. The release job reads that as `current`, then prefers the previous tag recorded in the latest GitHub Release body (`<!-- snow-tag: ... -->`). If no release marker exists, it falls back to `oras repo tags ghcr.io/<owner>/snow` and selects the newest other timestamp tag. It then runs `frostyard/changelog-generator` with those two exact tags to produce the diff. Only `snow` is diffed; the other profiles build and push unchanged and are not referenced in the release.
 
@@ -67,15 +62,17 @@ After the matrix completes, a self-contained `release` job runs on main-branch p
 
 ### build-native-images.yml — Native A/B Build and Publish (Phase 7)
 
-**Trigger:** Push to `main`, manual dispatch. **ONLY** these two -- never
-`pull_request`, never a fork-originated trigger, never
-`repository_dispatch`. This is the interim protected-builder rule
-(`docs/native-ab-publication.md` "Interim protected-builder constraints"):
-the `build-*` jobs handle Secure Boot/MOK and PCR signing private keys, so
-they must never run against untrusted code. A single `concurrency` group
-(`build-native-images`, `cancel-in-progress: false`) prevents two runs from
-interleaving `promote.sh` invocations against the same product's live
-signed index.
+**Trigger and custody:** Push/PR to main, `repository_dispatch`, and manual
+dispatch. Pull requests run only the non-publishing `build-pr` matrix with
+per-run RSA-4096 MOK and RSA-2048 PCR credentials; it has no environment,
+`NATIVE_*` secret, artifact upload, R2, or promotion access. Production
+`build-*` and promotion jobs exclude pull requests. The `native-build`
+environment must be restricted in GitHub settings to protected/default
+branches; its four existing `NATIVE_*` signing secrets serve protected native
+and bootc assembly. This replaces the obsolete accepted-risk claim that
+same-repository pull requests may enter `native-build`. A single concurrency
+group prevents two publication runs from interleaving `promote.sh` against the
+same product's live signed index.
 
 A **thin caller**: every real step is a call into an in-repo script
 (`shared/native-ab/publish/*.sh`, `shared/native-ab/ci/*.sh`,
@@ -183,6 +180,37 @@ dedicated upload-only token, never the sysext/manifest token `build.yml`/
 exercised through this workflow** -- only local rehearsal and the
 workflow's structure (actionlint-clean, every script reference
 hand-verified) have been.
+
+### Bootc Secure CI Tiers (Task 10)
+
+`build-images.yml` has two mutually exclusive paths. PR `mechanics-build`
+uses no secrets, does not publish, and produces only
+`io.snosi.bootc.secureboot-capable=false` local mechanics images. Protected
+`secure-build` runs only for non-PR main/default-branch events in
+`native-build`. It uses the same four `NATIVE_*` secrets as protected native
+assembly; public MOK/PCR values must byte-match
+`shared/native-ab/keys/mok-2026.crt` and
+`shared/native-ab/keys/pcr-signing-2026.pub`. Private credentials are removed
+after local validation and before registry publication.
+
+Protected bootc publication pushes a version tag, validates its immutable
+digest and secure labels/signature/policy-copied artifact, then moves `latest`;
+failed immutable candidates never move `latest`.
+`test-bootc-secure.yml` supplies PR/push fixture contracts,
+`bootc-secure-nightly.yml` supplies fixture coverage plus a self-hosted live
+full-window attempt, and `test-install.yml` remains explicitly insecure legacy
+mechanics coverage. Live Task 9/10 needs authorized signed secure
+N/N+1/N+2/transition OCI fixtures and external runners. Until then its
+unconfigured harnesses must exit 2 with `BLOCKED:`. The 2026-07-27 published
+`latest` images lacked `io.snosi.bootc.secureboot-capable`, so they are not
+valid live secure inputs. A manual Snowfield hardware run remains separate.
+The PR/push fixture contracts include Task 1-3's spike `--fixtures` mode, the
+privileged disposable-LUKS recovery-byte regression (installing `cryptsetup`
+only for that check), and the Task 3 console-pump socket fixture; no live
+Task 1-3 QEMU gate is duplicated there.
+This section defines CI tiers and their limits; the normative operator recovery
+and evidence-retention rules are in
+[`docs/bootc-secure-operations.md`](../docs/bootc-secure-operations.md).
 
 ### native-nightly.yml — Nightly Deep Secure-Boot Validation (Tier 2, 2026-07-17)
 

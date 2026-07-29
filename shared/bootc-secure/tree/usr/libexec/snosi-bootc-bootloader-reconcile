@@ -1,0 +1,112 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Reconcile shim's MOK-signed systemd-boot second stage from the booted image.
+set -euo pipefail
+
+readonly SOURCE="${SNOSI_BOOTC_RECONCILE_SOURCE:-/usr/lib/snosi/bootc/systemd-bootx64.efi}"
+readonly CERT="${SNOSI_BOOTC_RECONCILE_CERT:-/usr/lib/snosi/mok.crt}"
+readonly RUN_DIR="${SNOSI_BOOTC_RECONCILE_RUN_DIR:-/run/snosi-bootloader-reconcile}"
+readonly ESP_TYPE="c12a7328-f81f-11d2-ba4b-00a0c93ec93b"
+RECONCILE_LAYOUT=""
+RECONCILE_MOUNTPOINT=""
+RECONCILE_TEMP=""
+RECONCILE_BACKUP=""
+RECONCILE_MOUNTED_HERE=0
+
+die() { printf 'snosi-bootc-bootloader-reconcile: %s\n' "$*" >&2; exit 1; }
+
+cleanup() {
+    set +e
+    [[ -z "$RECONCILE_TEMP" ]] || rm -f -- "$RECONCILE_TEMP"
+    [[ -z "$RECONCILE_BACKUP" ]] || rm -f -- "$RECONCILE_BACKUP"
+    if [[ $RECONCILE_MOUNTED_HERE -eq 1 ]]; then
+        umount "$RECONCILE_MOUNTPOINT" >/dev/null 2>&1 || true
+        rmdir "$RECONCILE_MOUNTPOINT" >/dev/null 2>&1 || true
+    fi
+    [[ -z "$RECONCILE_LAYOUT" ]] || rm -f -- "$RECONCILE_LAYOUT"
+}
+
+colocated_esp_from_lsblk() { # lsblk-json encrypted-root-backing-partition
+    local layout=$1 backing_partition=$2 disk
+    local -a esps=()
+    disk=$(jq -er --arg backing_partition "$backing_partition" '
+        def nodes: . as $node | $node, (($node.children // [])[] | nodes);
+        [ .blockdevices[] | nodes | select(.path? == $backing_partition) | .pkname ]
+        | unique | if length == 1 then .[0] else error("expected one backing disk") end
+    ' "$layout") || return 1
+    while IFS= read -r esp; do esps+=("$esp"); done < <(
+        jq -er --arg disk "$disk" --arg esp_type "$ESP_TYPE" '
+            def nodes: . as $node | $node, (($node.children // [])[] | nodes);
+            .blockdevices[] | nodes
+            | select(.type == "part" and .pkname == $disk
+                and ((.parttype // "") | ascii_downcase == $esp_type)) | .path
+        ' "$layout"
+    )
+    [[ ${#esps[@]} -eq 1 ]] || {
+        printf 'snosi-bootc-bootloader-reconcile: expected one EFI System Partition beside %s\n' "$backing_partition" >&2
+        return 1
+    }
+    printf '%s\n' "${esps[0]}"
+}
+
+main() {
+    local backing esp destination_dir destination mount_options
+    local -a mounted=()
+    trap cleanup EXIT
+
+    [[ -f "$SOURCE" ]] || die "immutable systemd-boot source is missing"
+    [[ -f "$CERT" ]] || die "MOK certificate is missing"
+    sbverify --cert "$CERT" "$SOURCE" >/dev/null || die "immutable systemd-boot source is not MOK-signed"
+
+    backing=$(cryptsetup status root | awk '/^[[:space:]]*device:/{print $2; exit}')
+    [[ -n "$backing" ]] || die "booted encrypted root backing partition is unavailable"
+    mkdir -p "$RUN_DIR"
+    RECONCILE_LAYOUT="$RUN_DIR/lsblk.json"
+    lsblk -J -o PATH,TYPE,PARTTYPE,PKNAME >"$RECONCILE_LAYOUT"
+    esp=$(colocated_esp_from_lsblk "$RECONCILE_LAYOUT" "$backing") || die "unable to identify the colocated EFI System Partition"
+
+    while IFS=' ' read -r candidate mount_options; do
+        mounted+=("$candidate"$'\t'"$mount_options")
+    done < <(findmnt -rn -S "$esp" -o TARGET,OPTIONS)
+    [[ ${#mounted[@]} -le 1 ]] || die "EFI System Partition has ambiguous existing mounts"
+    if [[ ${#mounted[@]} -eq 1 ]]; then
+        IFS=$'\t' read -r RECONCILE_MOUNTPOINT mount_options <<<"${mounted[0]}"
+        [[ ,$mount_options, != *,ro,* ]] || die "EFI System Partition is already mounted read-only; refusing to remount or modify it"
+    else
+        RECONCILE_MOUNTPOINT="$RUN_DIR/esp"
+        mkdir -p "$RECONCILE_MOUNTPOINT"
+        mount -o rw "$esp" "$RECONCILE_MOUNTPOINT"
+        RECONCILE_MOUNTED_HERE=1
+    fi
+
+    destination_dir="$RECONCILE_MOUNTPOINT/EFI/BOOT"
+    destination="$destination_dir/grubx64.efi"
+    [[ -d "$destination_dir" && -f "$destination" ]] || die "installed shim second stage is missing"
+    # The source lives under /usr so an existing /boot ESP mount cannot shadow it.
+    if cmp -s "$SOURCE" "$destination"; then
+        exit 0
+    fi
+
+    RECONCILE_TEMP=$(mktemp "$destination_dir/.snosi-grubx64.efi.XXXXXX")
+    cp "$SOURCE" "$RECONCILE_TEMP"
+    sbverify --cert "$CERT" "$RECONCILE_TEMP" >/dev/null || die "temporary systemd-boot copy is not MOK-signed"
+    sync -f "$RECONCILE_TEMP"
+
+    # Preserve the existing second stage until the replacement is durable.
+    RECONCILE_BACKUP=$(mktemp "$destination_dir/.snosi-grubx64.efi.previous.XXXXXX")
+    cp "$destination" "$RECONCILE_BACKUP"
+    sync -f "$RECONCILE_BACKUP"
+    mv -f -- "$RECONCILE_TEMP" "$destination"
+    RECONCILE_TEMP=""
+    if ! sync -f "$destination" || ! sync -f "$destination_dir"; then
+        mv -f -- "$RECONCILE_BACKUP" "$destination" || die "replacement sync failed and prior second stage could not be restored"
+        RECONCILE_BACKUP=""
+        sync -f "$destination" || die "prior second stage restoration could not be synced"
+        sync -f "$destination_dir" || die "prior second stage restoration directory could not be synced"
+        die "replacement sync failed; prior second stage restored"
+    fi
+    rm -f -- "$RECONCILE_BACKUP"
+    RECONCILE_BACKUP=""
+}
+
+main "$@"

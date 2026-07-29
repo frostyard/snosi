@@ -36,6 +36,249 @@ firmware. Use `--firmware uefi-insecure` only for bcvk install-mechanics
 testing. Do not represent this as Secure Boot validation or change the
 established bootc installation/testing path because of it.
 
+**Bootc secure composition (Task 4, 2026-07-28):** `cayo`, `snow`, and
+`snowfield` include `shared/bootc-secure/mkosi.conf`; native A/B profiles never
+include it. The fragment uses an isolated low-priority Forky APT sandbox and
+explicitly selects its coherent systemd family, adds `lockdown=integrity` via
+`/usr/lib/bootc/kargs.d/10-lockdown.toml` (the only effective immutable-karg
+mechanism for the directory-format bootc profiles; do not use mkosi
+`KernelCommandLine=` here), and ships only the existing native public MOK
+certificate and RSA-2048 PCR public key at `/usr/lib/snosi/`. Its schema-1
+`/usr/lib/snosi/bootc-secure.json` is the rootfs contract for later assembly
+and installer tasks; schema 1 pins its encrypted root mapper as `root`, which
+the reconciler and deferred installer must use. It is not a signed-UKI production path: do not add private
+key material or claim Secure Boot support until Tasks 5 onward pass.
+Task 8a extends schema 1's additive `installer` object with the exact external
+Fisherman/bootc-installer/Dakota contract: pinned versions, 1 GiB ESP and 30
+GiB online-install disk floors, immutable Cosign acceptance, DPS LUKS2/Btrfs,
+Type #2-only bootc options, MOK/TPM/recovery policy, provenance, restage, and
+ESP repair. `docs/bootc-secure-install-contract.md` is normative; it defines
+requirements only and does not implement an installer in this repository.
+The Forky systemd family is a deliberate cross-suite compatibility risk with
+Frostyard's bootc/libostree debs, not an inferred package guarantee. Task 4
+validated one real cayo build with bootc 1.16.3, libostree 2026.2, and systemd
+261.1-3, then ran `bootc --version` and `bootc container --help` in a bwrap
+root containing only that output. Repeat that build/root check when either the
+Frostyard debs or the selected systemd family changes.
+
+**Bootc UKI assembly (Task 5, 2026-07-28):**
+`shared/bootc-secure/assemble-uki.sh` and the secure branch of
+`shared/outformat/image/buildah-package.sh` formalize the observed bootc 1.16.3
+hidden storage-digest plus direct two-pass ukify behavior as a maintained,
+fail-closed compatibility contract. This is NOT upstream-stable. Secure builds
+must set `SNOSI_BOOTC_SECURE=1` and caller-owned MOK/PCR credentials; Buildah
+packages a pristine first pass, obtains its storage composefs ID from the image
+binary, first places the MOK-signed systemd-boot source at
+`/usr/lib/snosi/bootc/systemd-bootx64.efi`, constructs the UKI and ESP copy
+below `/boot`, and requires a final OCI probe to retain the ID. It emits the explicit
+`io.snosi.bootc.secureboot-capable=true` label; non-secure builds emit `false`.
+The optional dual-PCR mode requires the previous certificate positionally and
+its matching private key only through `SNOSI_BOOTC_PREVIOUS_PCR_KEY`. Never
+copy private keys into the rootfs, OCI layers, labels, logs, or retained temp
+state. Task 5 derives fingerprints only from those exact caller-owned private
+keys and rejects matches in the rootfs, mounted OCI filesystem/config, sanitized
+ukify log, and scan state; it deliberately permits unrelated package/example
+keys and does not use documentation/MIME exclusions. Re-run Tasks 1-3 and Task 5 artifact/negative validation before changing
+bootc/libostree, ukify/systemd, Buildah packaging, or any observed command/output
+shape. See `docs/bootc-secure-assembly-compatibility.md`.
+
+**Bootc shim second-stage reconciliation (Task 7, 2026-07-28):** secure OCI
+assembly retains the MOK-signed systemd-boot at
+`/usr/lib/snosi/bootc/systemd-bootx64.efi` because an installed ESP can shadow
+`/boot`. `snosi-bootc-bootloader-reconcile.service` is active only through its
+static `/usr/lib/systemd/system/multi-user.target.wants/` link, has no
+`[Install]` section, and never writes enablement under `/etc`. It derives
+exactly one ESP beside the booted encrypted-root backing partition; it mounts
+only an unmounted ESP, and refuses an already-mounted read-only ESP without
+remounting or writing it. It MOK-verifies the immutable source and a same-filesystem
+temporary copy, syncs, and atomically replaces only `EFI/BOOT/grubx64.efi`.
+The prior second stage is restored byte-for-byte if post-replacement sync fails.
+Shim `BOOTX64.EFI` and MokManager `mmx64.efi` are never modified. Reconciliation
+intentionally permits rollback: the authenticated deployment currently booted,
+not a monotonic version, selects the replacement.
+The real cayo proof validates immutable-source assembly, OCI retention, and
+signature binding only; executing this reconciler against an installed FAT ESP
+is deferred to the Task 9 secure-install runtime harness.
+
+**Task 9 secure install harness (2026-07-29):**
+`test/bootc-secure-install-test.sh --fixtures` is the always-runnable contract
+layer. Live mode accepts only `PROFILE=cayo|snow|snowfield`, a matching
+immutable `ghcr.io/frostyard/<profile>@sha256:...` reference, a fresh secure
+Dakota ISO, public MOK/PCR identities, a nonempty mode-0600 recovery file, and
+a blank at-least-30-GiB target. It calls the external secure installer only
+through `BOOTC_SECURE_INSTALLER --non-interactive --iso ... --recipe ...`, then
+proves pre-enrollment shim rejection, same-varstore MOK enrollment, TPM reboot,
+and installed-state invariants. It prepares the shared OVMF/swtpm state before
+invoking `BOOTC_SECURE_INSTALLER`, requires its exact installed marker, and
+requires case-specific refusal markers from `BOOTC_SECURE_NEGATIVE_COMMAND`.
+`BOOTC_SECURE_RECOVERY_COMMAND` separately proves TPM replacement and recovery
+reenrollment; they are never accepted as negative cases. External implementation
+is complete, but no prepared runner/artifact set is currently supplied to this
+run;
+missing inputs must print `BLOCKED:` and exit 2, never claim E2E success. The
+Task 8 schema/contract is complete in Snosi; external implementation remains
+external. Snowfield retains the separate representative Surface hardware gate.
+Before a recovery runner, the install harness creates an owned mode-0600,
+path-only state manifest from its recipe and passes it with the Dakota ISO;
+the final exported handoff copies that same manifest shape.
+
+**Task 9 secure update harness (2026-07-29):**
+`test/bootc-secure-update-test.sh --fixtures` validates the mode-0600,
+path-only install handoff and marked external update protocol. Live mode
+requires immutable N+1/N+2 refs with distinct 14-digit image versions, an
+atomic publisher for the same tracking tag,
+and a causal negative runner; it runs the production updater for first switch
+and steady-state upgrade, then asserts every secure runtime and persistence
+invariant across updates and rollback. It is BLOCKED until those external
+runners and secure artifacts exist. Fisherman now carries the same-repository
+tracking tag through the recipe while provenance retains accepted-N's immutable
+digest. Snowfield still needs the representative Surface hardware gate.
+The retained handoff's TPM state/socket paths are reused exactly; all Task 9
+LUKS checks derive the single backing `/dev` device from `cryptsetup status
+root`, and guest MOK verification uses the immutable guest certificate plus a
+public fingerprint comparison rather than a host certificate path.
+
+**Task 10 CI and evidence status (2026-07-29):** `build-images.yml` PR
+`mechanics-build` is secretless, non-publishing, and can produce only
+`io.snosi.bootc.secureboot-capable=false` mechanics images. Protected
+`secure-build` is the sole OCI publisher: it uses the four `NATIVE_*` secrets
+only around local assembly/validation, requires the supplied public MOK/PCR
+identities to byte-match `shared/native-ab/keys/mok-2026.crt` and
+`shared/native-ab/keys/pcr-signing-2026.pub`, deletes credentials before any
+registry write, validates an immutable version digest, then moves `latest`.
+A failed candidate never moves `latest`. `native-build` must be restricted in
+GitHub settings to protected/default branches; native PRs use disposable
+RSA-4096 MOK and RSA-2048 PCR credentials and cannot publish. Fixture/static
+contracts, candidate scaffolding, and nightly/full-window orchestration are
+complete, but they are not live Task 9/10 evidence. The 2026-07-27 published
+`latest` images lacked `io.snosi.bootc.secureboot-capable`; live install,
+update, rotation, full-window, and Snowfield hardware validation remain
+BLOCKED until authorized signed secure N/N+1/N+2/transition OCI fixtures and
+prepared external runners exist. Do not claim production bootc Secure Boot
+support from these contracts.
+
+**Bootc secure operations (Task 11, 2026-07-29):**
+`docs/bootc-secure-operations.md` is the normative reference for the secure
+fresh-install support boundary, recovery credential custody, MOK/TPM/ESP
+recovery, rotation, incident response, and evidence retention. It links to the
+installer and assembly contracts rather than replacing them. Operations and
+documentation contracts are complete; live release evidence remains BLOCKED.
+
+**Bootc OCI signature policy (Task 6, 2026-07-28):** secure bootc profiles ship
+`/etc/containers/policy.json` with global `reject` and exact
+`sigstoreSigned` scopes only for `ghcr.io/frostyard/cayo`, `snow`, and
+`snowfield`; each uses the committed public-only `cosign.pub` copied to
+`/usr/lib/snosi/cosign.pub`. Cosign v2.6.1 signatures record repository rather
+than tag identities, so this MUST use `signedIdentity: matchRepository` and
+the GHCR `registries.d` entry MUST retain `use-sigstore-attachments: true`.
+The sole local exception is the empty `containers-storage` transport scope with
+`insecureAcceptAnything`: it permits bootc to consume only the image already
+accepted by Podman's signed `docker` pull; do not broaden `docker` to a namespace
+or global acceptance. Secure install
+paths must not use `--skip-fetch-check`. Local rootfs test fixtures use their
+own disposable permissive policy only; registry paths use a disposable HOME
+containing the restrictive policy so host configuration is never changed.
+`bootc-update-stage` must retain Podman's containers-storage transfer and its
+staged storage-digest check; a failed pull, including policy rejection, clears
+`/run/snosi/update-staged` and leaves the existing EXIT trap to record
+`outcome=failed`. Run `test/bootc-container-policy-test.sh`; set `RUN_LIVE=1`
+(and optionally `LIVE_IMAGES=cayo,snow,snowfield`) to verify published
+signatures, wrong key, unsigned, and wrong-repository rejection through Podman.
+
+**Bootc sealed-UKI feasibility gate (Tasks 1-2, 2026-07-28):**
+`test/bootc-secure-spike-test.sh --fixtures` is the non-root fixture layer for
+MOK/PCR validation, single-kernel discovery, pre-existing-UKI refusal, and the
+expected `/boot/EFI/Linux/<kernel>.efi` output path. Its default mode is a hard,
+fail-closed rootfs proof: it requires `output/cayo`, `bootc`, `ukify`,
+`sbverify`, Buildah, and disposable `BOOTC_SECURE_MOK_KEY`,
+`BOOTC_SECURE_MOK_CERT`, and `BOOTC_SECURE_PCR_KEY` inputs. If any is absent it
+prints `BLOCKED:` and exits 2, never a false security PASS. The PR/push
+bootc-secure contract jobs run this fixture mode, the root-only
+`test/task2-recovery-key-bytes-test.sh` disposable-LUKS regression after
+installing `cryptsetup`, and `test/task3-console-pump-test.py`. They never run
+the default live QEMU/OVMF/swtpm feasibility proof. Source inspection
+of pinned bootc 1.16.3 identifies `bootc container ukify --rootfs ROOT --
+<ukify-options>` as the interface that computes the composefs SHA-512 ID and
+forwards trailing options to ukify; the live pinned-stack rootfs proof observed
+that interface. The gate
+independently recomputes that ID with `bootc container compute-composefs-digest`,
+builds the UKI before copying it below `/boot/EFI/Linux`, and requires the
+copied UKI's `.cmdline` `composefs=` value, `.linux`/`.initrd`, `.pcrpkey`,
+`.pcrsig`, and MOK signature to validate both before and after
+`shared/outformat/image/buildah-package.sh`. This is a feasibility harness, not
+the production assembly path (Task 5); do not describe the secure bootc path as
+proven until the default rootfs proof completes. Live pinned-stack evidence
+shows its directory-rootfs invocation with `--allow-missing-verity` emits
+`composefs=?<128-hex-digest>`: composefs-rs uses the leading `?` as the
+insecure/missing-fsverity marker. The gate strips that marker only to compare
+the digest; this feasibility build does not prove production fs-verity
+enforcement.
+The `.linux` and `.initrd` comparisons are exact byte comparisons; any mismatch
+is fail-closed and an investigation gate, not a condition to normalize away.
+Task 2 extends the same harness with 19 fixture assertions and a live external
+installer route: it creates a 1 GiB ESP and x86-64 DPS root GPT partition,
+formats LUKS2/Btrfs with a disposable recovery key, and invokes `bootc install
+to-filesystem --composefs-backend --bootloader systemd --root-mount-spec ""`
+without `--karg`. The pinned 1.16.3 source accepts the empty mount specification
+as the signal to omit root kernel arguments and requires no CLI kargs for a
+Type #2 UKI. Directory-rootfs digest `03a...` differs from the OCI-reconstructed
+deployment digest `97dcc...` because OCI reconstruction normalizes metadata, so
+Task 2 packages a pristine first-pass OCI image, calls hidden `bootc container
+compute-composefs-digest-from-storage`, directly invokes ukify with
+`composefs=?<OCI-digest>`, injects the signed UKI only under `/boot/EFI/Linux`,
+then packages and recomputes the final image. The observed first/final/installed
+IDs are exactly `97dcccf026688eddbe0d4503a9528ef35b31ce15144b5aed3ab6f662b2997e0471e34a66642e1d1aeeb5d1621a0ce6ad5632e07fae9aa13d1a10ea610538afbb`.
+The live install verifies Type #2-only BLS metadata and the copied UKI's exact
+kernel/initrd/PCR/MOK binding. This proves feasibility only: the hidden digest
+command and direct ukify duplication are not production-stable interfaces. Task
+5 remains gated on a supported pinned upstream/bootc-debian assembly interface
+or an explicit maintained compatibility contract; do not move this logic into
+installer shell code. Both the storage digest probe and `to-filesystem` run the
+bootc binary in the temporary cayo OCI image (observed 1.16.3), not the host
+binary. Current bootc writes a BLS `efi=` entry pointing at
+`EFI/Linux/bootc/bootc_composefs-<id>.efi`; the fixture and live validator pin
+that observed feasibility shape and reject raw `linux`/`initrd` BLS entries.
+Task 2 never boots its disk; Task 3 owns the boot proof. The external-layout
+cleanup uses a per-process mapper and recursively unmounts only its recorded
+target before closing that mapper and detaching that loop device, with bounded
+retries so an unrelated host loop is never touched.
+Task 3's live secure-OVMF run observes DPS discovery and a
+`systemd-cryptsetup@root` recovery prompt without root/LUKS kernel arguments.
+Its socket pump now sends the disposable key after serial quiet, proven by a
+socket fixture and the live `[task3: typed recovery passphrase]` marker. The
+following cryptsetup rejection is BLOCKED: Task 2's `--key-file` input includes
+a trailing newline while the interactive path strips it. Do not alter kargs or
+storage until a focused key-byte proof establishes the recovery contract.
+That focused proof now passes after Task 2 switched its recovery producer to
+`printf '%s'`: the live gate reaches `/dev/mapper/root`, mounts Btrfs, completes
+`bootc-root-setup`, and switch-roots. It then BLOCKS later because real-root PID
+1 cannot populate `/etc` during first boot (`Read-only file system`), followed
+by failed TPM setup/drift-report/logind units and no SSH. This is a distinct
+post-switch-root investigation; do not change `/etc` or services in this gate.
+The next `rw`-only cmdline proof passes real-root first boot and reaches SSH;
+the direct ukify command now carries exactly `rw composefs=?<OCI-digest>` and
+fixture-rejects root/LUKS identifiers. Task 3 now has a fail-closed temporary
+ESP assertion: it derives the backing disk from the booted root LUKS partition,
+requires exactly one sibling EFI System Partition, mounts it read-only at
+`/run/task3-esp`, and runs `bootctl --esp-path=/run/task3-esp --no-pager
+status`, requiring Secure Boot, Measured UKI, and the installed Type #2 path.
+Zero or multiple ESP candidates fail fixture coverage; the guest cleanup trap
+unmounts the temporary mount. It does not add an fstab entry, boot mount spec,
+kernel argument, or persistent mount policy. The apparent post-readiness SSH
+failure was actually `bootctl status` returning nonzero after printing complete
+valid status because optional EFI-variable state was absent; the harness now
+ignores only that informational exit status and still fail-closes on the
+required text. The live gate passes the ESP assertion, requires exactly one
+signed-PCR-11 TPM token, creates the recovery file mode 0600, and shreds the
+guest enrollment credentials before reboot. It records the current kernel boot
+ID and requires a different boot ID after reboot so the old sshd cannot produce
+a false unattended-boot pass. The second boot reaches SSH with no
+additional serial key input, TPM-unlocks the encrypted DPS root, and the
+original recovery key still passes `cryptsetup open --test-passphrase`. Task 3
+is therefore a complete feasibility PASS. This does not remove Task 5's
+supported-interface gate or make the direct hidden-command/two-pass assembly
+production-ready.
+
 ## Architecture
 
 ### Configuration Composition
@@ -1279,12 +1522,12 @@ The target (e.g. `gnome-session.target`) comes from the service's `WantedBy=` in
 ## CI/CD
 
 - `build.yml` - Builds base + sysexts, publishes to Frostyard repo (Cloudflare R2)
-- `build-images.yml` - Matrix build of 3 profiles (2 desktop + 1 server), resetting mkosi dependencies to `base` so sysexts are not rebuilt per profile. Pushes OCI to ghcr.io, generates SBOMs (Syft), attaches via ORAS, signs with Cosign (public key committed at `cosign.pub`; `test-install.yml` verifies it before tests). A non-blocking `release` job runs after the matrix on main-branch pushes and creates a GitHub Release whose body is a changelog generated by `frostyard/changelog-generator` diffing the new `snow` image against the previously published one.
-- `build-native-images.yml` (Phase 7) - Native A/B (`cayo-ab`/`snow-ab`/`snowfield-ab`) build/publish pipeline; a thin caller of `shared/native-ab/publish/*.sh` and `shared/native-ab/ci/*.sh` — see `docs/native-ab-publication.md`'s "CI publication flow" section for the full job graph, secret inventory, and the "First production publication checklist" that must be completed before it is allowed to touch real R2. Triggers on push + PR to main (same sysext `paths-ignore` as `build-images.yml`), plus `workflow_dispatch`/`repository_dispatch` — builds run on every push/PR, but PROMOTION is gated out of PRs at the job level (`github.event_name != 'pull_request'`), so only main pushes + manual dispatch sign and mutate the live R2 index (the `native-promotion` environment also restricts to protected/main branches). The reviewer-approval gates were removed from both environments for velocity (2026-07); `native-build` is now open to any branch, so same-repo PR branches build with the Secure Boot/MOK + PCR signing keys (fork PRs fail — no secret access) — an accepted relaxation of the interim protected-builder rule pending mkosi split final-assembly-from-signing. `build-*`/`promote-*` are independent per-product jobs, not a matrix, so one product's failure never blocks another's. Production R2 upload has NOT been exercised through this workflow — only local rehearsal (`test/native-ab-publication-test.sh`, `test/native-publication-pipeline-test.sh`) and the workflow's structure (actionlint-clean, every script reference hand-verified) have been. **Boot validation (2026-07-17):** `test-public-origin`/`test-public-origin-iso` additionally BOOT the candidate bytes in QEMU/KVM before the verified marker is earned (`test/native-boot-smoke-test.sh`: multi-user.target reached, `systemctl is-system-running` = running, os-release identity match, clean poweroff; `test/native-iso-boot-smoke-test.sh`: serial login prompt). An unbootable image can no longer be promoted. SSH access is seeded via the `/etc`-overlay upperdir on var (the `snosi-install` `seed_var()` path) — root/verity bytes boot pristine; Secure Boot is NOT enforced in this tier (MOK never enrolled in the throwaway varstore) — SB/TPM fidelity belongs to the nightly.
+- `build-images.yml` - Three-profile PR `mechanics-build` packages and smoke-tests locally with no secrets or registry writes. Protected `secure-build` runs only for main non-PR events in `native-build`: it transiently materializes the durable production MOK/PCR identities supplied by the four `NATIVE_*` secrets, deletes those runner-local files before registry writes, validates the local artifact, pushes/signs the immutable version digest, verifies labels/signature and policy-copied bytes remotely, then copies that verified digest to `latest`. SBOM/provenance/manifests and the Snow release marker follow promotion. The `release` job needs `secure-build` and creates a GitHub Release from the promoted Snow tag.
+- `build-native-images.yml` (Phase 7) - Native A/B (`cayo-ab`/`snow-ab`/`snowfield-ab`) build/publish pipeline; a thin caller of `shared/native-ab/publish/*.sh` and `shared/native-ab/ci/*.sh` — see `docs/native-ab-publication.md`'s "CI publication flow" section for the full job graph, secret inventory, and the "First production publication checklist" that must be completed before it is allowed to touch real R2. Triggers on push + PR to main (same sysext `paths-ignore` as `build-images.yml`), plus `workflow_dispatch`/`repository_dispatch`. PRs run only the non-publishing `build-pr` matrix with runner-generated RSA-4096 MOK and RSA-2048 PCR credentials; it has no environment, secret, artifact-upload, R2, or promotion access. The independent production `build-{cayo,snow,snowfield}` jobs run only outside PRs in the protected/default-branch `native-build` environment, retain the production credentials and candidate upload, and feed the existing public-origin checks. Promotion remains gated out of PRs at the job level (`github.event_name != 'pull_request'`), so only main pushes + manual dispatch sign and mutate the live R2 index (the `native-promotion` environment also restricts to protected/main branches). `build-*`/`promote-*` are independent per-product jobs, not a matrix, so one product's failure never blocks another's. Production R2 upload has NOT been exercised through this workflow — only local rehearsal (`test/native-ab-publication-test.sh`, `test/native-publication-pipeline-test.sh`) and the workflow's structure (actionlint-clean, every script reference hand-verified) have been. **Boot validation (2026-07-17):** `test-public-origin`/`test-public-origin-iso` additionally BOOT the candidate bytes in QEMU/KVM before the verified marker is earned (`test/native-boot-smoke-test.sh`: multi-user.target reached, `systemctl is-system-running` = running, os-release identity match, clean poweroff; `test/native-iso-boot-smoke-test.sh`: serial login prompt). An unbootable image can no longer be promoted. SSH access is seeded via the `/etc`-overlay upperdir on var (the `snosi-install` `seed_var()` path) — root/verity bytes boot pristine; Secure Boot is NOT enforced in this tier (MOK never enrolled in the throwaway varstore) — SB/TPM fidelity belongs to the nightly.
 - `native-nightly.yml` - Nightly (cron + dispatch) deep secure-chain validation: runs `test/native-ab-secure-boot-test.sh` default mode on a hosted runner with KVM+swtpm+virt-firmware, rotating profiles by day of week (Sun snowfield-ab, Tue/Thu/Sat cayo-ab, else snow-ab). Uses NO secrets/environments — all key material is ephemeral per-run (PCR key RSA-2048 per contract §7). Non-blocking: promotion gating stays with the Tier 1 smoke test. Design: `docs/plans/2026-07-17-native-boot-validation-design.md`.
 - `check-dependencies.yml` - Weekly check for external dependency updates, creates PRs with updated checksums. Version-based checks are downgrade-guarded (`ver_gt`, sort -V strictly-newer) — coder deliberately tracks its stable channel (GitHub "latest"), whose version numbers run behind mainline
 - `check-packages.yml` - Daily check for APT package version updates, creates PRs
-- `validate.yml` - shellcheck + runtime-/etc-guard (`check-runtime-etc-guard.sh`) + native A/B static/contracts/publication-guard checks + mkosi summary validation on PRs
+- `validate.yml` - shellcheck + runtime-/etc-guard (`check-runtime-etc-guard.sh`) + native A/B static/contracts/publication-guard checks + bootc secure publication/artifact/policy/installer/update fixture contracts + mkosi summary validation on PRs
 - `test-install.yml` - Manual bootc installation test in QEMU/KVM
 - `scorecard.yml` - Weekly OpenSSF supply-chain security analysis
 ## Documentation

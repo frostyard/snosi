@@ -40,6 +40,108 @@ bootc and ostree install as regular APT packages from the Frostyard repository (
 - **Runtime lib pinning:** the debs declare only a partial `Depends` list; base `Packages=` keeps the full set of runtime link deps explicit (`libfuse3-4`, `libsoup-3.0-0`, `liblzma5`, `libzstd1`, `libmount1`, `libselinux1`, `libcom-err2`, `libext2fs2t64`, plus the declared ones). Do not remove them from `Packages=` just because apt does not demand them.
 - **History (until 2026-07):** both were compiled from source during the base image build via `shared/bootc/build/bootc.chroot` (BuildScript + `BuildPackages=` overlay deps + rustup toolchain + ostree double-install + stub-deb dpkg registration in `shared/bootc/postinst/bootc-register.chroot`). All of that machinery was removed when the deb path landed; see git history if the in-tree build ever needs resurrecting.
 
+**Bootc secure composition (Task 4):** the three OCI profiles include
+`shared/bootc-secure/mkosi.conf` immediately after the bootc runtime package
+fragment. It owns an isolated, low-priority Forky APT sandbox and an explicit,
+ABI-coherent Forky systemd family, avoiding accidental Trixie/Forky library
+mixes in systemd-boot, cryptsetup, and TPM tooling. It adds
+`lockdown=integrity` through
+`/usr/lib/bootc/kargs.d/10-lockdown.toml`, not mkosi `KernelCommandLine=`:
+these directory-format profiles do not have an mkosi-built UKI for that setting
+to affect. Pinned bootc 1.16.3 loads sorted `*.toml` files from that directory;
+the strict schema is `kargs = ["..."]` with optional
+`match-architectures = ["x86_64"]`. The fragment also carries explicit
+MOK/recovery/TPM/UKI tools and the public-only native MOK certificate plus
+RSA-2048 PCR signing public key. The image contract is
+`/usr/lib/snosi/bootc-secure.json` (schema 1). Task 5 adds
+`shared/bootc-secure/assemble-uki.sh`, called only through
+`buildah-package.sh` when `SNOSI_BOOTC_SECURE=1`: the first OCI package obtains
+bootc 1.16.3's hidden storage digest, and the adapter injects a MOK-signed UKI
+plus the ESP copy of systemd-boot under `/boot`. Before that first package, it
+places the same signed systemd-boot source at
+`/usr/lib/snosi/bootc/systemd-bootx64.efi`; this is required because an
+installed ESP mount shadows `/boot`, and it is deliberately present before the
+digest is calculated. A second OCI probe must retain the exact digest. This is a
+fail-closed maintained compatibility contract, not
+an upstream interface; see `docs/bootc-secure-assembly-compatibility.md` for
+the mandatory revalidation triggers. Private keys remain caller-owned and must
+not enter this fragment, its tree, OCI layers, labels, logs, or retained temp
+state. Native A/B profiles do not include it and continue using
+`shared/native-ab-secure/` independently.
+
+**Bootc shim second-stage reconciliation (Task 7):** the secure tree ships
+`snosi-bootc-bootloader-reconcile.service` with a static
+`/usr/lib/systemd/system/multi-user.target.wants/` link and no `[Install]`
+section. The service locates the one ESP on the disk containing the booted
+encrypted root, mounts it temporarily only if needed, verifies the immutable
+`/usr` source and temporary copy against the committed MOK, syncs, atomically
+replaces `EFI/BOOT/grubx64.efi`, and restores the exact old file on a failed
+post-replacement sync. It does not touch shim `BOOTX64.EFI`, MokManager
+`mmx64.efi`, or `/etc`; it accepts a valid signed stage from a rollback boot.
+Schema 1 pins `encrypted_root_mapper` to `root`; the reconciler's
+`cryptsetup status root` lookup and future installer must not independently
+choose a mapper name.
+Task 8a extends that same schema with an `installer` object: exact pinned
+bootc/Cosign/systemd versions, 1 GiB ESP and 30 GiB target-disk floors, OCI
+capability/policy requirements, DPS LUKS2/Btrfs layout, Type #2-only bootc
+options, and the signed-PCR recovery policy. The normative cross-repository
+consumer contract is `docs/bootc-secure-install-contract.md`; it does not
+implement Fisherman, bootc-installer, or Dakota in this repository.
+An existing `ro` ESP mount is refused before any remount or write. The real
+cayo Buildah proof validates immutable-source assembly/retention and signer
+binding, not runtime reconciliation on an installed FAT ESP; that execution is
+deferred to the Task 9 secure-install runtime harness.
+
+**Protected bootc publication and evidence boundary (Task 10):**
+`build-images.yml` keeps pull-request builds to local mechanics images labelled
+`io.snosi.bootc.secureboot-capable=false`; they receive no secrets and never
+publish. Protected `secure-build` jobs use the four `NATIVE_*` signing secrets
+only for local assembly and validation. The supplied MOK and PCR public
+identities must byte-match `shared/native-ab/keys/mok-2026.crt` and
+`shared/native-ab/keys/pcr-signing-2026.pub`; private material is deleted before
+registry publication. The protected job pushes an immutable version tag,
+validates that exact digest remotely (including its signature, secure labels,
+restrictive policy copy, and artifact), and only then moves `latest`; a failed
+immutable candidate cannot change `latest`. This is CI scaffolding and fixture
+coverage, not production Secure Boot evidence: the 2026-07-27 `latest` images
+were inspected without `io.snosi.bootc.secureboot-capable`, so they cannot feed
+Task 9 live mode. Task 9/10 live install, update, rotation, full-window, and
+Snowfield hardware evidence remain BLOCKED pending authorized signed secure
+N/N+1/N+2/transition fixtures and external runners.
+Build-specific secure composition and publication mechanics stay in this
+document; the normative operational recovery and evidence rules are in
+[`docs/bootc-secure-operations.md`](../docs/bootc-secure-operations.md).
+
+**OCI signature policy (Task 6):** the secure bootc tree supplies
+`/etc/containers/policy.json`, which defaults to `reject` and has one
+`sigstoreSigned` rule, using `/usr/lib/snosi/cosign.pub`, for each exact
+`ghcr.io/frostyard/{cayo,snow,snowfield}` repository. Cosign v2.6.1 signatures
+record only the repository identity, so `matchRepository` is required; using
+tag-exact identity would reject valid published images. The accompanying
+`registries.d/frostyard.yaml` enables Sigstore attachments for GHCR, without
+which containers/image ignores Cosign's registry signatures. The secure
+installer no longer bypasses fetch verification. Test rootfs fixtures retain a
+separate disposable permissive policy mounted only for that fixture; registry
+tests use an isolated HOME containing the restrictive policy and attachment
+configuration, never a changed host policy. `bootc-update-stage` keeps its
+Podman-to-containers-storage workaround and staged-storage-digest comparison;
+the empty `containers-storage` policy scope alone accepts already-local images,
+after Podman's signed `docker` pull. It does not weaken registry scopes.
+a failed Podman pull (including policy rejection) clears any stale staged
+semaphore and its existing EXIT trap records `outcome=failed`.
+
+**Forky compatibility evidence and limit:** Frostyard's `bootc` and
+`libostree-1-1` debs are built independently of the Forky systemd family, so
+their coexistence is a compatibility risk, not a package-manager proof. Task 4
+ran a full `just cayo` build resolving bootc `1.16.3-frostyard202607061837`,
+libostree `2026.2-frostyard202607061837`, and the selected systemd family at
+`261.1-3`; it then ran `bootc --version` and `bootc container --help` under
+`bwrap --ro-bind output/cayo /`, preventing host libraries from satisfying the
+commands. This is evidence for that exact combination only. Re-run the build
+and isolated-root command check whenever bootc-debian, libostree, or the Forky
+selection changes; do not treat the low APT pin or a host-side `ldd` result as
+runtime compatibility validation.
+
 **Server payload (cayo, cayo-ab-raw, cayo-ab):** Only `brew.chroot` (no desktop build scripts) — all three consume it via `shared/composition/cayo/mkosi.conf`.
 
 ### 2. PostInstallationScripts (after packages)

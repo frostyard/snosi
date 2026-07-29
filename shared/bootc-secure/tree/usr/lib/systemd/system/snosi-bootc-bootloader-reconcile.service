@@ -1,0 +1,10 @@
+[Unit]
+Description=Reconcile the bootc shim second-stage bootloader
+ConditionPathExists=/usr/lib/snosi/bootc-secure.json
+ConditionPathExists=/usr/lib/snosi/bootc/systemd-bootx64.efi
+After=local-fs.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/snosi-bootc-bootloader-reconcile

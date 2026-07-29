@@ -408,12 +408,92 @@ The OCI profiles ship `bubblewrap` for bcvk and already ship `virtiofsd`.
 The host still needs bcvk, Podman, libvirt, QEMU/KVM, and UEFI firmware.
 Native A/B profiles intentionally do not inherit this OCI-only bcvk dependency.
 
-**Secure Boot status:** OCI bootc profiles use `SecureBoot=no` and do not build
-or enroll the MOK signing chain used by native A/B profiles. They therefore do
-not currently boot under bcvk's enrolled-key Secure Boot firmware. Use
-`--firmware uefi-insecure` only for bcvk mechanics testing; this is not Secure
-Boot validation. Native A/B Secure Boot validation and the established bootc
-install/test workflow are unaffected.
+**Secure Boot status:** OCI bootc profiles include a bootc-only secure
+composition and a Task 5 two-pass UKI assembly adapter. Protected builds set
+`SNOSI_BOOTC_SECURE=1`; Buildah computes the pre-injection OCI composefs digest,
+constructs a MOK-signed Type #2 UKI plus MOK-signed systemd-boot, retains the
+signed second stage under `/usr/lib/snosi/bootc/` for installed-ESP
+reconciliation, then refuses the final image if its digest changes. The static
+reconciler activates after local filesystems without writing `/etc`, verifies
+the MOK signer before atomically replacing only shim's `grubx64.efi`, and allows
+valid rollback deployments to restore their own stage. It never remounts an
+already-mounted read-only ESP. The real cayo proof validates immutable-source
+assembly only; FAT-ESP reconciler execution is deferred to Task 9 secure-install
+runtime coverage. Secure and insecure images carry explicit
+`io.snosi.bootc.secureboot-capable=true|false` labels. This is a maintained,
+fail-closed compatibility contract for Frostyard bootc 1.16.3, including its
+hidden storage-digest command and direct two-pass ukify behavior, not an
+upstream-stable API. See `docs/bootc-secure-assembly-compatibility.md`.
+This is not production Secure Boot support: published `latest` images inspected
+on 2026-07-27 lacked `io.snosi.bootc.secureboot-capable` and are unsuitable for
+the secure install/update harnesses. MOK/TPM enrollment and full secure
+installation remain blocked pending signed secure N/N+1/N+2/transition OCI
+ fixtures and prepared external runners. Use
+ `--firmware uefi-insecure` only for bcvk mechanics testing, not Secure Boot
+ validation. Native A/B Secure Boot validation and the established bootc
+ install/test workflow are unaffected.
+
+The [secure bootc operations runbook](docs/bootc-secure-operations.md) is the
+normative entry point for the blocked-path status, recovery, rotation, and
+incident procedures; it does not make the secure fresh-install path supported.
+
+The external Fisherman/bootc-installer/Dakota secure-install boundary is
+defined in [`docs/bootc-secure-install-contract.md`](docs/bootc-secure-install-contract.md).
+It freezes the schema-1 installer requirements, immutable Cosign pull, DPS
+LUKS2/Btrfs layout, Type #2-only bootc invocation, TPM/recovery flow, and ESP
+repair boundary. It is a contract only; installer implementation and runtime
+proof are outside this repository. The external implementation checkboxes are
+complete, but Snosi live evidence remains blocked until authorized secure OCI
+fixtures and prepared runners are available to the harness.
+
+`test/bootc-secure-install-test.sh --fixtures` validates Task 9's install
+harness contract without privileged artifacts. Its live mode is deliberately
+fail-closed: it requires `PROFILE` (`cayo`, `snow`, or `snowfield`), a freshly
+built secure Dakota ISO, an immutable matching `OCI_REF`, MOK/PCR public
+identities, a mode-0600 recovery credential, a blank 30 GiB target disk, and
+external supported-test runners in `BOOTC_SECURE_INSTALLER`,
+`BOOTC_SECURE_NEGATIVE_COMMAND`, and `BOOTC_SECURE_RECOVERY_COMMAND`. The
+runners must follow the exact marked protocol in the secure-install contract;
+missing inputs print `BLOCKED:` and exit 2;
+this is not E2E evidence. Snowfield additionally requires the existing
+representative Surface-hardware gate.
+Recovery runners receive an owned, mode-0600 path-only state manifest plus the
+Dakota ISO and recipe, so they can reach the retained SSH identity without any
+secret bytes entering manifest JSON.
+
+`test/bootc-secure-update-test.sh --fixtures` validates the paired update
+handoff. Live mode consumes the mode-0600, path-only install-state manifest,
+immutable N+1/N+2 references with distinct 14-digit image versions, and marked
+external publisher/negative runners. Every negative case must create a fresh
+failed update record after its prior runtime state is cleared.
+The retained manifest's exact TPM state/socket paths are reused; runtime LUKS
+checks derive the backing `/dev` path from `cryptsetup status root`, and MOK
+verification compares public host/guest certificate fingerprints without
+passing a host path to the guest.
+It remains BLOCKED until those runners and secure artifacts exist. Fisherman
+now carries the same-repository tracking tag through the install recipe while
+provenance retains the accepted immutable N digest.
+
+CI keeps these boundaries explicit. Pull requests build only local bootc
+mechanics images labelled `io.snosi.bootc.secureboot-capable=false`; they do not
+receive publication credentials or write a registry. Protected builds publish
+an immutable version tag, validate its digest, labels, signature, restrictive
+policy copy, and artifact before moving `latest`; a failed candidate cannot
+move `latest`. Native pull requests likewise use disposable RSA-4096 MOK and
+RSA-2048 PCR credentials and cannot publish. Fixture success proves runner and
+publication-contract behavior only, not a live secure installation, update,
+rotation, full rollback window, or Snowfield hardware result.
+
+`test/bootc-secure-spike-test.sh` separately proves the sealed-UKI
+bootc chain in a disposable QEMU/OVMF/swtpm environment, including MOK Secure
+Boot, a measured Type #2 UKI, encrypted DPS-root recovery, signed-PCR-11 TPM
+auto-unlock after a distinct reboot, and recovery-key retention. It is a
+feasibility gate only: it validates the compatibility adapter's prerequisite
+behavior but is not installer proof.
+Both PR/push contract workflows run its non-root `--fixtures` mode, the
+privileged disposable-LUKS recovery-key byte regression, and the Task 3
+console-pump socket fixture. They do not run the live QEMU/OVMF feasibility
+gate.
 
 ### Build Process
 
@@ -466,12 +546,12 @@ Triggered on push/PR to main, this workflow:
 
 Triggered on push/PR to main or via repository dispatch, this workflow:
 
-1. Runs a matrix build of all 3 profiles (cayo, snow, snowfield)
+1. Runs an insecure, local-only mechanics matrix for pull requests and a protected `native-build` matrix for main-branch publication
 2. Resets mkosi dependencies to `base` for each profile build so sysexts are not rebuilt in every matrix job
-3. Pushes OCI images to GitHub Container Registry (ghcr.io) with version and `latest` tags
-4. Generates SBOMs (Syft), attaches them via ORAS, and signs both images and SBOM artifacts with Cosign
-5. Uploads manifests to R2 for tracking
-6. Creates a GitHub Release (main-branch pushes only) with a changelog generated by diffing the new `snow` image against the previously published one — see [Releases](https://github.com/frostyard/snosi/releases)
+3. On protected publication, validates the locally assembled secure image, pushes and signs only its immutable version digest, then re-pulls it through the production policy for remote label, signature, and artifact validation
+4. Moves `latest` with a registry-to-registry digest copy only after those checks pass
+5. Generates SBOMs (Syft), attaches them via ORAS, signs both images and SBOM artifacts with Cosign, and uploads manifests to R2 after promotion
+6. Creates a GitHub Release (main-branch pushes only) with a changelog generated by diffing the promoted `snow` image against the previously published one — see [Releases](https://github.com/frostyard/snosi/releases)
 
 ### Verifying image signatures
 
@@ -488,6 +568,24 @@ gh attestation verify oci://ghcr.io/frostyard/snow:latest --owner frostyard
 ```
 
 The `test-install.yml` workflow verifies the signature before every installation test.
+Secure bootc OCI images additionally enforce this key at pull/install/update time
+through containers/image policy. The only accepted repositories are
+`ghcr.io/frostyard/cayo`, `ghcr.io/frostyard/snow`, and
+`ghcr.io/frostyard/snowfield`; other images, keys, and repository identities are
+rejected. Cosign v2.6.1 signs repository identities, so the policy uses
+repository matching rather than tag matching and enables GHCR Sigstore
+attachments explicitly.
+
+The policy retains global rejection and signed `docker` registry enforcement.
+Its only local exception is `containers-storage:`: after Podman has verified a
+permitted registry image, bootc may consume that already-local image for its
+storage-transport update path. This does not accept an additional registry.
+
+This global-reject policy is intentional: Podman and Distrobox cannot pull
+arbitrary desktop containers by default. Users who need additional images must
+create `~/.config/containers/policy.json` with their own narrowly scoped trust
+rules; this per-user override does not weaken the system policy used by bootc
+installation or the root update service.
 
 ### Other workflows
 

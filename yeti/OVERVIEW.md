@@ -17,6 +17,14 @@ serialization hazard class (the updex `features check` nil-slice bug that broke
 pilothouse) and lists every other site with the same exposure. Read it before
 changing any tool's output shape.
 
+## Bootc Secure Operations
+
+The normative operator entry point for the secure bootc fresh-install path is
+[`docs/bootc-secure-operations.md`](../docs/bootc-secure-operations.md). This
+overview describes architecture only; the runbook retains support status,
+recovery, rotation, incident, and evidence rules. Its live-install and
+Snowfield hardware gates remain blocked.
+
 ## Outputs
 
 ### Desktop Images (OCI, pushed to ghcr.io)

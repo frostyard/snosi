@@ -1,0 +1,155 @@
+name: Test bootc secure contracts
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_live:
+        description: Run live secure install/update/rotation on a prepared self-hosted runner
+        required: false
+        default: false
+        type: boolean
+      run_snowfield_hardware:
+        description: Run representative Snowfield hardware validation on its prepared runner
+        required: false
+        default: false
+        type: boolean
+      profile:
+        description: Live profile
+        required: false
+        default: cayo
+        type: choice
+        options: [cayo, snow, snowfield]
+      state_root:
+        description: Absolute directory containing Task 9/10 artifacts and runner inputs
+        required: false
+        default: ""
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: test-bootc-secure-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Validate bootc publication guard
+        run: ./check-bootc-publication-guard.sh
+      - name: Validate bootc publication guard fixtures
+        run: ./test/bootc-publication-guard-test.sh
+      - name: Validate bootc secure artifact fixtures
+        run: ./test/bootc-secure-artifact-test.sh --fixtures
+      - name: Validate bootc secure mutation fixtures
+        run: ./test/bootc-secure-artifact-negative-test.sh --fixtures
+      - name: Validate Task 1-3 feasibility fixtures
+        run: ./test/bootc-secure-spike-test.sh --fixtures
+      - name: Install cryptsetup for Task 2 recovery-key regression
+        run: sudo apt-get update && sudo apt-get install --yes cryptsetup
+      - name: Validate Task 2 recovery-key bytes
+        run: sudo ./test/task2-recovery-key-bytes-test.sh
+      - name: Validate Task 3 console recovery pump
+        run: python3 ./test/task3-console-pump-test.py
+      - name: Validate bootc secure package cleanup
+        run: ./test/bootc-secure-package-cleanup-test.sh
+      - name: Validate bootc container policy
+        run: ./test/bootc-container-policy-test.sh
+      - name: Validate bootloader reconciliation
+        run: ./test/bootc-bootloader-reconcile-test.sh
+      - name: Validate secure installer contract
+        run: ./test/bootc-secure-install-contract-test.sh
+      - name: Validate bootc secure operations documentation
+        run: ./test/bootc-secure-docs-test.sh
+      - name: Validate secure install harness fixtures
+        run: ./test/bootc-secure-install-test.sh --fixtures
+      - name: Validate secure update harness fixtures
+        run: ./test/bootc-secure-update-test.sh --fixtures
+      - name: Validate secure rotation harness fixtures
+        run: ./test/bootc-secure-rotation-test.sh --fixtures
+      - name: Validate remote publication fixtures
+        run: ./test/bootc-secure-publication-test.sh
+
+  live-full-window:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live
+    runs-on: [self-hosted, linux, x64, bootc-secure]
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | \
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run prepared secure full window
+        env:
+          STATE_ROOT: ${{ inputs.state_root }}
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          set -o pipefail
+          ./shared/bootc-secure/ci/run-full-window.sh "$STATE_ROOT" "$PROFILE" |& tee /var/tmp/bootc-secure-full-window.log
+      - name: Upload full-window log
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bootc-secure-full-window-log-${{ inputs.profile }}
+          path: /var/tmp/bootc-secure-full-window.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+  snowfield-hardware:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_snowfield_hardware
+    runs-on: [self-hosted, linux, x64, snowfield-hardware]
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Run representative Snowfield hardware validation
+        env:
+          STATE_ROOT: ${{ inputs.state_root }}
+        run: |
+          set -euo pipefail
+          source ./shared/bootc-secure/ci/run-full-window.sh
+          validate_state_root "$STATE_ROOT" || {
+            echo "::error::state_root must be an absolute mode-0700 directory owned by the runner" >&2
+            exit 1
+          }
+          runner="$STATE_ROOT/snowfield-hardware-runner"
+          [[ -x $runner ]] || {
+            echo "::error::missing executable Snowfield hardware runner" >&2
+            exit 1
+          }
+          set +e
+          output=$("$runner" --state-root "$STATE_ROOT" 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output" | tee /var/tmp/bootc-secure-snowfield-hardware.log
+          [[ $status -eq 0 ]] && grep -Fqx 'BOOTC_SECURE_SNOWFIELD_HARDWARE: complete' <<<"$output"
+      - name: Upload Snowfield hardware runner log
+        if: success() || failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bootc-secure-snowfield-hardware-log
+          path: /var/tmp/bootc-secure-snowfield-hardware.log
+          retention-days: 30
+          if-no-files-found: ignore
