@@ -117,7 +117,7 @@ jobs:
         run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
 
       - name: setup-mkosi
-        uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf
+        uses: systemd/mkosi@e1e9eafc87dfd4dcb21d51027d1034daeffc534c
 
       - name: Build Image
         run: |
@@ -466,7 +466,7 @@ jobs:
         run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
 
       - name: setup-mkosi
-        uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf
+        uses: systemd/mkosi@e1e9eafc87dfd4dcb21d51027d1034daeffc534c
 
       - name: Build Image
         run: |
