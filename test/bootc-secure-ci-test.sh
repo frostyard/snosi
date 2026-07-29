@@ -18,6 +18,21 @@ workflow_invokes_static_coverage_test() { # workflow
     grep -Fq 'run: ./test/bootc-secure-ci-test.sh' "$1"
 }
 
+workflow_job_selects_runc() { # workflow job
+    local workflow=$1 job=$2 block
+    block=$(awk -v header="  $job:" '
+        $0 == header { in_job=1 }
+        in_job && $0 ~ /^  [[:alnum:]_-]+:$/ && $0 != header { exit }
+        in_job { print }
+    ' "$workflow")
+    [[ $block == *'- name: Configure Podman OCI runtime'* ]] \
+        && [[ $block == *'runtime = "runc"'* ]] \
+        && [[ $block == *"podman info --format '{{.Host.OCIRuntime.Name}}'"* ]] \
+        && [[ $block == *'[[ $runtime == runc ]]'* ]] \
+        && [[ $block == *'      - name: Build Image'* ]] \
+        && [[ ${block%%'      - name: Build Image'*} == *'- name: Configure Podman OCI runtime'* ]]
+}
+
 PASS=0
 FAIL=0
 
@@ -86,6 +101,10 @@ assert_true 'validate workflow runs Task 1-3 fixture coverage' \
     task123_fixture_coverage_is_present "$ROOT_DIR/.github/workflows/validate.yml"
 assert_true 'validate workflow runs the bootc secure CI wiring regression' \
     workflow_invokes_static_coverage_test "$ROOT_DIR/.github/workflows/validate.yml"
+assert_true 'secure-build selects and verifies the runc OCI runtime' \
+    workflow_job_selects_runc "$ROOT_DIR/.github/workflows/build-images.yml" secure-build
+assert_true 'mechanics-build selects and verifies the runc OCI runtime' \
+    workflow_job_selects_runc "$ROOT_DIR/.github/workflows/build-images.yml" mechanics-build
 
 printf '# Results: %d passed, %d failed, %d total\n' "$PASS" "$FAIL" "$((PASS + FAIL))"
 [[ $FAIL -eq 0 ]]

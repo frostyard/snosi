@@ -72,6 +72,20 @@ jobs:
         with:
           target-dir: /var/lib/containers
 
+      - name: Configure Podman OCI runtime
+        # GitHub runner 20260726 upgraded Podman 4.9.3 -> 5.8.4; its default
+        # crun path rejects the generated OCI version. The matched bundled
+        # runc works for direct and script-nested podman invocations.
+        run: |
+          sudo install -d -m 0755 /etc/containers/containers.conf.d
+          printf '%s\n' '[engine]' 'runtime = "runc"' \
+            | sudo tee /etc/containers/containers.conf.d/99-snosi-ci-runtime.conf >/dev/null
+          runtime=$(sudo podman info --format '{{.Host.OCIRuntime.Name}}')
+          [[ $runtime == runc ]] || {
+            echo "::error::Podman selected OCI runtime '$runtime', expected 'runc'" >&2
+            exit 1
+          }
+
       - name: Redirect temp to /mnt
         # / (/dev/root) has ~45G free after cleanup; /mnt has ~70G free. mkosi's
         # build workspace and podman/buildah tar staging default to TMPDIR
@@ -411,6 +425,20 @@ jobs:
         uses: ublue-os/container-storage-action@dc1f4c8f17b672069e921f001132f7cf98a423a6 # main 2026-02-11
         with:
           target-dir: /var/lib/containers
+
+      - name: Configure Podman OCI runtime
+        # GitHub runner 20260726 upgraded Podman 4.9.3 -> 5.8.4; its default
+        # crun path rejects the generated OCI version. The matched bundled
+        # runc works for direct and script-nested podman invocations.
+        run: |
+          sudo install -d -m 0755 /etc/containers/containers.conf.d
+          printf '%s\n' '[engine]' 'runtime = "runc"' \
+            | sudo tee /etc/containers/containers.conf.d/99-snosi-ci-runtime.conf >/dev/null
+          runtime=$(sudo podman info --format '{{.Host.OCIRuntime.Name}}')
+          [[ $runtime == runc ]] || {
+            echo "::error::Podman selected OCI runtime '$runtime', expected 'runc'" >&2
+            exit 1
+          }
 
       - name: Redirect temp to /mnt
         run: |

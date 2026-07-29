@@ -39,6 +39,12 @@ the only changed paths.
 Both the PR `mechanics-build` path and protected `secure-build` path iterate the
 three profiles (snow, snowfield, cayo); only the latter can publish.
 
+Both jobs select the GitHub runner bundle's `runc` through a job-local
+`containers.conf.d` drop-in and verify the effective runtime before building.
+This avoids the hosted `20260726.254.1` Podman 5.8.4/default-crun incompatibility
+(`crun: unknown version specified`) for direct smoke tests and nested Podman
+calls without changing the runtime policy inside shipped images.
+
 Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependency=base`). This prevents the root sysext dependency list from being appended into every profile build. The sysext publishing set is built once by `build.yml`; profile image jobs build only `base` plus the selected main image.
 
 **Jobs:** `mechanics-build` runs on pull requests with read-only permissions. It performs the three-profile disk preparation, build, insecure local package, smoke test, and cleanup path without secrets or registry writes. `secure-build` runs only on `main` non-PR events inside the protected `native-build` environment.
