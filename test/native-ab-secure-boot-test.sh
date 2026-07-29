@@ -253,6 +253,8 @@ export HOME="$real_home"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/ssh.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/secure-vm.sh"
 
 WORK_DIR=""
 HTTP_PID=""
@@ -345,7 +347,8 @@ cleanup() {
         while kill -0 "$QEMU_PID" 2>/dev/null && (( i++ < 20 )); do sleep 0.5; done
         kill -9 "$QEMU_PID" 2>/dev/null || true
     fi
-    [[ -z "$SWTPM_PID" ]] || kill "$SWTPM_PID" 2>/dev/null || true
+    secure_vm_stop_swtpm
+    SWTPM_PID=""
     if [[ "$KEEP_VM" == 1 ]]; then
         echo "KEEP_VM=1: leaving $WORK_DIR in place"
         return
@@ -466,18 +469,11 @@ assert_root_slot_versions() { # description expected_version...
 # OVMF + MOK pre-enrollment + swtpm + QEMU (custom -- NOT test/lib/vm.sh:
 # that library has no TPM/Secure-Boot/interactive-serial support)
 # ---------------------------------------------------------------------------
-OVMF_CODE_SRC=/usr/share/OVMF/OVMF_CODE_4M.secboot.fd
-OVMF_VARS_SRC=/usr/share/OVMF/OVMF_VARS_4M.ms.fd
-
 vm_prepare_ovmf() { # workdir mok_cert -> writes workdir/OVMF_CODE.fd, workdir/OVMF_VARS.fd
-    local wd="$1" cert="$2" guid
-    [[ -f "$OVMF_CODE_SRC" ]] || { echo "Error: missing $OVMF_CODE_SRC" >&2; exit 1; }
-    [[ -f "$OVMF_VARS_SRC" ]] || { echo "Error: missing $OVMF_VARS_SRC" >&2; exit 1; }
-    cp "$OVMF_CODE_SRC" "$wd/OVMF_CODE.fd"
-    cp "$OVMF_VARS_SRC" "$wd/OVMF_VARS.fd"
-    guid="$(python3 -c 'import uuid; print(uuid.uuid4())')"
-    echo "Pre-enrolling Snosi MOK ($cert) into OVMF varstore as owner GUID $guid"
-    virt-fw-vars --inplace "$wd/OVMF_VARS.fd" --add-mok "$guid" "$cert"
+    local wd="$1" cert="$2"
+    secure_vm_prepare_ovmf "$wd"
+    echo "Pre-enrolling Snosi MOK ($cert) into OVMF varstore"
+    secure_vm_enroll_mok "$wd/OVMF_VARS.fd" "$cert"
     # Confirm MokList and Secure Boot enablement landed before we ever boot.
     local printed
     printed="$(virt-fw-vars -i "$wd/OVMF_VARS.fd" -p 2>&1)"
@@ -487,14 +483,12 @@ vm_prepare_ovmf() { # workdir mok_cert -> writes workdir/OVMF_CODE.fd, workdir/O
 
 vm_prepare_swtpm() { # workdir -> sets TPM_SOCK, starts swtpm in background
     local wd="$1"
-    mkdir -p "$wd/tpm"
     # (Re)startable: --tpmstate keeps ALL TPM state (including the sealed
     # data behind the enrolled LUKS token) in $wd/tpm across swtpm restarts,
     # so this function must NEVER wipe that directory -- only remove the
     # stale control socket/pidfile a previous (now dead) swtpm left behind,
     # so the socket-appearance wait below observes the NEW daemon, not a
     # leftover socket inode from the old one.
-    rm -f "$wd/tpm/swtpm-ctrl.sock" "$wd/tpm/swtpm.pid"
     # QEMU's "-tpmdev emulator,chardev=..." integration expects the chardev
     # to point at swtpm's CONTROL channel (--ctrl): swtpm negotiates the
     # actual TPM command channel over that connection itself (an fd handoff
@@ -504,16 +498,9 @@ vm_prepare_swtpm() { # workdir -> sets TPM_SOCK, starts swtpm in background
     # and reproducibly hung QEMU at startup (2 threads, 0% CPU, state S,
     # zero vCPU threads ever created) since QEMU never got the handshake it
     # expects; --ctrl only, confirmed working end-to-end.
-    swtpm socket --tpm2 --tpmstate "dir=$wd/tpm" \
-        --ctrl "type=unixio,path=$wd/tpm/swtpm-ctrl.sock" \
-        --pid "file=$wd/tpm/swtpm.pid" \
-        --log "file=$wd/tpm/swtpm.log,level=1" \
-        -d
-    local i=0
-    while [[ ! -S "$wd/tpm/swtpm-ctrl.sock" ]] && (( i++ < 50 )); do sleep 0.2; done
-    [[ -S "$wd/tpm/swtpm-ctrl.sock" ]] || { echo "Error: swtpm control socket did not appear" >&2; exit 1; }
-    SWTPM_PID="$(cat "$wd/tpm/swtpm.pid")"
-    TPM_SOCK="$wd/tpm/swtpm-ctrl.sock"
+    secure_vm_start_swtpm "$wd"
+    SWTPM_PID="$SECURE_VM_SWTPM_PID"
+    TPM_SOCK="$SECURE_VM_TPM_SOCK"
     echo "swtpm running (PID $SWTPM_PID, control socket $TPM_SOCK)"
 }
 

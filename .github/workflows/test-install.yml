@@ -1,12 +1,11 @@
-name: Test bootc installation
+name: Test bootc installation mechanics (insecure)
 
 on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Image tag to test (default: latest)'
-        required: false
-        default: 'latest'
+        description: Explicit insecure mechanics image tag; this workflow provides no security evidence
+        required: true
 
 permissions: {}
 
@@ -15,6 +14,7 @@ env:
 
 jobs:
   test-install:
+    # This legacy mechanics tier does not validate Secure Boot, MOK, LUKS, TPM, or authenticated updates.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -61,7 +61,7 @@ jobs:
 
       - name: Verify image signature
         env:
-          TAG: ${{ inputs.image_tag || 'latest' }}
+          TAG: ${{ inputs.image_tag }}
         run: |
           # Resolve the mutable tag to its digest FIRST, then verify that
           # immutable ref and use it for everything downstream. Verifying the
@@ -71,6 +71,22 @@ jobs:
           echo "Resolved ${IMAGE}:${TAG} -> ${DIGEST}"
           cosign verify --key cosign.pub "${IMAGE}@${DIGEST}"
           echo "IMAGE_REF=${IMAGE}@${DIGEST}" >> "$GITHUB_ENV"
+          echo "DIGEST=${DIGEST}" >> "$GITHUB_ENV"
+
+      - name: Require explicitly insecure mechanics image
+        run: |
+          capability=$(skopeo inspect --format '{{ index .Labels "io.snosi.bootc.secureboot-capable" }}' "docker://${IMAGE}@${DIGEST}")
+          [[ $capability == false ]] || {
+            echo "::error::legacy mechanics workflow requires secureboot-capable=false" >&2
+            exit 1
+          }
+
+      - name: Record insecure mechanics scope
+        run: |
+          {
+            echo '## Insecure installation mechanics only'
+            echo 'This workflow does not validate Secure Boot, MOK, LUKS, TPM, or authenticated updates.'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Pull image
         run: |

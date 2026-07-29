@@ -398,9 +398,16 @@ raw YAML steps are not.
 
 Builds run on **every push and PR to `main`** (mirroring `build-images.yml`,
 same sysext `paths-ignore`), plus `workflow_dispatch` and `repository_dispatch`.
-Building and publishing are gated separately:
+Protected production assembly and PR validation are separated:
 
-- **Build + public-origin verify** run on every trigger, including PRs.
+- **PR builds** run one non-publishing `build-pr` matrix across cayo, snow,
+  and snowfield. It generates a per-run RSA-4096 MOK and RSA-2048 PCR signing
+  identity, builds with `SNOSI_NATIVE_AUTOSTAGE=1`, validates the resulting
+  artifact, and removes the private keys and certificates. It has no GitHub
+  environment, secrets, R2 access, artifact upload, or publication step.
+- **Production builds** run only outside pull requests in `native-build`, where
+  the protected Secure Boot/MOK and PCR signing credentials remain available.
+  They retain the candidate upload and public-origin verification flow.
 - **Promotion** (sign + mutate the live R2 index) is gated OUT of PRs at the
   job level (`if: !cancelled() && github.event_name != 'pull_request'`), so a
   PR builds and verifies but never publishes -- only `main` pushes and manual
@@ -408,13 +415,10 @@ Building and publishing are gated separately:
   restricts to protected (`main`) branches, so a `workflow_dispatch` fired
   from a feature branch cannot promote either.
 
-Custody trade-off (the approval gate was removed for velocity, 2026-07): the
-`native-build` environment no longer requires reviewer approval and is open to
-any branch, so **same-repo PR branches build with the Secure Boot/MOK + PCR
-signing keys** (fork PRs cannot access secrets, so their build jobs fail as
-expected). This relaxes the "interim protected-builder" posture below in
-exchange for CI-on-every-PR; the promotion (OpenPGP) key stays main-scoped via
-`native-promotion`. Revisit when mkosi gains split final-assembly-from-signing.
+`native-build` must be restricted to protected/default-branch access. This
+keeps production Secure Boot/MOK and PCR signing credentials out of every PR,
+while `build-pr` still validates signing mechanics with disposable credentials.
+The promotion (OpenPGP) key remains main-scoped through `native-promotion`.
 
 The per-ref `concurrency` group
 (`build-native-images-${{ github.ref }}`, `cancel-in-progress` only for PRs)
@@ -428,7 +432,8 @@ PR builds (which never promote) may cancel to save runner time.
 |---|---|---|
 | `pin-check` | `shared/native-ab/ci/check-mkosi-pin.sh` (no build) | -- |
 | `prepare` | Assigns one version/revision shared by every product this run | -- |
-| `build-cayo` / `build-snow` / `build-snowfield` | Bootstraps pinned mkosi, builds the profile, runs the static artifact test(s), `prepare-native-publication.sh --xz`, `publish-candidate.sh` | `native-build` environment |
+| `build-pr` | PR-only cayo/snow/snowfield matrix with disposable MOK/PCR credentials, artifact validation, and no publication | Pull request; no environment or secrets |
+| `build-cayo` / `build-snow` / `build-snowfield` | Bootstraps pinned mkosi, builds the profile, runs the static artifact test(s), `prepare-native-publication.sh --xz`, `publish-candidate.sh` | `native-build` environment; not pull requests |
 | `test-public-origin` | `verify-remote.sh` against the real public URL, one matrix leg per product | -- (read-only, no secrets) |
 | `promote-cayo` / `promote-snow` / `promote-snowfield` | `promote.sh` | `native-promotion` environment |
 | `build-iso` / `test-public-origin-iso` / `promote-iso` | Builds the network installer, verifies its candidate, promotes its signed index, then verifies the stable redirect | `native-build` / `native-promotion` environments as appropriate |

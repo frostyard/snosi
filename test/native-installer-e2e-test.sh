@@ -423,7 +423,9 @@ vm_graceful_stop() {
 }
 
 vm_hard_stop() {
-    [[ -n "$QEMU_PID" ]] && kill -9 "$QEMU_PID" 2>/dev/null || true
+    if [[ -n "$QEMU_PID" ]]; then
+        kill -9 "$QEMU_PID" 2>/dev/null || true
+    fi
     QEMU_PID=""
 }
 

@@ -120,4 +120,57 @@ if [[ -f "$raw_conf" ]]; then
     fi
 fi
 
+workflow=".github/workflows/build-native-images.yml"
+if [[ ! -f "$workflow" ]]; then
+    echo "FAIL: missing $workflow" >&2
+    fail=1
+else
+    pr_job=$(awk '
+      /^  build-pr:$/ { capture=1 }
+      capture && /^  [A-Za-z0-9_-]+:$/ && $0 != "  build-pr:" { exit }
+      capture { print }
+    ' "$workflow")
+
+    [[ -n "$pr_job" ]] \
+        || { echo "FAIL: $workflow: missing build-pr job" >&2; fail=1; }
+    grep -qF "if: github.event_name == 'pull_request'" <<<"$pr_job" \
+        || { echo "FAIL: $workflow: build-pr must run only on pull requests" >&2; fail=1; }
+    grep -qF 'openssl req -x509 -newkey rsa:4096' <<<"$pr_job" \
+        || { echo "FAIL: $workflow: build-pr must generate an RSA-4096 MOK" >&2; fail=1; }
+    grep -qF 'openssl req -x509 -newkey rsa:2048' <<<"$pr_job" \
+        || { echo "FAIL: $workflow: build-pr must generate an RSA-2048 PCR key" >&2; fail=1; }
+    for forbidden in 'secrets.NATIVE_' 'publish-candidate.sh' 'promote.sh' 'rclone:' 'actions/upload-artifact'; do
+        if grep -qF "$forbidden" <<<"$pr_job"; then
+            echo "FAIL: $workflow: build-pr must not reference $forbidden" >&2
+            fail=1
+        fi
+    done
+
+    for job in build-cayo build-snow build-snowfield; do
+        job_block=$(awk -v job="$job" '
+          $0 == "  " job ":" { capture=1 }
+          capture && /^  [A-Za-z0-9_-]+:$/ && $0 != "  " job ":" { exit }
+          capture { print }
+        ' "$workflow")
+        [[ -n "$job_block" ]] \
+            || { echo "FAIL: $workflow: missing $job job" >&2; fail=1; continue; }
+        grep -qF 'environment: native-build' <<<"$job_block" \
+            || { echo "FAIL: $workflow: $job must use native-build" >&2; fail=1; }
+        grep -qF "if: github.event_name != 'pull_request'" <<<"$job_block" \
+            || { echo "FAIL: $workflow: $job must exclude pull requests" >&2; fail=1; }
+    done
+
+    iso_job=$(awk '
+      /^  build-iso:$/ { capture=1 }
+      capture && /^  [A-Za-z0-9_-]+:$/ && $0 != "  build-iso:" { exit }
+      capture { print }
+    ' "$workflow")
+    [[ -n "$iso_job" ]] \
+        || { echo "FAIL: $workflow: missing build-iso job" >&2; fail=1; }
+    grep -qF 'environment: native-build' <<<"$iso_job" \
+        || { echo "FAIL: $workflow: build-iso must use native-build" >&2; fail=1; }
+    grep -qF "if: github.event_name != 'pull_request'" <<<"$iso_job" \
+        || { echo "FAIL: $workflow: build-iso must exclude pull requests" >&2; fail=1; }
+fi
+
 exit "$fail"

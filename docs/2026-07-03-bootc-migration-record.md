@@ -101,7 +101,7 @@ update --init`).
   store (target disk on live media) with the transfer store dropped after
   OCI export — fixes guaranteed ENOSPC on live media (see below).
 
-**ISO builder: `frostyard/titanoboa`** branch `feat/bootc-installer-live`:
+**ISO builder: `frostyard/dakota-iso`:**
 post-rootfs hook installs the installer Flatpak (upstream bundle + GNOME
 runtime), stages `/etc/bootc-installer/{recipe.json,images.json,cosign.pub,
 live-iso-mode}`, autostart + polkit for the `snow` live user, and swaps the
@@ -120,7 +120,7 @@ Three debugging lessons from getting the ISO working:
 2. **fisherman's composefs pull went to default podman storage** — the live
    RAM overlay, which cannot hold snow's ~10G of extracted layers (ENOSPC at
    layer 128/128 at 8G and 16G RAM alike). Fixed in frostyard/fisherman#2.
-3. **just 1.55 compat** in titanoboa's Justfile (`set lists := true`;
+3. **just 1.55 compat** in dakota-iso's Justfile (`set lists := true`;
    `which()` replaced by env-with-default for `PODMAN`).
 
 **Result: full pipeline verified in QEMU** — ISO boot → GNOME live session →
@@ -159,7 +159,7 @@ all share it) until images are embedded in the ISO.
 | frostyard/fisherman | #1 | cosign verification + digest pinning; Snow catalog |
 | frostyard/fisherman | #2 | composefs pull into scratch-rooted storage |
 | frostyard/bootc-installer | #1 | Snow recipe, Debian groups, cosign pass-through |
-| frostyard/titanoboa | branch `feat/bootc-installer-live` | bootc-installer live media (replaces nbc hook) |
+| frostyard/dakota-iso | bootc-installer live media (replaces nbc hook) |
 
 ## Remaining work
 

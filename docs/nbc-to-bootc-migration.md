@@ -16,6 +16,12 @@ Companion documents:
 > [Remaining validation](#remaining-validation-before-fleet-wide-migration)
 > are still open — migrate pilot machines first, not the whole fleet.
 
+> **Secure-path boundary:** this runbook covers the established ordinary bootc
+> migration path and its insecure-firmware mechanics. It does not install or
+> convert a host to the secure DPS LUKS/MOK/TPM layout. That fresh-install path
+> remains unsupported until its live gates pass; see
+> [`bootc-secure-operations.md`](bootc-secure-operations.md).
+
 ---
 
 ## 1. Identify what you have (inventory)
@@ -45,14 +51,19 @@ podman workloads, and any sysexts enabled via systemd-sysupdate.
 the migration record ("Constraints that shape the nbc retirement") and the
 validation plan: an nbc install is an A/B partition layout with no bootc
 deployment state (`spec.image: null`); there is no adoption path. The
-migration is a **fresh `bootc install` via the live installer ISO, followed
-by state restore**.
+migration is a **fresh ordinary `bootc install` via the live installer ISO,
+followed by state restore**.
+
+Neither an nbc install nor an existing ordinary bootc install can be converted
+in place to the secure DPS LUKS/MOK/TPM layout. Back up state and perform a
+secure fresh installation only after that separately gated path is supported;
+do not treat this migration procedure, ESP repair, or MOK/TPM recovery as a
+conversion method.
 
 Installer media: the bootc-installer live ISO (frostyard forks of
-`bootc-installer`/`fisherman`; ISO built from `frostyard/titanoboa`, branch
-`feat/bootc-installer-live` — see the migration record for build
-instructions). The installer verifies the image with cosign and pins the
-install to the resolved digest.
+`bootc-installer`/`fisherman`; ISO built from `frostyard/dakota-iso` — see the
+migration record for build instructions). The installer verifies the image
+with cosign and pins the install to the resolved digest.
 
 ### Disk sizing preconditions
 

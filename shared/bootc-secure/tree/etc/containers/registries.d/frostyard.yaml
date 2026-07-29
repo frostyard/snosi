@@ -1,0 +1,6 @@
+# Cosign v2.6.1 stores key-based signatures as registry attachments. This is
+# limited to GHCR; policy.json still rejects every repository but the three
+# explicitly scoped Frostyard images.
+docker:
+  ghcr.io:
+    use-sigstore-attachments: true

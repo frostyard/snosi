@@ -1,0 +1,124 @@
+name: Bootc Secure Nightly Validation
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Profile to validate
+        required: false
+        default: rotate
+        type: choice
+        options: [rotate, cayo, snow, snowfield]
+
+permissions: {}
+
+concurrency:
+  group: bootc-secure-nightly
+  cancel-in-progress: false
+
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    outputs:
+      profile: ${{ steps.profile.outputs.profile }}
+    permissions:
+      contents: read
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+      - name: Redirect temp to /mnt
+        run: |
+          sudo mkdir -p /mnt/tmp /mnt/var-tmp
+          sudo chmod 1777 /mnt/tmp /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | \
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Select profile
+        id: profile
+        env:
+          PROFILE_INPUT: ${{ inputs.profile }}
+        run: |
+          if [[ -n "$PROFILE_INPUT" && "$PROFILE_INPUT" != rotate ]]; then
+            profile="$PROFILE_INPUT"
+          else
+            case "$(date -u +%u)" in
+              7) profile=snowfield ;;
+              2|4|6) profile=cayo ;;
+              *) profile=snow ;;
+            esac
+          fi
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
+      - name: Validate bootc publication guard
+        run: ./check-bootc-publication-guard.sh
+      - name: Validate bootc publication guard fixtures
+        run: ./test/bootc-publication-guard-test.sh
+      - name: Validate bootc secure artifact fixtures
+        run: ./test/bootc-secure-artifact-test.sh --fixtures
+      - name: Validate bootc secure mutation fixtures
+        run: ./test/bootc-secure-artifact-negative-test.sh --fixtures
+      - name: Validate bootc secure package cleanup
+        run: ./test/bootc-secure-package-cleanup-test.sh
+      - name: Validate bootc container policy
+        run: ./test/bootc-container-policy-test.sh
+      - name: Validate bootloader reconciliation
+        run: ./test/bootc-bootloader-reconcile-test.sh
+      - name: Validate secure installer contract
+        run: ./test/bootc-secure-install-contract-test.sh
+      - name: Validate secure install harness fixtures
+        run: ./test/bootc-secure-install-test.sh --fixtures
+      - name: Validate secure update harness fixtures
+        run: ./test/bootc-secure-update-test.sh --fixtures
+      - name: Validate secure rotation harness fixtures
+        run: ./test/bootc-secure-rotation-test.sh --fixtures
+      - name: Validate remote publication fixtures
+        run: ./test/bootc-secure-publication-test.sh
+
+  live-full-window:
+    needs: fixtures
+    runs-on: [self-hosted, linux, x64, bootc-secure]
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | \
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run prepared secure full window
+        env:
+          PROFILE: ${{ needs.fixtures.outputs.profile }}
+        run: |
+          set -o pipefail
+          state_root="/var/lib/snosi/bootc-secure/$PROFILE"
+          if [[ ! -d $state_root ]]; then
+            ./test/bootc-secure-rotation-test.sh |& tee /var/tmp/bootc-secure-nightly.log
+          else
+            ./shared/bootc-secure/ci/run-full-window.sh "$state_root" "$PROFILE" |& tee /var/tmp/bootc-secure-nightly.log
+          fi
+      - name: Upload harness logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bootc-secure-nightly-${{ needs.fixtures.outputs.profile }}
+          path: /var/tmp/bootc-secure-nightly.log
+          retention-days: 14
+          if-no-files-found: ignore

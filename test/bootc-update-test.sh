@@ -29,6 +29,10 @@
 #   ROLLBACK=1         After the final hop, run the rollback phase: bootc
 #                      rollback, reboot, verify slots swapped and /var+/etc
 #                      persistence held.
+#   CONTAINERS_POLICY_SOURCE=<dir>
+#                      Replace the installed fixture's policy.json and
+#                      registries.d/frostyard.yaml before update hops. This is
+#                      for testing an unbuilt policy change in a real bootc VM.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,6 +45,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${KEEP_VM:=0}"
 : "${HOP_TRANSPORT:=registry}"
 : "${ROLLBACK:=0}"
+: "${CONTAINERS_POLICY_SOURCE:=}"
 
 # shellcheck source=test/lib/ssh.sh
 source "$SCRIPT_DIR/lib/ssh.sh"
@@ -192,6 +197,19 @@ echo "  booted digest: $booted (storage digest; registry manifest: $(digest_of "
 echo ""
 echo "=== Step 4: Write persistence markers ==="
 run_guest_script "$SCRIPT_DIR/update-tests/persistence-write.sh"
+
+if [[ -n "$CONTAINERS_POLICY_SOURCE" ]]; then
+    policy_source="$CONTAINERS_POLICY_SOURCE/policy.json"
+    registries_source="$CONTAINERS_POLICY_SOURCE/registries.d/frostyard.yaml"
+    [[ -f "$policy_source" && -f "$registries_source" ]] || {
+        echo "FATAL: CONTAINERS_POLICY_SOURCE must contain policy.json and registries.d/frostyard.yaml" >&2
+        exit 1
+    }
+    echo "Installing supplied containers policy into disposable guest fixture"
+    vm_ssh "mkdir -p /etc/containers/registries.d"
+    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" "$policy_source" root@localhost:/etc/containers/policy.json
+    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" "$registries_source" root@localhost:/etc/containers/registries.d/frostyard.yaml
+fi
 
 # ---------------------------------------------------------------
 declare -a hop_names=()

@@ -35,12 +35,10 @@ name: Build Native Images
 # native-build environment secrets, written to runner-local files immediately
 # before the one mkosi build step that consumes them, never echoed, removed by
 # both an in-step trap and an `if: always()` cleanup. The approval gate on
-# that environment was removed for velocity; the environment is now open to
-# any branch, so same-repo PR branches build with these keys (fork PRs cannot
-# access secrets and their build jobs fail, as expected). This is an accepted
-# risk pending mkosi split final-assembly-from-signing support
-# (docs/native-ab-contracts.md SS7); the promotion (OpenPGP update-signing)
-# key stays main-branch-scoped via the native-promotion environment.
+# that environment is restricted to protected/default-branch access. Pull
+# requests use disposable credentials in build-pr; the production credentials
+# remain scoped to protected assembly pending mkosi split final-assembly-from-
+# signing support (docs/native-ab-contracts.md SS7).
 on:
   repository_dispatch:
     types:
@@ -121,6 +119,114 @@ jobs:
         id: revision
         run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
+  # ---------------------------------------------------------------------
+  # Pull requests validate all production profiles with credentials generated
+  # on the runner. This job has neither environment access nor any publication
+  # step, so it cannot receive or prepare production signing material.
+  # ---------------------------------------------------------------------
+  build-pr:
+    needs: prepare
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: cayo-ab
+            product: cayo
+          - profile: snow-ab
+            product: snow
+          - profile: snowfield-ab
+            product: snowfield
+    env:
+      PROFILE: ${{ matrix.profile }}
+      PRODUCT: ${{ matrix.product }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Show disk space (before)
+        run: sudo df -h
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+
+      - name: Redirect temp to /mnt
+        run: |
+          sudo mkdir -p /mnt/tmp /mnt/var-tmp
+          sudo chmod 1777 /mnt/tmp /mnt/var-tmp
+          sudo mount --bind /mnt/var-tmp /var/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
+      - name: Show disk space (after)
+        run: sudo df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Bootstrap pinned mkosi
+        run: ./shared/native-ab/ci/bootstrap-mkosi.sh .mkosi
+
+      - name: Assert mkosi pin matches build.yml
+        run: ./shared/native-ab/ci/check-mkosi-pin.sh .mkosi
+
+      - name: Prepare mkosi build host
+        run: |
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_unconfined=0
+          sudo sysctl --ignore --write kernel.apparmor_restrict_unprivileged_userns=0
+          sudo aa-teardown || true
+          sudo apt-get remove -y apparmor || true
+          sudo mkdir -p /var/lib/ca-certificates
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends debian-archive-keyring \
+            dracut-core binutils file python3-cryptography
+
+      - name: Generate ephemeral Secure Boot/MOK and PCR signing key material
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p .snosi-private/history
+          openssl req -x509 -newkey rsa:4096 -nodes -days 2 \
+            -keyout mkosi.key -out mkosi.crt \
+            -subj "/CN=snosi native PR ephemeral MOK"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 2 \
+            -keyout .snosi-private/pcr-signing.key \
+            -out .snosi-private/pcr-signing.crt \
+            -subj "/CN=snosi native PR ephemeral PCR"
+          openssl x509 -in .snosi-private/pcr-signing.crt -pubkey -noout \
+            > .snosi-private/pcr-signing.pub
+
+      - name: Build image
+        run: |
+          sudo SNOSI_NATIVE_AUTOSTAGE=1 TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile "$PROFILE" \
+            --dependency= \
+            --dependency=base \
+            --image-version "$VERSION" \
+            build
+
+      - name: Remove ephemeral Secure Boot/MOK and PCR signing key material
+        if: always()
+        run: |
+          rm -f mkosi.key mkosi.crt .snosi-private/pcr-signing.key .snosi-private/pcr-signing.crt
+
+      - name: Validate native A/B secure artifact contract
+        run: |
+          OUTPUT_NAME="$PROFILE" ./test/native-ab-secure-artifact-test.sh \
+            "" "" "" .snosi-private/pcr-signing.pub single
+
+      - name: Validate Snowfield Surface artifact contract
+        if: matrix.product == 'snowfield'
+        run: sudo OUTPUT_NAME="$PROFILE" IMAGE_ID="$PRODUCT" ./test/snowfield-artifact-test.sh
+
+      - name: cleanup build output
+        if: always()
+        run: sudo -E .mkosi/bin/mkosi clean
+
   # ===========================================================================
   # build-cayo / build-snow / build-snowfield
   #
@@ -133,6 +239,7 @@ jobs:
 
   build-cayo:
     needs: prepare
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     environment: native-build
@@ -295,6 +402,7 @@ jobs:
 
   build-snow:
     needs: prepare
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     environment: native-build
@@ -436,6 +544,7 @@ jobs:
 
   build-snowfield:
     needs: prepare
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     environment: native-build
@@ -1074,6 +1183,7 @@ jobs:
   # ===========================================================================
   build-iso:
     needs: prepare
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: native-build

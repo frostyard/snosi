@@ -30,7 +30,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
-  build:
+  secure-build:
+    if: >-
+      github.event_name != 'pull_request' &&
+      github.ref == 'refs/heads/main'
+    environment: native-build
     runs-on: ubuntu-latest
     # A hung mkosi/apt otherwise burns the 6-hour default per matrix leg.
     timeout-minutes: 180
@@ -68,6 +72,20 @@ jobs:
         with:
           target-dir: /var/lib/containers
 
+      - name: Configure Podman OCI runtime
+        # GitHub runner 20260726 upgraded Podman 4.9.3 -> 5.8.4; its default
+        # crun path rejects the generated OCI version. The matched bundled
+        # runc works for direct and script-nested podman invocations.
+        run: |
+          sudo install -d -m 0755 /etc/containers/containers.conf.d
+          printf '%s\n' '[engine]' 'runtime = "runc"' \
+            | sudo tee /etc/containers/containers.conf.d/99-snosi-ci-runtime.conf >/dev/null
+          runtime=$(sudo podman info --format '{{.Host.OCIRuntime.Name}}')
+          [[ $runtime == runc ]] || {
+            echo "::error::Podman selected OCI runtime '$runtime', expected 'runc'" >&2
+            exit 1
+          }
+
       - name: Redirect temp to /mnt
         # / (/dev/root) has ~45G free after cleanup; /mnt has ~70G free. mkosi's
         # build workspace and podman/buildah tar staging default to TMPDIR
@@ -92,11 +110,11 @@ jobs:
 
       - name: Generate build date
         id: date
-        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Generate version tag
         id: version
-        run: echo "tag=$(date +%Y%m%d%H%M%S)" >> $GITHUB_OUTPUT
+        run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
 
       - name: setup-mkosi
         uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf
@@ -109,9 +127,44 @@ jobs:
             --image-version "${{ steps.version.outputs.tag }}" \
             build
 
+      - name: Materialize protected bootc signing credentials
+        env:
+          NATIVE_SECURE_BOOT_KEY: ${{ secrets.NATIVE_SECURE_BOOT_KEY }}
+          NATIVE_SECURE_BOOT_CERTIFICATE: ${{ secrets.NATIVE_SECURE_BOOT_CERTIFICATE }}
+          NATIVE_PCR_SIGNING_KEY: ${{ secrets.NATIVE_PCR_SIGNING_KEY }}
+          NATIVE_PCR_SIGNING_CERTIFICATE: ${{ secrets.NATIVE_PCR_SIGNING_CERTIFICATE }}
+        run: |
+          set -euo pipefail
+          for name in NATIVE_SECURE_BOOT_KEY NATIVE_SECURE_BOOT_CERTIFICATE NATIVE_PCR_SIGNING_KEY NATIVE_PCR_SIGNING_CERTIFICATE; do
+            [[ -n "${!name}" ]] || { echo "::error::secrets.$name is not set in native-build" >&2; exit 1; }
+          done
+          umask 077
+          mkdir -p /var/tmp/bootc-secure-credentials
+          printf '%s' "$NATIVE_SECURE_BOOT_KEY" > /var/tmp/bootc-secure-credentials/mok.key
+          printf '%s' "$NATIVE_SECURE_BOOT_CERTIFICATE" > /var/tmp/bootc-secure-credentials/mok.crt
+          printf '%s' "$NATIVE_PCR_SIGNING_KEY" > /var/tmp/bootc-secure-credentials/pcr.key
+          printf '%s' "$NATIVE_PCR_SIGNING_CERTIFICATE" > /var/tmp/bootc-secure-credentials/pcr.crt
+          chmod 600 /var/tmp/bootc-secure-credentials/*
+          openssl x509 -in /var/tmp/bootc-secure-credentials/pcr.crt -pubkey -noout \
+            > /var/tmp/bootc-secure-credentials/pcr.pub
+          chmod 600 /var/tmp/bootc-secure-credentials/pcr.pub
+          cmp -s /var/tmp/bootc-secure-credentials/mok.crt shared/native-ab/keys/mok-2026.crt || {
+            echo "::error::protected MOK certificate differs from the committed identity" >&2
+            exit 1
+          }
+          cmp -s /var/tmp/bootc-secure-credentials/pcr.pub shared/native-ab/keys/pcr-signing-2026.pub || {
+            echo "::error::protected PCR certificate differs from the committed identity" >&2
+            exit 1
+          }
+
       - name: Package image
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          SNOSI_BOOTC_SECURE: "1"
+          SNOSI_BOOTC_MOK_KEY: /var/tmp/bootc-secure-credentials/mok.key
+          SNOSI_BOOTC_MOK_CERT: /var/tmp/bootc-secure-credentials/mok.crt
+          SNOSI_BOOTC_PCR_KEY: /var/tmp/bootc-secure-credentials/pcr.key
+          SNOSI_BOOTC_PCR_CERT: /var/tmp/bootc-secure-credentials/pcr.pub
         run: |
           sudo TMPDIR="$TMPDIR" ./shared/outformat/image/buildah-package.sh \
             output/${{ matrix.profile }} \
@@ -124,8 +177,21 @@ jobs:
             "org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/tree/${{ github.sha }}" \
             "org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/${{ github.sha }}/README.md"
 
+      - name: Validate locally assembled secure artifact
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo ./test/bootc-secure-artifact-test.sh \
+            "output/${{ matrix.profile }}" \
+            "$IMAGE:${{ steps.version.outputs.tag }}" \
+            /var/tmp/bootc-secure-credentials/mok.crt \
+            /var/tmp/bootc-secure-credentials/pcr.pub
+
+      - name: Remove protected bootc signing credentials
+        if: always()
+        run: sudo rm -rf /var/tmp/bootc-secure-credentials
+
       - name: Chunk image
-        if: github.event_name != 'pull_request'
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
           MAX_LAYERS: 128
@@ -160,13 +226,11 @@ jobs:
 
       - name: Setup Syft
         id: setup-syft
-        if: github.event_name != 'pull_request'
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
           syft-version: v1.39.0
 
       - name: Generate SBOM
-        if: github.event_name != 'pull_request'
         id: generate-sbom
         env:
           PROFILE: ${{ matrix.profile }}
@@ -178,8 +242,7 @@ jobs:
           du -sh "${SBOM}"
           echo "SBOM=${SBOM}" >> "$GITHUB_OUTPUT"
 
-      - name: Push image
-        if: github.event_name != 'pull_request'
+      - name: Push immutable version tag
         id: push
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
@@ -200,58 +263,84 @@ jobs:
             echo "::error::Failed to extract valid digest: $DIGEST"
             exit 1
           fi
-          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
-
-          sudo buildah tag \
-            "$IMAGE:${{ steps.version.outputs.tag }}" \
-            "$IMAGE:latest"
-          sudo TMPDIR="$TMPDIR" buildah push \
-            --compression-format=zstd:chunked \
-            "$IMAGE:latest" \
-            "docker://$IMAGE:latest"
-
-      - name: Record snow tag for release job
-        # Runs only after a successful snow push. The tag travels to the
-        # release job as an artifact — matrix job outputs are last-writer-wins
-        # across legs, so they can't gate the release deterministically.
-        if: matrix.profile == 'snow' && github.event_name != 'pull_request'
-        run: echo "${{ steps.version.outputs.tag }}" > snow-tag.txt
-
-      - name: Upload snow tag artifact
-        if: matrix.profile == 'snow' && github.event_name != 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: snow-tag
-          path: snow-tag.txt
-          retention-days: 1
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Log in to ghcr.io
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+        with:
+          cosign-release: "v2.6.1"
+
+      - name: Sign immutable image digest
+        # docker/login-action writes the user-context registry credentials
+        # shared by Cosign, Skopeo verification, and latest promotion.
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
+            "$IMAGE@${{ steps.push.outputs.digest }}"
+
+      - name: Verify pushed secure image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          VERSION_TAG: ${{ steps.version.outputs.tag }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          LOCAL_REF: localhost/snosi-verified-${{ matrix.profile }}:${{ steps.version.outputs.tag }}
+        run: ./shared/bootc-secure/ci/verify-published-image.sh "$IMAGE" "$VERSION_TAG" "$DIGEST" "$LOCAL_REF"
+
+      - name: Validate policy-copied secure artifact
+        env:
+          LOCAL_REF: localhost/snosi-verified-${{ matrix.profile }}:${{ steps.version.outputs.tag }}
+        run: |
+          sudo ./test/bootc-secure-artifact-test.sh \
+            "output/${{ matrix.profile }}" "$LOCAL_REF" \
+            "output/${{ matrix.profile }}/usr/lib/snosi/mok.crt" \
+            "output/${{ matrix.profile }}/usr/lib/snosi/pcr-signing.pub"
+
+      - name: Promote validated digest to latest
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          skopeo copy --all \
+            "docker://$IMAGE@${{ steps.push.outputs.digest }}" \
+            "docker://$IMAGE:latest"
+          latest_digest=$(skopeo inspect --format '{{.Digest}}' "docker://$IMAGE:latest")
+          [[ "$latest_digest" == "${{ steps.push.outputs.digest }}" ]] || {
+            echo "::error::latest resolved to $latest_digest instead of ${{ steps.push.outputs.digest }}" >&2
+            exit 1
+          }
+
+      - name: Record snow tag for release job
+        # Runs only after the immutable candidate has become latest. The tag
+        # travels to the release job because matrix outputs are last-writer-wins.
+        if: matrix.profile == 'snow'
+        run: echo "${{ steps.version.outputs.tag }}" > snow-tag.txt
+
+      - name: Upload snow tag artifact
+        if: matrix.profile == 'snow'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snow-tag
+          path: snow-tag.txt
+          retention-days: 1
+
       - name: Install ORAS
-        if: github.event_name != 'pull_request'
         uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
 
       - name: Login to GHCR with ORAS
-        if: github.event_name != 'pull_request'
         env:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: |
           echo "${GHCR_PAT}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Install Cosign
-        if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
-        with:
-          cosign-release: "v2.6.1"
-
       - name: Upload SBOM
-        if: github.event_name != 'pull_request'
         id: upload-sbom
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
@@ -273,7 +362,6 @@ jobs:
           echo "sbom_digest=${sbom_digest}" >> "$GITHUB_OUTPUT"
 
       - name: Sign SBOM
-        if: github.event_name != 'pull_request'
         env:
           COSIGN_EXPERIMENTAL: "false"
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
@@ -283,20 +371,7 @@ jobs:
           cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
             "${IMAGE}@${SBOM_DIGEST}"
 
-      - name: Sign image
-        if: github.event_name != 'pull_request'
-        # No cosign login needed: the docker/login-action step above already
-        # wrote registry credentials to the docker config cosign reads.
-        # (The removed 'cosign login -p' also leaked the PAT on argv.)
-        run: |
-          cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
-            "$IMAGE@${{ steps.push.outputs.digest }}"
-        env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
-          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
-
       - name: Attest build provenance
-        if: github.event_name != 'pull_request'
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
@@ -304,12 +379,10 @@ jobs:
           push-to-registry: true
 
       - name: Move manifests
-        if: github.event_name != 'pull_request'
         run: |
           sudo ./manifestmv.sh
 
       - name: Upload manifests to R2
-        if: github.event_name != 'pull_request'
         uses: ryand56/r2-upload-action@b801a390acbdeb034c5e684ff5e1361c06639e7c
         with:
           r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
@@ -323,9 +396,128 @@ jobs:
         run: |
           sudo -E mkosi clean
 
+  mechanics-build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: cayo
+            description: "Cayo Linux Server Image"
+          - profile: snow
+            description: "Snow Linux OS Image"
+          - profile: snowfield
+            description: "Snowfield Linux OS Image"
+    steps:
+      - name: Show disk space (before)
+        run: sudo df -h
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+
+      - name: Mount BTRFS for podman storage
+        uses: ublue-os/container-storage-action@dc1f4c8f17b672069e921f001132f7cf98a423a6 # main 2026-02-11
+        with:
+          target-dir: /var/lib/containers
+
+      - name: Configure Podman OCI runtime
+        # GitHub runner 20260726 upgraded Podman 4.9.3 -> 5.8.4; its default
+        # crun path rejects the generated OCI version. The matched bundled
+        # runc works for direct and script-nested podman invocations.
+        run: |
+          sudo install -d -m 0755 /etc/containers/containers.conf.d
+          printf '%s\n' '[engine]' 'runtime = "runc"' \
+            | sudo tee /etc/containers/containers.conf.d/99-snosi-ci-runtime.conf >/dev/null
+          runtime=$(sudo podman info --format '{{.Host.OCIRuntime.Name}}')
+          [[ $runtime == runc ]] || {
+            echo "::error::Podman selected OCI runtime '$runtime', expected 'runc'" >&2
+            exit 1
+          }
+
+      - name: Redirect temp to /mnt
+        run: |
+          sudo mkdir -p /mnt/tmp
+          sudo chmod 1777 /mnt/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
+      - name: Show disk space (after)
+        run: sudo df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Check mkosi package duplicates
+        run: ./check-duplicate-packages.sh
+
+      - name: Generate build date
+        id: date
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate version tag
+        id: version
+        run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
+
+      - name: setup-mkosi
+        uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf
+
+      - name: Build Image
+        run: |
+          sudo TMPDIR="$TMPDIR" mkosi --profile ${{ matrix.profile }} \
+            --dependency= \
+            --dependency=base \
+            --image-version "${{ steps.version.outputs.tag }}" \
+            build
+
+      - name: Package image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo TMPDIR="$TMPDIR" ./shared/outformat/image/buildah-package.sh \
+            output/${{ matrix.profile }} \
+            "$IMAGE:${{ steps.version.outputs.tag }}" \
+            "org.opencontainers.image.title=${{ matrix.profile }}" \
+            "org.opencontainers.image.description=${{ matrix.description }}" \
+            "org.opencontainers.image.version=${{ steps.version.outputs.tag }}" \
+            "org.opencontainers.image.created=${{ steps.date.outputs.date }}" \
+            "org.opencontainers.image.source=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/blob/${{ github.sha }}/mkosi.conf" \
+            "org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/tree/${{ github.sha }}" \
+            "org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/${{ github.sha }}/README.md"
+
+      - name: Smoke test - verify SUID bit and bcvk requirements
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo podman run --rm "$IMAGE:${{ steps.version.outputs.tag }}" sh -ec '
+            mode=$(stat -c "%a" /usr/bin/sudo)
+            echo "sudo permissions: $mode"
+            if [ "$mode" != "4755" ]; then
+              echo "::error::SUID bit not set on /usr/bin/sudo (expected 4755, got $mode)"
+              exit 1
+            fi
+
+            for required in bwrap systemctl objcopy ssh ssh-keygen; do
+              if ! command -v "$required" >/dev/null; then
+                echo "::error::Missing $required required for optional bcvk testing"
+                exit 1
+              fi
+            done
+          '
+
+      - name: cleanup build output
+        if: always()
+        run: sudo -E mkosi clean
+
   release:
     runs-on: ubuntu-latest
-    needs: build
+    needs: secure-build
     # !cancelled(): run whenever the matrix finished, even if a sibling
     # profile failed (fail-fast is off) — previously any failed leg skipped
     # the release and that interval's changes were never described in any
