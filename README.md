@@ -59,6 +59,11 @@ The project produces:
 | **tailscale**       | Tailscale VPN client                                            | sysext        |
 | **vscode**          | Visual Studio Code desktop application                          | sysext        |
 
+Protected bootc publication validates each candidate with host Podman while
+running the candidate image's pinned bootc for its composefs storage digest.
+The publisher does not depend on a separate host bootc installation, avoiding
+version drift at that compatibility boundary.
+
 ## Architecture
 
 Naming, path, and policy contracts for the production native A/B products

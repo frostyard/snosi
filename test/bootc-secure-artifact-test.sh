@@ -20,7 +20,7 @@ PCR_CERT=${4:?Usage: $0 ROOTFS OCI_IMAGE_REF MOK_CERT PCR_CERT [PREVIOUS_PCR_CER
 PREVIOUS_PCR_CERT=${5:-}
 
 [[ -d "$ROOTFS" ]] || { echo "Error: missing rootfs: $ROOTFS" >&2; exit 1; }
-for command in bootc buildah jq objcopy objdump openssl sbverify; do
+for command in buildah jq objcopy objdump openssl podman sbverify; do
     command -v "$command" >/dev/null || { echo "BLOCKED: missing $command" >&2; exit 2; }
 done
 

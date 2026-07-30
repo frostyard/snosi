@@ -51,6 +51,9 @@ Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependen
 
 **Protected publication steps:**
 1. Transiently materialize the durable production MOK/PCR signing credentials supplied by the four `NATIVE_*` secrets, then build and package each profile. The supplied MOK certificate and derived PCR public key must byte-match the committed public identities; runner-local credential files are removed unconditionally after local artifact validation and before registry writes. The distinct disposable PR keys remain ephemeral.
+   Local validation requires host Podman, not host bootc: the validator runs the
+   candidate image's pinned bootc 1.16.3 to recompute its storage composefs digest.
+   The same boundary applies to the policy-copied validation after registry pull.
 2. Chunk, smoke test, and generate the SBOM, then use root Buildah's stdin login to push only the immutable timestamp tag and capture its digest.
 3. Use the Docker credential context to sign `IMAGE@DIGEST`, verify its remote digest/secure labels and Cosign signature, and copy it through the restrictive repository policy before validating the copied UKI/composefs artifact.
 4. Copy the verified immutable digest registry-to-registry to `latest`, and assert that `latest` resolves to that same digest. No local Buildah bytes are pushed under the mutable tag.
