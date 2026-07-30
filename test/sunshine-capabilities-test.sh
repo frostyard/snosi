@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-scratch=$(mktemp -d /tmp/opencode/sunshine-capabilities-test.XXXXXX)
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/sunshine-capabilities-test.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 
 mkdir -p "$scratch/shared/download" "$scratch/bin"
