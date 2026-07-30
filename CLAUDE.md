@@ -1503,8 +1503,10 @@ units.
 host for Moonlight installed from its official pinned Trixie deb through
 `verified_download()`. Its native `/usr` layout retains the package's
 `cap_sys_admin,cap_sys_nice` capability, `uhid` modules-load entry, and udev
-access rules. Its upstream user service is available for manual user startup;
-do not add a preset or `Upholds=` activation.
+access rules. After first enabling and merging the sysext, the modules-load
+entry and virtual-input udev rules take effect on the next boot unless manually
+applied. Its upstream user service is available for manual user startup; do not
+add a preset or `Upholds=` activation.
 
 Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var` at runtime. Configs needed in `/etc` must be:
 

@@ -155,6 +155,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 ### sunshine
 - `mkosi.postinst.chroot` downloads Sunshine's official pinned Trixie `.deb` with `verified_download()` and installs it with `dpkg -i`; its payload already uses the native `/usr` layout, so no relocation is needed
 - Desktop-only self-hosted game streaming host for Moonlight; retain the package's `cap_sys_admin,cap_sys_nice` file capability on `/usr/bin/sunshine`, `uhid` modules-load entry, and udev access rules
+- After first enabling and merging the sysext, the `uhid` modules-load entry and virtual-input udev rules take effect on the next boot unless manually applied
 - The upstream `app-dev.lizardbyte.app.Sunshine.service` user unit is available for manual user startup only: no user preset and no `Upholds=` drop-in provide automatic activation
 - Ships a hicolor icon, so `sysext-strip-icon-cache.sh` is required
 
