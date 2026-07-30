@@ -128,6 +128,7 @@ remove_forwarded_package_variable() {
     perl -0pi -e "s/^            $1=\\\"\\\$$1\\\" \\\\\n//m" \
         "$2/.github/workflows/build-images.yml"
 }
+remove_sudo_tmpdir() { perl -0pi -e 's/^          sudo TMPDIR="\$TMPDIR" \\\n//m' "$1/.github/workflows/build-images.yml"; }
 remove_cleanup_condition() { perl -0pi -e 's/        if: always\(\)\n//' "$1/.github/workflows/build-images.yml"; }
 break_label_check() { perl -0pi -e 's/== "true"/== "false"/' "$1/shared/bootc-secure/ci/verify-published-image.sh"; }
 remove_label_check() { perl -0pi -e 's/    \.Labels\["io\.snosi\.bootc\.secureboot-capable"\].*\n//' "$1/shared/bootc-secure/ci/verify-published-image.sh"; }
@@ -159,6 +160,7 @@ for variable in SNOSI_BOOTC_SECURE SNOSI_BOOTC_MOK_KEY SNOSI_BOOTC_MOK_CERT SNOS
     assert_guard "missing sudo-forwarded $variable fails" 1 \
         remove_forwarded_package_variable "$variable"
 done
+assert_guard 'missing sudo TMPDIR forwarding fails' 1 remove_sudo_tmpdir
 assert_guard 'missing unconditional cleanup fails' 1 remove_cleanup_condition
 assert_guard 'false secure label check fails' 1 break_label_check
 assert_guard 'missing secure label check fails' 1 remove_label_check

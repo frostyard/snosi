@@ -151,8 +151,9 @@ else
             capture && /^      - name: / && $0 != "      - name: Validate locally assembled secure artifact" { exit }
             capture { print }
         ' <<<"$secure_job")
+        # shellcheck disable=SC2016 # GitHub expression is an exact literal marker.
         if ! grep -Fq './test/bootc-secure-artifact-test.sh' <<<"$local_validation" ||
-                ! grep -Fq "\"output/\${{ matrix.profile }}\"" <<<"$local_validation"; then
+                ! grep -Fq '"output/${{ matrix.profile }}"' <<<"$local_validation"; then
             fail_check "$workflow secure-build: missing local secure artifact validation"
         fi
 
@@ -161,8 +162,9 @@ else
             capture && /^      - name: / && $0 != "      - name: Validate policy-copied secure artifact" { exit }
             capture { print }
         ' <<<"$secure_job")
+        # shellcheck disable=SC2016 # Shell variable reference is an exact literal marker.
         if ! grep -Fq './test/bootc-secure-artifact-test.sh' <<<"$remote_validation" ||
-                ! grep -Fq "\"\$LOCAL_REF\"" <<<"$remote_validation"; then
+                ! grep -Fq '"$LOCAL_REF"' <<<"$remote_validation"; then
             fail_check "$workflow secure-build: missing policy-copied artifact validation"
         fi
 
