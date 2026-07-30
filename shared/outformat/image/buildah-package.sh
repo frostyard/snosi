@@ -116,6 +116,7 @@ if [[ ${SNOSI_BOOTC_SECURE:-0} == 1 ]]; then
         bootc container compute-composefs-digest-from-storage "$first_image" | tr -d '\n')
     [[ $digest =~ ^[[:xdigit:]]{128}$ ]] || { echo "Error: unsupported bootc storage-digest interface" >&2; exit 1; }
     SNOSI_BOOTC_SECURE_COMPOSEFS_DIGEST="$digest" SNOSI_BOOTC_SECURE_BOOTC_VERSION=1.16.3 \
+        SNOSI_BOOTC_SECURE_UKIFY_IMAGE="$first_image" \
         SNOSI_BOOTC_PREVIOUS_PCR_KEY="${SNOSI_BOOTC_PREVIOUS_PCR_KEY:-}" \
         "$ASSEMBLER" "$ROOTFS_DIR" \
         "$SNOSI_BOOTC_MOK_KEY" "$SNOSI_BOOTC_MOK_CERT" "$SNOSI_BOOTC_PCR_KEY" "$SNOSI_BOOTC_PCR_CERT" \

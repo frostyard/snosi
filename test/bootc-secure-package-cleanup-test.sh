@@ -79,6 +79,7 @@ count=0
 [[ ! -f "$count_file" ]] || count=$(<"$count_file")
 count=$((count + 1))
 printf '%s' "$count" >"$count_file"
+printf '%s\n' "$@" >"$BUILD_FIXTURE_STATE/podman-$count-args"
 if [[ ${BUILD_FIXTURE_FINAL_PROBE_FAIL:-0} == 1 && $count -eq 2 ]]; then
     exit 86
 fi
@@ -104,6 +105,7 @@ if [[ $1 == --prepare-systemd-boot-source ]]; then
     printf 'immutable-bootloader\n' >"$2/usr/lib/snosi/bootc/systemd-bootx64.efi"
     exit 0
 fi
+printf '%s\n' "${SNOSI_BOOTC_SECURE_UKIFY_IMAGE:-}" >"$BUILD_FIXTURE_STATE/ukify-image"
 touch "$BUILD_FIXTURE_STATE/assembler-invoked"
 mkdir -p "$1/boot/EFI/Linux" "$1/boot/EFI/BOOT"
 printf 'injected-uki\n' >"$1/boot/EFI/Linux/test-kernel.efi"
@@ -114,15 +116,26 @@ EOF
         "$state/bin/umount" "$state/bin/buildah" "$state/bin/podman" "$state/assembler"
 }
 
-assert_cleanup() { # state root first final published
-    local state=$1 root=$2 first=$3 final=$4 published=$5
+assert_cleanup() { # state root published
+    local state=$1 root=$2 published=$3 ukify_image first final
     [[ -f "$state/assembler-invoked" ]] || fail "controlled assembler was not invoked"
+    [[ -f "$state/ukify-image" ]] || fail "assembler did not receive a ukify image"
+    ukify_image=$(<"$state/ukify-image")
+    [[ $ukify_image == localhost/snosi-bootc-secure-first-[0-9]* ]] ||
+        fail "assembler did not receive the exact first-pass ukify image"
+    first=$(grep -m1 -E '^localhost/snosi-bootc-secure-first-[0-9]+$' "$state/podman-1-args" || true)
+    final=""
+    [[ ! -f "$state/podman-2-args" ]] || final=$(grep -m1 -E '^localhost/snosi-bootc-secure-final-[0-9]+$' "$state/podman-2-args" || true)
+    [[ -n $first ]] || fail "first probe image was not captured from Podman"
+    [[ ! -f "$state/podman-2-args" || -n $final ]] || fail "final probe image was not captured from Podman"
+    { [[ -f "$state/podman-1-args" ]] && grep -Fxq -- "$ukify_image" "$state/podman-1-args"; } ||
+        fail "assembler ukify image differs from the first digest candidate"
     [[ -f "$state/mount-invoked" && $(<"$state/mount-invoked") == "--bind /proc $root/proc" ]] || fail "rootfs proc bind was not exact"
     [[ -f "$state/chroot-invoked" && $(<"$state/chroot-invoked") == "$root /usr/bin/bootc --version" ]] || fail "bootc version did not use rootfs chroot"
     [[ -f "$state/umount-invoked" && $(<"$state/umount-invoked") == "$root/proc" ]] || fail "rootfs proc unmount was not exact"
     [[ ! -e "$state/proc-mounted" ]] || fail "rootfs proc mount survived"
     [[ ! -e "$state/images/$(image_path "$first")" ]] || fail "first probe image survived"
-    [[ ! -e "$state/images/$(image_path "$final")" ]] || fail "final probe image survived"
+    [[ -z $final || ! -e "$state/images/$(image_path "$final")" ]] || fail "final probe image survived"
     [[ ! -e "$state/images/$(image_path "$published")" ]] || fail "published image survived"
     [[ ! -e "$root/boot/EFI/Linux/test-kernel.efi" ]] || fail "Task 5 UKI residue survived"
     [[ ! -e "$root/boot/EFI/BOOT/grubx64.efi" ]] || fail "Task 5 bootloader residue survived"
@@ -132,12 +145,10 @@ assert_cleanup() { # state root first final published
 }
 
 run_case() { # name assembler-fails|final-probe-fails|published-digest-mismatch
-    local name=$1 work state root first final published status
+    local name=$1 work state root published status
     work=$(mktemp -d)
     trap 'rm -rf -- "$work"' RETURN
     state="$work/state"; root="$work/root"
-    first="localhost/snosi-bootc-secure-first-$$"
-    final="localhost/snosi-bootc-secure-final-$$"
     published="localhost/task5-cleanup-$name:latest"
     write_fixtures "$state" "$root"
     set +e
@@ -152,7 +163,7 @@ run_case() { # name assembler-fails|final-probe-fails|published-digest-mismatch
     status=$?
     set -e
     [[ $status -ne 0 ]] || fail "$name unexpectedly succeeded"
-    assert_cleanup "$state" "$root" "$first" "$final" "$published"
+    assert_cleanup "$state" "$root" "$published"
 
     # A fresh secure invocation must not be blocked by leftovers from the failure.
     set +e
