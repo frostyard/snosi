@@ -38,17 +38,15 @@ its file list contains executable `/usr/bin/ukify` and the
 `/usr/lib/systemd/ukify -> ../../bin/ukify` compatibility symlink. This is a
 pinned compatibility observation, not an assumed package layout.
 
-Ukify reads these immutable inputs directly from the candidate image:
-
-- `/usr/lib/modules/<kernel>/vmlinuz`;
-- `/usr/lib/modules/<kernel>/initramfs.img`;
-- `/usr/lib/os-release`;
-- the candidate's pinned `systemd-ukify` and all of its dependencies.
+Ukify reads `/usr/lib/os-release`, pinned `systemd-ukify`, and its dependencies
+from the candidate image. The kernel and initrd use the staged-input contract
+below.
 
 The assembler rejects a discovered kernel or initrd path outside the supplied
 rootfs, then translates every host-side path in the current ukify arguments:
 
-- kernel and initrd become their absolute paths below `/usr/lib/modules`;
+- kernel and initrd become `/run/snosi-ukify-work/linux` and
+  `/run/snosi-ukify-work/initrd` after canonical staging;
 - os-release becomes `@/usr/lib/os-release`;
 - active and previous PCR private keys become fixed credential mount paths;
 - MOK private key and certificate become fixed credential mount paths;
@@ -56,6 +54,27 @@ rootfs, then translates every host-side path in the current ukify arguments:
 - output becomes `/run/snosi-ukify-work/uki.efi`.
 
 No host-rootfs or host-work path may remain in the container command.
+
+## Protected-Input Follow-Up
+
+Protected run `30579247524` (cayo job `90995134482`) proved the explicit
+credential-owner fix but then failed with `PermissionError: [Errno 13]` reading
+`/usr/lib/modules/7.1.3+deb13-amd64/initramfs.img`. The candidate correctly ran
+as the unprivileged credential UID with `--cap-drop=all`; it must not receive DAC
+capabilities, run as root, loosen rootfs modes, or mutate the first-pass image.
+Snow and Snowfield also failed Package image, and no validation, push, signing,
+or promotion ran.
+
+The revised design canonicalizes the discovered rootfs kernel and initrd,
+rejecting escape symlinks while allowing relative and rootfs-absolute internal
+symlinks. Before candidate execution it stages byte-identical mode-0644 public
+copies in the assembler-owned work directory. Ukify receives exactly
+`/run/snosi-ukify-work/linux` and `/run/snosi-ukify-work/initrd`. After execution
+the assembler compares those files against the canonical protected originals;
+any candidate rewrite fails closed. Final UKI `.linux` and `.initrd` validation
+also compares against those canonical originals. The originals remain outside
+the mount as the sole protected authority, so this does not expose secrets or
+retain another protected-mode copy.
 
 ## Ephemeral Mount Contract
 

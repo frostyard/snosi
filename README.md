@@ -447,17 +447,22 @@ require a matching host bootc or host libostree ABI; candidate-image bootc
 remains the storage-digest authority.
 Direct ukify similarly runs as `/usr/bin/ukify` inside the pristine first-pass
 candidate, with networking disabled, individual read-only credential mounts,
-and a public-only writable work mount. Its pinned systemd-ukify 261.1-3 and
-dependencies therefore come from the candidate, never the host; the disposable
-container and mounts do not enter a layer. Host `.linux` and `.initrd` byte
-checks remain valid because first-pass packaging is a byte-identical `cp -a`
-snapshot.
+and a public-only writable work mount. Protected run `30579247524` exposed that
+the unprivileged candidate cannot read a mode-restricted in-image initramfs.
+The assembler therefore canonicalizes in-root kernel/initrd sources, stages
+byte-identical mode-0644 public copies at fixed work paths, compares them with
+the protected originals after ukify, and validates final UKI sections against
+those originals. Its pinned systemd-ukify 261.1-3 and dependencies therefore
+come from the candidate, never the host; the disposable container and mounts do
+not enter a layer. Host `.linux` and `.initrd` byte checks remain valid because
+first-pass packaging is a byte-identical `cp -a` snapshot.
 The candidate runs with all Linux capabilities dropped as the common numeric
 credential owner, retaining mode-0600 credentials without capabilities.
 Protected active
 and optional previous PCR public identities remain outside the writable mount;
 the copied public inputs are checked against those identities after execution.
-This is not production Secure Boot support: published `latest` images inspected
+This remains not production Secure Boot support: the failed protected run did
+not reach validation, push, signing, or promotion, and published `latest` images inspected
 on 2026-07-27 lacked `io.snosi.bootc.secureboot-capable` and are unsuitable for
 the secure install/update harnesses. MOK/TPM enrollment and full secure
 installation remain blocked pending signed secure N/N+1/N+2/transition OCI

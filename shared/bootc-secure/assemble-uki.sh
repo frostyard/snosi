@@ -11,6 +11,8 @@ readonly CANDIDATE_UKIFY_MOK_CERT=/run/snosi-ukify-mok.crt
 readonly CANDIDATE_UKIFY_PCR_KEY=/run/snosi-ukify-pcr.key
 readonly CANDIDATE_UKIFY_PREVIOUS_KEY=/run/snosi-ukify-previous-pcr.key
 readonly CANDIDATE_UKIFY_WORK=/run/snosi-ukify-work
+readonly CANDIDATE_UKIFY_LINUX="$CANDIDATE_UKIFY_WORK/linux"
+readonly CANDIDATE_UKIFY_INITRD="$CANDIDATE_UKIFY_WORK/initrd"
 
 die() { echo "Error: $*" >&2; exit 1; }
 valid_digest() { [[ ${1:-} =~ ^[[:xdigit:]]{128}$ ]]; }
@@ -321,6 +323,32 @@ rootfs_image_path() { # rootfs host-path
     printf '/%s\n' "$relative"
 }
 
+rootfs_source_path() { # rootfs discovered-host-path
+    local root=$1 source=$2 canonical_root image_path
+    canonical_root=$(realpath -e "$root") || die "rootfs path cannot be resolved: $root"
+    image_path=$(rootfs_image_path "$root" "$source")
+    printf '%s%s\n' "$canonical_root" "$image_path"
+}
+
+stage_public_kernel_inputs() { # rootfs kernel initrd work-directory
+    local root=$1 kernel=$2 initrd=$3 work=$4 source_kernel source_initrd
+    source_kernel=$(rootfs_source_path "$root" "$kernel")
+    source_initrd=$(rootfs_source_path "$root" "$initrd")
+    [[ -f "$source_kernel" && -f "$source_initrd" ]] || die "canonical kernel inputs must be regular files"
+    install -m 0644 "$source_kernel" "$work/linux"
+    install -m 0644 "$source_initrd" "$work/initrd"
+    cmp -s "$source_kernel" "$work/linux" || die "staged kernel differs from canonical rootfs source"
+    cmp -s "$source_initrd" "$work/initrd" || die "staged initrd differs from canonical rootfs source"
+}
+
+verify_exposed_kernel_inputs() { # rootfs kernel initrd work-directory
+    local root=$1 kernel=$2 initrd=$3 work=$4 source_kernel source_initrd
+    source_kernel=$(rootfs_source_path "$root" "$kernel")
+    source_initrd=$(rootfs_source_path "$root" "$initrd")
+    cmp -s "$source_kernel" "$work/linux" || die "candidate changed staged kernel input"
+    cmp -s "$source_initrd" "$work/initrd" || die "candidate changed staged initrd input"
+}
+
 verify_exposed_pcr_public_keys() { # active-public work-directory [previous-public]
     local active=$1 work=$2 previous=${3:-}
     cmp -s "$active" "$work/pcr.pub" || die "candidate changed active PCR public key"
@@ -330,11 +358,10 @@ verify_exposed_pcr_public_keys() { # active-public work-directory [previous-publ
 
 candidate_ukify_args() { # rootfs kernel initrd digest version previous-key output-array
     local root=$1 kernel=$2 initrd=$3 digest=$4 version=$5 previous_key=$6 output_name=$7
-    local image_kernel image_initrd
     local -n output="$output_name"
-    image_kernel=$(rootfs_image_path "$root" "$kernel")
-    image_initrd=$(rootfs_image_path "$root" "$initrd")
-    output=(build --linux "$image_kernel" --initrd "$image_initrd"
+    rootfs_image_path "$root" "$kernel" >/dev/null
+    rootfs_image_path "$root" "$initrd" >/dev/null
+    output=(build --linux "$CANDIDATE_UKIFY_LINUX" --initrd "$CANDIDATE_UKIFY_INITRD"
         --os-release @/usr/lib/os-release --cmdline "rw composefs=?$digest"
         --uname "$version" --pcr-private-key "$CANDIDATE_UKIFY_PCR_KEY"
         --secureboot-private-key "$CANDIDATE_UKIFY_MOK_KEY"
@@ -352,7 +379,7 @@ candidate_ukify_args() { # rootfs kernel initrd digest version previous-key outp
 
 assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     local root=$1 mok_key=$2 mok_cert=$3 pcr_key=$4 pcr_cert=$5 previous_cert=${6:-}
-    local previous_key=${SNOSI_BOOTC_PREVIOUS_PCR_KEY:-} digest kernel_info version kernel initrd work gate primary_public previous_public uki ukify_status ukify_image
+    local previous_key=${SNOSI_BOOTC_PREVIOUS_PCR_KEY:-} digest kernel_info version kernel initrd canonical_kernel canonical_initrd work gate primary_public previous_public uki ukify_status ukify_image
     local -a ukify_args
     [[ -d "$root" ]] || die "rootfs directory is missing"
     validate_keypair "$mok_key" "$mok_cert" "MOK"
@@ -375,6 +402,8 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     refuse_existing_uki "$root"
     kernel_info=$(discover_kernel "$root")
     IFS=$'\t' read -r version kernel initrd <<<"$kernel_info"
+    canonical_kernel=$(rootfs_source_path "$root" "$kernel")
+    canonical_initrd=$(rootfs_source_path "$root" "$initrd")
     ukify_image=${SNOSI_BOOTC_SECURE_UKIFY_IMAGE:-}
     [[ -n $ukify_image ]] || die "missing first-pass candidate image for ukify"
     work=$(mktemp -d)
@@ -386,6 +415,7 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
         previous_public="$gate/previous.pub"
         install -m 0644 "$previous_public" "$work/previous.pub"
     fi
+    stage_public_kernel_inputs "$root" "$kernel" "$initrd" "$work"
     candidate_ukify_args "$root" "$kernel" "$initrd" "$digest" "$version" "$previous_key" ukify_args
     credential_gate_scan_tree "$gate" "ukify work directory before candidate execution" "$work"
     set +e
@@ -395,6 +425,7 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     ukify_status=$?
     set -e
     [[ $ukify_status -eq 0 ]] || die "ukify failed"
+    verify_exposed_kernel_inputs "$root" "$kernel" "$initrd" "$work"
     verify_exposed_pcr_public_keys "$primary_public" "$work" "$previous_public"
     credential_gate_scan_tree "$gate" "ukify work directory after candidate execution" "$work"
     credential_gate_scan_file "$gate" "sanitized ukify log" ukify.log "$work/ukify.log"
@@ -402,7 +433,7 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     mkdir -p "$(dirname "$uki")"
     install -m 0644 "$work/uki.efi" "$uki"
     sign_systemd_boot "$root" "$mok_cert"
-    validate_uki "$uki" "$kernel" "$initrd" "$mok_cert" "$primary_public" "$digest" "$previous_public"
+    validate_uki "$uki" "$canonical_kernel" "$canonical_initrd" "$mok_cert" "$primary_public" "$digest" "$previous_public"
     credential_gate_scan_tree "$gate" rootfs "$root"
 }
 
@@ -436,7 +467,7 @@ EOF
     fi
     candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
         fixture one "" fixture_args
-    expected_args=(build --linux /usr/lib/modules/one/vmlinuz --initrd /usr/lib/modules/one/initramfs.img
+    expected_args=(build --linux /run/snosi-ukify-work/linux --initrd /run/snosi-ukify-work/initrd
         --os-release @/usr/lib/os-release --cmdline 'rw composefs=?fixture' --uname one
         --pcr-private-key "$CANDIDATE_UKIFY_PCR_KEY" --secureboot-private-key "$CANDIDATE_UKIFY_MOK_KEY"
         --secureboot-certificate "$CANDIDATE_UKIFY_MOK_CERT" --measure --output "$CANDIDATE_UKIFY_WORK/uki.efi"
@@ -479,6 +510,12 @@ if [[ ${CANDIDATE_UKIFY_TEST_OVERWRITE_ACTIVE_PUB:-0} == 1 ]]; then
 fi
 if [[ ${CANDIDATE_UKIFY_TEST_OVERWRITE_PREVIOUS_PUB:-0} == 1 ]]; then
     printf 'candidate-mutated-previous-public-key\n' >"$host_work/previous.pub"
+fi
+if [[ ${CANDIDATE_UKIFY_TEST_OVERWRITE_LINUX:-0} == 1 ]]; then
+    printf 'candidate-mutated-linux\n' >"$host_work/linux"
+fi
+if [[ ${CANDIDATE_UKIFY_TEST_OVERWRITE_INITRD:-0} == 1 ]]; then
+    printf 'candidate-mutated-initrd\n' >"$host_work/initrd"
 fi
 if [[ ${CANDIDATE_UKIFY_TEST_NO_OUTPUT:-0} != 1 ]]; then
     if [[ ${CANDIDATE_UKIFY_TEST_EMPTY_OUTPUT:-0} == 1 ]]; then
@@ -570,6 +607,54 @@ EOF
         die "internal rootfs symlink translation failed"
     [[ $(rootfs_image_path "$root" "$root/absolute-internal-link") == /usr/lib/modules/one/vmlinuz ]] ||
         die "absolute internal rootfs symlink translation failed"
+
+    # The source is mode 0600; unprivileged fixtures cannot emulate root ownership.
+    # The candidate receives public, byte-identical work copies instead.
+    printf 'fixture kernel bytes\n' >"$root/usr/lib/modules/one/vmlinuz"
+    printf 'fixture initrd bytes\n' >"$root/usr/lib/modules/one/initramfs.img"
+    chmod 0600 "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img"
+    local staged_work="$top/work-staged-inputs"
+    mkdir "$staged_work"
+    stage_public_kernel_inputs "$root" "$root/absolute-internal-link" \
+        "$root/usr/lib/modules/one/initramfs.img" "$staged_work"
+    [[ $(/usr/bin/stat -c '%a' "$staged_work/linux") == 644 && $(/usr/bin/stat -c '%a' "$staged_work/initrd") == 644 ]] ||
+        die "staged public kernel inputs are not mode 0644"
+    cmp -s "$root/usr/lib/modules/one/vmlinuz" "$staged_work/linux" || die "staged kernel differs from source"
+    cmp -s "$root/usr/lib/modules/one/initramfs.img" "$staged_work/initrd" || die "staged initrd differs from source"
+    verify_exposed_kernel_inputs "$root" "$root/absolute-internal-link" \
+        "$root/usr/lib/modules/one/initramfs.img" "$staged_work"
+    printf 'candidate-mutated-linux\n' >"$staged_work/linux"
+    if (verify_exposed_kernel_inputs "$root" "$root/absolute-internal-link" \
+        "$root/usr/lib/modules/one/initramfs.img" "$staged_work") >/dev/null 2>&1; then
+        die "candidate kernel input overwrite accepted"
+    fi
+    cp "$root/usr/lib/modules/one/vmlinuz" "$staged_work/linux"
+    printf 'candidate-mutated-initrd\n' >"$staged_work/initrd"
+    if (verify_exposed_kernel_inputs "$root" "$root/absolute-internal-link" \
+        "$root/usr/lib/modules/one/initramfs.img" "$staged_work") >/dev/null 2>&1; then
+        die "candidate initrd input overwrite accepted"
+    fi
+
+    cp "$root/usr/lib/modules/one/vmlinuz" "$staged_work/linux"
+    cp "$root/usr/lib/modules/one/initramfs.img" "$staged_work/initrd"
+    PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$top/podman-overwrite-linux.args" \
+        CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" CANDIDATE_UKIFY_TEST_OVERWRITE_LINUX=1 \
+        run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$staged_work" \
+        "$staged_work/ukify.log" "$key" "$cert" "$pcr" "" -- build
+    if (verify_exposed_kernel_inputs "$root" "$root/absolute-internal-link" \
+        "$root/usr/lib/modules/one/initramfs.img" "$staged_work") >/dev/null 2>&1; then
+        die "candidate kernel overwrite through work mount accepted"
+    fi
+    cp "$root/usr/lib/modules/one/vmlinuz" "$staged_work/linux"
+    cp "$root/usr/lib/modules/one/initramfs.img" "$staged_work/initrd"
+    PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$top/podman-overwrite-initrd.args" \
+        CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" CANDIDATE_UKIFY_TEST_OVERWRITE_INITRD=1 \
+        run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$staged_work" \
+        "$staged_work/ukify.log" "$key" "$cert" "$pcr" "" -- build
+    if (verify_exposed_kernel_inputs "$root" "$root/absolute-internal-link" \
+        "$root/usr/lib/modules/one/initramfs.img" "$staged_work") >/dev/null 2>&1; then
+        die "candidate initrd overwrite through work mount accepted"
+    fi
 
     local previous="$top/previous.key" protected="$top/protected" overwrite_work="$top/work-overwrite-active"
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$previous" >/dev/null 2>&1
@@ -801,9 +886,11 @@ EOF
 }
 
 validate() { # rootfs image mok-cert pcr-cert [previous-pcr-cert]
-    local root=$1 image=$2 mok=$3 pcr=$4 previous=${5:-} version kernel initrd digest uki loader source work
+    local root=$1 image=$2 mok=$3 pcr=$4 previous=${5:-} version kernel initrd canonical_kernel canonical_initrd digest uki loader source work
     validate_root_contract "$root"
     kernel_info=$(discover_kernel "$root"); IFS=$'\t' read -r version kernel initrd <<<"$kernel_info"
+    canonical_kernel=$(rootfs_source_path "$root" "$kernel")
+    canonical_initrd=$(rootfs_source_path "$root" "$initrd")
     uki="$root/boot/EFI/Linux/$version.efi"; [[ -f "$uki" ]] || die "missing assembled UKI"
     loader="$root/boot/EFI/BOOT/grubx64.efi"; [[ -f "$loader" ]] || die "missing signed systemd-boot"
     source="$root/usr/lib/snosi/bootc/systemd-bootx64.efi"; [[ -f "$source" ]] || die "missing immutable signed systemd-boot source"
@@ -815,7 +902,7 @@ validate() { # rootfs image mok-cert pcr-cert [previous-pcr-cert]
     work=$(mktemp -d); trap 'rm -rf -- "$work"' RETURN
     openssl pkey -pubin -in "$pcr" -pubout -out "$work/pcr.pub"
     [[ -z "$previous" ]] || openssl pkey -pubin -in "$previous" -pubout -out "$work/previous.pub"
-    validate_uki "$uki" "$kernel" "$initrd" "$mok" "$work/pcr.pub" "$digest" "${previous:+$work/previous.pub}"
+    validate_uki "$uki" "$canonical_kernel" "$canonical_initrd" "$mok" "$work/pcr.pub" "$digest" "${previous:+$work/previous.pub}"
 }
 
 case ${1:-} in

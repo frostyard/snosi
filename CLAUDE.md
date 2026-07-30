@@ -79,10 +79,18 @@ refuses pre-mounted/missing rootfs proc paths and unmounts before any image
 mutation. Storage-digest authority remains bootc inside the candidate OCI image.
 Direct ukify executes as `/usr/bin/ukify` inside the pristine first-pass
 candidate with network disabled, individual read-only credential mounts, and a
-public-only writable work mount. The candidate supplies pinned systemd-ukify
-261.1-3 and its dependencies; no host ukify is accepted. The disposable
-container and mounts never enter a layer. Host `.linux`/`.initrd` byte checks
-remain valid because first-pass packaging is a byte-identical `cp -a` snapshot.
+public-only writable work mount. Protected run 30579247524 reached this point
+but cayo job 90995134482 failed because the unprivileged candidate could not
+read its mode-restricted in-image initramfs; no validation, push, signing, or
+promotion ran. Before execution, the assembler canonicalizes the discovered
+in-root kernel/initrd paths, copies their bytes to mode-0644 `linux`/`initrd`
+work inputs, and passes only those fixed work paths to ukify. It compares both
+work inputs against the canonical protected rootfs originals after execution,
+then compares final UKI sections against those same originals. The candidate
+supplies pinned systemd-ukify 261.1-3 and its dependencies; no host ukify is
+accepted. The disposable container and mounts never enter a layer. Host
+`.linux`/`.initrd` byte checks remain valid because first-pass packaging is a
+byte-identical `cp -a` snapshot.
 Candidate execution drops all Linux capabilities and runs as the common numeric
 owner of its mode-0600 credential files; it never adds read-bypass capabilities.
 The active and optional

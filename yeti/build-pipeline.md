@@ -76,15 +76,22 @@ not enter this fragment, its tree, OCI layers, labels, logs, or retained temp
 state. Direct ukify runs as `/usr/bin/ukify` in the first-pass candidate with
 `--network=none`, `--cap-drop=all`, `--security-opt label=type:unconfined_t`,
 a fixed entrypoint, and the common numeric credential owner via `--user`.
-Mismatched owners fail before Podman. The assembler resolves and translates in-root
-kernel/initrd paths to candidate paths, mounts each caller credential read-only
-at fixed `/run/snosi-ukify-*`
-paths, and gives it exactly one writable `/run/snosi-ukify-work` mount. The
+Mismatched owners fail before Podman. Protected run 30579247524 then exposed
+that this unprivileged, capability-free candidate cannot read a mode-restricted
+in-image initramfs. The assembler canonicalizes the discovered in-root
+kernel/initrd paths, stages byte-identical mode-0644 copies as fixed
+`/run/snosi-ukify-work/linux` and `/run/snosi-ukify-work/initrd` arguments, and
+mounts each caller credential read-only at fixed `/run/snosi-ukify-*` paths.
+It gives the candidate exactly one writable `/run/snosi-ukify-work` mount. The
 work directory is scanned for caller credentials both before and after candidate
-execution, so it carries only public inputs and output. The authoritative active
-and optional previous PCR public identities stay in the unmounted gate directory;
-the work copies must match them after candidate execution. Native A/B profiles
-do not include it and continue using `shared/native-ab-secure/` independently.
+execution; its staged inputs must compare with the canonical protected rootfs
+sources after execution, and final UKI sections compare with those originals.
+The authoritative active and optional previous PCR public identities stay in the
+unmounted gate directory; their work copies must also match after candidate
+execution. This fixture-covered fix has no live protected-build success claim:
+the failed run did not reach validation, push, signing, or promotion. Native A/B
+profiles do not include it and continue using `shared/native-ab-secure/`
+independently.
 
 **Bootc shim second-stage reconciliation (Task 7):** the secure tree ships
 `snosi-bootc-bootloader-reconcile.service` with a static
