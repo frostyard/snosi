@@ -38,18 +38,15 @@ its file list contains executable `/usr/bin/ukify` and the
 `/usr/lib/systemd/ukify -> ../../bin/ukify` compatibility symlink. This is a
 pinned compatibility observation, not an assumed package layout.
 
-The original design expected ukify to read these immutable inputs directly from
-the candidate image:
-
-- `/usr/lib/modules/<kernel>/vmlinuz`;
-- `/usr/lib/modules/<kernel>/initramfs.img`;
-- `/usr/lib/os-release`;
-- the candidate's pinned `systemd-ukify` and all of its dependencies.
+Ukify reads `/usr/lib/os-release`, pinned `systemd-ukify`, and its dependencies
+from the candidate image. The kernel and initrd use the staged-input contract
+below.
 
 The assembler rejects a discovered kernel or initrd path outside the supplied
 rootfs, then translates every host-side path in the current ukify arguments:
 
-- kernel and initrd become their absolute paths below `/usr/lib/modules`;
+- kernel and initrd become `/run/snosi-ukify-work/linux` and
+  `/run/snosi-ukify-work/initrd` after canonical staging;
 - os-release becomes `@/usr/lib/os-release`;
 - active and previous PCR private keys become fixed credential mount paths;
 - MOK private key and certificate become fixed credential mount paths;
