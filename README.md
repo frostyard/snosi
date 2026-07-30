@@ -452,6 +452,7 @@ container and mounts do not enter a layer. Host `.linux` and `.initrd` byte
 checks remain valid because first-pass packaging is a byte-identical `cp -a`
 snapshot.
 The candidate also runs with all Linux capabilities dropped. Protected active
+It runs as the common numeric credential owner, retaining mode-0600 credentials without capabilities.
 and optional previous PCR public identities remain outside the writable mount;
 the copied public inputs are checked against those identities after execution.
 This is not production Secure Boot support: published `latest` images inspected

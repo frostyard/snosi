@@ -230,15 +230,27 @@ sign_systemd_boot() { # rootfs mok-cert
     sbverify --cert "$mok_cert" "$out" >/dev/null || die "systemd-boot MOK signature failed"
 }
 
+common_credential_owner() { # credential [credential...]
+    local owner file
+    owner=$(stat -c '%u:%g' "$1") || die "cannot stat candidate credential"
+    for file in "$@"; do
+        [[ -n $file ]] || continue
+        [[ $(stat -c '%u:%g' "$file") == "$owner" ]] || die "candidate credential owners differ"
+    done
+    printf '%s\n' "$owner"
+}
+
 run_candidate_ukify() { # image work log mok-key mok-cert pcr-key previous-key -- ukify-args...
-    local image=$1 work=$2 log=$3 mok_key=$4 mok_cert=$5 pcr_key=$6 previous_key=$7 status
+    local image=$1 work=$2 log=$3 mok_key=$4 mok_cert=$5 pcr_key=$6 previous_key=$7 status owner
     local -a podman_args pipeline_status
     [[ -n $image ]] || die "candidate ukify image is missing"
     shift 7
     [[ ${1:-} == -- ]] || die "candidate ukify argument separator is missing"
     shift
+    owner=$(common_credential_owner "$mok_key" "$mok_cert" "$pcr_key" "$previous_key")
+    chown "$owner" "$work" || die "cannot set candidate ukify work owner"
 
-    podman_args=(run --rm --network=none --cap-drop=all
+    podman_args=(run --rm --network=none --cap-drop=all --user "$owner"
         --security-opt label=type:unconfined_t
         --entrypoint=/usr/bin/ukify
         --volume "$mok_key:$CANDIDATE_UKIFY_MOK_KEY:ro"
@@ -411,6 +423,14 @@ candidate_ukify_self_test() (
     openssl req -new -x509 -key "$key" -subj /CN=mok -days 1 -out "$cert" >/dev/null 2>&1
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$pcr" >/dev/null 2>&1
     openssl pkey -in "$pcr" -pubout -out "$work/pcr.pub" >/dev/null
+    cat >"$top/bin/stat" <<'EOF'
+#!/bin/bash
+if [[ ${3:-} == "$CANDIDATE_UKIFY_TEST_MISMATCH" ]]; then printf '999:999\n'; else /usr/bin/stat "$@"; fi
+EOF
+    chmod +x "$top/bin/stat"
+    if (PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_MISMATCH="$pcr" common_credential_owner "$key" "$cert" "$pcr") >/dev/null 2>&1; then
+        die "candidate unequal credential owners accepted"
+    fi
     candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
         fixture one "" fixture_args
     expected_args=(build --linux /usr/lib/modules/one/vmlinuz --initrd /usr/lib/modules/one/initramfs.img
@@ -426,7 +446,7 @@ candidate_ukify_self_test() (
 #!/bin/bash
 set -euo pipefail
 printf '%s\n' "$@" >"$CANDIDATE_UKIFY_TEST_ARGS"
-expected=(run --rm --network=none --cap-drop=all --security-opt label=type:unconfined_t --entrypoint=/usr/bin/ukify)
+expected=(run --rm --network=none --cap-drop=all --user "$(id -u):$(id -g)" --security-opt label=type:unconfined_t --entrypoint=/usr/bin/ukify)
 for expected_arg in "${expected[@]}"; do
     [[ ${1:-} == "$expected_arg" ]] || exit 87
     shift

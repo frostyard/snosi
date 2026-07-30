@@ -84,6 +84,7 @@ public-only writable work mount. The candidate supplies pinned systemd-ukify
 container and mounts never enter a layer. Host `.linux`/`.initrd` byte checks
 remain valid because first-pass packaging is a byte-identical `cp -a` snapshot.
 Candidate execution drops all Linux capabilities. The active and optional
+Candidate ukify runs as the common numeric owner of its mode-0600 credential files; it never adds read-bypass capabilities.
 previous PCR public identities remain in the unmounted assembler gate directory;
 only copies enter the writable work mount and must compare byte-for-byte with
 the protected identities after execution.
