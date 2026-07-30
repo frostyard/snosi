@@ -18,6 +18,7 @@ sysexts=(
     edge
     github-copilot
     incus
+    k3s
     lemonade
     nix
     paseo

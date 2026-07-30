@@ -1,0 +1,20 @@
+[Transfer]
+Features=k3s
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/k3s/
+MatchPattern=k3s_@v_%w_%a.raw.zst \
+             k3s_@v_%w_%a.raw.xz \
+             k3s_@v_%w_%a.raw.gz \
+             k3s_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=k3s_@v_%w_%a.raw.zst \
+             k3s_@v_%w_%a.raw.xz \
+             k3s_@v_%w_%a.raw.gz \
+             k3s_@v_%w_%a.raw
+CurrentSymlink=k3s.raw

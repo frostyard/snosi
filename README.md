@@ -51,6 +51,7 @@ The project produces:
 | **edge**            | Microsoft Edge browser                                          | sysext        |
 | **github-copilot**  | GitHub Copilot agent-native desktop application                 | sysext        |
 | **incus**           | Incus container/VM manager                                      | sysext        |
+| **k3s**             | k3s lightweight Kubernetes node (server or agent)               | sysext        |
 | **lemonade**        | Lemonade local LLM server (GPU/NPU accelerated)                 | sysext        |
 | **nix**             | Nix package manager                                             | sysext        |
 | **paseo**           | Paseo coding agent workspace desktop application                | sysext        |
@@ -204,7 +205,7 @@ sudo test/native-ab-update-test.sh \
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1password 1password-cli azurevpn bitwarden claude-desktop code-server coder debdev dev docker edge github-copilot incus lemonade nix paseo pilothouse podman tailscale vscode
+  1password 1password-cli azurevpn bitwarden claude-desktop code-server coder debdev dev docker edge github-copilot incus k3s lemonade nix paseo pilothouse podman tailscale vscode
                                      snow            cayo
                                       │
                                   snowfield
@@ -568,7 +569,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all sysexts (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, lemonade, nix, paseo, pilothouse, podman, tailscale, vscode)
+1. Builds the base image and all sysexts (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, tailscale, vscode)
 2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Uploads package manifests for version tracking
 

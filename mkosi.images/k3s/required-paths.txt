@@ -1,0 +1,8 @@
+# k3s sysext: static binary installed via verified_download + local stub deb
+/usr/bin/k3s
+/usr/bin/kubectl
+/usr/bin/crictl
+/usr/lib/systemd/system/k3s.service
+/usr/lib/systemd/system/k3s-agent.service
+/usr/lib/systemd/system-preset/40-k3s.preset
+/usr/lib/systemd/system/multi-user.target.d/10-k3s.conf
