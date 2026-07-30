@@ -61,7 +61,14 @@ plus the ESP copy of systemd-boot under `/boot`. Before that first package, it
 places the same signed systemd-boot source at
 `/usr/lib/snosi/bootc/systemd-bootx64.efi`; this is required because an
 installed ESP mount shadows `/boot`, and it is deliberately present before the
-digest is calculated. A second OCI probe must retain the exact digest. This is a
+digest is calculated. The preflight version gate uses bare-name
+`mount`/`mountpoint`/`chroot`/`umount`: it refuses a missing or pre-mounted
+`$ROOTFS_DIR/proc`, bind-mounts only host `/proc`, runs `/usr/bin/bootc
+--version` against target libraries, and always unmounts before
+`--prepare-systemd-boot-source`. Bare names are load-bearing for the non-root
+PATH fixtures. This gate is not digest authority; both storage digest probes
+still run bootc inside their candidate OCI images. A second OCI probe must
+retain the exact digest. This is a
 fail-closed maintained compatibility contract, not
 an upstream interface; see `docs/bootc-secure-assembly-compatibility.md` for
 the mandatory revalidation triggers. Private keys remain caller-owned and must

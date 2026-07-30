@@ -440,6 +440,10 @@ runtime coverage. Secure and insecure images carry explicit
 fail-closed compatibility contract for Frostyard bootc 1.16.3, including its
 hidden storage-digest command and direct two-pass ukify behavior, not an
 upstream-stable API. See `docs/bootc-secure-assembly-compatibility.md`.
+The protected packager checks its pinned bootc through the built rootfs with a
+temporary procfs bind, then removes that bind before assembly. It does not
+require a matching host bootc or host libostree ABI; candidate-image bootc
+remains the storage-digest authority.
 This is not production Secure Boot support: published `latest` images inspected
 on 2026-07-27 lacked `io.snosi.bootc.secureboot-capable` and are unsuitable for
 the secure install/update harnesses. MOK/TPM enrollment and full secure
