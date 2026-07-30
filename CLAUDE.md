@@ -146,6 +146,9 @@ only around local assembly/validation, requires the supplied public MOK/PCR
 identities to byte-match `shared/native-ab/keys/mok-2026.crt` and
 `shared/native-ab/keys/pcr-signing-2026.pub`, deletes credentials before any
 registry write, validates an immutable version digest, then moves `latest`.
+Local and policy-copied artifact validation use host Podman to execute the
+candidate image's pinned bootc; they do not require or accept an independently
+installed host bootc as the storage-digest authority.
 A failed candidate never moves `latest`. `native-build` must be restricted in
 GitHub settings to protected/default branches; native PRs use disposable
 RSA-4096 MOK and RSA-2048 PCR credentials and cannot publish. Fixture/static

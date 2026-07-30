@@ -8,6 +8,16 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 secure="$root/shared/bootc-secure/mkosi.conf"
 tree="$root/shared/bootc-secure/tree"
 package_manager="$root/shared/bootc-secure/package-manager"
+artifact_validator="$root/test/bootc-secure-artifact-test.sh"
+
+# Live validation executes the candidate image's pinned bootc through Podman;
+# it must not depend on an independently installed host bootc.
+grep -Fq 'for command in buildah jq objcopy objdump openssl podman sbverify; do' \
+    "$artifact_validator"
+if grep -Eq '^for command in .*\bbootc\b' "$artifact_validator"; then
+    echo "bootc secure artifact validation must use candidate-image bootc, not host bootc" >&2
+    exit 1
+fi
 
 [[ -f "$secure" ]]
 [[ -f "$package_manager/etc/apt/sources.list.d/forky.sources" ]]
