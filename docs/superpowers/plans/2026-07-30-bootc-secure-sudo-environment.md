@@ -180,7 +180,7 @@ Run:
 test/bootc-publication-guard-test.sh
 ./check-bootc-publication-guard.sh
 test/bootc-secure-package-cleanup-test.sh
-test/bootc-secure-package-negative-test.sh
+test/bootc-secure-artifact-negative-test.sh --fixtures
 shellcheck check-bootc-publication-guard.sh \
   test/bootc-publication-guard-test.sh
 actionlint .github/workflows/build-images.yml
