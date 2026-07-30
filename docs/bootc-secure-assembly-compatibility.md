@@ -17,6 +17,11 @@ The adapter relies on all of the following observed behavior:
    key, and four PCR policies per signer.
 4. `bootc install to-filesystem` consumes the resulting image as a Type #2 UKI
    deployment without raw `linux` or `initrd` BLS fallback.
+5. Forky `systemd-ukify 261.1-3` ships executable `/usr/bin/ukify` (package
+   SHA-256 `817b8ea0a8953f9fb4b42d91f04ed1511bbb1e76cee466497dfb955cb246aa34`).
+6. Direct ukify runs inside the first-pass candidate; candidate bootc remains
+   storage-digest authority.
+7. Final host byte comparisons depend on first-pass `cp -a` identity.
 
 `buildah-package.sh` makes a first, unsigned-label OCI image, computes that
 storage digest through the image's own bootc binary, invokes the assembler,

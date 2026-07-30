@@ -444,6 +444,13 @@ The protected packager checks its pinned bootc through the built rootfs with a
 temporary procfs bind, then removes that bind before assembly. It does not
 require a matching host bootc or host libostree ABI; candidate-image bootc
 remains the storage-digest authority.
+Direct ukify similarly runs as `/usr/bin/ukify` inside the pristine first-pass
+candidate, with networking disabled, individual read-only credential mounts,
+and a public-only writable work mount. Its pinned systemd-ukify 261.1-3 and
+dependencies therefore come from the candidate, never the host; the disposable
+container and mounts do not enter a layer. Host `.linux` and `.initrd` byte
+checks remain valid because first-pass packaging is a byte-identical `cp -a`
+snapshot.
 This is not production Secure Boot support: published `latest` images inspected
 on 2026-07-27 lacked `io.snosi.bootc.secureboot-capable` and are unsuitable for
 the secure install/update harnesses. MOK/TPM enrollment and full secure

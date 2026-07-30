@@ -77,6 +77,12 @@ Before first-pass packaging, the root packager temporarily bind-mounts only host
 through chroot, so target libraries rather than the CI host ABI resolve. It
 refuses pre-mounted/missing rootfs proc paths and unmounts before any image
 mutation. Storage-digest authority remains bootc inside the candidate OCI image.
+Direct ukify executes as `/usr/bin/ukify` inside the pristine first-pass
+candidate with network disabled, individual read-only credential mounts, and a
+public-only writable work mount. The candidate supplies pinned systemd-ukify
+261.1-3 and its dependencies; no host ukify is accepted. The disposable
+container and mounts never enter a layer. Host `.linux`/`.initrd` byte checks
+remain valid because first-pass packaging is a byte-identical `cp -a` snapshot.
 The optional dual-PCR mode requires the previous certificate positionally and
 its matching private key only through `SNOSI_BOOTC_PREVIOUS_PCR_KEY`. Never
 copy private keys into the rootfs, OCI layers, labels, logs, or retained temp
