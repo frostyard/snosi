@@ -57,8 +57,8 @@ The project produces:
 | **paseo**           | Paseo coding agent workspace desktop application                | sysext        |
 | **pilothouse**      | Pilothouse local web administration console for Snosi           | sysext        |
 | **podman**          | Podman + Distrobox                                              | sysext        |
-| **tailscale**       | Tailscale VPN client                                            | sysext        |
 | **sunshine**        | Sunshine self-hosted game streaming host for Moonlight          | sysext        |
+| **tailscale**       | Tailscale VPN client                                            | sysext        |
 | **vscode**          | Visual Studio Code desktop application                          | sysext        |
 
 Protected bootc publication validates each candidate with host Podman while
@@ -247,8 +247,8 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | **paseo**         | Paseo desktop app (Electron)                  | [mkosi.images/paseo/mkosi.conf](mkosi.images/paseo/mkosi.conf)                 |
 | **pilothouse**    | Pilothouse local web administration console   | [mkosi.images/pilothouse/mkosi.conf](mkosi.images/pilothouse/mkosi.conf)       |
 | **podman**        | Podman, Distrobox, buildah, crun              | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf)               |
-| **tailscale**     | Tailscale VPN client                          | [mkosi.images/tailscale/mkosi.conf](mkosi.images/tailscale/mkosi.conf)         |
 | **sunshine**      | Sunshine self-hosted game streaming host for Moonlight | [mkosi.images/sunshine/mkosi.conf](mkosi.images/sunshine/mkosi.conf)     |
+| **tailscale**     | Tailscale VPN client                          | [mkosi.images/tailscale/mkosi.conf](mkosi.images/tailscale/mkosi.conf)         |
 | **vscode**        | Visual Studio Code desktop application         | [mkosi.images/vscode/mkosi.conf](mkosi.images/vscode/mkosi.conf)               |
 
 ## How Profiles Work

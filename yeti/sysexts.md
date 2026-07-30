@@ -36,8 +36,8 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **paseo** | paseo | Paseo coding agent workspace desktop app (pinned .deb via verified_download from getpaseo/paseo GitHub releases, relocated from /opt) |
 | **pilothouse** | frostyard-pilothouse | Pilothouse local web administration console for Snosi (pilothouse web UI + pilothoused root broker) — downloaded via `verified_download()` from frostyard/pilothouse GitHub releases |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
-| **tailscale** | tailscale | Tailscale VPN client |
 | **sunshine** | sunshine | Sunshine self-hosted game streaming host (official pinned Trixie .deb via verified_download) |
+| **tailscale** | tailscale | Tailscale VPN client |
 | **vscode** | code | Visual Studio Code desktop application (from packages.microsoft.com) |
 
 ## Sysext Configuration Pattern

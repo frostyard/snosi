@@ -1263,8 +1263,8 @@ Docker, 1Password) are tracked separately in
 This file is only a rebuild sentinel; mkosi still resolves packages from APT.
 
 Current sysext checksum-managed downloads are 1Password, Bitwarden, Azure VPN,
-Microsoft Edge, code-server, coder, GitHub Copilot, Lemonade, Paseo, and
-Pilothouse. Current image checksum-managed downloads are Homebrew
+Microsoft Edge, code-server, coder, GitHub Copilot, Lemonade, Paseo, Pilothouse,
+and Sunshine. Current image checksum-managed downloads are Homebrew
 install script, Surface secure boot certificate, Hotedge, Logomenu, and Bazaar
 Companion. Current APT version tracking covers `code`, `docker-ce`,
 `1password-cli`, and `claude-desktop`; Edge is checksum-managed because the build installs a patched

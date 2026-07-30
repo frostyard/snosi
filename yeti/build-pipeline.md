@@ -410,7 +410,7 @@ by the build artifact that must be rebuilt when a dependency changes:
 
 Pins URL + SHA256 for direct downloads consumed by sysext builds. Current
 consumers are 1Password, Bitwarden, Azure VPN, Edge, code-server, coder,
-GitHub Copilot, Lemonade, Paseo, and Pilothouse.
+GitHub Copilot, Lemonade, Paseo, Pilothouse, and Sunshine.
 Updates to this file should trigger `build.yml` and skip the OCI image matrix.
 
 ### image-checksums.json
