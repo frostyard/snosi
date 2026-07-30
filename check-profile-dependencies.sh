@@ -24,6 +24,7 @@ sysexts=(
     paseo
     pilothouse
     podman
+    sunshine
     tailscale
     vscode
 )

@@ -1,0 +1,20 @@
+[Transfer]
+Features=sunshine
+Verify=false
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/sunshine/
+MatchPattern=sunshine_@v_%w_%a.raw.zst \
+             sunshine_@v_%w_%a.raw.xz \
+             sunshine_@v_%w_%a.raw.gz \
+             sunshine_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=sunshine_@v_%w_%a.raw.zst \
+             sunshine_@v_%w_%a.raw.xz \
+             sunshine_@v_%w_%a.raw.gz \
+             sunshine_@v_%w_%a.raw
+CurrentSymlink=sunshine.raw

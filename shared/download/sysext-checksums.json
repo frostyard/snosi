@@ -53,5 +53,10 @@
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.6.0/frostyard-pilothouse_0.6.0_amd64.deb",
     "sha256": "17a18dfefd7f788cbe2d8d6994c6271d29d6e69e0071720a8105ad70a9d647c6",
     "version": "0.6.0"
+  },
+  "sunshine": {
+    "url": "https://github.com/LizardByte/Sunshine/releases/download/v2026.516.143833/sunshine-debian-trixie-amd64.deb",
+    "sha256": "b9b65f2be93b3e30be0710a940a616b1381da5bc6d858dce33bc0094d7fd4131",
+    "version": "2026.516.143833"
   }
 }
