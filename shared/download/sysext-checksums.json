@@ -29,6 +29,11 @@
     "sha256": "a23cc8ceb36b881c341fd4d3bba217bf1b9f1097b5f462ba62da9a58c11d8870",
     "version": "2.34.7"
   },
+  "github-copilot": {
+    "url": "https://github.com/github/app/releases/download/v1.1.2/GitHub-Copilot-linux-x64.deb",
+    "sha256": "df80379b8e624eaf751c33758534f111bed7faf09b8d988e59ac7e0ab3dc9ff4",
+    "version": "1.1.2"
+  },
   "lemonade": {
     "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.5.0/lemonade-server_11.5.0-debian13_amd64.deb",
     "sha256": "cd7448b1b577815a75b4596a9611d29a37db737c036dd9bc9b18d258ddd4204e",

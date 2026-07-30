@@ -392,7 +392,8 @@ by the build artifact that must be rebuilt when a dependency changes:
 ### sysext-checksums.json
 
 Pins URL + SHA256 for direct downloads consumed by sysext builds. Current
-consumers include the Bitwarden, Edge, Azure VPN, and code-server sysexts.
+consumers are 1Password, Bitwarden, Azure VPN, Edge, code-server, coder,
+GitHub Copilot, Lemonade, Paseo, and Pilothouse.
 Updates to this file should trigger `build.yml` and skip the OCI image matrix.
 
 ### image-checksums.json

@@ -175,12 +175,10 @@ Every independently versioned sysext lives in its own named component:
 Component name = sysext name. Admin overrides live at
 `/etc/sysupdate.<name>.d/<name>.feature.d/*.conf`.
 
-Today all 17 sysext transfer/feature pairs ship in the default
-`/usr/lib/sysupdate.d/` (in
-`mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`), one shared target with
-the OS transfers once native profiles exist. Each is allowlisted with tag
-`component-migration` until Phase 1 adds `frostyard-updex` component
-discovery and migrates each pair to its own `sysupdate.<name>.d/`.
+All 20 sysext transfer/feature pairs ship in component-scoped
+`/usr/lib/sysupdate.<name>.d/` directories under
+`mkosi.images/base/mkosi.extra/`. `/usr/lib/sysupdate.d/` is reserved for the
+three OS transfers above; sysext pairs must never be added there.
 
 ## 7. Key ownership, custody, and rotation
 

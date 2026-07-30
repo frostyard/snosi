@@ -37,7 +37,7 @@ Frostyard workspace root (the parent of `snosi/`).
 | ostree | `libostree-1-1` | `snosi/shared/packages/bootc/mkosi.conf:5` | bootc profiles |
 | pilothouse | `frostyard-pilothouse` | `snosi/mkosi.images/pilothouse/mkosi.conf:23` (sysext) | opt-in sysext, all products |
 
-`pilothouse` is the **only** Frostyard-authored sysext (all 17 other sysexts
+`pilothouse` is the **only** Frostyard-authored sysext (all 19 other sysexts
 wrap third-party tools). It is a pinned GitHub-release `.deb`
 (`snosi/shared/download/sysext-checksums.json:37-40`,
 `snosi/mkosi.images/pilothouse/mkosi.postinst.chroot:8-17`), not an APT install.

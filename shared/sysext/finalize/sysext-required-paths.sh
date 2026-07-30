@@ -39,7 +39,8 @@ path_present() {
 missing=()
 while IFS= read -r line; do
     line="${line%%#*}"
-    line="${line//[[:space:]]/}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
     [[ -n "$line" ]] || continue
     if ! path_present "$line"; then
         missing+=("$line")
