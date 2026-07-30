@@ -79,8 +79,8 @@ entrypoint. The assembler translates rootfs kernel/initrd paths to candidate
 paths, mounts each caller credential read-only at fixed `/run/snosi-ukify-*`
 paths, and gives it exactly one writable `/run/snosi-ukify-work` mount. The
 work directory is scanned for caller credentials both before and after candidate
-execution, so it carries only public inputs and output. Native A/B profiles do not include it and continue using
-`shared/native-ab-secure/` independently.
+execution, so it carries only public inputs and output. Native A/B profiles do
+not include it and continue using `shared/native-ab-secure/` independently.
 
 **Bootc shim second-stage reconciliation (Task 7):** the secure tree ships
 `snosi-bootc-bootloader-reconcile.service` with a static

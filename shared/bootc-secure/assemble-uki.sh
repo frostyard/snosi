@@ -233,6 +233,7 @@ sign_systemd_boot() { # rootfs mok-cert
 run_candidate_ukify() { # image work log mok-key mok-cert pcr-key previous-key -- ukify-args...
     local image=$1 work=$2 log=$3 mok_key=$4 mok_cert=$5 pcr_key=$6 previous_key=$7 status
     local -a podman_args
+    [[ -n $image ]] || die "candidate ukify image is missing"
     shift 7
     [[ ${1:-} == -- ]] || die "candidate ukify argument separator is missing"
     shift
@@ -268,9 +269,31 @@ rootfs_image_path() { # rootfs host-path
     printf '/%s\n' "$relative"
 }
 
+candidate_ukify_args() { # rootfs kernel initrd digest version previous-key output-array
+    local root=$1 kernel=$2 initrd=$3 digest=$4 version=$5 previous_key=$6 output_name=$7
+    local image_kernel image_initrd
+    local -n output="$output_name"
+    image_kernel=$(rootfs_image_path "$root" "$kernel")
+    image_initrd=$(rootfs_image_path "$root" "$initrd")
+    output=(build --linux "$image_kernel" --initrd "$image_initrd"
+        --os-release @/usr/lib/os-release --cmdline "rw composefs=?$digest"
+        --uname "$version" --pcr-private-key "$CANDIDATE_UKIFY_PCR_KEY"
+        --secureboot-private-key "$CANDIDATE_UKIFY_MOK_KEY"
+        --secureboot-certificate "$CANDIDATE_UKIFY_MOK_CERT" --measure
+        --output "$CANDIDATE_UKIFY_WORK/uki.efi")
+    if [[ -n "$previous_key" ]]; then
+        output+=(--pcr-private-key "$CANDIDATE_UKIFY_PREVIOUS_KEY"
+            --pcrpkey "$CANDIDATE_UKIFY_WORK/pcr.pub"
+            --phases "enter-initrd,enter-initrd:leave-initrd,enter-initrd:leave-initrd:sysinit,enter-initrd:leave-initrd:sysinit:ready"
+            --phases "enter-initrd,enter-initrd:leave-initrd,enter-initrd:leave-initrd:sysinit,enter-initrd:leave-initrd:sysinit:ready")
+    else
+        output+=(--pcrpkey "$CANDIDATE_UKIFY_WORK/pcr.pub")
+    fi
+}
+
 assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     local root=$1 mok_key=$2 mok_cert=$3 pcr_key=$4 pcr_cert=$5 previous_cert=${6:-}
-    local previous_key=${SNOSI_BOOTC_PREVIOUS_PCR_KEY:-} digest kernel_info version kernel initrd work gate primary_public previous_public uki ukify_status ukify_image image_kernel image_initrd
+    local previous_key=${SNOSI_BOOTC_PREVIOUS_PCR_KEY:-} digest kernel_info version kernel initrd work gate primary_public previous_public uki ukify_status ukify_image
     local -a ukify_args
     [[ -d "$root" ]] || die "rootfs directory is missing"
     validate_keypair "$mok_key" "$mok_cert" "MOK"
@@ -295,8 +318,6 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     IFS=$'\t' read -r version kernel initrd <<<"$kernel_info"
     ukify_image=${SNOSI_BOOTC_SECURE_UKIFY_IMAGE:-}
     [[ -n $ukify_image ]] || die "missing first-pass candidate image for ukify"
-    image_kernel=$(rootfs_image_path "$root" "$kernel")
-    image_initrd=$(rootfs_image_path "$root" "$initrd")
     work=$(mktemp -d)
     openssl pkey -in "$pcr_key" -pubout -out "$work/pcr.pub" >/dev/null
     primary_public="$work/pcr.pub"; previous_public=""
@@ -304,20 +325,7 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
         openssl pkey -pubin -in "$previous_cert" -pubout -out "$work/previous.pub"
         previous_public="$work/previous.pub"
     fi
-    ukify_args=(build --linux "$image_kernel" --initrd "$image_initrd"
-        --os-release @/usr/lib/os-release --cmdline "rw composefs=?$digest"
-        --uname "$version" --pcr-private-key "$CANDIDATE_UKIFY_PCR_KEY"
-        --secureboot-private-key "$CANDIDATE_UKIFY_MOK_KEY"
-        --secureboot-certificate "$CANDIDATE_UKIFY_MOK_CERT" --measure
-        --output "$CANDIDATE_UKIFY_WORK/uki.efi")
-    if [[ -n "$previous_key" ]]; then
-        ukify_args+=(--pcr-private-key "$CANDIDATE_UKIFY_PREVIOUS_KEY"
-            --pcrpkey "$CANDIDATE_UKIFY_WORK/pcr.pub"
-            --phases "enter-initrd,enter-initrd:leave-initrd,enter-initrd:leave-initrd:sysinit,enter-initrd:leave-initrd:sysinit:ready"
-            --phases "enter-initrd,enter-initrd:leave-initrd,enter-initrd:leave-initrd:sysinit,enter-initrd:leave-initrd:sysinit:ready")
-    else
-        ukify_args+=(--pcrpkey "$CANDIDATE_UKIFY_WORK/pcr.pub")
-    fi
+    candidate_ukify_args "$root" "$kernel" "$initrd" "$digest" "$version" "$previous_key" ukify_args
     credential_gate_scan_tree "$gate" "ukify work directory before candidate execution" "$work"
     set +e
     run_candidate_ukify "$ukify_image" "$work" "$work/ukify.log" \
@@ -345,7 +353,8 @@ remove_injected() { # rootfs
 }
 
 candidate_ukify_self_test() (
-    local top root work key cert pcr log args mok_mount cert_mount pcr_mount work_mount
+    local top root work key cert pcr log args mok_mount cert_mount pcr_mount work_mount empty_args status
+    local -a fixture_args expected_args
     top=$(mktemp -d); trap 'rm -rf -- "$top"' RETURN
     root="$top/root"; work="$top/work-single"; log="$work/ukify.log"; args="$top/podman.args"
     mkdir -p "$root/usr/lib/modules/one" "$work" "$top/bin"
@@ -355,6 +364,17 @@ candidate_ukify_self_test() (
     openssl req -new -x509 -key "$key" -subj /CN=mok -days 1 -out "$cert" >/dev/null 2>&1
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$pcr" >/dev/null 2>&1
     openssl pkey -in "$pcr" -pubout -out "$work/pcr.pub" >/dev/null
+    candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
+        fixture one "" fixture_args
+    expected_args=(build --linux /usr/lib/modules/one/vmlinuz --initrd /usr/lib/modules/one/initramfs.img
+        --os-release @/usr/lib/os-release --cmdline 'rw composefs=?fixture' --uname one
+        --pcr-private-key "$CANDIDATE_UKIFY_PCR_KEY" --secureboot-private-key "$CANDIDATE_UKIFY_MOK_KEY"
+        --secureboot-certificate "$CANDIDATE_UKIFY_MOK_CERT" --measure --output "$CANDIDATE_UKIFY_WORK/uki.efi"
+        --pcrpkey "$CANDIDATE_UKIFY_WORK/pcr.pub")
+    [[ ${#fixture_args[@]} -eq ${#expected_args[@]} ]] || die "candidate ukify arguments have an unexpected length"
+    for index in "${!expected_args[@]}"; do
+        [[ ${fixture_args[index]} == "${expected_args[index]}" ]] || die "candidate ukify argument translation is incorrect"
+    done
     cat >"$top/bin/podman" <<'EOF'
 #!/bin/bash
 set -euo pipefail
@@ -375,6 +395,10 @@ if [[ ${1:-} == --volume ]]; then
 fi
 [[ ${1:-} == localhost/snosi-bootc-secure-first-fixture ]] || exit 91
 [[ -n ${host_work:-} ]] || exit 88
+if [[ ${CANDIDATE_UKIFY_TEST_PODMAN_UNAVAILABLE:-0} == 1 ]]; then
+    echo 'candidate ukify image is unavailable' >&2
+    exit 127
+fi
 if [[ ${CANDIDATE_UKIFY_TEST_FAIL:-0} == 1 ]]; then
     echo "candidate ukify failed at /run/snosi-ukify-pcr.key" >&2
     exit 86
@@ -390,13 +414,26 @@ printf 'safe diagnostic; key path %s\n' /run/snosi-ukify-pcr.key >&2
 cat "$CANDIDATE_UKIFY_TEST_PRIVATE_KEY" >&2
 EOF
     chmod +x "$top/bin/podman"
+    empty_args="$top/podman-empty.args"
+    if (PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$empty_args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
+        run_candidate_ukify "" "$work" "$top/empty.log" "$key" "$cert" "$pcr" "" -- build) >"$top/empty-output" 2>&1; then
+        die "candidate ukify accepted an empty image"
+    fi
+    [[ ! -e "$empty_args" ]] || die "candidate ukify ran Podman without an image"
+    grep -Fq -- 'candidate ukify image is missing' "$top/empty-output" || die "candidate ukify empty-image diagnostic is missing"
+    local unavailable_work="$top/work-podman-unavailable" unavailable_log="$top/podman-unavailable.log"
+    mkdir "$unavailable_work"
+    set +e
+    PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$top/podman-unavailable.args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
+        CANDIDATE_UKIFY_TEST_PODMAN_UNAVAILABLE=1 \
+        run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$unavailable_work" "$unavailable_log" "$key" "$cert" "$pcr" "" -- build
+    status=$?
+    set -e
+    [[ $status -eq 127 ]] || die "candidate ukify did not propagate unavailable Podman status"
+    grep -Fq -- 'candidate ukify image is unavailable' "$unavailable_log" || die "candidate ukify unavailable diagnostic was not retained"
     PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
         run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$work" "$log" "$key" "$cert" "$pcr" "" -- \
-        build --linux /usr/lib/modules/one/vmlinuz --initrd /usr/lib/modules/one/initramfs.img \
-        --os-release @/usr/lib/os-release --cmdline 'rw composefs=?fixture' \
-        --pcr-private-key /run/snosi-ukify-pcr.key --secureboot-private-key /run/snosi-ukify-mok.key \
-        --secureboot-certificate /run/snosi-ukify-mok.crt --pcrpkey /run/snosi-ukify-work/pcr.pub \
-        --output /run/snosi-ukify-work/uki.efi
+        "${fixture_args[@]}"
     mok_mount="$key:/run/snosi-ukify-mok.key:ro"; cert_mount="$cert:/run/snosi-ukify-mok.crt:ro"
     pcr_mount="$pcr:/run/snosi-ukify-pcr.key:ro"; work_mount="$work:/run/snosi-ukify-work:rw"
     if ! grep -Fqx -- localhost/snosi-bootc-secure-first-fixture "$args" || ! grep -Fqx -- "$mok_mount" "$args" ||
@@ -424,15 +461,14 @@ EOF
     fi
 
     local previous="$top/previous.key" dual_work="$top/work-dual" dual_args="$top/podman-dual.args"
+    local -a dual_ukify_args
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$previous" >/dev/null 2>&1
     mkdir "$dual_work"; openssl pkey -in "$pcr" -pubout -out "$dual_work/pcr.pub" >/dev/null
+    candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
+        fixture one "$previous" dual_ukify_args
     PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$dual_args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
         run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$dual_work" "$dual_work/ukify.log" "$key" "$cert" "$pcr" "$previous" -- \
-        build --linux /usr/lib/modules/one/vmlinuz --initrd /usr/lib/modules/one/initramfs.img \
-        --os-release @/usr/lib/os-release --cmdline 'rw composefs=?fixture' \
-        --pcr-private-key /run/snosi-ukify-pcr.key --pcr-private-key /run/snosi-ukify-previous-pcr.key \
-        --secureboot-private-key /run/snosi-ukify-mok.key --secureboot-certificate /run/snosi-ukify-mok.crt \
-        --pcrpkey /run/snosi-ukify-work/pcr.pub --output /run/snosi-ukify-work/uki.efi
+        "${dual_ukify_args[@]}"
     if ! grep -Fqx -- "$previous:/run/snosi-ukify-previous-pcr.key:ro" "$dual_args" ||
         ! grep -Fqx -- /run/snosi-ukify-previous-pcr.key "$dual_args"; then
         die "candidate ukify dual-key mount is incorrect"
