@@ -79,6 +79,9 @@ count=0
 [[ ! -f "$count_file" ]] || count=$(<"$count_file")
 count=$((count + 1))
 printf '%s' "$count" >"$count_file"
+if [[ $count -eq 1 ]]; then
+    printf '%s\n' "$@" >"$BUILD_FIXTURE_STATE/podman-first-args"
+fi
 if [[ ${BUILD_FIXTURE_FINAL_PROBE_FAIL:-0} == 1 && $count -eq 2 ]]; then
     exit 86
 fi
@@ -104,6 +107,7 @@ if [[ $1 == --prepare-systemd-boot-source ]]; then
     printf 'immutable-bootloader\n' >"$2/usr/lib/snosi/bootc/systemd-bootx64.efi"
     exit 0
 fi
+printf '%s\n' "${SNOSI_BOOTC_SECURE_UKIFY_IMAGE:-}" >"$BUILD_FIXTURE_STATE/ukify-image"
 touch "$BUILD_FIXTURE_STATE/assembler-invoked"
 mkdir -p "$1/boot/EFI/Linux" "$1/boot/EFI/BOOT"
 printf 'injected-uki\n' >"$1/boot/EFI/Linux/test-kernel.efi"
@@ -115,8 +119,14 @@ EOF
 }
 
 assert_cleanup() { # state root first final published
-    local state=$1 root=$2 first=$3 final=$4 published=$5
+    local state=$1 root=$2 first=$3 final=$4 published=$5 ukify_image
     [[ -f "$state/assembler-invoked" ]] || fail "controlled assembler was not invoked"
+    [[ -f "$state/ukify-image" ]] || fail "assembler did not receive a ukify image"
+    ukify_image=$(<"$state/ukify-image")
+    [[ $ukify_image == localhost/snosi-bootc-secure-first-[0-9]* ]] ||
+        fail "assembler did not receive the exact first-pass ukify image"
+    { [[ -f "$state/podman-first-args" ]] && grep -Fxq -- "$ukify_image" "$state/podman-first-args"; } ||
+        fail "assembler ukify image differs from the first digest candidate"
     [[ -f "$state/mount-invoked" && $(<"$state/mount-invoked") == "--bind /proc $root/proc" ]] || fail "rootfs proc bind was not exact"
     [[ -f "$state/chroot-invoked" && $(<"$state/chroot-invoked") == "$root /usr/bin/bootc --version" ]] || fail "bootc version did not use rootfs chroot"
     [[ -f "$state/umount-invoked" && $(<"$state/umount-invoked") == "$root/proc" ]] || fail "rootfs proc unmount was not exact"
