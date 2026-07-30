@@ -67,6 +67,17 @@ for variable in SNOSI_BOOTC_SECURE SNOSI_BOOTC_MOK_KEY SNOSI_BOOTC_MOK_CERT SNOS
 done
 ```
 
+Also add the `TMPDIR` anchor mutation beside the forwarding helper and loop:
+
+```bash
+remove_sudo_tmpdir() {
+    perl -0pi -e 's/^          sudo TMPDIR="\$TMPDIR" \\\n//m' \
+        "$1/.github/workflows/build-images.yml"
+}
+
+assert_guard 'missing sudo TMPDIR forwarding fails' 1 remove_sudo_tmpdir
+```
+
 - [ ] **Step 2: Run the guard fixture and confirm RED**
 
 Run:
@@ -127,7 +138,7 @@ Run:
 test/bootc-publication-guard-test.sh
 ```
 
-Expected: the fixture baseline passes because it declares all forwarded values; each of the five forwarding mutations passes by making the guard reject its fixture. The real-tree guard is not run yet because the production workflow still lacks forwarding.
+Expected: the fixture baseline passes because it declares all forwarded values; each of the five secure-variable forwarding mutations and the `TMPDIR` anchor mutation pass by making the guard reject its fixture. The real-tree guard is not run yet because the production workflow still lacks forwarding.
 
 - [ ] **Step 5: Forward secure values through sudo in the protected workflow**
 
@@ -187,7 +198,7 @@ actionlint .github/workflows/build-images.yml
 git diff --check
 ```
 
-Expected: all commands exit 0; the publication fixture reports 28 passing assertions and zero failures; both package fixture scripts pass.
+Expected: all commands exit 0; the publication fixture reports 29 passing assertions and zero failures; both package fixture scripts pass.
 
 - [ ] **Step 8: Review and commit Task 1**
 
