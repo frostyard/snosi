@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-scratch=$(mktemp -d /tmp/opencode/check-profile-dependencies-test.XXXXXX)
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/check-profile-dependencies-test.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 
 cp "$repo_root/check-profile-dependencies.sh" "$scratch/"
