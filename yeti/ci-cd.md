@@ -295,6 +295,7 @@ for the build artifact that must be rebuilt.
 - Microsoft Azure VPN Client
 - Microsoft Edge Stable .deb
 - GitHub Copilot desktop .deb
+- Sunshine Trixie .deb
 
 Version-based checks only propose an update when the candidate sorts
 **strictly newer** (`sort -V`) than the pinned version — a plain `!=`

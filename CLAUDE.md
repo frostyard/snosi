@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 snosi is a bootable container image build system using [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). Images are deployed via bootc/systemd-boot with atomic updates.
 
-**Outputs:** 2 OCI desktop images (snow, snowfield), 1 OCI server image (cayo), and 21 sysext overlay images (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, tailscale, vscode).
+**Outputs:** 2 OCI desktop images (snow, snowfield), 1 OCI server image (cayo), and 22 sysext overlay images (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode).
 
 ## Build Commands
 
@@ -1498,6 +1498,13 @@ systemd`/`dpkg-query -W 'linux-image-*'` both resolving,
 units.
 
 ### Sysext Constraints
+
+**Sunshine sysext:** Sunshine is a desktop-only, self-hosted game-streaming
+host for Moonlight installed from its official pinned Trixie deb through
+`verified_download()`. Its native `/usr` layout retains the package's
+`cap_sys_admin,cap_sys_nice` capability, `uhid` modules-load entry, and udev
+access rules. Its upstream user service is available for manual user startup;
+do not add a preset or `Upholds=` activation.
 
 Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var` at runtime. Configs needed in `/etc` must be:
 

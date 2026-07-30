@@ -1007,7 +1007,7 @@ installed), plus a first-promotion assertion that `promote.sh` prints
 
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
-1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, tailscale, vscode
+1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode
 
 ## Architecture
 

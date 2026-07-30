@@ -58,6 +58,7 @@ The project produces:
 | **pilothouse**      | Pilothouse local web administration console for Snosi           | sysext        |
 | **podman**          | Podman + Distrobox                                              | sysext        |
 | **tailscale**       | Tailscale VPN client                                            | sysext        |
+| **sunshine**        | Sunshine self-hosted game streaming host for Moonlight          | sysext        |
 | **vscode**          | Visual Studio Code desktop application                          | sysext        |
 
 Protected bootc publication validates each candidate with host Podman while
@@ -205,7 +206,7 @@ sudo test/native-ab-update-test.sh \
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1password 1password-cli azurevpn bitwarden claude-desktop code-server coder debdev dev docker edge github-copilot incus k3s lemonade nix paseo pilothouse podman tailscale vscode
+  1password 1password-cli azurevpn bitwarden claude-desktop code-server coder debdev dev docker edge github-copilot incus k3s lemonade nix paseo pilothouse podman sunshine tailscale vscode
                                      snow            cayo
                                       │
                                   snowfield
@@ -247,6 +248,7 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | **pilothouse**    | Pilothouse local web administration console   | [mkosi.images/pilothouse/mkosi.conf](mkosi.images/pilothouse/mkosi.conf)       |
 | **podman**        | Podman, Distrobox, buildah, crun              | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf)               |
 | **tailscale**     | Tailscale VPN client                          | [mkosi.images/tailscale/mkosi.conf](mkosi.images/tailscale/mkosi.conf)         |
+| **sunshine**      | Sunshine self-hosted game streaming host for Moonlight | [mkosi.images/sunshine/mkosi.conf](mkosi.images/sunshine/mkosi.conf)     |
 | **vscode**        | Visual Studio Code desktop application         | [mkosi.images/vscode/mkosi.conf](mkosi.images/vscode/mkosi.conf)               |
 
 ## How Profiles Work
@@ -381,7 +383,7 @@ use a system-installed mkosi instead.
 # List available build targets
 just
 
-# Build base + all system extensions
+# Build base + all 21 system extensions, including Sunshine
 just sysexts
 
 # Build snow desktop image
@@ -571,7 +573,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all sysexts (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, tailscale, vscode)
+1. Builds the base image and all 22 sysexts (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode)
 2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Uploads package manifests for version tracking
 

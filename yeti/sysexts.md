@@ -37,6 +37,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **pilothouse** | frostyard-pilothouse | Pilothouse local web administration console for Snosi (pilothouse web UI + pilothoused root broker) — downloaded via `verified_download()` from frostyard/pilothouse GitHub releases |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
 | **tailscale** | tailscale | Tailscale VPN client |
+| **sunshine** | sunshine | Sunshine self-hosted game streaming host (official pinned Trixie .deb via verified_download) |
 | **vscode** | code | Visual Studio Code desktop application (from packages.microsoft.com) |
 
 ## Sysext Configuration Pattern
@@ -117,7 +118,7 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server`, `coder`, `edge`, `bitwarden`, `github-copilot`, `paseo`, and `azurevpn` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb`; its Tauri payload already has a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
+`code-server`, `coder`, `edge`, `bitwarden`, `github-copilot`, `paseo`, `sunshine`, and `azurevpn` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb`; its Tauri payload already has a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
 
 ## Sysext-Specific Extra Files
 
@@ -150,6 +151,12 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `/usr/bin/paseo` symlinks the bundled CLI wrapper (`resources/bin/paseo`), which resolves symlinks back into the bundle itself
 - Its postinst's AppArmor block is a no-op in the buildroot, and would only write to `/etc` (stripped) anyway
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in; ships hicolor icons → `sysext-strip-icon-cache.sh` required
+
+### sunshine
+- `mkosi.postinst.chroot` downloads Sunshine's official pinned Trixie `.deb` with `verified_download()` and installs it with `dpkg -i`; its payload already uses the native `/usr` layout, so no relocation is needed
+- Desktop-only self-hosted game streaming host for Moonlight; retain the package's `cap_sys_admin,cap_sys_nice` file capability on `/usr/bin/sunshine`, `uhid` modules-load entry, and udev access rules
+- The upstream `app-dev.lizardbyte.app.Sunshine.service` user unit is available for manual user startup only: no user preset and no `Upholds=` drop-in provide automatic activation
+- Ships a hicolor icon, so `sysext-strip-icon-cache.sh` is required
 
 ### claude-desktop
 - No `mkosi.extra/` and no postinst — the Anthropic `claude-desktop` deb (apt repo at `downloads.claude.ai/claude-desktop/apt/stable`, registered in `mkosi.sandbox`) installs natively under `/usr` (`/usr/lib/claude-desktop` + `/usr/bin/claude-desktop` symlink), so no relocation is needed
