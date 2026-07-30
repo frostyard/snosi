@@ -1315,7 +1315,7 @@ Use build-time enablement/presets for desired service state. For run-once runtim
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 21 sysexts
+just sysexts            # Build base + all 22 sysexts
 just snow               # Build snow desktop
 just snowfield          # Build snowfield (Surface)
 just cayo               # Build cayo server

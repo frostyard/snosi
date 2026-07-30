@@ -14,7 +14,7 @@ Requires: just, git, python3, root/sudo access. mkosi itself is auto-bootstrappe
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 21 sysexts
+just sysexts            # Build base + all 22 sysexts
 just snow               # Build snow desktop image
 just snowfield          # Build snowfield (Surface kernel)
 just cayo               # Build cayo server image
