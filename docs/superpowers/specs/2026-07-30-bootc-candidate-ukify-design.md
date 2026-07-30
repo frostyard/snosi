@@ -27,7 +27,7 @@ build.
 Run direct `/usr/bin/ukify` inside the already-packaged first-pass candidate
 OCI image. The packager passes that local image reference to the assembler via
 `SNOSI_BOOTC_SECURE_UKIFY_IMAGE`. The assembler uses `podman run --rm` with
-network disabled, the existing unconfined-label convention, and explicit
+network disabled, all Linux capabilities dropped, the existing unconfined-label convention, and explicit
 `--entrypoint=/usr/bin/ukify` so future image CMD/ENTRYPOINT changes cannot
 intercept the ukify arguments.
 
@@ -69,9 +69,11 @@ The candidate receives only these bind mounts:
 
 Each credential is mounted at a fixed `/run/snosi-ukify-*.key|crt` path. The
 work directory is mounted at `/run/snosi-ukify-work`; it carries the generated
-public PCR key into the container and returns only `uki.efi`. Public inputs do
-not need separate credential mounts when already present in the work directory
-or candidate rootfs.
+public PCR keys into the container and returns only `uki.efi`. The authoritative
+active and optional previous public identities remain in the unmounted assembler
+gate directory; the exposed copies are compared with them after successful
+candidate execution before UKI validation. Public inputs do not need separate
+credential mounts when already present in the work directory or candidate rootfs.
 
 Credential mounts are never copied into the rootfs or OCI layers. The
 container is removed by Podman, the first-pass image remains under the existing
@@ -81,7 +83,8 @@ Podman secrets, create a retained container, or relabel credential files.
 
 Use `--security-opt label=type:unconfined_t`, matching existing candidate-image
 storage probes, rather than `:z`/`:Z` bind suffixes that mutate host labels.
-Use `--network=none`; ukify requires no network.
+Use `--network=none` and `--cap-drop=all`; ukify requires neither network nor
+Linux capabilities.
 
 The writable work directory is public-output-only by invariant. Before exposing
 it to the container, run the existing caller-credential gate over the directory

@@ -74,13 +74,16 @@ an upstream interface; see `docs/bootc-secure-assembly-compatibility.md` for
 the mandatory revalidation triggers. Private keys remain caller-owned and must
 not enter this fragment, its tree, OCI layers, labels, logs, or retained temp
 state. Direct ukify runs as `/usr/bin/ukify` in the first-pass candidate with
-`--network=none`, `--security-opt label=type:unconfined_t`, and a fixed
-entrypoint. The assembler translates rootfs kernel/initrd paths to candidate
-paths, mounts each caller credential read-only at fixed `/run/snosi-ukify-*`
+`--network=none`, `--cap-drop=all`, `--security-opt label=type:unconfined_t`,
+and a fixed entrypoint. The assembler resolves and translates in-root
+kernel/initrd paths to candidate paths, mounts each caller credential read-only
+at fixed `/run/snosi-ukify-*`
 paths, and gives it exactly one writable `/run/snosi-ukify-work` mount. The
 work directory is scanned for caller credentials both before and after candidate
-execution, so it carries only public inputs and output. Native A/B profiles do
-not include it and continue using `shared/native-ab-secure/` independently.
+execution, so it carries only public inputs and output. The authoritative active
+and optional previous PCR public identities stay in the unmounted gate directory;
+the work copies must match them after candidate execution. Native A/B profiles
+do not include it and continue using `shared/native-ab-secure/` independently.
 
 **Bootc shim second-stage reconciliation (Task 7):** the secure tree ships
 `snosi-bootc-bootloader-reconcile.service` with a static

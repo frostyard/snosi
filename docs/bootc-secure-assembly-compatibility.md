@@ -22,6 +22,9 @@ The adapter relies on all of the following observed behavior:
 6. Direct ukify runs inside the first-pass candidate; candidate bootc remains
    storage-digest authority.
 7. Final host byte comparisons depend on first-pass `cp -a` identity.
+8. Candidate ukify runs with network disabled and all Linux capabilities dropped.
+   Its authoritative active and optional previous PCR public identities remain
+   outside the writable work mount; exposed copies must match after execution.
 
 `buildah-package.sh` makes a first, unsigned-label OCI image, computes that
 storage digest through the image's own bootc binary, invokes the assembler,

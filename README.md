@@ -451,6 +451,9 @@ dependencies therefore come from the candidate, never the host; the disposable
 container and mounts do not enter a layer. Host `.linux` and `.initrd` byte
 checks remain valid because first-pass packaging is a byte-identical `cp -a`
 snapshot.
+The candidate also runs with all Linux capabilities dropped. Protected active
+and optional previous PCR public identities remain outside the writable mount;
+the copied public inputs are checked against those identities after execution.
 This is not production Secure Boot support: published `latest` images inspected
 on 2026-07-27 lacked `io.snosi.bootc.secureboot-capable` and are unsuitable for
 the secure install/update harnesses. MOK/TPM enrollment and full secure

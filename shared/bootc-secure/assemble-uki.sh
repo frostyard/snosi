@@ -232,13 +232,13 @@ sign_systemd_boot() { # rootfs mok-cert
 
 run_candidate_ukify() { # image work log mok-key mok-cert pcr-key previous-key -- ukify-args...
     local image=$1 work=$2 log=$3 mok_key=$4 mok_cert=$5 pcr_key=$6 previous_key=$7 status
-    local -a podman_args
+    local -a podman_args pipeline_status
     [[ -n $image ]] || die "candidate ukify image is missing"
     shift 7
     [[ ${1:-} == -- ]] || die "candidate ukify argument separator is missing"
     shift
 
-    podman_args=(run --rm --network=none
+    podman_args=(run --rm --network=none --cap-drop=all
         --security-opt label=type:unconfined_t
         --entrypoint=/usr/bin/ukify
         --volume "$mok_key:$CANDIDATE_UKIFY_MOK_KEY:ro"
@@ -253,8 +253,13 @@ run_candidate_ukify() { # image work log mok-key mok-cert pcr-key previous-key -
             "$CANDIDATE_UKIFY_MOK_KEY" "$CANDIDATE_UKIFY_PCR_KEY" \
             "$CANDIDATE_UKIFY_PREVIOUS_KEY" |
         tee "$log" >&2
-    status=${PIPESTATUS[0]}
+    pipeline_status=("${PIPESTATUS[@]}")
+    status=${pipeline_status[0]}
     [[ $status -eq 0 ]] || return "$status"
+    [[ ${pipeline_status[1]} -eq 0 && ${pipeline_status[2]} -eq 0 ]] || {
+        echo "Error: candidate ukify diagnostics could not be retained" >&2
+        return 1
+    }
     [[ -s $work/uki.efi ]] || {
         echo "Error: candidate ukify produced no UKI" >&2
         return 1
@@ -262,11 +267,19 @@ run_candidate_ukify() { # image work log mok-key mok-cert pcr-key previous-key -
 }
 
 rootfs_image_path() { # rootfs host-path
-    local root=${1%/} path=$2 relative
+    local root path relative
+    root=$(realpath -e "$1") || die "rootfs path cannot be resolved: $1"
+    path=$(realpath -e "$2") || die "rootfs path cannot be resolved: $2"
     [[ $path == "$root/"* ]] || die "path is outside rootfs: $path"
     relative=${path#"$root/"}
-    while [[ $relative == /* ]]; do relative=${relative#/}; done
     printf '/%s\n' "$relative"
+}
+
+verify_exposed_pcr_public_keys() { # active-public work-directory [previous-public]
+    local active=$1 work=$2 previous=${3:-}
+    cmp -s "$active" "$work/pcr.pub" || die "candidate changed active PCR public key"
+    [[ -z $previous ]] || cmp -s "$previous" "$work/previous.pub" ||
+        die "candidate changed previous PCR public key"
 }
 
 candidate_ukify_args() { # rootfs kernel initrd digest version previous-key output-array
@@ -319,11 +332,13 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     ukify_image=${SNOSI_BOOTC_SECURE_UKIFY_IMAGE:-}
     [[ -n $ukify_image ]] || die "missing first-pass candidate image for ukify"
     work=$(mktemp -d)
-    openssl pkey -in "$pcr_key" -pubout -out "$work/pcr.pub" >/dev/null
-    primary_public="$work/pcr.pub"; previous_public=""
+    openssl pkey -in "$pcr_key" -pubout -out "$gate/pcr.pub" >/dev/null
+    primary_public="$gate/pcr.pub"; previous_public=""
+    install -m 0644 "$primary_public" "$work/pcr.pub"
     if [[ -n "$previous_cert" ]]; then
-        openssl pkey -pubin -in "$previous_cert" -pubout -out "$work/previous.pub"
-        previous_public="$work/previous.pub"
+        openssl pkey -pubin -in "$previous_cert" -pubout -out "$gate/previous.pub"
+        previous_public="$gate/previous.pub"
+        install -m 0644 "$previous_public" "$work/previous.pub"
     fi
     candidate_ukify_args "$root" "$kernel" "$initrd" "$digest" "$version" "$previous_key" ukify_args
     credential_gate_scan_tree "$gate" "ukify work directory before candidate execution" "$work"
@@ -334,6 +349,7 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     ukify_status=$?
     set -e
     [[ $ukify_status -eq 0 ]] || die "ukify failed"
+    verify_exposed_pcr_public_keys "$primary_public" "$work" "$previous_public"
     credential_gate_scan_tree "$gate" "ukify work directory after candidate execution" "$work"
     credential_gate_scan_file "$gate" "sanitized ukify log" ukify.log "$work/ukify.log"
     uki="$root/boot/EFI/Linux/$version.efi"
@@ -379,7 +395,7 @@ candidate_ukify_self_test() (
 #!/bin/bash
 set -euo pipefail
 printf '%s\n' "$@" >"$CANDIDATE_UKIFY_TEST_ARGS"
-expected=(run --rm --network=none --security-opt label=type:unconfined_t --entrypoint=/usr/bin/ukify)
+expected=(run --rm --network=none --cap-drop=all --security-opt label=type:unconfined_t --entrypoint=/usr/bin/ukify)
 for expected_arg in "${expected[@]}"; do
     [[ ${1:-} == "$expected_arg" ]] || exit 87
     shift
@@ -402,6 +418,12 @@ fi
 if [[ ${CANDIDATE_UKIFY_TEST_FAIL:-0} == 1 ]]; then
     echo "candidate ukify failed at /run/snosi-ukify-pcr.key" >&2
     exit 86
+fi
+if [[ ${CANDIDATE_UKIFY_TEST_OVERWRITE_ACTIVE_PUB:-0} == 1 ]]; then
+    printf 'candidate-mutated-active-public-key\n' >"$host_work/pcr.pub"
+fi
+if [[ ${CANDIDATE_UKIFY_TEST_OVERWRITE_PREVIOUS_PUB:-0} == 1 ]]; then
+    printf 'candidate-mutated-previous-public-key\n' >"$host_work/previous.pub"
 fi
 if [[ ${CANDIDATE_UKIFY_TEST_NO_OUTPUT:-0} != 1 ]]; then
     if [[ ${CANDIDATE_UKIFY_TEST_EMPTY_OUTPUT:-0} == 1 ]]; then
@@ -444,7 +466,8 @@ EOF
     local seen_image=0 podman_arg
     local writable_mounts=0
     while IFS= read -r podman_arg; do
-        [[ $seen_image -eq 0 || $podman_arg != "$root"* ]] || die "candidate ukify passed a host rootfs path"
+        [[ $seen_image -eq 0 || ( $podman_arg != "$root"* && $podman_arg != "$work"* ) ]] ||
+            die "candidate ukify passed a host rootfs or work path"
         [[ $podman_arg == localhost/snosi-bootc-secure-first-fixture ]] && seen_image=1
         [[ $podman_arg == *:rw ]] && writable_mounts=$((writable_mounts + 1))
     done <"$args"
@@ -459,10 +482,53 @@ EOF
     if (rootfs_image_path "$root" "$work/outside") >/dev/null 2>&1; then
         die "outside-rootfs path accepted"
     fi
+    mkdir "$top/outside"
+    touch "$top/outside/vmlinuz"
+    ln -s ../outside/vmlinuz "$root/relative-escape"
+    ln -s "$top/outside/vmlinuz" "$root/absolute-escape"
+    ln -s usr/lib/modules/one/vmlinuz "$root/internal-link"
+    if (rootfs_image_path "$root" "$root/relative-escape") >/dev/null 2>&1; then
+        die "relative rootfs symlink escape accepted"
+    fi
+    if (rootfs_image_path "$root" "$root/absolute-escape") >/dev/null 2>&1; then
+        die "absolute rootfs symlink escape accepted"
+    fi
+    [[ $(rootfs_image_path "$root" "$root/internal-link") == /usr/lib/modules/one/vmlinuz ]] ||
+        die "internal rootfs symlink translation failed"
 
-    local previous="$top/previous.key" dual_work="$top/work-dual" dual_args="$top/podman-dual.args"
-    local -a dual_ukify_args
+    local previous="$top/previous.key" protected="$top/protected" overwrite_work="$top/work-overwrite-active"
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$previous" >/dev/null 2>&1
+    mkdir "$protected" "$overwrite_work"
+    cp "$work/pcr.pub" "$protected/pcr.pub"; cp "$protected/pcr.pub" "$overwrite_work/pcr.pub"
+    PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$top/podman-overwrite-active.args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
+        CANDIDATE_UKIFY_TEST_OVERWRITE_ACTIVE_PUB=1 \
+        run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$overwrite_work" "$overwrite_work/ukify.log" "$key" "$cert" "$pcr" "" -- build
+    if (verify_exposed_pcr_public_keys "$protected/pcr.pub" "$overwrite_work") >/dev/null 2>&1; then
+        die "candidate active PCR public-key overwrite accepted"
+    fi
+
+    local previous_protected="$protected/previous.pub" overwrite_dual_work="$top/work-overwrite-previous"
+    mkdir "$overwrite_dual_work"
+    openssl pkey -in "$previous" -pubout -out "$previous_protected" >/dev/null
+    cp "$protected/pcr.pub" "$overwrite_dual_work/pcr.pub"; cp "$previous_protected" "$overwrite_dual_work/previous.pub"
+    PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$top/podman-overwrite-previous.args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
+        CANDIDATE_UKIFY_TEST_OVERWRITE_PREVIOUS_PUB=1 \
+        run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$overwrite_dual_work" "$overwrite_dual_work/ukify.log" "$key" "$cert" "$pcr" "$previous" -- build
+    if (verify_exposed_pcr_public_keys "$protected/pcr.pub" "$overwrite_dual_work" "$previous_protected") >/dev/null 2>&1; then
+        die "candidate previous PCR public-key overwrite accepted"
+    fi
+
+    local tee_work="$top/work-tee-failure" tee_log="$top/not-a-log"
+    mkdir "$tee_work" "$tee_log"
+    set +e
+    PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$top/podman-tee-failure.args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
+        run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$tee_work" "$tee_log" "$key" "$cert" "$pcr" "" -- build
+    status=$?
+    set -e
+    [[ $status -ne 0 ]] || die "candidate ukify accepted a tee failure"
+
+    local dual_work="$top/work-dual" dual_args="$top/podman-dual.args"
+    local -a dual_ukify_args
     mkdir "$dual_work"; openssl pkey -in "$pcr" -pubout -out "$dual_work/pcr.pub" >/dev/null
     candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
         fixture one "$previous" dual_ukify_args
