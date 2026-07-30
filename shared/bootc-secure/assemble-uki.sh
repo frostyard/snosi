@@ -230,15 +230,30 @@ sign_systemd_boot() { # rootfs mok-cert
     sbverify --cert "$mok_cert" "$out" >/dev/null || die "systemd-boot MOK signature failed"
 }
 
+common_credential_owner() { # credential [credential...]
+    local owner file file_owner
+    owner=$(stat -c '%u:%g' "$1") || die "cannot stat candidate credential"
+    for file in "$@"; do
+        [[ -n $file ]] || continue
+        file_owner=$(stat -c '%u:%g' "$file") || die "cannot stat candidate credential"
+        [[ $file_owner == "$owner" ]] || die "candidate credential owners differ"
+    done
+    printf '%s\n' "$owner"
+}
+
 run_candidate_ukify() { # image work log mok-key mok-cert pcr-key previous-key -- ukify-args...
-    local image=$1 work=$2 log=$3 mok_key=$4 mok_cert=$5 pcr_key=$6 previous_key=$7 status
+    local image=$1 work=$2 log=$3 mok_key=$4 mok_cert=$5 pcr_key=$6 previous_key=$7 status owner
     local -a podman_args pipeline_status
     [[ -n $image ]] || die "candidate ukify image is missing"
     shift 7
     [[ ${1:-} == -- ]] || die "candidate ukify argument separator is missing"
     shift
+    if ! owner=$(common_credential_owner "$mok_key" "$mok_cert" "$pcr_key" "$previous_key"); then
+        die "candidate credential owner validation failed"
+    fi
+    chown "$owner" "$work" || die "cannot set candidate ukify work owner"
 
-    podman_args=(run --rm --network=none --cap-drop=all
+    podman_args=(run --rm --network=none --cap-drop=all --user "$owner"
         --security-opt label=type:unconfined_t
         --entrypoint=/usr/bin/ukify
         --volume "$mok_key:$CANDIDATE_UKIFY_MOK_KEY:ro"
@@ -411,6 +426,14 @@ candidate_ukify_self_test() (
     openssl req -new -x509 -key "$key" -subj /CN=mok -days 1 -out "$cert" >/dev/null 2>&1
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$pcr" >/dev/null 2>&1
     openssl pkey -in "$pcr" -pubout -out "$work/pcr.pub" >/dev/null
+    cat >"$top/bin/stat" <<'EOF'
+#!/bin/bash
+if [[ ${3:-} == "$CANDIDATE_UKIFY_TEST_MISMATCH" ]]; then printf '999:999\n'; else /usr/bin/stat "$@"; fi
+EOF
+    chmod +x "$top/bin/stat"
+    if (PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_MISMATCH="$pcr" common_credential_owner "$key" "$cert" "$pcr") >/dev/null 2>&1; then
+        die "candidate unequal credential owners accepted"
+    fi
     candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
         fixture one "" fixture_args
     expected_args=(build --linux /usr/lib/modules/one/vmlinuz --initrd /usr/lib/modules/one/initramfs.img
@@ -426,7 +449,7 @@ candidate_ukify_self_test() (
 #!/bin/bash
 set -euo pipefail
 printf '%s\n' "$@" >"$CANDIDATE_UKIFY_TEST_ARGS"
-expected=(run --rm --network=none --cap-drop=all --security-opt label=type:unconfined_t --entrypoint=/usr/bin/ukify)
+expected=(run --rm --network=none --cap-drop=all --user "$(id -u):$(id -g)" --security-opt label=type:unconfined_t --entrypoint=/usr/bin/ukify)
 for expected_arg in "${expected[@]}"; do
     [[ ${1:-} == "$expected_arg" ]] || exit 87
     shift
@@ -442,6 +465,7 @@ if [[ ${1:-} == --volume ]]; then
 fi
 [[ ${1:-} == localhost/snosi-bootc-secure-first-fixture ]] || exit 91
 [[ -n ${host_work:-} ]] || exit 88
+[[ $(/usr/bin/stat -c '%u:%g' "$host_work") == "$(id -u):$(id -g)" ]] || exit 92
 if [[ ${CANDIDATE_UKIFY_TEST_PODMAN_UNAVAILABLE:-0} == 1 ]]; then
     echo 'candidate ukify image is unavailable' >&2
     exit 127
@@ -467,6 +491,23 @@ printf 'safe diagnostic; key path %s\n' /run/snosi-ukify-pcr.key >&2
 cat "$CANDIDATE_UKIFY_TEST_PRIVATE_KEY" >&2
 EOF
     chmod +x "$top/bin/podman"
+    local mismatch_work="$top/work-owner-mismatch" mismatch_output mismatch_owner
+    mkdir "$mismatch_work"
+    mismatch_owner=$(/usr/bin/stat -c '%u:%g' "$mismatch_work")
+    set +e
+    mismatch_output=$(PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_MISMATCH="$pcr" \
+        CANDIDATE_UKIFY_TEST_ARGS="$top/podman-owner-mismatch.args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
+        run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$mismatch_work" \
+        "$mismatch_work/ukify.log" "$key" "$cert" "$pcr" "" -- build 2>&1)
+    status=$?
+    set -e
+    [[ $status -ne 0 ]] || die "candidate unequal credential owners reached Podman"
+    grep -Fq -- 'candidate credential owner validation failed' <<<"$mismatch_output" ||
+        die "candidate unequal credential owners lacked validation diagnostic"
+    [[ $(/usr/bin/stat -c '%u:%g' "$mismatch_work") == "$mismatch_owner" ]] ||
+        die "candidate unequal credential owners changed work ownership"
+    [[ ! -e "$top/podman-owner-mismatch.args" ]] ||
+        die "candidate unequal credential owners invoked Podman"
     empty_args="$top/podman-empty.args"
     if (PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$empty_args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
         run_candidate_ukify "" "$work" "$top/empty.log" "$key" "$cert" "$pcr" "" -- build) >"$top/empty-output" 2>&1; then

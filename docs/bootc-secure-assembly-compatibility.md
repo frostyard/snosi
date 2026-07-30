@@ -23,6 +23,8 @@ The adapter relies on all of the following observed behavior:
    storage-digest authority.
 7. Final host byte comparisons depend on first-pass `cp -a` identity.
 8. Candidate ukify runs with network disabled and all Linux capabilities dropped.
+   It runs as the common numeric owner of its mode-0600 credentials; mismatches
+   fail before Podman.
    Its authoritative active and optional previous PCR public identities remain
    outside the writable work mount; exposed copies must match after execution.
 
