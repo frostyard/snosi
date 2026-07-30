@@ -49,6 +49,7 @@ The project produces:
 | **dev**             | Build essentials, Python, cmake, valgrind, gdb                  | sysext        |
 | **docker**          | Docker CE container runtime                                     | sysext        |
 | **edge**            | Microsoft Edge browser                                          | sysext        |
+| **github-copilot**  | GitHub Copilot agent-native desktop application                 | sysext        |
 | **incus**           | Incus container/VM manager                                      | sysext        |
 | **lemonade**        | Lemonade local LLM server (GPU/NPU accelerated)                 | sysext        |
 | **nix**             | Nix package manager                                             | sysext        |
@@ -195,7 +196,7 @@ sudo test/native-ab-update-test.sh \
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1pass azurevpn bitwarden claude-desktop code-server coder debdev dev docker edge incus lemonade nix paseo podman tailscale vscode │         │
+  1password 1password-cli azurevpn bitwarden claude-desktop code-server coder debdev dev docker edge github-copilot incus lemonade nix paseo pilothouse podman tailscale vscode
                                      snow            cayo
                                       │
                                   snowfield
@@ -220,17 +221,24 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | ----------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
 | **1password**     | 1Password desktop app                         | [mkosi.images/1password/mkosi.conf](mkosi.images/1password/mkosi.conf)         |
 | **1password-cli** | 1Password CLI tool                            | [mkosi.images/1password-cli/mkosi.conf](mkosi.images/1password-cli/mkosi.conf) |
+| **azurevpn**      | Microsoft Azure VPN client                    | [mkosi.images/azurevpn/mkosi.conf](mkosi.images/azurevpn/mkosi.conf)           |
+| **bitwarden**     | Bitwarden password manager desktop app        | [mkosi.images/bitwarden/mkosi.conf](mkosi.images/bitwarden/mkosi.conf)         |
+| **claude-desktop**| Claude desktop application                    | [mkosi.images/claude-desktop/mkosi.conf](mkosi.images/claude-desktop/mkosi.conf) |
 | **code-server**   | code-server (VS Code in the browser)          | [mkosi.images/code-server/mkosi.conf](mkosi.images/code-server/mkosi.conf)     |
 | **coder**         | Coder workspaces server + workspace proxy     | [mkosi.images/coder/mkosi.conf](mkosi.images/coder/mkosi.conf)                 |
 | **debdev**        | debootstrap, distro-info, archive keyrings    | [mkosi.images/debdev/mkosi.conf](mkosi.images/debdev/mkosi.conf)               |
 | **dev**           | build-essential, cmake, Python, valgrind, gdb | [mkosi.images/dev/mkosi.conf](mkosi.images/dev/mkosi.conf)                     |
 | **docker**        | Docker CE, containerd, buildx, compose        | [mkosi.images/docker/mkosi.conf](mkosi.images/docker/mkosi.conf)               |
+| **edge**          | Microsoft Edge browser                         | [mkosi.images/edge/mkosi.conf](mkosi.images/edge/mkosi.conf)                   |
+| **github-copilot**| GitHub Copilot agent-native desktop application | [mkosi.images/github-copilot/mkosi.conf](mkosi.images/github-copilot/mkosi.conf) |
 | **incus**         | Incus, QEMU/KVM, OVMF, virt-viewer            | [mkosi.images/incus/mkosi.conf](mkosi.images/incus/mkosi.conf)                 |
 | **lemonade**      | Lemonade local LLM server (lemond)            | [mkosi.images/lemonade/mkosi.conf](mkosi.images/lemonade/mkosi.conf)           |
 | **nix**           | Nix package manager, systemd integration      | [mkosi.images/nix/mkosi.conf](mkosi.images/nix/mkosi.conf)                     |
 | **paseo**         | Paseo desktop app (Electron)                  | [mkosi.images/paseo/mkosi.conf](mkosi.images/paseo/mkosi.conf)                 |
+| **pilothouse**    | Pilothouse local web administration console   | [mkosi.images/pilothouse/mkosi.conf](mkosi.images/pilothouse/mkosi.conf)       |
 | **podman**        | Podman, Distrobox, buildah, crun              | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf)               |
 | **tailscale**     | Tailscale VPN client                          | [mkosi.images/tailscale/mkosi.conf](mkosi.images/tailscale/mkosi.conf)         |
+| **vscode**        | Visual Studio Code desktop application         | [mkosi.images/vscode/mkosi.conf](mkosi.images/vscode/mkosi.conf)               |
 
 ## How Profiles Work
 
@@ -538,7 +546,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all sysexts (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, incus, lemonade, nix, paseo, pilothouse, podman, tailscale, vscode)
+1. Builds the base image and all sysexts (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, lemonade, nix, paseo, pilothouse, podman, tailscale, vscode)
 2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Uploads package manifests for version tracking
 

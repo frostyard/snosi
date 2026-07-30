@@ -60,6 +60,15 @@ jobs:
             echo "bitwarden_version=$LATEST_BW" >> $GITHUB_OUTPUT
           fi
 
+          # Check GitHub Copilot desktop app
+          CURRENT_GITHUB_COPILOT=$(jq -r '."github-copilot".version' "$CHECKSUMS")
+          LATEST_GITHUB_COPILOT=$(gh_api https://api.github.com/repos/github/app/releases | jq -r '[.[] | select(.draft == false and .prerelease == false)][0].tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_GITHUB_COPILOT" && "$LATEST_GITHUB_COPILOT" != "null" ]] && ver_gt "$LATEST_GITHUB_COPILOT" "$CURRENT_GITHUB_COPILOT"; then
+            UPDATES="${UPDATES}github-copilot: $CURRENT_GITHUB_COPILOT -> $LATEST_GITHUB_COPILOT\n"
+            echo "github_copilot_update=true" >> "$GITHUB_OUTPUT"
+            echo "github_copilot_version=$LATEST_GITHUB_COPILOT" >> "$GITHUB_OUTPUT"
+          fi
+
           # Check code-server
           CURRENT_CS=$(jq -r '.["code-server"].version' "$CHECKSUMS")
           LATEST_CS=$(gh_api https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's/^v//')
@@ -151,6 +160,8 @@ jobs:
         env:
           BITWARDEN_UPDATE: ${{ steps.check.outputs.bitwarden_update }}
           BITWARDEN_VERSION: ${{ steps.check.outputs.bitwarden_version }}
+          GITHUB_COPILOT_UPDATE: ${{ steps.check.outputs.github_copilot_update }}
+          GITHUB_COPILOT_VERSION: ${{ steps.check.outputs.github_copilot_version }}
           CODESERVER_UPDATE: ${{ steps.check.outputs.codeserver_update }}
           CODESERVER_VERSION: ${{ steps.check.outputs.codeserver_version }}
           CODER_UPDATE: ${{ steps.check.outputs.coder_update }}
@@ -178,6 +189,18 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.bitwarden.url=$u | .bitwarden.sha256=$s | .bitwarden.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$GITHUB_COPILOT_UPDATE" == "true" ]]; then
+            VER="$GITHUB_COPILOT_VERSION"
+            URL="https://github.com/github/app/releases/download/v${VER}/GitHub-Copilot-linux-x64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '."github-copilot".url=$u | ."github-copilot".sha256=$s | ."github-copilot".version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi

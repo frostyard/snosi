@@ -28,6 +28,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
 | **edge** | microsoft-edge-stable | Microsoft Edge browser (pinned .deb via verified_download, relocated from /opt) |
+| **github-copilot** | github | GitHub Copilot desktop app (official pinned .deb via verified_download; Tauri; native /usr layout) |
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF, virt-viewer |
 | **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
@@ -103,6 +104,10 @@ payload of load-bearing dependency packages, the primary unit files, and the
 check in addition to (after) the image's own `mkosi.finalize` — file-detected
 default scripts compose with explicit `FinalizeScripts=` entries.
 
+Entries may contain internal spaces. The parser trims only surrounding
+whitespace and comments, preserving the path itself for the required-path
+check.
+
 **Delta semantics:** for `Overlay=yes` images the finalize `$BUILDROOT` is the
 sysext DELTA (the overlay upper layer — exactly what ships), not the merged
 base view. Only list paths the sysext itself provides. A package that is also
@@ -111,7 +116,7 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server`, `coder`, `edge`, `bitwarden`, `paseo`, and `azurevpn` are the current exceptions to the `Packages=` line: it downloads a pinned upstream `.deb` in `mkosi.images/code-server/mkosi.postinst.chroot` with `verified_download()` and installs it with `dpkg -i`. It still sets `KEYPACKAGE=code-server`, and the shared postoutput script resolves that version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file Exec rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
+`code-server`, `coder`, `edge`, `bitwarden`, `github-copilot`, `paseo`, and `azurevpn` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb`; its Tauri payload already has a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
 
 ## Sysext-Specific Extra Files
 
@@ -177,6 +182,10 @@ Some sysexts include extra files via `mkosi.extra/`:
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
 - The postinst repoints the update-alternatives symlinks (`/usr/bin/microsoft-edge`, `x-www-browser`, `gnome-www-browser`) at the real binary: their `/etc/alternatives` targets ship in profile images but are stripped from sysexts, so they would dangle on target systems
 - Its icons are hicolor symlinks created by the relocation script — visibility depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below), so on images that still ship `icon-theme.cache` the Edge icon renders generic
+
+### github-copilot
+- No `mkosi.extra/`, relocation, runtime service, or `/etc` capture: GitHub's official pinned `.deb` installs the Tauri application directly under `/usr`
+- Ships hicolor icons, so the shared `sysext-strip-icon-cache.sh` finalize step is required
 
 ### incus
 - `mkosi.finalize` — Captures the tmpfiles-referenced `/etc` paths to factory defaults

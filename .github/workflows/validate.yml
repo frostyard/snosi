@@ -144,6 +144,11 @@ jobs:
         # hooks. No root, no bind mount, no image build.
         run: ./test/snosi-etc-diff-test.sh
 
+      - name: Validate sysext required paths finalizer
+        # Fixture regression test for whitespace-preserving parsing of sysext
+        # required-paths.txt entries. No root, network, or image build.
+        run: ./test/sysext-required-paths-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:

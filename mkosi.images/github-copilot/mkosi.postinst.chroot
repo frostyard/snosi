@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+# shellcheck disable=SC1091
+source "$SRCDIR/shared/download/verified-download.sh"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "github-copilot" "$DEBS/github-copilot.deb"
+
+dpkg -i "$DEBS/github-copilot.deb"

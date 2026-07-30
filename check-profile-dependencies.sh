@@ -5,18 +5,26 @@ cd "$(dirname "$0")"
 
 profiles=(cayo snow snowfield)
 sysexts=(
+    1password
     1password-cli
+    azurevpn
+    bitwarden
     claude-desktop
     code-server
     coder
     debdev
     dev
     docker
+    edge
+    github-copilot
     incus
+    lemonade
     nix
+    paseo
     pilothouse
     podman
     tailscale
+    vscode
 )
 
 failed=0

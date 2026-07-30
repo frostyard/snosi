@@ -1,0 +1,6 @@
+# github-copilot sysext: GitHub Copilot desktop application (Tauri)
+/usr/bin/github
+/usr/bin/git-credential-copilot
+/usr/lib/GitHub Copilot
+/usr/share/applications/GitHub Copilot.desktop
+/usr/share/icons/hicolor/128x128/apps/github.png
