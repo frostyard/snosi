@@ -30,6 +30,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **edge** | microsoft-edge-stable | Microsoft Edge browser (pinned .deb via verified_download, relocated from /opt) |
 | **github-copilot** | github | GitHub Copilot desktop app (official pinned .deb via verified_download; Tauri; native /usr layout) |
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF, virt-viewer |
+| **k3s** | k3s | k3s lightweight Kubernetes node — pinned static binary via `verified_download()` from k3s-io/k3s GitHub releases, dpkg-registered through a build-local stub deb |
 | **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
 | **paseo** | paseo | Paseo coding agent workspace desktop app (pinned .deb via verified_download from getpaseo/paseo GitHub releases, relocated from /opt) |
@@ -195,6 +196,13 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/incus/incus-sysext-setup` — The setup script the service runs
 - `usr/lib/sysusers.d/{dnsmasq,rdma}.conf` — User/group definitions
 - `usr/lib/tmpfiles.d/incus.conf` — Factory config injection + runtime dirs + xz alternatives links
+
+### k3s
+- `mkosi.postinst.chroot` — Downloads the pinned k3s static binary (bare binary on k3s-io/k3s GitHub releases, no deb/apt repo) via `verified_download()`, then builds a minimal stub deb around it (`dpkg-deb -Znone`, version read from the same `sysext-checksums.json` entry) and installs with `dpkg -i` so the shared postoutput script can resolve `KEYPACKAGE=k3s` from the merged dpkg database like every other sysext. The pinned sha256 is upstream's own published `sha256sum-amd64.txt` value, and the URL percent-encodes the `+` in the release tag (`v1.36.2%2Bk3s1`)
+- Multicall symlinks `kubectl` and `crictl` -> `k3s` (relative, so they resolve in buildroot and merged root alike). Deliberately NO `ctr` symlink: docker's containerd.io ships a real `/usr/bin/ctr`, and two merged sysexts claiming one path shadow each other — use `k3s ctr`
+- `usr/lib/systemd/system/k3s.service` / `k3s-agent.service` — adapted from the upstream installer's generated units (`/usr/bin/k3s`, `Type=notify`, `Delegate=yes`, modprobe br_netfilter/overlay). Declarative role selection: both are preset-enabled and upheld, but `k3s.service` has `ConditionPathExists=!/etc/default/k3s-agent` while `k3s-agent.service` has `ConditionFileNotEmpty=/etc/default/k3s-agent` — a fresh node runs a standalone server (matching upstream curl|sh behavior); writing `/etc/default/k3s-agent` (K3S_URL= + K3S_TOKEN=) is the single switch that turns the node into an agent
+- No `/etc` factory capture or tmpfiles needed: k3s reads `/etc/rancher/k3s/config.yaml` and `/etc/default/k3s{,-agent}` (admin-written, persistent `/etc` overlay) and keeps all state under persistent `/var/lib/rancher`
+- Dependency check tracks the upstream *stable* channel (`update.k3s.io/v1-release/channels/stable`), not GitHub "latest" (new minors reach latest before stable)
 
 ### lemonade
 - `mkosi.postinst.chroot` — Downloads the lemonade-server .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Everything ships natively under `/usr`; no relocation

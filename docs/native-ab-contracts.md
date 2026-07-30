@@ -175,7 +175,7 @@ Every independently versioned sysext lives in its own named component:
 Component name = sysext name. Admin overrides live at
 `/etc/sysupdate.<name>.d/<name>.feature.d/*.conf`.
 
-All 20 sysext transfer/feature pairs ship in component-scoped
+All 21 sysext transfer/feature pairs ship in component-scoped
 `/usr/lib/sysupdate.<name>.d/` directories under
 `mkosi.images/base/mkosi.extra/`. `/usr/lib/sysupdate.d/` is reserved for the
 three OS transfers above; sysext pairs must never be added there.

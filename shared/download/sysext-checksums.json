@@ -34,6 +34,11 @@
     "sha256": "df80379b8e624eaf751c33758534f111bed7faf09b8d988e59ac7e0ab3dc9ff4",
     "version": "1.1.2"
   },
+  "k3s": {
+    "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s",
+    "sha256": "65a55ec56c24eab44383086166ec620a491952b7e23941a49ddca6e8a4c4b4de",
+    "version": "1.36.2+k3s1"
+  },
   "lemonade": {
     "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.5.0/lemonade-server_11.5.0-debian13_amd64.deb",
     "sha256": "cd7448b1b577815a75b4596a9611d29a37db737c036dd9bc9b18d258ddd4204e",

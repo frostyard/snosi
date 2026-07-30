@@ -1,0 +1,48 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+# shellcheck disable=SC1091
+source "$SRCDIR/shared/download/verified-download.sh"
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+verified_download "k3s" "$WORK/k3s"
+
+# k3s is a bare static binary, not a deb. The shared postoutput script
+# resolves the sysext version from the merged dpkg database (KEYPACKAGE), so
+# build a minimal deb around the verified binary and install it — dpkg then
+# tracks /usr/bin/k3s and carries the pinned upstream version. The version
+# comes from the same sysext-checksums.json entry that pinned the download.
+VERSION=$(jq -r '.k3s.version' "$SRCDIR/shared/download/sysext-checksums.json")
+VERSION="${VERSION#v}"
+
+mkdir -p "$WORK/pkg/DEBIAN" "$WORK/pkg/usr/bin"
+install -m 0755 "$WORK/k3s" "$WORK/pkg/usr/bin/k3s"
+cat > "$WORK/pkg/DEBIAN/control" <<EOF
+Package: k3s
+Version: $VERSION
+Section: admin
+Priority: optional
+Architecture: amd64
+Maintainer: Frostyard <noreply@frostyard.org>
+Homepage: https://k3s.io
+Description: Lightweight Kubernetes
+ Single-binary Kubernetes distribution from the CNCF k3s project, packaged
+ locally by the snosi sysext build from the pinned upstream release binary.
+EOF
+# -Znone: the payload is one already-compressed-ish 80+ MiB Go binary and the
+# deb is a build-local intermediate that dpkg extracts immediately; the sysext
+# erofs output is what actually gets compressed for publishing.
+dpkg-deb --build --root-owner-group -Znone "$WORK/pkg" "$WORK/k3s.deb"
+dpkg -i "$WORK/k3s.deb"
+
+# Multicall entry points, same set the upstream installer creates minus ctr:
+# the docker sysext's containerd.io already ships a real /usr/bin/ctr, and two
+# merged sysexts claiming the same path would shadow each other — use
+# `k3s ctr` instead. Relative symlinks so they resolve inside the buildroot,
+# the sysext overlay, and the merged root alike.
+ln -sf k3s /usr/bin/kubectl
+ln -sf k3s /usr/bin/crictl

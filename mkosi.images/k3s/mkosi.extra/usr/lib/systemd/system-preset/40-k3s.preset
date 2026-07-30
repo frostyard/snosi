@@ -1,0 +1,7 @@
+# Both units are preset-enabled; their Conditions select the role at start
+# time (server unless /etc/default/k3s-agent exists, agent when it does), so
+# exactly one of the two ever runs on a given node. Merging the sysext on a
+# fresh node therefore starts a standalone k3s server, matching upstream's
+# curl|sh installer behavior.
+enable k3s.service
+enable k3s-agent.service
