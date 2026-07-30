@@ -15,7 +15,7 @@
 # in QEMU, and validates in order:
 #
 #   1. No failed legacy updaters; bootc/nbc/sysupdate auto-update units masked.
-#   2. The OS default sysupdate.d target and the 21 shipped sysext components
+#   2. The OS default sysupdate.d target and the 22 shipped sysext components
 #      are structurally separate (component discovery via `systemd-sysupdate
 #      components`).
 #   3. Two ad hoc test sysext components (testa, testb; independently
