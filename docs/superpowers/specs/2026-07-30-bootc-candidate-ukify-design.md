@@ -85,7 +85,8 @@ Use `--security-opt label=type:unconfined_t`, matching existing candidate-image
 storage probes, rather than `:z`/`:Z` bind suffixes that mutate host labels.
 Use `--network=none` and `--cap-drop=all`; ukify requires neither network nor
 Linux capabilities.
-It runs as the common numeric owner of every mode-0600 credential mount; owner mismatches fail before Podman.
+It runs as the common numeric owner of every mode-0600 credential mount; owner
+mismatches fail before Podman.
 
 The writable work directory is public-output-only by invariant. Before exposing
 it to the container, run the existing caller-credential gate over the directory

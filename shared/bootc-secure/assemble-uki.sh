@@ -462,6 +462,7 @@ if [[ ${1:-} == --volume ]]; then
 fi
 [[ ${1:-} == localhost/snosi-bootc-secure-first-fixture ]] || exit 91
 [[ -n ${host_work:-} ]] || exit 88
+[[ $(/usr/bin/stat -c '%u:%g' "$host_work") == "$(id -u):$(id -g)" ]] || exit 92
 if [[ ${CANDIDATE_UKIFY_TEST_PODMAN_UNAVAILABLE:-0} == 1 ]]; then
     echo 'candidate ukify image is unavailable' >&2
     exit 127

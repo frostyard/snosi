@@ -75,8 +75,8 @@ the mandatory revalidation triggers. Private keys remain caller-owned and must
 not enter this fragment, its tree, OCI layers, labels, logs, or retained temp
 state. Direct ukify runs as `/usr/bin/ukify` in the first-pass candidate with
 `--network=none`, `--cap-drop=all`, `--security-opt label=type:unconfined_t`,
-and the common numeric credential owner via `--user`; mismatched owners fail before Podman.
-and a fixed entrypoint. The assembler resolves and translates in-root
+a fixed entrypoint, and the common numeric credential owner via `--user`.
+Mismatched owners fail before Podman. The assembler resolves and translates in-root
 kernel/initrd paths to candidate paths, mounts each caller credential read-only
 at fixed `/run/snosi-ukify-*`
 paths, and gives it exactly one writable `/run/snosi-ukify-work` mount. The
