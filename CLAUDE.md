@@ -146,6 +146,9 @@ only around local assembly/validation, requires the supplied public MOK/PCR
 identities to byte-match `shared/native-ab/keys/mok-2026.crt` and
 `shared/native-ab/keys/pcr-signing-2026.pub`, deletes credentials before any
 registry write, validates an immutable version digest, then moves `latest`.
+The protected package step forwards the secure flag and credential paths as
+explicit sudo command assignments; GitHub step environment values do not cross
+sudo implicitly, and secret bytes remain only in the mode-0600 files.
 Local and policy-copied artifact validation use host Podman to execute the
 candidate image's pinned bootc; they do not require or accept an independently
 installed host bootc as the storage-digest authority.

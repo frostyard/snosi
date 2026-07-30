@@ -113,6 +113,28 @@ else
             require_text "$workflow secure-build" "$secure_job" "$variable"
         done
 
+        package_step=$(awk '
+            /^      - name: Package image$/ { capture=1 }
+            capture && /^      - name: / && $0 != "      - name: Package image" { exit }
+            capture { print }
+        ' <<<"$secure_job")
+        forwarded_variables=(
+            SNOSI_BOOTC_SECURE
+            SNOSI_BOOTC_MOK_KEY
+            SNOSI_BOOTC_MOK_CERT
+            SNOSI_BOOTC_PCR_KEY
+            SNOSI_BOOTC_PCR_CERT
+        )
+        for variable in "${forwarded_variables[@]}"; do
+            forwarded_line=$(printf '            %s="$%s" %s' \
+                "$variable" "$variable" "\\")
+            require_text "$workflow protected package sudo environment" \
+                "$package_step" "$forwarded_line"
+        done
+        sudo_tmpdir_line=$(printf '%s%s' "          sudo TMPDIR=\"\$TMPDIR\" " "\\")
+        require_text "$workflow protected package sudo environment" \
+            "$package_step" "$sudo_tmpdir_line"
+
         cleanup_step=$(awk '
             /^      - name: Remove protected bootc signing credentials$/ { capture=1 }
             capture && /^      - name: / && $0 != "      - name: Remove protected bootc signing credentials" { exit }
@@ -129,6 +151,7 @@ else
             capture && /^      - name: / && $0 != "      - name: Validate locally assembled secure artifact" { exit }
             capture { print }
         ' <<<"$secure_job")
+        # shellcheck disable=SC2016 # GitHub expression is an exact literal marker.
         if ! grep -Fq './test/bootc-secure-artifact-test.sh' <<<"$local_validation" ||
                 ! grep -Fq '"output/${{ matrix.profile }}"' <<<"$local_validation"; then
             fail_check "$workflow secure-build: missing local secure artifact validation"
@@ -139,6 +162,7 @@ else
             capture && /^      - name: / && $0 != "      - name: Validate policy-copied secure artifact" { exit }
             capture { print }
         ' <<<"$secure_job")
+        # shellcheck disable=SC2016 # Shell variable reference is an exact literal marker.
         if ! grep -Fq './test/bootc-secure-artifact-test.sh' <<<"$remote_validation" ||
                 ! grep -Fq '"$LOCAL_REF"' <<<"$remote_validation"; then
             fail_check "$workflow secure-build: missing policy-copied artifact validation"

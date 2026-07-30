@@ -70,6 +70,14 @@ jobs:
           SNOSI_BOOTC_MOK_CERT: /var/tmp/bootc-secure-credentials/mok.crt
           SNOSI_BOOTC_PCR_KEY: /var/tmp/bootc-secure-credentials/pcr.key
           SNOSI_BOOTC_PCR_CERT: /var/tmp/bootc-secure-credentials/pcr.pub
+        run: |
+          sudo TMPDIR="$TMPDIR" \
+            SNOSI_BOOTC_SECURE="$SNOSI_BOOTC_SECURE" \
+            SNOSI_BOOTC_MOK_KEY="$SNOSI_BOOTC_MOK_KEY" \
+            SNOSI_BOOTC_MOK_CERT="$SNOSI_BOOTC_MOK_CERT" \
+            SNOSI_BOOTC_PCR_KEY="$SNOSI_BOOTC_PCR_KEY" \
+            SNOSI_BOOTC_PCR_CERT="$SNOSI_BOOTC_PCR_CERT" \
+            ./shared/outformat/image/buildah-package.sh output/cayo localhost/cayo:version
       - name: Validate locally assembled secure artifact
         run: |
           sudo ./test/bootc-secure-artifact-test.sh \
@@ -116,6 +124,11 @@ permit_pull_request_with_or() { perl -0pi -e "s/ &&\n      github\.ref == 'refs\
 remove_main_condition() { perl -0pi -e "s/      github\.ref == 'refs\/heads\/main'\n//" "$1/.github/workflows/build-images.yml"; }
 allow_shell_or() { perl -0pi -e 's{(        run: sudo rm -rf /var/tmp/bootc-secure-credentials)}{$1 || exit 1}' "$1/.github/workflows/build-images.yml"; }
 remove_package_variable() { perl -0pi -e "s/          $1:.*\n//" "$2/.github/workflows/build-images.yml"; }
+remove_forwarded_package_variable() {
+    perl -0pi -e "s/^            $1=\\\"\\\$$1\\\" \\\\\n//m" \
+        "$2/.github/workflows/build-images.yml"
+}
+remove_sudo_tmpdir() { perl -0pi -e 's/^          sudo TMPDIR="\$TMPDIR" \\\n//m' "$1/.github/workflows/build-images.yml"; }
 remove_cleanup_condition() { perl -0pi -e 's/        if: always\(\)\n//' "$1/.github/workflows/build-images.yml"; }
 break_label_check() { perl -0pi -e 's/== "true"/== "false"/' "$1/shared/bootc-secure/ci/verify-published-image.sh"; }
 remove_label_check() { perl -0pi -e 's/    \.Labels\["io\.snosi\.bootc\.secureboot-capable"\].*\n//' "$1/shared/bootc-secure/ci/verify-published-image.sh"; }
@@ -143,6 +156,11 @@ assert_guard 'shell || in a secure-build run block passes' 0 allow_shell_or
 for variable in SNOSI_BOOTC_SECURE SNOSI_BOOTC_MOK_KEY SNOSI_BOOTC_MOK_CERT SNOSI_BOOTC_PCR_KEY SNOSI_BOOTC_PCR_CERT; do
     assert_guard "missing $variable fails" 1 remove_package_variable "$variable"
 done
+for variable in SNOSI_BOOTC_SECURE SNOSI_BOOTC_MOK_KEY SNOSI_BOOTC_MOK_CERT SNOSI_BOOTC_PCR_KEY SNOSI_BOOTC_PCR_CERT; do
+    assert_guard "missing sudo-forwarded $variable fails" 1 \
+        remove_forwarded_package_variable "$variable"
+done
+assert_guard 'missing sudo TMPDIR forwarding fails' 1 remove_sudo_tmpdir
 assert_guard 'missing unconditional cleanup fails' 1 remove_cleanup_condition
 assert_guard 'false secure label check fails' 1 break_label_check
 assert_guard 'missing secure label check fails' 1 remove_label_check

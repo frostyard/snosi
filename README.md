@@ -63,6 +63,9 @@ Protected bootc publication validates each candidate with host Podman while
 running the candidate image's pinned bootc for its composefs storage digest.
 The publisher does not depend on a separate host bootc installation, avoiding
 version drift at that compatibility boundary.
+The protected packager passes its secure assembly flag and credential paths
+explicitly through sudo. The private bytes stay in mode-0600 runner files;
+only their paths cross the privilege boundary.
 
 ## Architecture
 
