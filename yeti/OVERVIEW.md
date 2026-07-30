@@ -1017,10 +1017,10 @@ installed), plus a first-promotion assertion that `promote.sh` prints
 mkosi.conf                  # Root config: distribution, dependencies, build settings
 mkosi.version               # Version tag script (date-based, overridden by CI IMAGE_VERSION)
 mkosi.clean                 # Clean script (rm -rf output/*)
-mkosi.images/               # Image definitions (base + 21 sysexts)
+mkosi.images/               # Image definitions (base + 22 sysexts)
   base/                     # Foundation image: systemd, bootc/ostree (frostyard debs), firmware, core utils
     mkosi.extra/            # Base filesystem overlay (dracut, systemd units/timers, sysupdate, tmpfiles, sysusers)
-      usr/lib/sysupdate.<name>.d/  # per-sysext .transfer + .feature component dirs (one pair each, 21 total)
+      usr/lib/sysupdate.<name>.d/  # per-sysext .transfer + .feature component dirs (one pair each, 22 total)
     mkosi.postinst.chroot   # Mount enablement, useradd home dir, bls-garbage-collect removal
     mkosi.finalize.chroot   # Masks systemd-networkd-wait-online
   docker/                   # Each sysext: mkosi.conf + optional extra/scripts

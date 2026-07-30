@@ -533,7 +533,7 @@ persistence.
 builds two real `cayo-ab-raw` versions itself, boots N, and asserts no failed
 systemd units and the bootc/nbc/systemd-sysupdate masks from above; that
 `/usr/lib/sysupdate.d/` contains only the three OS transfers (no `.feature`
-files) while `systemd-sysupdate components` enumerates all 21 shipped sysext
+files) while `systemd-sysupdate components` enumerates all 22 shipped sysext
 components; that two independently versioned ad hoc test components
 (`testa`/`testb`, created under `/etc/sysupdate.<name>.d/`) update via
 `--component=` without touching OS partitions, the ESP, or each other's

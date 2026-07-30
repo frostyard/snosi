@@ -13,6 +13,7 @@ verified_download "sunshine" "$DEBS/sunshine.deb"
 
 dpkg -i "$DEBS/sunshine.deb"
 
+# libcap2-bin is supplied by base; fail closed if it no longer provides getcap.
 if command -v getcap >/dev/null; then
     getcap_bin=$(command -v getcap)
 elif [[ -x /usr/sbin/getcap ]]; then

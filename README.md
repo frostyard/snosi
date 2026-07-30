@@ -383,7 +383,7 @@ use a system-installed mkosi instead.
 # List available build targets
 just
 
-# Build base + all 21 system extensions, including Sunshine
+# Build base + all 22 system extensions, including Sunshine
 just sysexts
 
 # Build snow desktop image

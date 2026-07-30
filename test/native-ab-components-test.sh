@@ -526,7 +526,7 @@ assert_eq "/usr/lib/sysupdate.d/ contains exactly the OS transfers, no features"
 
 expected_sysext_components=(1password 1password-cli azurevpn bitwarden claude-desktop
     code-server coder debdev dev docker edge github-copilot incus k3s lemonade nix
-    pilothouse podman sunshine tailscale vscode)
+    paseo pilothouse podman sunshine tailscale vscode)
 
 components_raw="$(vm_ssh '/usr/lib/systemd/systemd-sysupdate components --no-legend')"
 echo "systemd-sysupdate components --no-legend:"
