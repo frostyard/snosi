@@ -27,6 +27,20 @@ The adapter relies on all of the following observed behavior:
    fail before Podman.
    Its authoritative active and optional previous PCR public identities remain
    outside the writable work mount; exposed copies must match after execution.
+9. Protected run `30579247524` showed that this unprivileged candidate cannot
+   read a mode-restricted in-image initramfs. The adapter canonicalizes each
+   discovered in-root kernel/initrd source, stages only byte-identical mode-0644
+   public copies at `/run/snosi-ukify-work/linux` and
+   `/run/snosi-ukify-work/initrd`, and passes those fixed paths to ukify. It
+   compares both exposed copies against their canonical protected rootfs sources
+   after execution and compares final UKI sections against those originals.
+   Symlink escapes are rejected; valid relative and rootfs-absolute internal
+   symlinks resolve to their canonical source. The work mount holds no
+   protected-mode duplicate or private credential; rootfs originals remain the
+   sole authoritative protected inputs.
+
+The cited protected run failed before validation, push, signing, or promotion;
+this fixture-covered behavior is not live secure-publication evidence.
 
 `buildah-package.sh` makes a first, unsigned-label OCI image, computes that
 storage digest through the image's own bootc binary, invokes the assembler,
