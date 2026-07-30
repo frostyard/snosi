@@ -18,18 +18,49 @@ image_path() {
 
 write_fixtures() { # state root
     local state=$1 root=$2
-    mkdir -p "$state/bin" "$state/images" "$root/usr/bin" "$root/usr/lib/modules/test-kernel" \
+    mkdir -p "$state/bin" "$state/images" "$root/proc" "$root/usr/bin" "$root/usr/lib/modules/test-kernel" \
         "$root/boot/EFI/Linux" "$root/boot/EFI/BOOT"
-    printf '%s\n' '#!/bin/bash' 'echo "bootc 1.16.3"' >"$root/usr/bin/bootc"
-    chmod +x "$root/usr/bin/bootc"
     : >"$root/usr/lib/modules/test-kernel/vmlinuz"
     : >"$root/usr/lib/modules/test-kernel/initramfs.img"
     printf 'keep-linux\n' >"$root/boot/EFI/Linux/keep.txt"
     printf 'keep-boot\n' >"$root/boot/EFI/BOOT/pre-existing.efi"
 
+    cat >"$state/bin/mountpoint" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+[[ $1 == -q && $2 == "$BUILD_FIXTURE_ROOT/proc" ]]
+[[ -e "$BUILD_FIXTURE_STATE/proc-mounted" ]]
+EOF
+    cat >"$state/bin/mount" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+[[ $1 == --bind && $2 == /proc && $3 == "$BUILD_FIXTURE_ROOT/proc" ]]
+printf '%s\n' "$*" >"$BUILD_FIXTURE_STATE/mount-invoked"
+touch "$BUILD_FIXTURE_STATE/proc-mounted"
+EOF
+    cat >"$state/bin/chroot" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+[[ $1 == "$BUILD_FIXTURE_ROOT" && $2 == /usr/bin/bootc && $3 == --version ]]
+printf '%s\n' "$*" >"$BUILD_FIXTURE_STATE/chroot-invoked"
+if [[ ${BUILD_FIXTURE_CHROOT_FAIL:-0} == 1 ]]; then
+    echo 'fixture rootfs loader failure' >&2
+    exit 86
+fi
+printf '%s\n' "${BUILD_FIXTURE_BOOTC_VERSION:-bootc 1.16.3}"
+EOF
+    cat >"$state/bin/umount" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+[[ $1 == "$BUILD_FIXTURE_ROOT/proc" ]]
+printf '%s\n' "$*" >"$BUILD_FIXTURE_STATE/umount-invoked"
+[[ ${BUILD_FIXTURE_UMOUNT_FAIL:-0} != 1 ]] || exit 87
+rm -f "$BUILD_FIXTURE_STATE/proc-mounted"
+EOF
     cat >"$state/bin/buildah" <<'EOF'
 #!/bin/bash
 set -euo pipefail
+touch "$BUILD_FIXTURE_STATE/buildah-invoked"
 hash() { printf '%s' "$1" | sha256sum | cut -d' ' -f1; }
 case $1 in
     from) printf 'container-%s\n' "${RANDOM}" ;;
@@ -79,12 +110,17 @@ printf 'injected-uki\n' >"$1/boot/EFI/Linux/test-kernel.efi"
 printf 'injected-bootloader\n' >"$1/boot/EFI/BOOT/grubx64.efi"
 [[ ${BUILD_FIXTURE_ASSEMBLER_FAIL:-0} != 1 ]]
 EOF
-    chmod +x "$state/bin/buildah" "$state/bin/podman" "$state/assembler"
+    chmod +x "$state/bin/mountpoint" "$state/bin/mount" "$state/bin/chroot" \
+        "$state/bin/umount" "$state/bin/buildah" "$state/bin/podman" "$state/assembler"
 }
 
 assert_cleanup() { # state root first final published
     local state=$1 root=$2 first=$3 final=$4 published=$5
     [[ -f "$state/assembler-invoked" ]] || fail "controlled assembler was not invoked"
+    [[ -f "$state/mount-invoked" && $(<"$state/mount-invoked") == "--bind /proc $root/proc" ]] || fail "rootfs proc bind was not exact"
+    [[ -f "$state/chroot-invoked" && $(<"$state/chroot-invoked") == "$root /usr/bin/bootc --version" ]] || fail "bootc version did not use rootfs chroot"
+    [[ -f "$state/umount-invoked" && $(<"$state/umount-invoked") == "$root/proc" ]] || fail "rootfs proc unmount was not exact"
+    [[ ! -e "$state/proc-mounted" ]] || fail "rootfs proc mount survived"
     [[ ! -e "$state/images/$(image_path "$first")" ]] || fail "first probe image survived"
     [[ ! -e "$state/images/$(image_path "$final")" ]] || fail "final probe image survived"
     [[ ! -e "$state/images/$(image_path "$published")" ]] || fail "published image survived"
@@ -105,7 +141,7 @@ run_case() { # name assembler-fails|final-probe-fails|published-digest-mismatch
     published="localhost/task5-cleanup-$name:latest"
     write_fixtures "$state" "$root"
     set +e
-    BUILD_FIXTURE_STATE="$state" PATH="$state/bin:$PATH" SNOSI_BOOTC_SECURE=1 \
+    BUILD_FIXTURE_STATE="$state" BUILD_FIXTURE_ROOT="$root" PATH="$state/bin:$PATH" SNOSI_BOOTC_SECURE=1 \
         SNOSI_BOOTC_MOK_KEY=fixture SNOSI_BOOTC_MOK_CERT=fixture \
         SNOSI_BOOTC_PCR_KEY=fixture SNOSI_BOOTC_PCR_CERT=fixture \
         SNOSI_BOOTC_SECURE_TEST_HOOKS=1 SNOSI_BOOTC_SECURE_TEST_ASSEMBLER="$state/assembler" \
@@ -120,7 +156,7 @@ run_case() { # name assembler-fails|final-probe-fails|published-digest-mismatch
 
     # A fresh secure invocation must not be blocked by leftovers from the failure.
     set +e
-    BUILD_FIXTURE_STATE="$state" PATH="$state/bin:$PATH" SNOSI_BOOTC_SECURE=1 \
+    BUILD_FIXTURE_STATE="$state" BUILD_FIXTURE_ROOT="$root" PATH="$state/bin:$PATH" SNOSI_BOOTC_SECURE=1 \
         SNOSI_BOOTC_MOK_KEY=fixture SNOSI_BOOTC_MOK_CERT=fixture \
         SNOSI_BOOTC_PCR_KEY=fixture SNOSI_BOOTC_PCR_CERT=fixture \
         SNOSI_BOOTC_SECURE_TEST_HOOKS=1 SNOSI_BOOTC_SECURE_TEST_ASSEMBLER="$state/assembler" \
@@ -130,6 +166,51 @@ run_case() { # name assembler-fails|final-probe-fails|published-digest-mismatch
     [[ $status -eq 0 ]] || fail "$name left the next secure packaging run wedged"
     "$state/assembler" --remove-injected "$root"
 }
+
+run_probe_failure_case() { # name expected-text setup-command env-name env-value
+    local name=$1 expected=$2 setup=$3 env_name=$4 env_value=$5 work state root published status output
+    work=$(mktemp -d)
+    trap 'rm -rf -- "$work"' RETURN
+    state="$work/state"; root="$work/root"
+    published="localhost/task5-probe-$name:latest"
+    write_fixtures "$state" "$root"
+    [[ $setup == none ]] || "$setup" "$state" "$root"
+    set +e
+    output=$(env BUILD_FIXTURE_STATE="$state" BUILD_FIXTURE_ROOT="$root" PATH="$state/bin:$PATH" \
+        SNOSI_BOOTC_SECURE=1 SNOSI_BOOTC_MOK_KEY=fixture SNOSI_BOOTC_MOK_CERT=fixture \
+        SNOSI_BOOTC_PCR_KEY=fixture SNOSI_BOOTC_PCR_CERT=fixture \
+        SNOSI_BOOTC_SECURE_TEST_HOOKS=1 SNOSI_BOOTC_SECURE_TEST_ASSEMBLER="$state/assembler" \
+        "$env_name=$env_value" "$PACKAGER" "$root" "$published" 2>&1)
+    status=$?
+    set -e
+    [[ $status -ne 0 ]] || fail "$name unexpectedly succeeded"
+    [[ $output == *"$expected"* ]] || fail "$name lacked diagnostic: $expected"
+    [[ ! -e "$state/assembler-invoked" ]] || fail "$name reached the assembler"
+    [[ ! -e "$state/buildah-invoked" ]] || fail "$name reached Buildah"
+    case $name in
+        proc-missing)
+            [[ ! -e "$state/mount-invoked" && ! -e "$root/proc" ]] || fail "$name changed malformed rootfs"
+            ;;
+        proc-pre-mounted)
+            [[ ! -e "$state/mount-invoked" && ! -e "$state/umount-invoked" && -e "$state/proc-mounted" ]] || fail "$name touched an unowned mount"
+            ;;
+        chroot-fails|wrong-version)
+            [[ -e "$state/umount-invoked" && ! -e "$state/proc-mounted" ]] || fail "$name did not clean its proc mount"
+            ;;
+        umount-fails)
+            [[ -e "$state/umount-invoked" && -e "$state/proc-mounted" ]] || fail "$name did not expose failed unmount state"
+            ;;
+    esac
+}
+
+mark_proc_mounted() { touch "$1/proc-mounted"; }
+remove_proc_dir() { rmdir "$2/proc"; }
+
+run_probe_failure_case proc-missing 'rootfs proc directory is missing' remove_proc_dir UNUSED 0
+run_probe_failure_case proc-pre-mounted 'rootfs proc is already mounted' mark_proc_mounted UNUSED 0
+run_probe_failure_case chroot-fails 'fixture rootfs loader failure' none BUILD_FIXTURE_CHROOT_FAIL 1
+run_probe_failure_case wrong-version 'expected bootc 1.16.3, observed bootc 1.16.2' none BUILD_FIXTURE_BOOTC_VERSION 'bootc 1.16.2'
+run_probe_failure_case umount-fails 'failed to unmount rootfs proc' none BUILD_FIXTURE_UMOUNT_FAIL 1
 
 run_case assembler-fails
 run_case final-probe-fails

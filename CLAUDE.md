@@ -72,6 +72,11 @@ binary, first places the MOK-signed systemd-boot source at
 `/usr/lib/snosi/bootc/systemd-bootx64.efi`, constructs the UKI and ESP copy
 below `/boot`, and requires a final OCI probe to retain the ID. It emits the explicit
 `io.snosi.bootc.secureboot-capable=true` label; non-secure builds emit `false`.
+Before first-pass packaging, the root packager temporarily bind-mounts only host
+`/proc` into the complete mkosi rootfs and runs the exact bootc version probe
+through chroot, so target libraries rather than the CI host ABI resolve. It
+refuses pre-mounted/missing rootfs proc paths and unmounts before any image
+mutation. Storage-digest authority remains bootc inside the candidate OCI image.
 The optional dual-PCR mode requires the previous certificate positionally and
 its matching private key only through `SNOSI_BOOTC_PREVIOUS_PCR_KEY`. Never
 copy private keys into the rootfs, OCI layers, labels, logs, or retained temp

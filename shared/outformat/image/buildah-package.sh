@@ -21,6 +21,50 @@ shift 2
 
 [[ -d "$ROOTFS_DIR" ]] || { echo "Error: rootfs directory does not exist: $ROOTFS_DIR" >&2; exit 1; }
 
+probe_rootfs_bootc_version() ( # rootfs
+    local root=$1 proc="$1/proc" mounted=0 output status
+
+    # shellcheck disable=SC2329 # Invoked by the helper subshell's EXIT trap.
+    cleanup_proc() {
+        local exit_status=$?
+        trap - EXIT
+        if [[ $mounted -eq 1 ]] && ! umount "$proc"; then
+            echo "Error: failed to unmount rootfs proc: $proc" >&2
+            exit_status=1
+        fi
+        exit "$exit_status"
+    }
+
+    [[ -d $proc ]] || {
+        echo "Error: rootfs proc directory is missing: $proc" >&2
+        exit 1
+    }
+    if mountpoint -q "$proc"; then
+        echo "Error: rootfs proc is already mounted: $proc" >&2
+        exit 1
+    fi
+
+    trap cleanup_proc EXIT
+    mount --bind /proc "$proc" || {
+        echo "Error: failed to bind host proc into rootfs: $proc" >&2
+        exit 1
+    }
+    mounted=1
+
+    set +e
+    output=$(chroot "$root" /usr/bin/bootc --version 2>&1)
+    status=$?
+    set -e
+    if [[ $status -ne 0 ]]; then
+        printf 'Error: rootfs bootc execution failed:\n%s\n' "$output" >&2
+        exit 1
+    fi
+    [[ $output == 'bootc 1.16.3' ]] || {
+        printf 'Error: expected bootc 1.16.3, observed %s\n' "$output" >&2
+        exit 1
+    }
+)
+
 secure_label="io.snosi.bootc.secureboot-capable=false"
 secure_assembly_label=""
 first_image=""
@@ -59,9 +103,7 @@ if [[ ${SNOSI_BOOTC_SECURE:-0} == 1 ]]; then
     [[ -x "$ASSEMBLER" ]] || {
         echo "Error: bootc secure assembler is unavailable" >&2; exit 1;
     }
-    [[ $("$ROOTFS_DIR/usr/bin/bootc" --version 2>/dev/null || true) == 'bootc 1.16.3' ]] || {
-        echo "Error: secure assembly requires rootfs bootc 1.16.3" >&2; exit 1;
-    }
+    probe_rootfs_bootc_version "$ROOTFS_DIR"
     trap cleanup_secure EXIT
     # The reconciler's signed source must be in the pristine first OCI pass:
     # adding it after the storage digest would change the composefs identity.
