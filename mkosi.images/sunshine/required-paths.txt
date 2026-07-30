@@ -1,0 +1,9 @@
+# sunshine sysext: self-hosted game streaming host for Moonlight
+/usr/bin/sunshine
+/usr/lib/modules-load.d/60-sunshine.conf
+/usr/lib/systemd/user/app-dev.lizardbyte.app.Sunshine.service
+/usr/lib/udev/rules.d/60-sunshine.rules
+/usr/share/applications/dev.lizardbyte.app.Sunshine.desktop
+/usr/share/icons/hicolor/scalable/apps/dev.lizardbyte.app.Sunshine.svg
+/usr/share/sunshine/apps.json
+/usr/share/sunshine/web/index.html

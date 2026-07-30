@@ -8,7 +8,7 @@
 `shared/download/image-checksums.json` when that is the only changed path;
 image-only direct-download updates should rebuild OCI profiles instead.
 
-Builds the base image and all 21 sysexts, publishes to the Frostyard repository on Cloudflare R2.
+Builds the base image and all 22 sysexts, publishes to the Frostyard repository on Cloudflare R2.
 
 **Steps:**
 1. Aggressive cleanup of runner (removes JDK, .NET, Android SDK, etc. to free disk space)
@@ -295,6 +295,7 @@ for the build artifact that must be rebuilt.
 - Microsoft Azure VPN Client
 - Microsoft Edge Stable .deb
 - GitHub Copilot desktop .deb
+- Sunshine Trixie .deb
 
 Version-based checks only propose an update when the candidate sorts
 **strictly newer** (`sort -V`) than the pinned version — a plain `!=`

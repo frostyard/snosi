@@ -1,0 +1,42 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+# shellcheck disable=SC1091
+source "$SRCDIR/shared/download/verified-download.sh"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "sunshine" "$DEBS/sunshine.deb"
+
+dpkg -i "$DEBS/sunshine.deb"
+
+# libcap2-bin is supplied by base; fail closed if it no longer provides getcap.
+if command -v getcap >/dev/null; then
+    getcap_bin=$(command -v getcap)
+elif [[ -x /usr/sbin/getcap ]]; then
+    getcap_bin=/usr/sbin/getcap
+else
+    printf 'Sunshine capability assertion requires getcap\n' >&2
+    exit 1
+fi
+
+normalize_capabilities() {
+    local capability_names capability_flags
+    capability_names=${1%=*}
+    capability_flags=${1##*=}
+    capability_names=$(printf '%s\n' "$capability_names" | tr ',' '\n' | LC_ALL=C sort | paste -sd, -)
+    printf '%s=%s\n' "$capability_names" "$capability_flags"
+}
+
+capability_output=$("$getcap_bin" /usr/bin/sunshine)
+actual_capabilities=${capability_output#* }
+expected_capabilities='cap_sys_admin,cap_sys_nice=p'
+if [[ $(normalize_capabilities "$actual_capabilities") != \
+    $(normalize_capabilities "$expected_capabilities") ]]; then
+    printf 'Sunshine capability assertion failed: expected %s, got %s\n' \
+        "$expected_capabilities" "$actual_capabilities" >&2
+    exit 1
+fi

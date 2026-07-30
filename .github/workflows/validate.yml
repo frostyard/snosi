@@ -149,6 +149,18 @@ jobs:
         # required-paths.txt entries. No root, network, or image build.
         run: ./test/sysext-required-paths-test.sh
 
+      - name: Validate Sunshine package dependencies
+        # Fixture check for Sunshine's .deb dependencies. No root, network, or build.
+        run: ./test/sunshine-package-dependencies-test.sh
+
+      - name: Validate local mkosi profile dependency check
+        # Fixture check for pinned local mkosi use. No root, network, or build.
+        run: ./test/check-profile-dependencies-local-mkosi-test.sh
+
+      - name: Validate Sunshine file capabilities
+        # PATH-stubbed capability assertion fixture. No root, network, or build.
+        run: ./test/sunshine-capabilities-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:

@@ -3,6 +3,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+mkosi=mkosi
+if [[ -x .mkosi/bin/mkosi ]]; then
+    mkosi=.mkosi/bin/mkosi
+fi
+
 profiles=(cayo snow snowfield)
 sysexts=(
     1password
@@ -24,6 +29,7 @@ sysexts=(
     paseo
     pilothouse
     podman
+    sunshine
     tailscale
     vscode
 )
@@ -31,7 +37,7 @@ sysexts=(
 failed=0
 
 for profile in "${profiles[@]}"; do
-    summary=$(mkosi -f --profile "$profile" summary)
+    summary=$("$mkosi" -f --profile "$profile" summary)
 
     for sysext in "${sysexts[@]}"; do
         if grep -q "^IMAGE: ${sysext}$" <<<"$summary"; then

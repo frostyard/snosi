@@ -371,7 +371,7 @@ install: `/var/lib/dpkg` is a symlink to `../../usr/lib/sysimage/dpkg`,
 `usr/share/snosi/var-inventory.txt` exists with at least one
 `image-metadata` line, and no unit failures were introduced; (2)
 `/usr/lib/sysupdate.d/` contains only the three OS transfers (no `.feature`
-files) and `systemd-sysupdate components` enumerates all 21 shipped sysext
+files) and `systemd-sysupdate components` enumerates all 22 shipped sysext
 components; (3) two ad hoc test components (`testa`, `testb`, independently
 versioned) created under `/etc/sysupdate.<name>.d/` update independently via
 `--component=`, leave the GPT partition table and ESP `/EFI/Linux` listing

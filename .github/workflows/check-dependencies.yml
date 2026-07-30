@@ -69,6 +69,15 @@ jobs:
             echo "github_copilot_version=$LATEST_GITHUB_COPILOT" >> "$GITHUB_OUTPUT"
           fi
 
+          # Check Sunshine
+          CURRENT_SUNSHINE=$(jq -r '.sunshine.version' "$CHECKSUMS")
+          LATEST_SUNSHINE=$(gh_api https://api.github.com/repos/LizardByte/Sunshine/releases | jq -r '[.[] | select(.draft == false and .prerelease == false)][0].tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_SUNSHINE" && "$LATEST_SUNSHINE" != "null" ]] && ver_gt "$LATEST_SUNSHINE" "$CURRENT_SUNSHINE"; then
+            UPDATES="${UPDATES}sunshine: $CURRENT_SUNSHINE -> $LATEST_SUNSHINE\n"
+            echo "sunshine_update=true" >> "$GITHUB_OUTPUT"
+            echo "sunshine_version=$LATEST_SUNSHINE" >> "$GITHUB_OUTPUT"
+          fi
+
           # Check code-server
           CURRENT_CS=$(jq -r '.["code-server"].version' "$CHECKSUMS")
           LATEST_CS=$(gh_api https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's/^v//')
@@ -175,6 +184,8 @@ jobs:
           BITWARDEN_VERSION: ${{ steps.check.outputs.bitwarden_version }}
           GITHUB_COPILOT_UPDATE: ${{ steps.check.outputs.github_copilot_update }}
           GITHUB_COPILOT_VERSION: ${{ steps.check.outputs.github_copilot_version }}
+          SUNSHINE_UPDATE: ${{ steps.check.outputs.sunshine_update }}
+          SUNSHINE_VERSION: ${{ steps.check.outputs.sunshine_version }}
           CODESERVER_UPDATE: ${{ steps.check.outputs.codeserver_update }}
           CODESERVER_VERSION: ${{ steps.check.outputs.codeserver_version }}
           CODER_UPDATE: ${{ steps.check.outputs.coder_update }}
@@ -216,6 +227,18 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '."github-copilot".url=$u | ."github-copilot".sha256=$s | ."github-copilot".version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$SUNSHINE_UPDATE" == "true" ]]; then
+            VER="$SUNSHINE_VERSION"
+            URL="https://github.com/LizardByte/Sunshine/releases/download/v${VER}/sunshine-debian-trixie-amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.sunshine.url=$u | .sunshine.sha256=$s | .sunshine.version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi
