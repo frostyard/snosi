@@ -565,13 +565,17 @@ EOF
     mkdir "$redaction_work"
     set +e
     (
-        redact_credentials() { return 1; }
+        redact_credentials() {
+            local line
+            while IFS= read -r line || [[ -n $line ]]; do :; done
+            return 73
+        }
         PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$top/podman-redaction-failure.args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
             run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$redaction_work" "$redaction_work/ukify.log" "$key" "$cert" "$pcr" "" -- build
     )
     status=$?
     set -e
-    [[ $status -ne 0 ]] || die "candidate ukify accepted a redaction failure"
+    [[ $status -eq 1 ]] || die "candidate ukify did not map redaction status"
     [[ -f "$top/podman-redaction-failure.args" ]] || die "candidate ukify redaction fixture did not run Podman"
     [[ -f "$redaction_work/ukify.log" ]] || die "candidate ukify redaction fixture did not reach tee"
 
