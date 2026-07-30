@@ -166,7 +166,13 @@ jobs:
           SNOSI_BOOTC_PCR_KEY: /var/tmp/bootc-secure-credentials/pcr.key
           SNOSI_BOOTC_PCR_CERT: /var/tmp/bootc-secure-credentials/pcr.pub
         run: |
-          sudo TMPDIR="$TMPDIR" ./shared/outformat/image/buildah-package.sh \
+          sudo TMPDIR="$TMPDIR" \
+            SNOSI_BOOTC_SECURE="$SNOSI_BOOTC_SECURE" \
+            SNOSI_BOOTC_MOK_KEY="$SNOSI_BOOTC_MOK_KEY" \
+            SNOSI_BOOTC_MOK_CERT="$SNOSI_BOOTC_MOK_CERT" \
+            SNOSI_BOOTC_PCR_KEY="$SNOSI_BOOTC_PCR_KEY" \
+            SNOSI_BOOTC_PCR_CERT="$SNOSI_BOOTC_PCR_CERT" \
+            ./shared/outformat/image/buildah-package.sh \
             output/${{ matrix.profile }} \
             "$IMAGE:${{ steps.version.outputs.tag }}" \
             "org.opencontainers.image.title=${{ matrix.profile }}" \

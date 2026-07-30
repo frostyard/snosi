@@ -51,6 +51,10 @@ Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependen
 
 **Protected publication steps:**
 1. Transiently materialize the durable production MOK/PCR signing credentials supplied by the four `NATIVE_*` secrets, then build and package each profile. The supplied MOK certificate and derived PCR public key must byte-match the committed public identities; runner-local credential files are removed unconditionally after local artifact validation and before registry writes. The distinct disposable PR keys remain ephemeral.
+   The package command repeats all five `SNOSI_BOOTC_*` names as explicit sudo
+   assignments because step-level environment values are otherwise filtered by
+   sudo. Do not replace this with implicit preservation or pass secret bytes in
+   arguments.
    Local validation requires host Podman, not host bootc: the validator runs the
    candidate image's pinned bootc 1.16.3 to recompute its storage composefs digest.
    The same boundary applies to the policy-copied validation after registry pull.
