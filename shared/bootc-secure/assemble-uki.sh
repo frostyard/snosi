@@ -267,9 +267,40 @@ run_candidate_ukify() { # image work log mok-key mok-cert pcr-key previous-key -
 }
 
 rootfs_image_path() { # rootfs host-path
-    local root path relative
+    local root input_root=${1%/} input=$2 relative current component candidate target path links=0
     root=$(realpath -e "$1") || die "rootfs path cannot be resolved: $1"
-    path=$(realpath -e "$2") || die "rootfs path cannot be resolved: $2"
+    if [[ $input == "$root/"* ]]; then
+        relative=${input#"$root/"}
+    elif [[ $input == "$input_root/"* ]]; then
+        relative=${input#"$input_root/"}
+    else
+        die "path is outside rootfs: $input"
+    fi
+    current=$root
+    while [[ -n $relative ]]; do
+        component=${relative%%/*}
+        if [[ $relative == */* ]]; then relative=${relative#*/}; else relative=""; fi
+        [[ -z $component || $component == . ]] && continue
+        if [[ $component == .. ]]; then
+            current=$(dirname "$current")
+            continue
+        fi
+        candidate="$current/$component"
+        if [[ -L $candidate ]]; then
+            target=$(readlink "$candidate")
+            links=$((links + 1)); [[ $links -le 40 ]] || die "too many rootfs symlinks"
+            if [[ $target == /* ]]; then
+                current=$root
+                target=${target#/}
+            else
+                current=$(dirname "$candidate")
+            fi
+            relative="$target${relative:+/$relative}"
+        else
+            current=$candidate
+        fi
+    done
+    path=$(realpath -e "$current") || die "rootfs path cannot be resolved: $input"
     [[ $path == "$root/"* ]] || die "path is outside rootfs: $path"
     relative=${path#"$root/"}
     printf '/%s\n' "$relative"
@@ -487,6 +518,7 @@ EOF
     ln -s ../outside/vmlinuz "$root/relative-escape"
     ln -s "$top/outside/vmlinuz" "$root/absolute-escape"
     ln -s usr/lib/modules/one/vmlinuz "$root/internal-link"
+    ln -s /usr/lib/modules/one/vmlinuz "$root/absolute-internal-link"
     if (rootfs_image_path "$root" "$root/relative-escape") >/dev/null 2>&1; then
         die "relative rootfs symlink escape accepted"
     fi
@@ -495,6 +527,8 @@ EOF
     fi
     [[ $(rootfs_image_path "$root" "$root/internal-link") == /usr/lib/modules/one/vmlinuz ]] ||
         die "internal rootfs symlink translation failed"
+    [[ $(rootfs_image_path "$root" "$root/absolute-internal-link") == /usr/lib/modules/one/vmlinuz ]] ||
+        die "absolute internal rootfs symlink translation failed"
 
     local previous="$top/previous.key" protected="$top/protected" overwrite_work="$top/work-overwrite-active"
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$previous" >/dev/null 2>&1
@@ -526,6 +560,20 @@ EOF
     status=$?
     set -e
     [[ $status -ne 0 ]] || die "candidate ukify accepted a tee failure"
+
+    local redaction_work="$top/work-redaction-failure"
+    mkdir "$redaction_work"
+    set +e
+    (
+        redact_credentials() { return 1; }
+        PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$top/podman-redaction-failure.args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
+            run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$redaction_work" "$redaction_work/ukify.log" "$key" "$cert" "$pcr" "" -- build
+    )
+    status=$?
+    set -e
+    [[ $status -ne 0 ]] || die "candidate ukify accepted a redaction failure"
+    [[ -f "$top/podman-redaction-failure.args" ]] || die "candidate ukify redaction fixture did not run Podman"
+    [[ -f "$redaction_work/ukify.log" ]] || die "candidate ukify redaction fixture did not reach tee"
 
     local dual_work="$top/work-dual" dual_args="$top/podman-dual.args"
     local -a dual_ukify_args
