@@ -285,7 +285,8 @@ jobs:
 
       - name: Sign immutable image digest
         # docker/login-action writes the user-context registry credentials used
-        # directly by Cosign and passed explicitly to root Skopeo verification.
+        # directly by Cosign and passed explicitly to Skopeo verification and
+        # promotion. Pinned Cosign signing remains a user-context operation.
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
@@ -317,14 +318,9 @@ jobs:
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
         run: |
-          skopeo copy --all \
-            "docker://$IMAGE@${{ steps.push.outputs.digest }}" \
-            "docker://$IMAGE:latest"
-          latest_digest=$(skopeo inspect --format '{{.Digest}}' "docker://$IMAGE:latest")
-          [[ "$latest_digest" == "${{ steps.push.outputs.digest }}" ]] || {
-            echo "::error::latest resolved to $latest_digest instead of ${{ steps.push.outputs.digest }}" >&2
-            exit 1
-          }
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          ./shared/bootc-secure/ci/promote-published-image.sh \
+            "$IMAGE" "${{ steps.push.outputs.digest }}" "$AUTH_FILE"
 
       - name: Record snow tag for release job
         # Runs only after the immutable candidate has become latest. The tag

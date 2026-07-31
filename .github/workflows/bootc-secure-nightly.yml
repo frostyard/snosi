@@ -85,6 +85,8 @@ jobs:
         run: ./test/bootc-secure-rotation-test.sh --fixtures
       - name: Validate remote publication fixtures
         run: ./test/bootc-secure-publication-test.sh
+      - name: Validate authenticated promotion fixtures
+        run: ./test/bootc-secure-promotion-test.sh
 
   live-full-window:
     needs: fixtures
