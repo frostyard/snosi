@@ -45,6 +45,7 @@ required_strings=(
     'Dual-PCR transition policy is not fallback across independent TPM tokens.'
     'Remove the old MOK only after every old-signed rollback deployment is retired.'
     'Loss of both TPM authorization and the external recovery passphrase is unrecoverable.'
+    'Root Skopeo receives the Docker login auth file explicitly through --src-authfile.'
 )
 
 for heading in "${required_headings[@]}"; do
