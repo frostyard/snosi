@@ -195,9 +195,6 @@ move_login_after_verification() {
 remove_promotion_src_authfile() { perl -0pi -e 's/ --src-authfile "\$AUTH_FILE"//' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
 remove_promotion_dest_authfile() { perl -0pi -e 's/ --dest-authfile "\$AUTH_FILE"//' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
 remove_promotion_inspect_authfile() { perl -0pi -e 's/skopeo inspect --authfile "\$AUTH_FILE"/skopeo inspect/' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
-old_inline_promotion_copy() {
-    perl -0pi -e 's{           \./shared/bootc-secure/ci/promote-published-image\.sh \\\n             "\$IMAGE" "\$DIGEST" "\$AUTH_FILE"}{           skopeo copy --all "docker://$IMAGE@$DIGEST" "docker://$IMAGE:latest"}' "$1/.github/workflows/build-images.yml"
-}
 inline_promotion_copy() {
     perl -0pi -e 's|\./shared/bootc-secure/ci/promote-published-image\.sh|skopeo copy --all|' "$1/.github/workflows/build-images.yml"
 }
