@@ -1,4 +1,4 @@
 code=1.131.0-1785237861
-docker-ce=5:29.6.2-1~debian.13~trixie
-1password-cli=2.35.0-1
+docker-ce=5:29.7.0-1~debian.13~trixie
+1password-cli=2.38.1-1
 claude-desktop=1.24012.9
