@@ -67,17 +67,20 @@ Frostyard debs or the selected systemd family changes.
 hidden storage-digest plus direct two-pass ukify behavior as a maintained,
 fail-closed compatibility contract. This is NOT upstream-stable. Secure builds
 must set `SNOSI_BOOTC_SECURE=1` and caller-owned MOK/PCR credentials; Buildah
-packages a pristine first pass, obtains its storage composefs ID from the image
-binary, first places the MOK-signed systemd-boot source at
-`/usr/lib/snosi/bootc/systemd-bootx64.efi`, constructs the UKI and ESP copy
-below `/boot`, and requires a final OCI probe to retain the ID. It emits the explicit
+packages and chunks a pristine first pass, then obtains its storage composefs
+ID from that chunked candidate image. It first places the MOK-signed
+systemd-boot source at `/usr/lib/snosi/bootc/systemd-bootx64.efi`, constructs
+the UKI and ESP copy below `/boot`, and derives the final image from the
+chunked candidate with that `/boot` tree as its only filesystem overlay. The
+final candidate's bootc performs the second of exactly two digest probes and
+must retain the ID; protected builds never chunk after assembly. It emits the explicit
 `io.snosi.bootc.secureboot-capable=true` label; non-secure builds emit `false`.
 Before first-pass packaging, the root packager temporarily bind-mounts only host
 `/proc` into the complete mkosi rootfs and runs the exact bootc version probe
 through chroot, so target libraries rather than the CI host ABI resolve. It
 refuses pre-mounted/missing rootfs proc paths and unmounts before any image
 mutation. Storage-digest authority remains bootc inside the candidate OCI image.
-Direct ukify executes as `/usr/bin/ukify` inside the pristine first-pass
+Direct ukify executes as `/usr/bin/ukify` inside the chunked first-pass
 candidate with network disabled, individual read-only credential mounts, and a
 public-only writable work mount. Protected run 30579247524 reached this point
 but cayo job 90995134482 failed because the unprivileged candidate could not
@@ -104,8 +107,9 @@ state. Task 5 derives fingerprints only from those exact caller-owned private
 keys and rejects matches in the rootfs, mounted OCI filesystem/config, sanitized
 ukify log, and scan state; it deliberately permits unrelated package/example
 keys and does not use documentation/MIME exclusions. Re-run Tasks 1-3 and Task 5 artifact/negative validation before changing
-bootc/libostree, ukify/systemd, Buildah packaging, or any observed command/output
-shape. See `docs/bootc-secure-assembly-compatibility.md`.
+bootc/libostree, ukify/systemd, chunkah, Buildah derivation, the `/boot`
+exclusion, or any observed command/output shape. See
+`docs/bootc-secure-assembly-compatibility.md`.
 
 **Bootc shim second-stage reconciliation (Task 7, 2026-07-28):** secure OCI
 assembly retains the MOK-signed systemd-boot at
@@ -1546,7 +1550,7 @@ The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput
 - `shared/download/` - Verified download system: `sysext-checksums.json` pins direct downloads consumed by sysexts, `image-checksums.json` pins direct downloads consumed by OCI profile builds, `package-versions.json` tracks external APT package version sentinels for sysexts, and `verified-download.sh` provides the `verified_download()` helper
 - `shared/kernel/` - Kernel configs (backports, surface, stock) and dracut scripts
 - `shared/packages/` - Package set definitions, some with postinstall scripts for relocation
-- `shared/outformat/image/` - Image output format config (directory), finalize scripts, `buildah-package.sh` (OCI packaging), and `chunkah-package.sh` (CI re-chunks the OCI image for efficient delta updates)
+- `shared/outformat/image/` - Image output format config (directory), finalize scripts, `buildah-package.sh` (OCI packaging), and `chunkah-package.sh` (chunks non-secure OCI images and the pristine protected candidate before digest sealing; protected images are never re-chunked after assembly)
 - `shared/sysext/postoutput/` - Shared sysext postoutput logic
 - `mkosi.sandbox/etc/apt/` - External APT repo configs (Docker, Incus, linux-surface, Frostyard)
 

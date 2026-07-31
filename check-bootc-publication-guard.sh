@@ -119,6 +119,8 @@ else
             capture { print }
         ' <<<"$secure_job")
         forwarded_variables=(
+            SOURCE_DATE_EPOCH
+            MAX_LAYERS
             SNOSI_BOOTC_SECURE
             SNOSI_BOOTC_MOK_KEY
             SNOSI_BOOTC_MOK_CERT
@@ -131,9 +133,18 @@ else
             require_text "$workflow protected package sudo environment" \
                 "$package_step" "$forwarded_line"
         done
+        require_text "$workflow protected package environment" \
+            "$package_step" '          MAX_LAYERS: 128'
+        # shellcheck disable=SC2016 # This is a literal workflow marker.
+        require_text "$workflow protected package epoch derivation" \
+            "$package_step" '          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)'
         sudo_tmpdir_line=$(printf '%s%s' "          sudo TMPDIR=\"\$TMPDIR\" " "\\")
         require_text "$workflow protected package sudo environment" \
             "$package_step" "$sudo_tmpdir_line"
+
+        if grep -Eq '(^|[[:space:]])\./shared/outformat/image/chunkah-package\.sh([[:space:]]|$)' <<<"$secure_job"; then
+            fail_check "$workflow secure-build: must not invoke chunkah-package.sh directly"
+        fi
 
         cleanup_step=$(awk '
             /^      - name: Remove protected bootc signing credentials$/ { capture=1 }
@@ -176,8 +187,10 @@ else
         if ! grep -Fq './shared/bootc-secure/ci/verify-published-image.sh' <<<"$verifier_step"; then
             fail_check "$workflow secure-build: missing secure image verifier call"
         fi
+        # shellcheck disable=SC2016 # Match the literal workflow shell source.
         require_text "$workflow secure verifier auth path" \
             "$verifier_step" '          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"'
+        # shellcheck disable=SC2016 # Match the literal workflow shell source.
         require_text "$workflow secure verifier auth argument" \
             "$verifier_step" '            "$IMAGE" "$VERSION_TAG" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"'
 
@@ -197,8 +210,10 @@ else
         if ! grep -Fq './shared/bootc-secure/ci/promote-published-image.sh' <<<"$promotion_step"; then
             fail_check "$workflow secure-build: missing authenticated promotion helper call"
         fi
+        # shellcheck disable=SC2016 # Match the literal workflow shell source.
         require_text "$workflow secure promotion auth path" \
             "$promotion_step" '          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"'
+        # shellcheck disable=SC2016 # Match the literal workflow shell source.
         require_text "$workflow secure promotion auth argument" \
             "$promotion_step" '            "$IMAGE" "${{ steps.push.outputs.digest }}" "$AUTH_FILE"'
     fi
@@ -228,6 +243,7 @@ else
     verifier_text=$(<"$verifier")
     require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-capable"] == "true" and'
     require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.3-storage-digest-v1"'
+    # shellcheck disable=SC1003,SC2016 # Match the literal verifier shell source.
     require_text "$verifier" "$verifier_text" \
         'inspection=$(skopeo inspect --authfile "$AUTH_FILE" \'
     tag_inspect_line=$(cat <<'EOF'
@@ -235,10 +251,13 @@ tag_digest=$(skopeo inspect --authfile "$AUTH_FILE" --format '{{.Digest}}' \
 EOF
 )
     require_text "$verifier tag inspect auth" "$verifier_text" "$tag_inspect_line"
+    # shellcheck disable=SC2016 # Match the literal verifier shell source.
     require_text "$verifier" "$verifier_text" \
         'if [[ $tag_digest != "$EXPECTED_DIGEST" ]]; then'
+    # shellcheck disable=SC1003,SC2016 # Match the literal verifier shell source.
     require_text "$verifier" "$verifier_text" \
         'DOCKER_CONFIG=$auth_dir cosign verify --key "$ROOT_DIR/cosign.pub" \'
+    # shellcheck disable=SC1003,SC2016 # Match the literal verifier shell source.
     require_text "$verifier" "$verifier_text" \
         'sudo skopeo copy --src-authfile "$AUTH_FILE" \'
 fi
@@ -248,8 +267,10 @@ if [[ ! -f $promotion_helper ]]; then
     fail_check "missing secure image promotion helper: shared/bootc-secure/ci/promote-published-image.sh"
 else
     promotion_text=$(<"$promotion_helper")
+    # shellcheck disable=SC1003 # Match the literal promotion shell source.
     require_text "$promotion_helper" "$promotion_text" \
         'skopeo copy --all \'
+    # shellcheck disable=SC1003,SC2016 # Match the literal promotion shell source.
     require_text "$promotion_helper promotion source auth" "$promotion_text" \
         '    --src-authfile "$AUTH_FILE" --dest-authfile "$AUTH_FILE" \'
     promotion_inspect_line=$(cat <<'EOF'
