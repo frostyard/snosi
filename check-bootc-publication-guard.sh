@@ -176,6 +176,10 @@ else
         if ! grep -Fq './shared/bootc-secure/ci/verify-published-image.sh' <<<"$verifier_step"; then
             fail_check "$workflow secure-build: missing secure image verifier call"
         fi
+        require_text "$workflow secure verifier auth path" \
+            "$verifier_step" '          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"'
+        require_text "$workflow secure verifier auth argument" \
+            "$verifier_step" '            "$IMAGE" "$VERSION_TAG" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"'
     fi
 
     ordered_steps=(
@@ -202,6 +206,8 @@ else
     verifier_text=$(<"$verifier")
     require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-capable"] == "true" and'
     require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.3-storage-digest-v1"'
+    require_text "$verifier" "$verifier_text" \
+        'sudo skopeo copy --src-authfile "$AUTH_FILE" \'
 fi
 
 if ((fail)); then

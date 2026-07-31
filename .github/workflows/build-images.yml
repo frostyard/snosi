@@ -284,8 +284,8 @@ jobs:
           cosign-release: "v2.6.1"
 
       - name: Sign immutable image digest
-        # docker/login-action writes the user-context registry credentials
-        # shared by Cosign, Skopeo verification, and latest promotion.
+        # docker/login-action writes the user-context registry credentials used
+        # directly by Cosign and passed explicitly to root Skopeo verification.
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
@@ -299,7 +299,10 @@ jobs:
           VERSION_TAG: ${{ steps.version.outputs.tag }}
           DIGEST: ${{ steps.push.outputs.digest }}
           LOCAL_REF: localhost/snosi-verified-${{ matrix.profile }}:${{ steps.version.outputs.tag }}
-        run: ./shared/bootc-secure/ci/verify-published-image.sh "$IMAGE" "$VERSION_TAG" "$DIGEST" "$LOCAL_REF"
+        run: |
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          ./shared/bootc-secure/ci/verify-published-image.sh \
+            "$IMAGE" "$VERSION_TAG" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 
       - name: Validate policy-copied secure artifact
         env:
