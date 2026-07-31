@@ -68,6 +68,11 @@ version drift at that compatibility boundary.
 The protected packager passes its secure assembly flag and credential paths
 explicitly through sudo. The private bytes stay in mode-0600 runner files;
 only their paths cross the privilege boundary.
+For protected secure images, it chunks the pristine candidate before the
+candidate's pinned bootc obtains the authoritative storage digest. The final
+image inherits those chunked layers and overlays only `/boot`; its bootc must
+return the same digest in the second of exactly two digest probes. Protected
+assembly never runs a post-assembly chunk pass.
 
 ## Architecture
 
@@ -290,7 +295,7 @@ shared/
 │       ├── mkosi.conf         ← Sets Format=directory
 │       ├── finalize/          ← Image finalization scripts
 │       ├── buildah-package.sh ← Packages rootfs dir into an OCI image
-│       └── chunkah-package.sh ← Re-chunks the OCI image for efficient updates
+│       └── chunkah-package.sh ← Chunks OCI candidates for efficient updates
 ├── packages/
 │   ├── cayo/mkosi.conf        ← Server packages + podman
 │   ├── snow/mkosi.conf        ← GNOME desktop packages
@@ -429,10 +434,13 @@ Native A/B profiles intentionally do not inherit this OCI-only bcvk dependency.
 
 **Secure Boot status:** OCI bootc profiles include a bootc-only secure
 composition and a Task 5 two-pass UKI assembly adapter. Protected builds set
-`SNOSI_BOOTC_SECURE=1`; Buildah computes the pre-injection OCI composefs digest,
-constructs a MOK-signed Type #2 UKI plus MOK-signed systemd-boot, retains the
-signed second stage under `/usr/lib/snosi/bootc/` for installed-ESP
-reconciliation, then refuses the final image if its digest changes. The static
+`SNOSI_BOOTC_SECURE=1`; Buildah chunks the pristine candidate before that
+candidate's bootc computes the authoritative OCI composefs digest, constructs a
+MOK-signed Type #2 UKI plus MOK-signed systemd-boot, retains the signed second
+stage under `/usr/lib/snosi/bootc/` for installed-ESP reconciliation, then
+derives the final image from the chunked candidate with only `/boot` overlaid.
+The final candidate's bootc is the second of exactly two digest probes and must
+return the same digest; protected assembly never chunks after that overlay. The static
 reconciler activates after local filesystems without writing `/etc`, verifies
 the MOK signer before atomically replacing only shim's `grubx64.efi`, and allows
 valid rollback deployments to restore their own stage. It never remounts an

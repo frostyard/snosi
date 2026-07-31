@@ -55,9 +55,10 @@ MOK/recovery/TPM/UKI tools and the public-only native MOK certificate plus
 RSA-2048 PCR signing public key. The image contract is
 `/usr/lib/snosi/bootc-secure.json` (schema 1). Task 5 adds
 `shared/bootc-secure/assemble-uki.sh`, called only through
-`buildah-package.sh` when `SNOSI_BOOTC_SECURE=1`: the first OCI package obtains
-bootc 1.16.3's hidden storage digest, and the adapter injects a MOK-signed UKI
-plus the ESP copy of systemd-boot under `/boot`. Before that first package, it
+`buildah-package.sh` when `SNOSI_BOOTC_SECURE=1`: the pristine first OCI package
+is chunked before its candidate bootc obtains bootc 1.16.3's hidden storage
+digest. That chunked candidate is digest authority; the adapter injects a
+MOK-signed UKI plus the ESP copy of systemd-boot under `/boot`. Before that first package, it
 places the same signed systemd-boot source at
 `/usr/lib/snosi/bootc/systemd-bootx64.efi`; this is required because an
 installed ESP mount shadows `/boot`, and it is deliberately present before the
@@ -66,9 +67,11 @@ digest is calculated. The preflight version gate uses bare-name
 `$ROOTFS_DIR/proc`, bind-mounts only host `/proc`, runs `/usr/bin/bootc
 --version` against target libraries, and always unmounts before
 `--prepare-systemd-boot-source`. Bare names are load-bearing for the non-root
-PATH fixtures. This gate is not digest authority; both storage digest probes
-still run bootc inside their candidate OCI images. A second OCI probe must
-retain the exact digest. This is a
+PATH fixtures. This gate is not digest authority; exactly two storage digest
+probes run bootc inside candidate OCI images: the chunked candidate before
+assembly and the final image after assembly. The final image inherits the
+chunked candidate's layers and receives only the `/boot` overlay; its probe must
+retain the exact digest. Protected builds never chunk after assembly. This is a
 fail-closed maintained compatibility contract, not
 an upstream interface; see `docs/bootc-secure-assembly-compatibility.md` for
 the mandatory revalidation triggers. Private keys remain caller-owned and must
@@ -396,7 +399,7 @@ Creates OCI container images from the directory output.
 buildah-package.sh <rootfs-dir> <image-ref> [label=value ...]
 ```
 
-Uses `buildah mount` + `cp -a` + `buildah commit` instead of `buildah COPY` to preserve all file metadata (SUID bits, xattrs, capabilities, ACLs, hardlinks). This works around buildah#4463 which drops SUID bits during COPY.
+Uses `buildah mount` + `cp -a` + `buildah commit` instead of `buildah COPY` to preserve all file metadata (SUID bits, xattrs, capabilities, ACLs, hardlinks). This works around buildah#4463 which drops SUID bits during COPY. In protected secure mode it first packages and chunks a pristine candidate, seals that chunked candidate's digest into the UKI, then derives the final image from it with only `/boot` overlaid. The final candidate must return the same digest in the second of exactly two digest probes; no protected post-assembly chunking is permitted.
 
 ### chunkah-package.sh
 
@@ -407,6 +410,11 @@ Optimizes OCI image layers using [chunkah](https://quay.io/jlebon/chunkah).
 - Runs `chunkah build --prune /sysroot/ --max-layers $MAX_LAYERS` (default 128)
 - Uses `user.component` xattrs (set during finalize) to group files into efficient layers
 - Removes ostree-specific labels from output
+
+For protected secure packaging, changing chunkah, the Buildah derivation, or
+the `/boot` exclusion requires the full bootc secure compatibility
+revalidation; these are digest-binding behavior, not independent optimization
+details.
 
 ## Verified Download System
 

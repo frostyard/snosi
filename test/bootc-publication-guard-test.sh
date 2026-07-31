@@ -88,13 +88,17 @@ jobs:
           NATIVE_PCR_SIGNING_CERTIFICATE: ${{ secrets.NATIVE_PCR_SIGNING_CERTIFICATE }}
       - name: Package image
         env:
+          MAX_LAYERS: 128
           SNOSI_BOOTC_SECURE: "1"
           SNOSI_BOOTC_MOK_KEY: /var/tmp/bootc-secure-credentials/mok.key
           SNOSI_BOOTC_MOK_CERT: /var/tmp/bootc-secure-credentials/mok.crt
           SNOSI_BOOTC_PCR_KEY: /var/tmp/bootc-secure-credentials/pcr.key
           SNOSI_BOOTC_PCR_CERT: /var/tmp/bootc-secure-credentials/pcr.pub
         run: |
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
           sudo TMPDIR="$TMPDIR" \
+            SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" \
+            MAX_LAYERS="$MAX_LAYERS" \
             SNOSI_BOOTC_SECURE="$SNOSI_BOOTC_SECURE" \
             SNOSI_BOOTC_MOK_KEY="$SNOSI_BOOTC_MOK_KEY" \
             SNOSI_BOOTC_MOK_CERT="$SNOSI_BOOTC_MOK_CERT" \
@@ -162,6 +166,23 @@ remove_forwarded_package_variable() {
         "$2/.github/workflows/build-images.yml"
 }
 remove_sudo_tmpdir() { perl -0pi -e 's/^          sudo TMPDIR="\$TMPDIR" \\\n//m' "$1/.github/workflows/build-images.yml"; }
+remove_source_epoch_forwarding() {
+    perl -0pi -e 's/^            SOURCE_DATE_EPOCH="\$SOURCE_DATE_EPOCH" \\\n//m' \
+        "$1/.github/workflows/build-images.yml"
+}
+remove_max_layers_environment() { perl -0pi -e 's/^\s+MAX_LAYERS: 128\n//m' "$1/.github/workflows/build-images.yml"; }
+remove_source_epoch_derivation() { perl -0pi -e 's/^\s+SOURCE_DATE_EPOCH=\$\(git log -1 --format=%ct\)\n//m' "$1/.github/workflows/build-images.yml"; }
+remove_max_layers_forwarding() {
+    perl -0pi -e 's/^            MAX_LAYERS="\$MAX_LAYERS" \\\n//m' "$1/.github/workflows/build-images.yml"
+}
+add_post_package_chunk() {
+    perl -0pi -e 's/(      - name: Validate locally assembled secure artifact)/      - name: Chunk image\n        run: .\/shared\/outformat\/image\/chunkah-package.sh image epoch\n$1/' \
+        "$1/.github/workflows/build-images.yml"
+}
+add_direct_secure_chunk() {
+    perl -0pi -e 's/(      - name: Validate locally assembled secure artifact)/      - name: Arbitrary name\n        run: .\/shared\/outformat\/image\/chunkah-package.sh image epoch\n$1/' \
+        "$1/.github/workflows/build-images.yml"
+}
 remove_cleanup_condition() { perl -0pi -e 's/        if: always\(\)\n//' "$1/.github/workflows/build-images.yml"; }
 break_label_check() { perl -0pi -e 's/== "true"/== "false"/' "$1/shared/bootc-secure/ci/verify-published-image.sh"; }
 remove_label_check() { perl -0pi -e 's/    \.Labels\["io\.snosi\.bootc\.secureboot-capable"\].*\n//' "$1/shared/bootc-secure/ci/verify-published-image.sh"; }
@@ -224,6 +245,12 @@ for variable in SNOSI_BOOTC_SECURE SNOSI_BOOTC_MOK_KEY SNOSI_BOOTC_MOK_CERT SNOS
         remove_forwarded_package_variable "$variable"
 done
 assert_guard 'missing sudo TMPDIR forwarding fails' 1 remove_sudo_tmpdir
+assert_guard 'missing sudo SOURCE_DATE_EPOCH forwarding fails' 1 remove_source_epoch_forwarding
+assert_guard 'missing MAX_LAYERS environment fails' 1 remove_max_layers_environment
+assert_guard 'missing SOURCE_DATE_EPOCH derivation fails' 1 remove_source_epoch_derivation
+assert_guard 'missing sudo MAX_LAYERS forwarding fails' 1 remove_max_layers_forwarding
+assert_guard 'post-package secure chunking fails' 1 add_post_package_chunk
+assert_guard 'direct secure chunking under any step name fails' 1 add_direct_secure_chunk
 assert_guard 'missing unconditional cleanup fails' 1 remove_cleanup_condition
 assert_guard 'false secure label check fails' 1 break_label_check
 assert_guard 'missing secure label check fails' 1 remove_label_check
