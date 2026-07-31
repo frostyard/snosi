@@ -42,6 +42,16 @@ make_fixture() {
     : >"$fixture/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
 
     cat >"$fixture/shared/bootc-secure/ci/verify-published-image.sh" <<'EOF'
+inspection=$(skopeo inspect --authfile "$AUTH_FILE" \
+    "docker://$IMAGE@$EXPECTED_DIGEST")
+tag_digest=$(skopeo inspect --authfile "$AUTH_FILE" --format '{{.Digest}}' \
+    "docker://$IMAGE:$VERSION_TAG")
+if [[ $tag_digest != "$EXPECTED_DIGEST" ]]; then
+    exit 1
+fi
+auth_dir=$(dirname -- "$AUTH_FILE")
+DOCKER_CONFIG=$auth_dir cosign verify --key "$ROOT_DIR/cosign.pub" \
+    "$IMAGE@$EXPECTED_DIGEST" >/dev/null
 sudo skopeo copy --src-authfile "$AUTH_FILE" \
     "docker://$IMAGE@$EXPECTED_DIGEST" "containers-storage:$LOCAL_REF"
 jq -e --arg digest "$EXPECTED_DIGEST" '
@@ -49,6 +59,17 @@ jq -e --arg digest "$EXPECTED_DIGEST" '
     .Labels["io.snosi.bootc.secureboot-capable"] == "true" and
     .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.3-storage-digest-v1"
 ' <<<"$inspection" >/dev/null
+EOF
+
+    cat >"$fixture/shared/bootc-secure/ci/promote-published-image.sh" <<'EOF'
+skopeo copy --all \
+    --src-authfile "$AUTH_FILE" --dest-authfile "$AUTH_FILE" \
+    "docker://$IMAGE@$EXPECTED_DIGEST" "docker://$IMAGE:latest"
+latest_digest=$(skopeo inspect --authfile "$AUTH_FILE" \
+    --format '{{.Digest}}' "docker://$IMAGE:latest")
+if [[ $latest_digest != "$EXPECTED_DIGEST" ]]; then
+    exit 1
+fi
 EOF
 
     cat >"$fixture/.github/workflows/build-images.yml" <<'EOF'
@@ -84,11 +105,13 @@ jobs:
         run: |
           sudo ./test/bootc-secure-artifact-test.sh \
             "output/${{ matrix.profile }}" localhost/cayo:version mok.crt pcr.pub
-      - name: Remove protected bootc signing credentials
+       - name: Remove protected bootc signing credentials
         if: always()
         run: sudo rm -rf /var/tmp/bootc-secure-credentials
-      - name: Push immutable version tag
-      - name: Sign immutable image digest
+       - name: Push immutable version tag
+       - name: Log in to ghcr.io
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+       - name: Sign immutable image digest
       - name: Verify pushed secure image
         run: |
           AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
@@ -98,8 +121,13 @@ jobs:
         run: |
           sudo ./test/bootc-secure-artifact-test.sh \
             "output/${{ matrix.profile }}" "$LOCAL_REF" mok.crt pcr.pub
-      - name: Promote validated digest to latest
+       - name: Promote validated digest to latest
+        run: |
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          ./shared/bootc-secure/ci/promote-published-image.sh \
+            "$IMAGE" "${{ steps.push.outputs.digest }}" "$AUTH_FILE"
 EOF
+    perl -pi -e 's/^       - /      - /' "$fixture/.github/workflows/build-images.yml"
 }
 
 assert_guard() {
@@ -145,8 +173,30 @@ remove_verifier_src_authfile() {
     perl -0pi -e 's/ --src-authfile "\$AUTH_FILE"//' \
         "$1/shared/bootc-secure/ci/verify-published-image.sh"
 }
+remove_digest_inspect_auth() {
+    perl -0pi -e 's/skopeo inspect --authfile "\$AUTH_FILE"/skopeo inspect/' \
+        "$1/shared/bootc-secure/ci/verify-published-image.sh"
+}
+remove_cosign_docker_config() {
+    perl -0pi -e 's/DOCKER_CONFIG=\$auth_dir cosign/cosign/' \
+        "$1/shared/bootc-secure/ci/verify-published-image.sh"
+}
+remove_tag_binding() {
+    perl -0pi -e 's/^tag_digest=.*?^fi\n//ms' \
+        "$1/shared/bootc-secure/ci/verify-published-image.sh"
+}
 move_promotion_early() {
     perl -0pi -e 's/      - name: Promote validated digest to latest\n//; s/(      - name: Push immutable version tag\n)/$1      - name: Promote validated digest to latest\n/' "$1/.github/workflows/build-images.yml"
+}
+remove_login() { perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n//' "$1/.github/workflows/build-images.yml"; }
+move_login_after_verification() {
+    perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n//; s/(      - name: Validate policy-copied secure artifact\n)/$1      - name: Log in to ghcr.io\n        uses: docker\/login-action\@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3\n/' "$1/.github/workflows/build-images.yml"
+}
+remove_promotion_src_authfile() { perl -0pi -e 's/ --src-authfile "\$AUTH_FILE"//' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
+remove_promotion_dest_authfile() { perl -0pi -e 's/ --dest-authfile "\$AUTH_FILE"//' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
+remove_promotion_inspect_authfile() { perl -0pi -e 's/skopeo inspect --authfile "\$AUTH_FILE"/skopeo inspect/' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
+inline_promotion_copy() {
+    perl -0pi -e 's|\./shared/bootc-secure/ci/promote-published-image\.sh|skopeo copy --all|' "$1/.github/workflows/build-images.yml"
 }
 
 assert_guard 'baseline secure publication fixture passes' 0 unchanged
@@ -179,7 +229,16 @@ assert_guard 'false secure label check fails' 1 break_label_check
 assert_guard 'missing secure label check fails' 1 remove_label_check
 assert_guard 'missing workflow auth handoff fails' 1 remove_workflow_auth_handoff
 assert_guard 'missing verifier source auth option fails' 1 remove_verifier_src_authfile
+assert_guard 'missing verifier digest inspect auth fails' 1 remove_digest_inspect_auth
+assert_guard 'missing Cosign Docker config fails' 1 remove_cosign_docker_config
+assert_guard 'missing version tag binding fails' 1 remove_tag_binding
 assert_guard 'early latest promotion fails' 1 move_promotion_early
+assert_guard 'missing registry login fails' 1 remove_login
+assert_guard 'login after verification fails' 1 move_login_after_verification
+assert_guard 'missing promotion source auth fails' 1 remove_promotion_src_authfile
+assert_guard 'missing promotion destination auth fails' 1 remove_promotion_dest_authfile
+assert_guard 'missing promotion inspect auth fails' 1 remove_promotion_inspect_authfile
+assert_guard 'inline promotion copy fails' 1 inline_promotion_copy
 
 printf '%d passing assertions, %d failures\n' "$pass" "$fail"
 ((fail == 0))

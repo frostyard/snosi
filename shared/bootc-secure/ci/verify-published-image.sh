@@ -22,6 +22,10 @@ if [[ ! -f $AUTH_FILE ]]; then
     printf 'source registry auth file is not a regular file\n' >&2
     exit 2
 fi
+if [[ ${AUTH_FILE##*/} != config.json ]]; then
+    printf 'source registry auth file must be named config.json\n' >&2
+    exit 2
+fi
 
 if [[ ! $IMAGE =~ ^ghcr\.io/frostyard/(cayo|snow|snowfield)$ ]]; then
     printf 'invalid secure image reference\n' >&2
@@ -40,12 +44,21 @@ if [[ ! $LOCAL_REF =~ ^localhost/snosi-verified-${IMAGE_NAME}:${VERSION_TAG}$ ]]
     exit 2
 fi
 
-inspection=$(skopeo inspect "docker://$IMAGE@$EXPECTED_DIGEST")
+inspection=$(skopeo inspect --authfile "$AUTH_FILE" \
+    "docker://$IMAGE@$EXPECTED_DIGEST")
 jq -e --arg digest "$EXPECTED_DIGEST" '
     .Digest == $digest and
     .Labels["io.snosi.bootc.secureboot-capable"] == "true" and
     .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.3-storage-digest-v1"
 ' <<<"$inspection" >/dev/null
+
+tag_digest=$(skopeo inspect --authfile "$AUTH_FILE" --format '{{.Digest}}' \
+    "docker://$IMAGE:$VERSION_TAG")
+if [[ $tag_digest != "$EXPECTED_DIGEST" ]]; then
+    printf 'version tag resolved to %s instead of %s\n' \
+        "$tag_digest" "$EXPECTED_DIGEST" >&2
+    exit 1
+fi
 
 work=$(mktemp -d)
 chmod 700 "$work"
@@ -57,7 +70,9 @@ jq --arg key "$ROOT_DIR/cosign.pub" '
 mkdir -p "$work/registries.d"
 cp "$REGISTRIES" "$work/registries.d/frostyard.yaml"
 
-cosign verify --key "$ROOT_DIR/cosign.pub" "$IMAGE@$EXPECTED_DIGEST" >/dev/null
+auth_dir=$(dirname -- "$AUTH_FILE")
+DOCKER_CONFIG=$auth_dir cosign verify --key "$ROOT_DIR/cosign.pub" \
+    "$IMAGE@$EXPECTED_DIGEST" >/dev/null
 sudo skopeo copy --src-authfile "$AUTH_FILE" \
     --policy "$work/policy.json" --registries.d "$work/registries.d" \
     "docker://$IMAGE@$EXPECTED_DIGEST" "containers-storage:$LOCAL_REF"

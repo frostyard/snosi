@@ -174,9 +174,14 @@ registry write, validates an immutable version digest, then moves `latest`.
 The protected package step forwards the secure flag and credential paths as
 explicit sudo command assignments; GitHub step environment values do not cross
 sudo implicitly, and secret bytes remain only in the mode-0600 files.
-The remote verifier passes Docker login's auth file explicitly to root Skopeo
-as source-only authentication; it never relies on sudo preserving a usable
-user runtime auth path or on root Buildah's credential-store defaults.
+Every GHCR read and write in secure verification and promotion receives the
+Docker login config explicitly: inspections use `--authfile`, root policy copy
+uses source-only `--src-authfile`, and promotion uses source and destination
+auth files. Pinned Cosign v2.6.1 receives registry auth through command-scoped
+`DOCKER_CONFIG`; it has no registry-config flag. Version-tag resolution must
+equal the pushed digest before policy copy. The verifier never relies on sudo
+preserving a usable user runtime auth path or on root Buildah's credential-store
+defaults.
 Local and policy-copied artifact validation use host Podman to execute the
 candidate image's pinned bootc; they do not require or accept an independently
 installed host bootc as the storage-digest authority.
@@ -190,6 +195,10 @@ update, rotation, full-window, and Snowfield hardware validation remain
 BLOCKED until authorized signed secure N/N+1/N+2/transition OCI fixtures and
 prepared external runners exist. Do not claim production bootc Secure Boot
 support from these contracts.
+Deferred publication follow-ups: bind SBOM signing to the exact uploaded
+referrer digest, gate Snow release creation on complete metadata publication,
+decide whether `latest` moves only after metadata completion, and make general
+output cleanup unconditional where retained runners require it.
 
 **Bootc secure operations (Task 11, 2026-07-29):**
 `docs/bootc-secure-operations.md` is the normative reference for the secure

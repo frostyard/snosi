@@ -46,6 +46,8 @@ required_strings=(
     'Remove the old MOK only after every old-signed rollback deployment is retired.'
     'Loss of both TPM authorization and the external recovery passphrase is unrecoverable.'
     'Root Skopeo receives the Docker login auth file explicitly through --src-authfile.'
+    'Every GHCR read and write in secure verification and promotion receives the Docker login config explicitly.'
+    'Pinned Cosign v2.6.1 receives registry auth through command-scoped DOCKER_CONFIG.'
 )
 
 for heading in "${required_headings[@]}"; do

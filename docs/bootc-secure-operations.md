@@ -49,6 +49,8 @@ registry write, and then advances the tracking tag.
 
 GitHub's `native-build` environment must be restricted to protected/default
 branches and have no required reviewer. Root Skopeo receives the Docker login auth file explicitly through --src-authfile.
+Every GHCR read and write in secure verification and promotion receives the Docker login config explicitly.
+Pinned Cosign v2.6.1 receives registry auth through command-scoped DOCKER_CONFIG.
 The Docker auth file from `docker/login-action` must be directly consumable by
 root Skopeo without user-scoped credential-helper state; otherwise verification
 fails closed. The next protected run remains the live proof. Do not rely on
@@ -56,6 +58,12 @@ inherited `XDG_RUNTIME_DIR`, root Buildah credentials, or registry visibility as
 the authentication mechanism for the policy-copy gate. Candidate publication,
 tag movement, and an image labelled secure are not substitutes for the blocked
 live installation and hardware gates.
+
+Skopeo inspections use `--authfile`, root policy copy uses source-only
+`--src-authfile`, and promotion uses source and destination auth files. Pinned
+Cosign has no registry-config flag; its command receives only the config
+directory through `DOCKER_CONFIG`. Version-tag resolution must equal the pushed
+digest before policy copy.
 
 ## Fresh Installation
 

@@ -180,10 +180,32 @@ else
             "$verifier_step" '          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"'
         require_text "$workflow secure verifier auth argument" \
             "$verifier_step" '            "$IMAGE" "$VERSION_TAG" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"'
+
+        login_step=$(awk '
+            /^      - name: Log in to ghcr.io$/ { capture=1 }
+            capture && /^      - name: / && $0 != "      - name: Log in to ghcr.io" { exit }
+            capture { print }
+        ' <<<"$secure_job")
+        require_text "$workflow secure registry login" "$login_step" \
+            '        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3'
+
+        promotion_step=$(awk '
+            /^      - name: Promote validated digest to latest$/ { capture=1 }
+            capture && /^      - name: / && $0 != "      - name: Promote validated digest to latest" { exit }
+            capture { print }
+        ' <<<"$secure_job")
+        if ! grep -Fq './shared/bootc-secure/ci/promote-published-image.sh' <<<"$promotion_step"; then
+            fail_check "$workflow secure-build: missing authenticated promotion helper call"
+        fi
+        require_text "$workflow secure promotion auth path" \
+            "$promotion_step" '          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"'
+        require_text "$workflow secure promotion auth argument" \
+            "$promotion_step" '            "$IMAGE" "${{ steps.push.outputs.digest }}" "$AUTH_FILE"'
     fi
 
     ordered_steps=(
         'Push immutable version tag'
+        'Log in to ghcr.io'
         'Sign immutable image digest'
         'Verify pushed secure image'
         'Validate policy-copied secure artifact'
@@ -207,7 +229,34 @@ else
     require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-capable"] == "true" and'
     require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.3-storage-digest-v1"'
     require_text "$verifier" "$verifier_text" \
+        'inspection=$(skopeo inspect --authfile "$AUTH_FILE" \'
+    tag_inspect_line=$(cat <<'EOF'
+tag_digest=$(skopeo inspect --authfile "$AUTH_FILE" --format '{{.Digest}}' \
+EOF
+)
+    require_text "$verifier tag inspect auth" "$verifier_text" "$tag_inspect_line"
+    require_text "$verifier" "$verifier_text" \
+        'if [[ $tag_digest != "$EXPECTED_DIGEST" ]]; then'
+    require_text "$verifier" "$verifier_text" \
+        'DOCKER_CONFIG=$auth_dir cosign verify --key "$ROOT_DIR/cosign.pub" \'
+    require_text "$verifier" "$verifier_text" \
         'sudo skopeo copy --src-authfile "$AUTH_FILE" \'
+fi
+
+promotion_helper="$guard_root/shared/bootc-secure/ci/promote-published-image.sh"
+if [[ ! -f $promotion_helper ]]; then
+    fail_check "missing secure image promotion helper: shared/bootc-secure/ci/promote-published-image.sh"
+else
+    promotion_text=$(<"$promotion_helper")
+    require_text "$promotion_helper" "$promotion_text" \
+        'skopeo copy --all \'
+    require_text "$promotion_helper promotion source auth" "$promotion_text" \
+        '    --src-authfile "$AUTH_FILE" --dest-authfile "$AUTH_FILE" \'
+    promotion_inspect_line=$(cat <<'EOF'
+latest_digest=$(skopeo inspect --authfile "$AUTH_FILE" \
+EOF
+)
+    require_text "$promotion_helper promotion inspect auth" "$promotion_text" "$promotion_inspect_line"
 fi
 
 if ((fail)); then

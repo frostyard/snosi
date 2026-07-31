@@ -208,15 +208,21 @@ after local validation and before registry publication.
 
 Protected bootc publication pushes a version tag, validates its immutable
 digest and secure labels/signature/policy-copied artifact, then moves `latest`;
-failed immutable candidates never move `latest`.
-The workflow's `docker/login-action` credentials serve user-context Cosign and
-are passed by path to the verifier. The Docker auth file must be directly
-consumable by root Skopeo without user-scoped credential-helper state; otherwise
-the policy-copy verification fails closed and the next protected run remains the
-live proof. Root Skopeo receives that file only through `--src-authfile` for the
-immutable registry source; its local `containers-storage:` destination receives
-no registry credentials. Do not infer this handoff from `XDG_RUNTIME_DIR` or
-root Buildah login state.
+failed immutable candidates never move `latest`. Every GHCR read and write in
+secure verification and promotion receives the Docker login config explicitly:
+Skopeo inspections use `--authfile`, root policy copy uses source-only
+`--src-authfile`, and promotion uses source and destination auth files. Pinned
+Cosign v2.6.1 receives registry auth through command-scoped `DOCKER_CONFIG`; it
+has no registry-config flag. Version-tag resolution must equal the pushed digest
+before policy copy. The Docker auth file must be directly consumable by root
+Skopeo without user-scoped credential-helper state; otherwise the policy-copy
+verification fails closed and the next protected run remains the live proof. Do
+not infer this handoff from `XDG_RUNTIME_DIR` or root Buildah login state.
+
+Deferred publication follow-ups: bind SBOM signing to the exact uploaded
+referrer digest, gate Snow release creation on complete metadata publication,
+decide whether `latest` moves only after metadata completion, and make general
+output cleanup unconditional where retained runners require it.
 `test-bootc-secure.yml` supplies PR/push fixture contracts,
 `bootc-secure-nightly.yml` supplies fixture coverage plus a self-hosted live
 full-window attempt, and `test-install.yml` remains explicitly insecure legacy
