@@ -207,6 +207,17 @@ else
     require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-capable"] == "true" and'
     require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.3-storage-digest-v1"'
     require_text "$verifier" "$verifier_text" \
+        'inspection=$(skopeo inspect --authfile "$AUTH_FILE" \'
+    tag_inspect_line=$(cat <<'EOF'
+tag_digest=$(skopeo inspect --authfile "$AUTH_FILE" --format '{{.Digest}}' \
+EOF
+)
+    require_text "$verifier tag inspect auth" "$verifier_text" "$tag_inspect_line"
+    require_text "$verifier" "$verifier_text" \
+        'if [[ $tag_digest != "$EXPECTED_DIGEST" ]]; then'
+    require_text "$verifier" "$verifier_text" \
+        'DOCKER_CONFIG=$auth_dir cosign verify --key "$ROOT_DIR/cosign.pub" \'
+    require_text "$verifier" "$verifier_text" \
         'sudo skopeo copy --src-authfile "$AUTH_FILE" \'
 fi
 

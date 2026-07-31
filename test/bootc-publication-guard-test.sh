@@ -42,6 +42,16 @@ make_fixture() {
     : >"$fixture/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
 
     cat >"$fixture/shared/bootc-secure/ci/verify-published-image.sh" <<'EOF'
+inspection=$(skopeo inspect --authfile "$AUTH_FILE" \
+    "docker://$IMAGE@$EXPECTED_DIGEST")
+tag_digest=$(skopeo inspect --authfile "$AUTH_FILE" --format '{{.Digest}}' \
+    "docker://$IMAGE:$VERSION_TAG")
+if [[ $tag_digest != "$EXPECTED_DIGEST" ]]; then
+    exit 1
+fi
+auth_dir=$(dirname -- "$AUTH_FILE")
+DOCKER_CONFIG=$auth_dir cosign verify --key "$ROOT_DIR/cosign.pub" \
+    "$IMAGE@$EXPECTED_DIGEST" >/dev/null
 sudo skopeo copy --src-authfile "$AUTH_FILE" \
     "docker://$IMAGE@$EXPECTED_DIGEST" "containers-storage:$LOCAL_REF"
 jq -e --arg digest "$EXPECTED_DIGEST" '
@@ -145,6 +155,18 @@ remove_verifier_src_authfile() {
     perl -0pi -e 's/ --src-authfile "\$AUTH_FILE"//' \
         "$1/shared/bootc-secure/ci/verify-published-image.sh"
 }
+remove_digest_inspect_auth() {
+    perl -0pi -e 's/skopeo inspect --authfile "\$AUTH_FILE"/skopeo inspect/' \
+        "$1/shared/bootc-secure/ci/verify-published-image.sh"
+}
+remove_cosign_docker_config() {
+    perl -0pi -e 's/DOCKER_CONFIG=\$auth_dir cosign/cosign/' \
+        "$1/shared/bootc-secure/ci/verify-published-image.sh"
+}
+remove_tag_binding() {
+    perl -0pi -e 's/^tag_digest=.*?^fi\n//ms' \
+        "$1/shared/bootc-secure/ci/verify-published-image.sh"
+}
 move_promotion_early() {
     perl -0pi -e 's/      - name: Promote validated digest to latest\n//; s/(      - name: Push immutable version tag\n)/$1      - name: Promote validated digest to latest\n/' "$1/.github/workflows/build-images.yml"
 }
@@ -179,6 +201,9 @@ assert_guard 'false secure label check fails' 1 break_label_check
 assert_guard 'missing secure label check fails' 1 remove_label_check
 assert_guard 'missing workflow auth handoff fails' 1 remove_workflow_auth_handoff
 assert_guard 'missing verifier source auth option fails' 1 remove_verifier_src_authfile
+assert_guard 'missing verifier digest inspect auth fails' 1 remove_digest_inspect_auth
+assert_guard 'missing Cosign Docker config fails' 1 remove_cosign_docker_config
+assert_guard 'missing version tag binding fails' 1 remove_tag_binding
 assert_guard 'early latest promotion fails' 1 move_promotion_early
 
 printf '%d passing assertions, %d failures\n' "$pass" "$fail"
