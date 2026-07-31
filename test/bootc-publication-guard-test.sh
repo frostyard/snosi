@@ -42,6 +42,8 @@ make_fixture() {
     : >"$fixture/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
 
     cat >"$fixture/shared/bootc-secure/ci/verify-published-image.sh" <<'EOF'
+sudo skopeo copy --src-authfile "$AUTH_FILE" \
+    "docker://$IMAGE@$EXPECTED_DIGEST" "containers-storage:$LOCAL_REF"
 jq -e --arg digest "$EXPECTED_DIGEST" '
     .Digest == $digest and
     .Labels["io.snosi.bootc.secureboot-capable"] == "true" and
@@ -88,7 +90,10 @@ jobs:
       - name: Push immutable version tag
       - name: Sign immutable image digest
       - name: Verify pushed secure image
-        run: ./shared/bootc-secure/ci/verify-published-image.sh "$IMAGE" "$VERSION_TAG" "$DIGEST" "$LOCAL_REF"
+        run: |
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          ./shared/bootc-secure/ci/verify-published-image.sh \
+            "$IMAGE" "$VERSION_TAG" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
       - name: Validate policy-copied secure artifact
         run: |
           sudo ./test/bootc-secure-artifact-test.sh \
@@ -132,6 +137,14 @@ remove_sudo_tmpdir() { perl -0pi -e 's/^          sudo TMPDIR="\$TMPDIR" \\\n//m
 remove_cleanup_condition() { perl -0pi -e 's/        if: always\(\)\n//' "$1/.github/workflows/build-images.yml"; }
 break_label_check() { perl -0pi -e 's/== "true"/== "false"/' "$1/shared/bootc-secure/ci/verify-published-image.sh"; }
 remove_label_check() { perl -0pi -e 's/    \.Labels\["io\.snosi\.bootc\.secureboot-capable"\].*\n//' "$1/shared/bootc-secure/ci/verify-published-image.sh"; }
+remove_workflow_auth_handoff() {
+    perl -0pi -e 's/^          AUTH_FILE=.*\n//m; s/ "\$AUTH_FILE"\n/\n/' \
+        "$1/.github/workflows/build-images.yml"
+}
+remove_verifier_src_authfile() {
+    perl -0pi -e 's/ --src-authfile "\$AUTH_FILE"//' \
+        "$1/shared/bootc-secure/ci/verify-published-image.sh"
+}
 move_promotion_early() {
     perl -0pi -e 's/      - name: Promote validated digest to latest\n//; s/(      - name: Push immutable version tag\n)/$1      - name: Promote validated digest to latest\n/' "$1/.github/workflows/build-images.yml"
 }
@@ -164,6 +177,8 @@ assert_guard 'missing sudo TMPDIR forwarding fails' 1 remove_sudo_tmpdir
 assert_guard 'missing unconditional cleanup fails' 1 remove_cleanup_condition
 assert_guard 'false secure label check fails' 1 break_label_check
 assert_guard 'missing secure label check fails' 1 remove_label_check
+assert_guard 'missing workflow auth handoff fails' 1 remove_workflow_auth_handoff
+assert_guard 'missing verifier source auth option fails' 1 remove_verifier_src_authfile
 assert_guard 'early latest promotion fails' 1 move_promotion_early
 
 printf '%d passing assertions, %d failures\n' "$pass" "$fail"

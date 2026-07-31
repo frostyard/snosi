@@ -10,6 +10,7 @@ IMAGE="ghcr.io/frostyard/cayo"
 VERSION="20260729010101"
 LOCAL_REF="localhost/snosi-verified-cayo:$VERSION"
 WORK=""
+AUTH_FILE=""
 PASS=0
 FAIL=0
 
@@ -35,7 +36,7 @@ assert_failure() { # description command output
     fi
 }
 
-run_helper() { # image version digest local-ref
+run_helper() { # image version digest local-ref auth-file
     local output status
     set +e
     output=$(PATH="$WORK/bin:$PATH" COMMAND_LOG="$WORK/commands" COPIED_POLICY="$WORK/copied-policy.json" "$HELPER" "$@" 2>&1)
@@ -44,10 +45,10 @@ run_helper() { # image version digest local-ref
     printf '%s\n%s\n' "$status" "$output"
 }
 
-run_case() { # description expected-status image version digest local-ref
+run_case() { # description expected-status image version digest local-ref auth-file
     local result status output
     : >"$WORK/commands"
-    result=$(run_helper "$3" "$4" "$5" "$6")
+    result=$(run_helper "$3" "$4" "$5" "$6" "$7")
     status=${result%%$'\n'*}
     output=${result#*$'\n'}
     if [[ $2 == success ]]; then
@@ -59,6 +60,8 @@ run_case() { # description expected-status image version digest local-ref
 
 WORK=$(mktemp -d)
 mkdir -p "$WORK/bin"
+AUTH_FILE="$WORK/auth.json"
+printf '{"auths":{}}\n' >"$AUTH_FILE"
 cat >"$WORK/bin/skopeo" <<'EOF'
 #!/bin/bash
 set -euo pipefail
@@ -94,9 +97,9 @@ chmod +x "$WORK/bin/skopeo" "$WORK/bin/cosign" "$WORK/bin/sudo"
 export INSPECTION
 INSPECTION=$(jq -nc --arg digest "$DIGEST" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": "bootc-1.16.3-storage-digest-v1"}}')
 
-run_case "accepted immutable secure image is copied" success "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF"
+run_case "accepted immutable secure image is copied" success "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 grep -Fqx "cosign verify --key $ROOT_DIR/cosign.pub $IMAGE@$DIGEST" "$WORK/commands" && pass "Cosign verifies the immutable image with the committed key" || fail "Cosign verifies the immutable image with the committed key"
-grep -Fq "skopeo copy --policy " "$WORK/commands" && grep -Fq -- "--registries.d " "$WORK/commands" && grep -Fq "docker://$IMAGE@$DIGEST containers-storage:$LOCAL_REF" "$WORK/commands" && pass "policy copy uses immutable source and root containers storage" || fail "policy copy uses immutable source and root containers storage"
+grep -Fq "skopeo copy --src-authfile $AUTH_FILE --policy " "$WORK/commands" && grep -Fq -- "--registries.d " "$WORK/commands" && grep -Fq "docker://$IMAGE@$DIGEST containers-storage:$LOCAL_REF" "$WORK/commands" && pass "policy copy uses immutable source and root containers storage" || fail "policy copy uses immutable source and root containers storage"
 if jq -e '.default == [{"type":"reject"}]' "$WORK/copied-policy.json" >/dev/null; then pass "copied policy retains global reject"; else fail "copied policy retains global reject"; fi
 if jq -e --arg key "$ROOT_DIR/cosign.pub" '
     [.transports.docker | keys[]] == ["ghcr.io/frostyard/cayo", "ghcr.io/frostyard/snow", "ghcr.io/frostyard/snowfield"] and
@@ -107,26 +110,38 @@ if jq -e --arg key "$ROOT_DIR/cosign.pub" '
     ]
 ' "$WORK/copied-policy.json" >/dev/null; then pass "copied policy retains exactly the three scoped Cosign rules"; else fail "copied policy retains exactly the three scoped Cosign rules"; fi
 if jq -e '.transports["containers-storage"][""] == [{"type":"insecureAcceptAnything"}]' "$WORK/copied-policy.json" >/dev/null; then pass "copied policy retains the containers-storage exception"; else fail "copied policy retains the containers-storage exception"; fi
-if [[ $(sed -n '1p' "$WORK/commands") == "skopeo inspect docker://$IMAGE@$DIGEST" ]] && [[ $(sed -n '2p' "$WORK/commands") == "cosign verify --key $ROOT_DIR/cosign.pub $IMAGE@$DIGEST" ]] && [[ $(sed -n '4p' "$WORK/commands") == "skopeo copy --policy "* ]]; then pass "verification orders inspect before Cosign before policy copy"; else fail "verification orders inspect before Cosign before policy copy"; fi
+if [[ $(sed -n '1p' "$WORK/commands") == "skopeo inspect docker://$IMAGE@$DIGEST" ]] && [[ $(sed -n '2p' "$WORK/commands") == "cosign verify --key $ROOT_DIR/cosign.pub $IMAGE@$DIGEST" ]] && [[ $(sed -n '4p' "$WORK/commands") == "skopeo copy --src-authfile $AUTH_FILE "* ]]; then pass "verification orders inspect before Cosign before policy copy"; else fail "verification orders inspect before Cosign before policy copy"; fi
+grep -Fq "skopeo copy --src-authfile $AUTH_FILE --policy " "$WORK/commands" &&
+        pass "root policy copy receives the explicit source auth file" ||
+        fail "root policy copy receives the explicit source auth file"
+if ! sed -n '1,2p' "$WORK/commands" | grep -Fq -- '--src-authfile'; then
+    pass "inspect and Cosign do not receive the root copy auth option"
+else
+    fail "inspect and Cosign do not receive the root copy auth option"
+fi
+run_case "missing source auth file is rejected" failure \
+    "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$WORK/missing-auth.json"
+run_case "non-regular source auth path is rejected" failure \
+    "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$WORK"
 
-run_case "tagged image reference is rejected" failure "$IMAGE:$VERSION" "$VERSION" "$DIGEST" "$LOCAL_REF"
-run_case "wrong image repository is rejected" failure "ghcr.io/frostyard/untrusted" "$VERSION" "$DIGEST" "$LOCAL_REF"
-run_case "malformed digest is rejected" failure "$IMAGE" "$VERSION" "sha256:not-a-digest" "$LOCAL_REF"
-run_case "mismatched local reference is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "localhost/snosi-verified-snow:$VERSION"
-run_case "malformed version tag is rejected" failure "$IMAGE" "latest" "$DIGEST" "$LOCAL_REF"
+run_case "tagged image reference is rejected" failure "$IMAGE:$VERSION" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
+run_case "wrong image repository is rejected" failure "ghcr.io/frostyard/untrusted" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
+run_case "malformed digest is rejected" failure "$IMAGE" "$VERSION" "sha256:not-a-digest" "$LOCAL_REF" "$AUTH_FILE"
+run_case "mismatched local reference is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "localhost/snosi-verified-snow:$VERSION" "$AUTH_FILE"
+run_case "malformed version tag is rejected" failure "$IMAGE" "latest" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 
 INSPECTION=$(jq -nc --arg digest "$DIGEST" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "false", "io.snosi.bootc.secureboot-assembly": "bootc-1.16.3-storage-digest-v1"}}')
-run_case "false secure capability is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF"
+run_case "false secure capability is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 INSPECTION=$(jq -nc --arg digest "$DIGEST" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-assembly": "bootc-1.16.3-storage-digest-v1"}}')
-run_case "missing secure capability is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF"
+run_case "missing secure capability is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 INSPECTION=$(jq -nc --arg digest "$DIGEST" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": "wrong"}}')
-run_case "wrong secure assembly is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF"
+run_case "wrong secure assembly is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 INSPECTION=$(jq -nc --arg digest "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": "bootc-1.16.3-storage-digest-v1"}}')
-run_case "remote digest mismatch is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF"
+run_case "remote digest mismatch is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 
 INSPECTION=$(jq -nc --arg digest "$DIGEST" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": "bootc-1.16.3-storage-digest-v1"}}')
-COSIGN_VERIFY_FAIL=1 run_case "failed Cosign verification is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF"
-SKOPEO_COPY_FAIL=1 run_case "failed policy copy is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF"
+COSIGN_VERIFY_FAIL=1 run_case "failed Cosign verification is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
+SKOPEO_COPY_FAIL=1 run_case "failed policy copy is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 
 if [[ -f "$HELPER" ]] && ! grep -Eiq '(skopeo|docker)[^#]*(push|tag)|latest' "$HELPER"; then
     pass "helper has no publication or mutable-tag operation"

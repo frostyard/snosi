@@ -48,10 +48,14 @@ immutable version digest before moving `latest`, deletes credentials before any
 registry write, and then advances the tracking tag.
 
 GitHub's `native-build` environment must be restricted to protected/default
-branches and have no required reviewer. GHCR packages must remain public for the
-current root Skopeo policy-copy gate unless root registry authentication is
-added. Candidate publication, tag movement, and an image labelled secure are
-not substitutes for the blocked live installation and hardware gates.
+branches and have no required reviewer. Root Skopeo receives the Docker login auth file explicitly through --src-authfile.
+The Docker auth file from `docker/login-action` must be directly consumable by
+root Skopeo without user-scoped credential-helper state; otherwise verification
+fails closed. The next protected run remains the live proof. Do not rely on
+inherited `XDG_RUNTIME_DIR`, root Buildah credentials, or registry visibility as
+the authentication mechanism for the policy-copy gate. Candidate publication,
+tag movement, and an image labelled secure are not substitutes for the blocked
+live installation and hardware gates.
 
 ## Fresh Installation
 

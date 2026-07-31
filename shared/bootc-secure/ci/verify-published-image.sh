@@ -7,8 +7,8 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 POLICY="$ROOT_DIR/shared/bootc-secure/tree/etc/containers/policy.json"
 REGISTRIES="$ROOT_DIR/shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml"
 
-if [[ $# -ne 4 ]]; then
-    printf 'usage: %s IMAGE VERSION_TAG EXPECTED_DIGEST LOCAL_REF\n' "${0##*/}" >&2
+if [[ $# -ne 5 ]]; then
+    printf 'usage: %s IMAGE VERSION_TAG EXPECTED_DIGEST LOCAL_REF AUTH_FILE\n' "${0##*/}" >&2
     exit 2
 fi
 
@@ -16,6 +16,12 @@ IMAGE=$1
 VERSION_TAG=$2
 EXPECTED_DIGEST=$3
 LOCAL_REF=$4
+AUTH_FILE=$5
+
+if [[ ! -f $AUTH_FILE ]]; then
+    printf 'source registry auth file is not a regular file\n' >&2
+    exit 2
+fi
 
 if [[ ! $IMAGE =~ ^ghcr\.io/frostyard/(cayo|snow|snowfield)$ ]]; then
     printf 'invalid secure image reference\n' >&2
@@ -52,5 +58,6 @@ mkdir -p "$work/registries.d"
 cp "$REGISTRIES" "$work/registries.d/frostyard.yaml"
 
 cosign verify --key "$ROOT_DIR/cosign.pub" "$IMAGE@$EXPECTED_DIGEST" >/dev/null
-sudo skopeo copy --policy "$work/policy.json" --registries.d "$work/registries.d" \
+sudo skopeo copy --src-authfile "$AUTH_FILE" \
+    --policy "$work/policy.json" --registries.d "$work/registries.d" \
     "docker://$IMAGE@$EXPECTED_DIGEST" "containers-storage:$LOCAL_REF"
