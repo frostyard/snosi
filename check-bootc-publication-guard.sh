@@ -62,6 +62,7 @@ required_files=(
     shared/bootc-secure/tree/etc/containers/policy.json
     shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml
     shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json
+    shared/bootc-secure/ci/resolve-snow-release-predecessor.sh
 )
 for required in "${required_files[@]}"; do
     require_file "$required"
@@ -234,6 +235,70 @@ else
         fi
         [[ -n $line ]] && previous=$line
     done
+
+    metadata_steps=(
+        'Upload SBOM'
+        'Sign SBOM'
+        'Attest build provenance'
+        'Upload manifests to R2'
+        'Record snow tag for release job'
+        'Upload snow tag artifact'
+    )
+    previous=0
+    for name in "${metadata_steps[@]}"; do
+        line=$(step_line "$workflow" "$name" || true)
+        if [[ -n $line && $line -le $previous ]]; then
+            fail_check "$workflow: $name must follow the prior secure metadata step"
+        fi
+        [[ -n $line ]] && previous=$line
+    done
+
+    snow_tag_record_step=$(awk '
+        /^      - name: Record snow tag for release job$/ { capture=1 }
+        capture && /^      - name: / && $0 != "      - name: Record snow tag for release job" { exit }
+        capture { print }
+    ' "$workflow")
+    require_text "$workflow Snow tag record" "$snow_tag_record_step" \
+        "        if: matrix.profile == 'snow'"
+    snow_tag_artifact_step=$(awk '
+        /^      - name: Upload snow tag artifact$/ { capture=1 }
+        capture && /^      - name: / && $0 != "      - name: Upload snow tag artifact" { exit }
+        capture { print }
+    ' "$workflow")
+    require_text "$workflow Snow tag artifact" "$snow_tag_artifact_step" \
+        "        if: matrix.profile == 'snow'"
+
+    release_job=$(awk '
+        /^  release:$/ { capture=1 }
+        capture && /^  [A-Za-z0-9_-]+:$/ && $0 != "  release:" { exit }
+        capture { print }
+    ' "$workflow")
+    if [[ -z $release_job ]]; then
+        fail_check "$workflow: missing release job"
+    else
+        release_checkout=$(awk '
+            /^      - name: Checkout repository$/ { capture=1 }
+            capture && /^      - name: / && $0 != "      - name: Checkout repository" { exit }
+            capture { print }
+        ' <<<"$release_job")
+        require_text "$workflow release checkout" "$release_checkout" "        if: steps.current.outputs.tag != ''"
+        require_text "$workflow release checkout" "$release_checkout" \
+            '        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4'
+        require_text "$workflow release checkout" "$release_checkout" '          persist-credentials: false'
+
+        resolver_step=$(awk '
+            /^      - name: Resolve previous and current snow tags$/ { capture=1 }
+            capture && /^      - name: / && $0 != "      - name: Resolve previous and current snow tags" { exit }
+            capture { print }
+        ' <<<"$release_job")
+        require_text "$workflow release predecessor resolver path" "$resolver_step" \
+            "          ./shared/bootc-secure/ci/resolve-snow-release-predecessor.sh \\"
+        require_text "$workflow release predecessor resolver arguments" "$resolver_step" \
+            "            \"\$GITHUB_REPOSITORY\" \"\$IMAGE\" \"\$CURRENT\" \"\$GITHUB_OUTPUT\""
+        if grep -Fq 'oras repo tags' <<<"$release_job"; then
+            fail_check "$workflow release: must not fall back to oras repo tags"
+        fi
+    fi
 fi
 
 verifier="$guard_root/shared/bootc-secure/ci/verify-published-image.sh"

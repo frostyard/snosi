@@ -313,20 +313,6 @@ jobs:
           ./shared/bootc-secure/ci/promote-published-image.sh \
             "$IMAGE" "${{ steps.push.outputs.digest }}" "$AUTH_FILE"
 
-      - name: Record snow tag for release job
-        # Runs only after the immutable candidate has become latest. The tag
-        # travels to the release job because matrix outputs are last-writer-wins.
-        if: matrix.profile == 'snow'
-        run: echo "${{ steps.version.outputs.tag }}" > snow-tag.txt
-
-      - name: Upload snow tag artifact
-        if: matrix.profile == 'snow'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: snow-tag
-          path: snow-tag.txt
-          retention-days: 1
-
       - name: Install ORAS
         uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
 
@@ -387,6 +373,19 @@ jobs:
           r2-bucket: frostyardrepo
           source-dir: output/manifests
           destination-dir: manifests/
+
+      - name: Record snow tag for release job
+        # The tag travels to the release job because matrix outputs are last-writer-wins.
+        if: matrix.profile == 'snow'
+        run: echo "${{ steps.version.outputs.tag }}" > snow-tag.txt
+
+      - name: Upload snow tag artifact
+        if: matrix.profile == 'snow'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snow-tag
+          path: snow-tag.txt
+          retention-days: 1
 
       - name: cleanup build output
         run: |
@@ -543,6 +542,12 @@ jobs:
             echo "::warning::snow leg did not push this run; skipping release"
           fi
 
+      - name: Checkout repository
+        if: steps.current.outputs.tag != ''
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
       - name: Install ORAS
         if: steps.current.outputs.tag != ''
         uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
@@ -561,27 +566,8 @@ jobs:
           CURRENT: ${{ steps.current.outputs.tag }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
-          # Prefer the tag recorded in the most recent GitHub Release: if a
-          # past release run failed, the next one diffs across the gap instead
-          # of silently losing that interval. Fall back to the registry for
-          # first runs / pre-marker releases.
-          previous=$(gh release view --repo "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null | grep -oP '(?<=<!-- snow-tag: )[0-9]{14}(?= -->)' | head -n1 || true)
-          if [[ -z "$previous" ]]; then
-            previous=$(oras repo tags "$IMAGE" | grep -E '^[0-9]{14}$' | grep -vx "$CURRENT" | sort -r | head -n1 || true)
-          fi
-          if [[ -z "$previous" ]]; then
-            echo "::warning::No previous snow tag found; nothing to diff against; skipping release"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [[ "$previous" == "$CURRENT" ]]; then
-            echo "::warning::Previous tag equals current ($CURRENT); skipping release"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "previous=$previous" >> "$GITHUB_OUTPUT"
-          echo "current=$CURRENT"   >> "$GITHUB_OUTPUT"
+          ./shared/bootc-secure/ci/resolve-snow-release-predecessor.sh \
+            "$GITHUB_REPOSITORY" "$IMAGE" "$CURRENT" "$GITHUB_OUTPUT"
 
       - name: Generate changelog
         id: changelog

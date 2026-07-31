@@ -72,6 +72,8 @@ if [[ $latest_digest != "$EXPECTED_DIGEST" ]]; then
 fi
 EOF
 
+    : >"$fixture/shared/bootc-secure/ci/resolve-snow-release-predecessor.sh"
+
     cat >"$fixture/.github/workflows/build-images.yml" <<'EOF'
 jobs:
   secure-build:
@@ -130,6 +132,32 @@ jobs:
           AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
           ./shared/bootc-secure/ci/promote-published-image.sh \
             "$IMAGE" "${{ steps.push.outputs.digest }}" "$AUTH_FILE"
+       - name: Upload SBOM
+       - name: Sign SBOM
+       - name: Attest build provenance
+       - name: Upload manifests to R2
+       - name: Record snow tag for release job
+        if: matrix.profile == 'snow'
+       - name: Upload snow tag artifact
+        if: matrix.profile == 'snow'
+  release:
+    steps:
+      - name: Read snow tag
+      - name: Checkout repository
+        if: steps.current.outputs.tag != ''
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Install ORAS
+        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+      - name: Login to GHCR with ORAS
+        env:
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        run: echo "${GHCR_PAT}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Resolve previous and current snow tags
+        run: |
+          ./shared/bootc-secure/ci/resolve-snow-release-predecessor.sh \
+            "$GITHUB_REPOSITORY" "$IMAGE" "$CURRENT" "$GITHUB_OUTPUT"
 EOF
     perl -pi -e 's/^       - /      - /' "$fixture/.github/workflows/build-images.yml"
 }
@@ -219,6 +247,30 @@ remove_promotion_inspect_authfile() { perl -0pi -e 's/skopeo inspect --authfile 
 inline_promotion_copy() {
     perl -0pi -e 's|\./shared/bootc-secure/ci/promote-published-image\.sh|skopeo copy --all|' "$1/.github/workflows/build-images.yml"
 }
+move_snow_tag_before_signing() {
+    perl -0pi -e 's/(      - name: Sign SBOM\n)(      - name: Attest build provenance\n)(      - name: Upload manifests to R2\n)(      - name: Record snow tag for release job\n)/$4$1$2$3/' "$1/.github/workflows/build-images.yml"
+}
+move_snow_tag_artifact_before_manifests() {
+    perl -0pi -e "s/(      - name: Upload manifests to R2\\n)(      - name: Record snow tag for release job\\n        if: matrix\\.profile == 'snow'\\n)(      - name: Upload snow tag artifact\\n        if: matrix\\.profile == 'snow'\\n)/\$2\$3\$1/" "$1/.github/workflows/build-images.yml"
+}
+remove_release_resolver() {
+    perl -0pi -e 's{^          \./shared/bootc-secure/ci/resolve-snow-release-predecessor\.sh.*?^            "\$GITHUB_REPOSITORY" "\$IMAGE" "\$CURRENT" "\$GITHUB_OUTPUT"\n}{}ms' "$1/.github/workflows/build-images.yml"
+}
+add_oras_tag_fallback() {
+    printf "          oras repo tags \"\$IMAGE\"\n" >>"$1/.github/workflows/build-images.yml"
+}
+remove_release_checkout() {
+    perl -0pi -e 's/^        uses: actions\/checkout\@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4\n//m' "$1/.github/workflows/build-images.yml"
+}
+remove_snow_tag_record_condition() {
+    perl -0pi -e "s/(      - name: Record snow tag for release job\\n)        if: matrix\\.profile == 'snow'\\n/\$1/" "$1/.github/workflows/build-images.yml"
+}
+remove_snow_tag_artifact_condition() {
+    perl -0pi -e "s/(      - name: Upload snow tag artifact\\n)        if: matrix\\.profile == 'snow'\\n/\$1/" "$1/.github/workflows/build-images.yml"
+}
+corrupt_release_resolver_arguments() {
+    perl -0pi -e 's/"\$GITHUB_REPOSITORY" "\$IMAGE" "\$CURRENT" "\$GITHUB_OUTPUT"/"\$GITHUB_REPOSITORY" "\$IMAGE" "\$BROKEN" "\$GITHUB_OUTPUT"/' "$1/.github/workflows/build-images.yml"
+}
 
 assert_guard 'baseline secure publication fixture passes' 0 unchanged
 assert_guard 'missing bootc secure include fails' 1 remove_secure_include
@@ -266,6 +318,14 @@ assert_guard 'missing promotion source auth fails' 1 remove_promotion_src_authfi
 assert_guard 'missing promotion destination auth fails' 1 remove_promotion_dest_authfile
 assert_guard 'missing promotion inspect auth fails' 1 remove_promotion_inspect_authfile
 assert_guard 'inline promotion copy fails' 1 inline_promotion_copy
+assert_guard 'snow tag recorded before SBOM signing fails' 1 move_snow_tag_before_signing
+assert_guard 'snow tag artifact uploaded before manifests fails' 1 move_snow_tag_artifact_before_manifests
+assert_guard 'missing release predecessor resolver fails' 1 remove_release_resolver
+assert_guard 'ORAS tag fallback in release fails' 1 add_oras_tag_fallback
+assert_guard 'missing release checkout fails' 1 remove_release_checkout
+assert_guard 'missing Snow record condition fails' 1 remove_snow_tag_record_condition
+assert_guard 'missing Snow artifact condition fails' 1 remove_snow_tag_artifact_condition
+assert_guard 'corrupt release resolver arguments fails' 1 corrupt_release_resolver_arguments
 
 printf '%d passing assertions, %d failures\n' "$pass" "$fail"
 ((fail == 0))

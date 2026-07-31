@@ -61,17 +61,17 @@ Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependen
 2. Chunk, smoke test, and generate the SBOM, then use root Buildah's stdin login to push only the immutable timestamp tag and capture its digest.
 3. Use the Docker credential context to sign `IMAGE@DIGEST`, verify its remote digest/secure labels and Cosign signature, and copy it through the restrictive repository policy before validating the copied UKI/composefs artifact.
 4. Copy the verified immutable digest registry-to-registry to `latest`, and assert that `latest` resolves to that same digest. No local Buildah bytes are pushed under the mutable tag.
-5. Only after promotion, record Snow's release tag, attach/sign the SBOM, attest provenance, and upload manifests to R2.
+5. Only after promotion, attach/sign the SBOM, attest provenance, and upload manifests to R2. The Snow tag artifact is recorded only after all of those metadata steps succeed, so its presence authorizes the release job to use the current image.
 
 #### release job — Automated GitHub Releases
 
-After `secure-build` completes, a self-contained `release` job runs on main-branch pushes only and creates a GitHub Release summarising what changed in the build. It uses `!cancelled()` so it can still run after a matrix leg fails, but only proceeds when the `snow` leg uploaded its post-promotion tag artifact. Release failures are visible; the job is not `continue-on-error`.
+After `secure-build` completes, a self-contained `release` job runs on main-branch pushes only and creates a GitHub Release summarising what changed in the build. It uses `!cancelled()` so it can still run after a matrix leg fails, but only proceeds when the `snow` leg uploaded its post-metadata tag artifact. Release failures are visible; the job is not `continue-on-error`.
 
-**Resolution:** The `snow` matrix leg writes the just-pushed timestamp tag to a short-lived artifact. The release job reads that as `current`, then prefers the previous tag recorded in the latest GitHub Release body (`<!-- snow-tag: ... -->`). If no release marker exists, it falls back to `oras repo tags ghcr.io/<owner>/snow` and selects the newest other timestamp tag. It then runs `frostyard/changelog-generator` with those two exact tags to produce the diff. Only `snow` is diffed; the other profiles build and push unchanged and are not referenced in the release.
+**Predecessor contract:** The `snow` matrix leg writes the just-published timestamp tag to a short-lived artifact only after SBOM upload/signing, provenance attestation, and R2 manifest publication. The release job reads that as `current`, pages GitHub Releases newest-first, and considers only `<!-- snow-tag: ... -->` markers. A marker is eligible only when it is an older 14-digit tag whose immutable `ghcr.io/<owner>/snow:<tag>` digest has a discovered referrer with exact `artifactType` `application/vnd.syft+json`. The first eligible marker is `previous`; arbitrary numeric registry tags are never enumerated or selected. A missing tag, unavailable image, discovery failure, malformed discovery output, or absent Syft referrer skips that marker and continues. API pagination failure is fatal. If no eligible marker remains, the resolver writes `skip=true`, warns, and safely skips changelog and release creation.
 
 **Release tag scheme:** `YYYY-MM-DD.N` (daily counter, e.g. `2026-04-09.1`). The release title is `Build YYYY-MM-DD HH:MM:SS UTC`. The body comes from the generated changelog plus the hidden `snow-tag` marker used by future releases.
 
-**Skip paths:** Missing/invalid snow artifact, no previous tag, or `previous == current` all emit warnings and skip release creation.
+**Evidence boundary:** Protected run `30627996880` passed all three secure image jobs (`cayo`, `snow`, and `snowfield`); only its release changelog failed. The old fallback selected failed-build tag `20260731030941`, which had no SBOM. The replacement is fixture and static-test verified, not live-proven, until a main-branch run creates or cleanly skips a Snow release under this contract.
 
 ### build-native-images.yml — Native A/B Build and Publish (Phase 7)
 

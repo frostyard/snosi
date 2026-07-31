@@ -49,6 +49,8 @@ jobs:
         run: ./check-bootc-publication-guard.sh
       - name: Validate bootc publication guard fixtures
         run: ./test/bootc-publication-guard-test.sh
+      - name: Validate bootc release predecessor fixtures
+        run: ./test/bootc-release-predecessor-test.sh
       - name: Validate bootc secure artifact fixtures
         run: ./test/bootc-secure-artifact-test.sh --fixtures
       - name: Validate bootc secure mutation fixtures
