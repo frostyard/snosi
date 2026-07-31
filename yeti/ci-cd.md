@@ -210,10 +210,13 @@ Protected bootc publication pushes a version tag, validates its immutable
 digest and secure labels/signature/policy-copied artifact, then moves `latest`;
 failed immutable candidates never move `latest`.
 The workflow's `docker/login-action` credentials serve user-context Cosign and
-are passed by path to the verifier. Root Skopeo receives that file only through
-`--src-authfile` for the immutable registry source; its local
-`containers-storage:` destination receives no registry credentials. Do not
-infer this handoff from `XDG_RUNTIME_DIR` or root Buildah login state.
+are passed by path to the verifier. The Docker auth file must be directly
+consumable by root Skopeo without user-scoped credential-helper state; otherwise
+the policy-copy verification fails closed and the next protected run remains the
+live proof. Root Skopeo receives that file only through `--src-authfile` for the
+immutable registry source; its local `containers-storage:` destination receives
+no registry credentials. Do not infer this handoff from `XDG_RUNTIME_DIR` or
+root Buildah login state.
 `test-bootc-secure.yml` supplies PR/push fixture contracts,
 `bootc-secure-nightly.yml` supplies fixture coverage plus a self-hosted live
 full-window attempt, and `test-install.yml` remains explicitly insecure legacy
