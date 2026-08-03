@@ -163,8 +163,11 @@ the mechanical job-by-job summary.
    (holds `NATIVE_UPDATE_SIGNING_KEY`, the OpenPGP update-signing private
    key). Downloads its own `native-verified-<product>` marker and
    `native-prepared-<product>` artifact (both `continue-on-error: true`);
-   no-ops if either is missing. Otherwise writes the signing key to
-   `/var/tmp/native-promote-secrets/os-update-signing.key`, runs
+    no-ops if either is missing. The four promotion jobs conditionally run an
+    `Install rclone` step only when both artifacts are present; it runs
+    `apt-get update` immediately before installation to avoid stale
+    hosted-runner indexes on delayed reruns. Otherwise writes the signing key to
+    `/var/tmp/native-promote-secrets/os-update-signing.key`, runs
    `promote.sh --signing-key ...`, removes the key file (`if: always()`),
    and uploads a `native-promoted-<product>` marker on success
 6. `release-notes` -- non-blocking, main-branch pushes only
