@@ -11,3 +11,4 @@
 /usr/lib/tmpfiles.d/pilothouse.conf
 /usr/lib/systemd/system-preset/40-pilothouse.preset
 /usr/lib/systemd/system/multi-user.target.d/10-pilothouse.conf
+/usr/lib/systemd/system/pilothoused.service.d/10-snosi-backends.conf

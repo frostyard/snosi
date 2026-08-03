@@ -50,9 +50,9 @@
     "version": "0.2.3"
   },
   "pilothouse": {
-    "url": "https://github.com/frostyard/pilothouse/releases/download/v0.6.0/frostyard-pilothouse_0.6.0_amd64.deb",
-    "sha256": "17a18dfefd7f788cbe2d8d6994c6271d29d6e69e0071720a8105ad70a9d647c6",
-    "version": "0.6.0"
+    "url": "https://github.com/frostyard/pilothouse/releases/download/v0.7.0/frostyard-pilothouse_0.7.0_amd64.deb",
+    "sha256": "af3c7bcfff75e9323f3b78fa6a538b0cce4cc63abd69acf9c76fff41c945b838",
+    "version": "0.7.0"
   },
   "sunshine": {
     "url": "https://github.com/LizardByte/Sunshine/releases/download/v2026.516.143833/sunshine-debian-trixie-amd64.deb",

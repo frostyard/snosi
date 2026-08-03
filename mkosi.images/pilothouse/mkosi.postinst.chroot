@@ -5,13 +5,20 @@ if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
     set -x
 fi
 
+# shellcheck source=/dev/null
 source "$SRCDIR/shared/download/verified-download.sh"
+# shellcheck source=/dev/null
+source "$SRCDIR/shared/download/deb-dependencies.sh"
 DEBS=$(mktemp -d)
 trap 'rm -rf "$DEBS"' EXIT
 verified_download "pilothouse" "$DEBS/pilothouse.deb"
+assert_deb_dependencies_satisfied "$DEBS/pilothouse.deb"
 
-# The deb has no Depends (static Go binaries). It ships its own sysusers.d
-# fragment in /usr (creates the pilothouse user/group at boot) and a PAM
-# config at /etc/pam.d/pilothouse, which is stripped from the sysext delta —
-# mkosi.finalize captures it to factory defaults for tmpfiles to restore.
+# The DEB is installed directly because it is downloaded from GitHub rather
+# than an APT repository. Its declared dependencies must already be satisfied
+# by the merged buildroot; the guard above fails before dpkg mutates the root
+# if Packages= composition drifts behind a new release. It ships its own
+# sysusers.d fragment in /usr (creates the pilothouse user/group at boot) and
+# a PAM config at /etc/pam.d/pilothouse, which is stripped from the sysext
+# delta — mkosi.finalize captures it to factory defaults for tmpfiles to restore.
 dpkg -i "$DEBS/pilothouse.deb"
