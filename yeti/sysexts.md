@@ -34,7 +34,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
 | **paseo** | paseo | Paseo coding agent workspace desktop app (pinned .deb via verified_download from getpaseo/paseo GitHub releases, relocated from /opt) |
-| **pilothouse** | frostyard-pilothouse | Pilothouse local web administration console for Snosi (pilothouse web UI + pilothoused root broker) — downloaded via `verified_download()` from frostyard/pilothouse GitHub releases |
+| **pilothouse** | frostyard-pilothouse | Pilothouse web administration with capability-gated Updex/container backends (web UI + root broker) — downloaded via `verified_download()` from frostyard/pilothouse GitHub releases |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
 | **sunshine** | sunshine | Sunshine self-hosted game streaming host (official pinned Trixie .deb via verified_download) |
 | **tailscale** | tailscale | Tailscale VPN client |
@@ -231,12 +231,13 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/tmpfiles.d/nix.conf` — `/nix` hierarchy + factory config injection
 
 ### pilothouse
-- `mkosi.postinst.chroot` — Downloads the frostyard-pilothouse .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Static Go binaries (no Depends), everything ships natively under `/usr`; no relocation
+- `mkosi.postinst.chroot` — Downloads the frostyard-pilothouse .deb (GitHub release, no apt repo) via `verified_download()`, then uses `shared/download/deb-dependencies.sh` to verify its declared `Depends` against the merged buildroot before `dpkg -i` can mutate it. Runtime dependencies must be explicit in `Packages=` or supplied by the base; everything ships natively under `/usr`, so no relocation is needed
 - `mkosi.finalize` — Captures `/etc/pam.d/pilothouse` to factory defaults; `pilothoused` authenticates admin actions through the "pilothouse" PAM service and sysexts cannot ship `/etc`
 - The deb's own `usr/lib/sysusers.d/pilothouse.conf` creates the `pilothouse` user/group at boot (ships in `/usr`, so it survives the delta — no extra sysusers fragment needed)
 - `usr/lib/tmpfiles.d/pilothouse.conf` — Factory PAM config injection
 - `usr/lib/systemd/system-preset/40-pilothouse.preset` — Enables `pilothoused.service` (root broker on `/run/pilothouse/broker.sock`) and `pilothouse.service` (web UI on 127.0.0.1:8888)
 - `usr/lib/systemd/system/multi-user.target.d/10-pilothouse.conf` — `Upholds=pilothoused.service pilothouse.service` drop-in for reliable boot activation
+- `usr/lib/systemd/system/pilothoused.service.d/10-snosi-backends.conf` — Resets only `pilothoused.service`'s broker command while retaining the package's socket, socket-group, and sudo admin-group arguments. It explicitly opts in to `--updex /usr/bin/updex`, `--podman-socket /run/podman/podman.sock`, `--docker unix:///var/run/docker.sock`, and `--incus`. These flags permit Pilothouse probes but do not force registration or make startup fail when an executable or socket endpoint is unavailable
 
 ### tailscale
 - `mkosi.finalize` — Captures `/etc/default/tailscaled` to factory defaults (tailscaled requires the EnvironmentFile)

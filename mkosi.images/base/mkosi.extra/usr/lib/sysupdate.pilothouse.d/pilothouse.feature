@@ -1,4 +1,4 @@
 [Feature]
-Description=Pilothouse local web administration console for Snosi
+Description=Pilothouse web administration with capability-gated backends
 Documentation=https://github.com/frostyard/pilothouse
 Enabled=false

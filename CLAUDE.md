@@ -1532,6 +1532,14 @@ entry and virtual-input udev rules take effect on the next boot unless manually
 applied. Its upstream user service is available for manual user startup; do not
 add a preset or `Upholds=` activation.
 
+**Pilothouse sysext:** Snosi overrides only `pilothoused.service` `ExecStart`
+to retain the packaged Debian socket, socket-group, and sudo-group arguments
+and explicitly configure Updex, Podman, Docker, and Incus. These are probe
+opt-ins, not hard dependencies; unavailable endpoints remain unregistered and
+nonfatal. The GitHub-release DEB's complete `Depends` expression must pass
+`assert_deb_dependencies_satisfied` before `dpkg -i`; add newly required
+runtime packages through `Packages=` rather than installing them implicitly.
+
 Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var` at runtime. Configs needed in `/etc` must be:
 
 1. Captured to `/usr/share/factory/etc` during build (via `mkosi.finalize`) — capture ONLY the specific paths the sysext's tmpfiles rules reference, never all of `/etc` (the buildroot `/etc` is the merged base view; a full capture ships `/etc/shadow` and SSH host keys in the published sysext)

@@ -55,7 +55,7 @@ The project produces:
 | **lemonade**        | Lemonade local LLM server (GPU/NPU accelerated)                 | sysext        |
 | **nix**             | Nix package manager                                             | sysext        |
 | **paseo**           | Paseo coding agent workspace desktop application                | sysext        |
-| **pilothouse**      | Pilothouse local web administration console for Snosi           | sysext        |
+| **pilothouse**      | Pilothouse web administration with capability-gated Updex/container backends | sysext        |
 | **podman**          | Podman + Distrobox                                              | sysext        |
 | **sunshine**        | Sunshine self-hosted game streaming host for Moonlight          | sysext        |
 | **tailscale**       | Tailscale VPN client                                            | sysext        |
@@ -250,11 +250,15 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | **lemonade**      | Lemonade local LLM server (lemond)            | [mkosi.images/lemonade/mkosi.conf](mkosi.images/lemonade/mkosi.conf)           |
 | **nix**           | Nix package manager, systemd integration      | [mkosi.images/nix/mkosi.conf](mkosi.images/nix/mkosi.conf)                     |
 | **paseo**         | Paseo desktop app (Electron)                  | [mkosi.images/paseo/mkosi.conf](mkosi.images/paseo/mkosi.conf)                 |
-| **pilothouse**    | Pilothouse local web administration console   | [mkosi.images/pilothouse/mkosi.conf](mkosi.images/pilothouse/mkosi.conf)       |
+| **pilothouse**    | Pilothouse web administration with capability-gated Updex/container backends | [mkosi.images/pilothouse/mkosi.conf](mkosi.images/pilothouse/mkosi.conf)       |
 | **podman**        | Podman, Distrobox, buildah, crun              | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf)               |
 | **sunshine**      | Sunshine self-hosted game streaming host for Moonlight | [mkosi.images/sunshine/mkosi.conf](mkosi.images/sunshine/mkosi.conf)     |
 | **tailscale**     | Tailscale VPN client                          | [mkosi.images/tailscale/mkosi.conf](mkosi.images/tailscale/mkosi.conf)         |
 | **vscode**        | Visual Studio Code desktop application         | [mkosi.images/vscode/mkosi.conf](mkosi.images/vscode/mkosi.conf)               |
+
+The Pilothouse sysext explicitly configures Updex, Podman, Docker, and Incus.
+Pilothouse advertises each backend only after its executable or socket probe
+succeeds, so unavailable endpoints do not prevent `pilothoused` from starting.
 
 ## How Profiles Work
 
