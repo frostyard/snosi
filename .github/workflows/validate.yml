@@ -96,6 +96,11 @@ jobs:
         # in CI, matching every other QEMU harness in this repo.
         run: ./test/native-publication-pipeline-test.sh
 
+      - name: Validate native promotion rclone installation
+        # Fresh promotion runners must refresh APT before installing rclone;
+        # stale hosted-runner indexes can reference mirror revisions already removed.
+        run: python3 test/native-rclone-install-test.py
+
       - name: Validate native A/B publication guard
         # A profile literally named cayo-ab, snow-ab, or snowfield-ab is
         # production-facing (docs/native-ab-contracts.md §15) and must never

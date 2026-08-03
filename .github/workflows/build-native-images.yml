@@ -842,7 +842,9 @@ jobs:
 
       - name: Install rclone
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
-        run: sudo apt-get install -y rclone
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rclone
 
       - name: Write OpenPGP update-signing key
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
@@ -964,7 +966,9 @@ jobs:
 
       - name: Install rclone
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
-        run: sudo apt-get install -y rclone
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rclone
 
       - name: Write OpenPGP update-signing key
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
@@ -1086,7 +1090,9 @@ jobs:
 
       - name: Install rclone
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
-        run: sudo apt-get install -y rclone
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rclone
 
       - name: Write OpenPGP update-signing key
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
@@ -1398,7 +1404,9 @@ jobs:
 
       - name: Install rclone
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
-        run: sudo apt-get install -y rclone
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rclone
 
       - name: Write OpenPGP update-signing key
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
