@@ -15,14 +15,14 @@
     "version": "3.1.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_150.0.4078.105-1_amd64.deb",
-    "sha256": "7114192e2c7e8c12aeecb604b2732355e925716035729ebf8a0afe6895cdc01b",
-    "version": "150.0.4078.105-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_151.0.4129.59-1_amd64.deb",
+    "sha256": "5e443a1c2385950faaf60ae21aac85cfd117bc05f7e40c965720c40d7d4c75af",
+    "version": "151.0.4129.59-1"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.130.0/code-server_4.130.0_amd64.deb",
-    "sha256": "2df0f7718a1e6ac090fa39226c1a291453403e3ca2e636804695648cdb24a851",
-    "version": "4.130.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.131.0/code-server_4.131.0_amd64.deb",
+    "sha256": "f406ed417f179c82d75a34043d055b8b51cbe944e5624f2fdf39207fe425d29e",
+    "version": "4.131.0"
   },
   "coder": {
     "url": "https://github.com/coder/coder/releases/download/v2.34.7/coder_2.34.7_linux_amd64.deb",
@@ -40,14 +40,14 @@
     "version": "1.36.2+k3s1"
   },
   "lemonade": {
-    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.5.0/lemonade-server_11.5.0-debian13_amd64.deb",
-    "sha256": "cd7448b1b577815a75b4596a9611d29a37db737c036dd9bc9b18d258ddd4204e",
-    "version": "11.5.0"
+    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.5.1/lemonade-server_11.5.1-debian13_amd64.deb",
+    "sha256": "6153b3dfaf6fbb694c25c2947ee622e783423145cecabc9aacb79d2479119ed8",
+    "version": "11.5.1"
   },
   "paseo": {
-    "url": "https://github.com/getpaseo/paseo/releases/download/v0.2.3/Paseo-0.2.3-amd64.deb",
-    "sha256": "7a7d65a4dd968ea44d70294e588e00d80ab127593a9220ff2204897ca3ff880d",
-    "version": "0.2.3"
+    "url": "https://github.com/getpaseo/paseo/releases/download/v0.2.5/Paseo-0.2.5-amd64.deb",
+    "sha256": "2159168b005f9d95e446ac38a58d0e6d3a21c45da6813c9ff9917d0d71414ea5",
+    "version": "0.2.5"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.6.0/frostyard-pilothouse_0.6.0_amd64.deb",
