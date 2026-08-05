@@ -15,9 +15,30 @@ authoritative. The `installer` object defines the requirements below.
 
 ## Prerequisites
 
-- The installer medium must provide bootc `1.16.3`, Cosign `2.6.1`, and the
-  coherent Forky systemd `261.1-3` family. A newer replacement is unsupported
-  until the secure assembly compatibility contract is revalidated.
+- The installer medium must provide bootc `1.16.3` exactly, and at minimum
+  Cosign `2.6.1` and the coherent Forky systemd `261.1-3` family. The two
+  policies are deliberately different:
+
+  - **bootc is an exact pin.** The secure assembly depends on observed,
+    non-upstream-stable behaviour of that release — the hidden storage-digest
+    command and the two-pass ukify sequence — so a newer bootc is the change
+    most likely to break it without failing loudly.
+  - **systemd and Cosign are floors.** What the systemd requirement guards at
+    install time is tooling behaviour (`systemd-cryptenroll` TPM sealing,
+    `bootctl`, `systemd-repart`); the installed system's systemd family is
+    pinned and validated separately at image build time. A version above the
+    floor that has not been validated end to end installs and emits a warning,
+    recorded in the install provenance — it is never silently treated as
+    validated. Revalidate the secure assembly compatibility contract before
+    relying on such a combination.
+
+  An exact pin on a medium that is rebuilt routinely creates standing pressure
+  to edit the pinned number instead of revalidating the change, and a check
+  maintainers are trained to defeat protects nothing. The floor plus warning
+  keeps the signal without the treadmill.
+
+- Install provenance records the versions **detected on the medium**, not the
+  values declared here, so "what actually ran" is answerable after the fact.
 - The target disk must be at least `32212254720` bytes (30 GiB). This covers
   the online pull, OCI cache, and deployed composefs state; it is not a claim
   about the eventual steady-state free space.
@@ -281,8 +302,12 @@ Fisherman records `/var/lib/snosi/bootc-secure-install.json` in the encrypted
 root after successful installation. It records the resolved OCI digest and
 repository, secure-capability label, contract schema and assembly compatibility,
 composefs ID, UKI hash, MOK and PCR public-key fingerprints, ESP PARTUUID,
-LUKS UUID and TPM-token identity, installer component versions, and completion
-time. Secrets and passphrases are never recorded.
+LUKS UUID and TPM-token identity, installer component versions **as detected on
+the medium**, and completion time. Secrets and passphrases are never recorded.
+
+Recording detected rather than declared versions is what makes the floor policy
+above auditable: an install that proceeded on an above-floor, unvalidated
+systemd says so in its own record.
 
 The record is JSON with these required keys: `oci_ref`, `tracking_ref`, `repository`,
 `secure_capability`, `contract_schema`, `assembly_compatibility`, `composefs_id`,
