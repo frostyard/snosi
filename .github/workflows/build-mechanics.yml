@@ -1,0 +1,184 @@
+# Publish MECHANICS images for QA.
+#
+# These images carry io.snosi.bootc.secureboot-capable=false and provide NO
+# security evidence. They exist for one reason: `bootc install to-disk` is the
+# legacy mechanics tier and test-install.yml correctly refuses to run it against
+# a secure image, so without a published mechanics image there is no legal
+# target for install-mechanics regression testing at all. frostyard/lab's bootc
+# install lane has never once passed for exactly this reason.
+#
+# NOT FOR INSTALLATION BY USERS. Deliberately:
+#   - published only under `mechanics` / `mechanics-<version>` tags
+#   - `latest` and every user-facing tag are never touched by this workflow
+#   - labelled io.snosi.qa.mechanics-only=true and described as QA-only
+#   - never referenced from install documentation
+#
+# Retention is GHCR's default GC. These are disposable regression fixtures;
+# there is no reason to accumulate or protect them.
+#
+# This is a SEPARATE workflow from build-images.yml on purpose. That workflow's
+# PR `mechanics-build` job is deliberately secretless and non-publishing, and it
+# stays that way — the registry write lives here, where its scope is explicit
+# and auditable, and it uses the scoped GITHUB_TOKEN rather than a PAT.
+name: Publish mechanics images (QA only)
+
+on:
+  schedule:
+    # 03:30 UTC — clear of the 06:00 nightlies and the 08:00/09:00 dependency
+    # checks. Nightly rather than per-push: this is a regression signal for the
+    # install path, not a release artifact, and the matrix is a 3x180-minute
+    # build that does not need to run on every commit.
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  REPO_NAME: snosi
+
+jobs:
+  mechanics-publish:
+    # Never from a pull request. A fork PR must not be able to reach a job that
+    # holds packages: write.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: cayo
+            description: "Cayo Linux Server Image"
+          - profile: snow
+            description: "Snow Linux OS Image"
+          - profile: snowfield
+            description: "Snowfield Linux OS Image"
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: true
+
+      - name: Mount BTRFS for podman storage
+        uses: ublue-os/container-storage-action@dc1f4c8f17b672069e921f001132f7cf98a423a6 # main 2026-02-11
+        with:
+          target-dir: /var/lib/containers
+
+      - name: Configure Podman OCI runtime
+        # Matches build-images.yml: the hosted runner's Podman 5.8.4 default
+        # crun path rejects the generated OCI version; the bundled runc works.
+        run: |
+          sudo install -d -m 0755 /etc/containers/containers.conf.d
+          printf '%s\n' '[engine]' 'runtime = "runc"' \
+            | sudo tee /etc/containers/containers.conf.d/99-snosi-ci-runtime.conf >/dev/null
+          runtime=$(sudo podman info --format '{{.Host.OCIRuntime.Name}}')
+          [[ $runtime == runc ]] || {
+            echo "::error::Podman selected OCI runtime '$runtime', expected 'runc'" >&2
+            exit 1
+          }
+
+      - name: Redirect temp to /mnt
+        run: |
+          sudo mkdir -p /mnt/tmp
+          sudo chmod 1777 /mnt/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Generate build date
+        id: date
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate version tag
+        id: version
+        run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
+
+      - name: setup-mkosi
+        uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf
+
+      - name: Build image
+        # No SNOSI_BOOTC_SECURE and no MOK/PCR credentials, so this is a
+        # mechanics build by construction. The guard below proves it rather
+        # than trusting it.
+        run: |
+          sudo TMPDIR="$TMPDIR" mkosi --profile ${{ matrix.profile }} \
+            --dependency= \
+            --dependency=base \
+            --image-version "${{ steps.version.outputs.tag }}" \
+            build
+
+      - name: Package image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo TMPDIR="$TMPDIR" ./shared/outformat/image/buildah-package.sh \
+            output/${{ matrix.profile }} \
+            "$IMAGE:mechanics-${{ steps.version.outputs.tag }}" \
+            "org.opencontainers.image.title=${{ matrix.profile }} (mechanics, QA only)" \
+            "org.opencontainers.image.description=QA ONLY - NOT FOR INSTALLATION. ${{ matrix.description }} built without Secure Boot assembly, for install-mechanics regression testing only. Provides no security evidence." \
+            "org.opencontainers.image.version=${{ steps.version.outputs.tag }}" \
+            "org.opencontainers.image.created=${{ steps.date.outputs.date }}" \
+            "org.opencontainers.image.source=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/blob/${{ github.sha }}/mkosi.conf" \
+            "io.snosi.qa.mechanics-only=true"
+
+      - name: Refuse to publish anything secure-capable under a mechanics tag
+        # Fail-closed mirror of test-install.yml's guard, pointing the other
+        # way. That one refuses to INSTALL a secure image by the mechanics
+        # path; this refuses to PUBLISH a secure image under a mechanics tag.
+        # Publishing a secureboot-capable image here would hand the lab a
+        # target it would then install by the wrong path — the exact confusion
+        # this whole tag exists to remove.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          TAG: mechanics-${{ steps.version.outputs.tag }}
+        run: |
+          capability=$(sudo podman inspect --format \
+            '{{ index .Labels "io.snosi.bootc.secureboot-capable" }}' "$IMAGE:$TAG")
+          echo "io.snosi.bootc.secureboot-capable=$capability"
+          [[ $capability == false ]] || {
+            echo "::error::refusing to publish '$capability' under a mechanics tag; expected false" >&2
+            exit 1
+          }
+
+      - name: Push mechanics tags
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          TAG: mechanics-${{ steps.version.outputs.tag }}
+          # Scoped to this repository and this run, unlike the PAT used by the
+          # secure publisher. A mechanics push needs nothing broader.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Login via stdin so the token never appears in process arguments.
+          echo "$GH_TOKEN" | sudo buildah login -u "${{ github.actor }}" --password-stdin ghcr.io
+
+          # Immutable, version-stamped.
+          sudo TMPDIR="$TMPDIR" buildah push --compression-format=zstd:chunked \
+            "$IMAGE:$TAG" "docker://$IMAGE:$TAG"
+
+          # Moving `mechanics` alias so the lab's digest poller has a stable
+          # ref to watch. `latest` is NOT touched here and must never be.
+          sudo TMPDIR="$TMPDIR" buildah push --compression-format=zstd:chunked \
+            "$IMAGE:$TAG" "docker://$IMAGE:mechanics"
+
+          {
+            echo "## Mechanics image published (QA only)"
+            echo ''
+            echo "- \`$IMAGE:$TAG\`"
+            echo "- \`$IMAGE:mechanics\` (moving alias)"
+            echo ''
+            echo 'Provides no security evidence. Not for installation.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: cleanup build output
+        if: always()
+        run: sudo -E mkosi clean
