@@ -25,14 +25,14 @@
     "version": "4.131.0"
   },
   "coder": {
-    "url": "https://github.com/coder/coder/releases/download/v2.34.7/coder_2.34.7_linux_amd64.deb",
-    "sha256": "a23cc8ceb36b881c341fd4d3bba217bf1b9f1097b5f462ba62da9a58c11d8870",
-    "version": "2.34.7"
+    "url": "https://github.com/coder/coder/releases/download/v2.35.3/coder_2.35.3_linux_amd64.deb",
+    "sha256": "8fbeef52bd7b2c795501cfa357b8389867f882b9a9b363ddda3c7c544f103a5d",
+    "version": "2.35.3"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.2/GitHub-Copilot-linux-x64.deb",
-    "sha256": "df80379b8e624eaf751c33758534f111bed7faf09b8d988e59ac7e0ab3dc9ff4",
-    "version": "1.1.2"
+    "url": "https://github.com/github/app/releases/download/v1.1.3/GitHub-Copilot-linux-x64.deb",
+    "sha256": "018233d0e51aba898703fad93163f70d279dd2a4baae3f247a0a1486de2adce9",
+    "version": "1.1.3"
   },
   "k3s": {
     "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s",
