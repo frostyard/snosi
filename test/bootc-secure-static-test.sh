@@ -12,12 +12,20 @@ artifact_validator="$root/test/bootc-secure-artifact-test.sh"
 
 # Live validation executes the candidate image's pinned bootc through Podman;
 # it must not depend on an independently installed host bootc.
-grep -Fq 'for command in buildah jq objcopy objdump openssl podman sbverify; do' \
+grep -Fq 'for command in buildah chroot jq lsinitrd objcopy objdump openssl podman sbverify; do' \
     "$artifact_validator"
 if grep -Eq '^for command in .*\bbootc\b' "$artifact_validator"; then
     echo "bootc secure artifact validation must use candidate-image bootc, not host bootc" >&2
     exit 1
 fi
+
+# Validate the exact initramfs embedded in the assembled UKI by executing its
+# own generator. A secure bootc artifact is unusable unless GPT auto discovery
+# emits the unit that unlocks its encrypted root.
+grep -Fq "SYSTEMD_PROC_CMDLINE='root=gpt-auto-force'" "$artifact_validator"
+grep -Fq 'chroot "$initrd_root" "$generator"' "$artifact_validator"
+grep -Fq 'late/systemd-cryptsetup@root.service' "$artifact_validator"
+grep -Fq "'/dev/gpt-auto-root-luks'" "$artifact_validator"
 
 [[ -f "$secure" ]]
 [[ -f "$package_manager/etc/apt/sources.list.d/forky.sources" ]]
