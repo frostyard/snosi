@@ -6,38 +6,35 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ASSEMBLER="$ROOT_DIR/shared/bootc-secure/assemble-uki.sh"
 
-if [[ ${1:-} == --fixtures ]]; then
-    "$ASSEMBLER" --self-test
-    "$ASSEMBLER" --credential-self-test
-    echo "bootc secure artifact fixtures passed"
-    exit 0
-fi
+# This is a structural initramfs check. Forced discovery proves that the exact
+# embedded generator can emit a root cryptsetup unit and has cryptsetup support;
+# it does not exercise production EFI discovery or reproduce issue 517's VM
+# failure. That remains the responsibility of the secure-install VM lane.
+validate_gpt_auto_cryptsetup() (
+    local uki scratch initrd initrd_root generator_root generator unit
+    for command in chroot lsinitrd objcopy; do
+        if ! command -v "$command" >/dev/null; then
+            echo "SKIP: initramfs gpt-auto validation requires $command" >&2
+            return 0
+        fi
+    done
+    if (( EUID != 0 )) && [[ ${SNOSI_GPT_AUTO_FIXTURE:-0} != 1 ]]; then
+        echo "SKIP: initramfs gpt-auto validation requires root for chroot" >&2
+        return 0
+    fi
 
-ROOTFS=${1:?Usage: $0 ROOTFS OCI_IMAGE_REF MOK_CERT PCR_CERT [PREVIOUS_PCR_CERT]}
-IMAGE=${2:?Usage: $0 ROOTFS OCI_IMAGE_REF MOK_CERT PCR_CERT [PREVIOUS_PCR_CERT]}
-MOK_CERT=${3:?Usage: $0 ROOTFS OCI_IMAGE_REF MOK_CERT PCR_CERT [PREVIOUS_PCR_CERT]}
-PCR_CERT=${4:?Usage: $0 ROOTFS OCI_IMAGE_REF MOK_CERT PCR_CERT [PREVIOUS_PCR_CERT]}
-PREVIOUS_PCR_CERT=${5:-}
-
-[[ -d "$ROOTFS" ]] || { echo "Error: missing rootfs: $ROOTFS" >&2; exit 1; }
-for command in buildah chroot jq lsinitrd objcopy objdump openssl podman sbverify; do
-    command -v "$command" >/dev/null || { echo "BLOCKED: missing $command" >&2; exit 2; }
-done
-
-if (( EUID != 0 )); then
-    echo "BLOCKED: bootc secure artifact validation must run as root" >&2
-    exit 2
-fi
-
-validate_gpt_auto_cryptsetup() {
-    local uki initrd initrd_root generator_root generator unit
     uki=$(find "$ROOTFS/boot/EFI/Linux" -maxdepth 1 -type f -name '*.efi' -print -quit)
     [[ -n $uki ]] || { echo "Error: assembled UKI is missing" >&2; return 1; }
 
-    initrd=$(mktemp)
-    initrd_root=$(mktemp -d)
-    trap 'rm -f "$initrd"; rm -rf "$initrd_root"' RETURN
-    objcopy --dump-section ".initrd=$initrd" "$uki"
+    scratch=$(mktemp -d)
+    initrd="$scratch/initrd"
+    initrd_root="$scratch/root"
+    mkdir -p "$initrd_root"
+    trap 'rm -rf "$scratch"' EXIT
+    # objcopy rewrites its input when no output is named, stripping a PE's
+    # Authenticode certificate table. Always write a disposable output and
+    # leave the assembled, signed UKI byte-for-byte untouched.
+    objcopy --dump-section ".initrd=$initrd" "$uki" "$scratch/uki.copy"
     (
         cd "$initrd_root"
         lsinitrd --unpack "$initrd"
@@ -68,14 +65,92 @@ validate_gpt_auto_cryptsetup() {
         echo "Error: initramfs gpt-auto-generator did not emit systemd-cryptsetup@root.service" >&2
         return 1
     }
-    grep -Fq "ExecStart=/usr/lib/systemd/systemd-cryptsetup attach 'root' '/dev/gpt-auto-root-luks'" "$unit"
-    grep -Fq 'BindsTo=dev-gpt\x2dauto\x2droot\x2dluks.device' "$unit"
+    grep -Fq "ExecStart=/usr/lib/systemd/systemd-cryptsetup attach 'root' '/dev/gpt-auto-root-luks'" "$unit" || {
+        echo "Error: generated root cryptsetup unit has the wrong attach command" >&2
+        return 1
+    }
+    grep -Fq 'BindsTo=dev-gpt\x2dauto\x2droot\x2dluks.device' "$unit" || {
+        echo "Error: generated root cryptsetup unit does not bind to the LUKS device" >&2
+        return 1
+    }
     find "$initrd_root$generator_root/late" -type l \
         -lname '../systemd-cryptsetup@root.service' -print -quit | grep -q . || {
         echo "Error: generated root cryptsetup unit has no LUKS device dependency" >&2
         return 1
     }
-}
+)
+
+gpt_auto_fixture() (
+    local fixture old_root before after
+    fixture=$(mktemp -d)
+    trap 'rm -rf "$fixture"' EXIT
+    mkdir -p "$fixture/bin" "$fixture/root/boot/EFI/Linux"
+    printf 'signed UKI fixture\n' >"$fixture/root/boot/EFI/Linux/test.efi"
+    before=$(sha256sum "$fixture/root/boot/EFI/Linux/test.efi")
+
+    cat >"$fixture/bin/objcopy" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+[[ $# -eq 4 && $1 == --dump-section && $2 == .initrd=* ]]
+printf 'initrd fixture\n' >"${2#.initrd=}"
+cp -- "$3" "$4"
+EOF
+    cat >"$fixture/bin/lsinitrd" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+[[ $1 == --unpack && -s $2 ]]
+mkdir -p usr/lib/systemd/system-generators
+printf '#!/bin/sh\nexit 0\n' >usr/lib/systemd/system-generators/systemd-gpt-auto-generator
+chmod +x usr/lib/systemd/system-generators/systemd-gpt-auto-generator
+EOF
+    cat >"$fixture/bin/chroot" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+root=$1
+shift 2
+late=$3
+unit="$root$late/systemd-cryptsetup@root.service"
+cat >"$unit" <<'UNIT'
+[Unit]
+BindsTo=dev-gpt\x2dauto\x2droot\x2dluks.device
+[Service]
+ExecStart=/usr/lib/systemd/systemd-cryptsetup attach 'root' '/dev/gpt-auto-root-luks' 'none' 'tpm2-device=auto'
+UNIT
+mkdir -p "$root$late/dev-gpt\\x2dauto\\x2droot\\x2dluks.device.wants"
+ln -s ../systemd-cryptsetup@root.service \
+    "$root$late/dev-gpt\\x2dauto\\x2droot\\x2dluks.device.wants/systemd-cryptsetup@root.service"
+EOF
+    chmod +x "$fixture/bin/objcopy" "$fixture/bin/lsinitrd" "$fixture/bin/chroot"
+
+    old_root=${ROOTFS:-}
+    ROOTFS="$fixture/root"
+    PATH="$fixture/bin:$PATH" SNOSI_GPT_AUTO_FIXTURE=1 validate_gpt_auto_cryptsetup
+    ROOTFS=$old_root
+    after=$(sha256sum "$fixture/root/boot/EFI/Linux/test.efi")
+    [[ $after == "$before" ]] || {
+        echo "Error: gpt-auto validation modified the signed UKI" >&2
+        return 1
+    }
+)
+
+if [[ ${1:-} == --fixtures ]]; then
+    "$ASSEMBLER" --self-test
+    "$ASSEMBLER" --credential-self-test
+    gpt_auto_fixture
+    echo "bootc secure artifact fixtures passed"
+    exit 0
+fi
+
+ROOTFS=${1:?Usage: $0 ROOTFS OCI_IMAGE_REF MOK_CERT PCR_CERT [PREVIOUS_PCR_CERT]}
+IMAGE=${2:?Usage: $0 ROOTFS OCI_IMAGE_REF MOK_CERT PCR_CERT [PREVIOUS_PCR_CERT]}
+MOK_CERT=${3:?Usage: $0 ROOTFS OCI_IMAGE_REF MOK_CERT PCR_CERT [PREVIOUS_PCR_CERT]}
+PCR_CERT=${4:?Usage: $0 ROOTFS OCI_IMAGE_REF MOK_CERT PCR_CERT [PREVIOUS_PCR_CERT]}
+PREVIOUS_PCR_CERT=${5:-}
+
+[[ -d "$ROOTFS" ]] || { echo "Error: missing rootfs: $ROOTFS" >&2; exit 1; }
+for command in buildah jq objcopy objdump openssl podman sbverify; do
+    command -v "$command" >/dev/null || { echo "BLOCKED: missing $command" >&2; exit 2; }
+done
 
 "$ASSEMBLER" --validate "$ROOTFS" "$IMAGE" "$MOK_CERT" "$PCR_CERT" "$PREVIOUS_PCR_CERT"
 validate_gpt_auto_cryptsetup
