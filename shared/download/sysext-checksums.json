@@ -30,19 +30,19 @@
     "version": "2.35.3"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.3/GitHub-Copilot-linux-x64.deb",
-    "sha256": "018233d0e51aba898703fad93163f70d279dd2a4baae3f247a0a1486de2adce9",
-    "version": "1.1.3"
+    "url": "https://github.com/github/app/releases/download/v1.1.4/GitHub-Copilot-linux-x64.deb",
+    "sha256": "9d12163af84343b1fb757d0bcca0b879b881f6b8f92a3e747e3dafa585190bf3",
+    "version": "1.1.4"
   },
   "k3s": {
-    "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.2%2Bk3s1/k3s",
-    "sha256": "65a55ec56c24eab44383086166ec620a491952b7e23941a49ddca6e8a4c4b4de",
-    "version": "1.36.2+k3s1"
+    "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.3%2Bk3s1/k3s",
+    "sha256": "2f98a9f8fe5782479ee2d54e70a1b10a7f6fd4cae8d38ed3098452dc6eed76b5",
+    "version": "1.36.3+k3s1"
   },
   "lemonade": {
-    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.5.1/lemonade-server_11.5.1-debian13_amd64.deb",
-    "sha256": "6153b3dfaf6fbb694c25c2947ee622e783423145cecabc9aacb79d2479119ed8",
-    "version": "11.5.1"
+    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.5.2/lemonade-server_11.5.2-debian13_amd64.deb",
+    "sha256": "cd97101397689adf4e9a76e8967a0100fb70cd2f9c3f14a26af0cb58f6f12399",
+    "version": "11.5.2"
   },
   "paseo": {
     "url": "https://github.com/getpaseo/paseo/releases/download/v0.2.5/Paseo-0.2.5-amd64.deb",
