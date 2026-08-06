@@ -39,6 +39,17 @@ grep -Fq 'Error: failed to unpack the UKI initramfs with lsinitrd' \
 grep -Fq "ExecStart=/usr/bin/systemd-cryptsetup attach 'root' '/dev/gpt-auto-root-luks' '' ''" \
     "$artifact_validator"
 
+# Issue 517: systemd 261 moved the gpt-auto-root/-luks udev symlink rules into
+# 90-image-dissect.rules, which dracut does not install by default. The secure
+# tree must force it into the initramfs, and the artifact validator must fail
+# any initramfs that cannot create /dev/gpt-auto-root-luks.
+gpt_auto_dracut_conf="$tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf"
+[[ -f "$gpt_auto_dracut_conf" ]]
+grep -Fqx 'install_items+=" /usr/lib/udev/rules.d/90-image-dissect.rules "' \
+    "$gpt_auto_dracut_conf"
+grep -Fq 'SYMLINK+="gpt-auto-root-luks"' "$artifact_validator"
+grep -Fq 'no udev rule creating /dev/gpt-auto-root-luks' "$artifact_validator"
+
 [[ -f "$secure" ]]
 [[ -f "$package_manager/etc/apt/sources.list.d/forky.sources" ]]
 [[ -f "$package_manager/etc/apt/preferences.d/forky" ]]

@@ -60,6 +60,28 @@ validated one real cayo build with bootc 1.16.3, libostree 2026.2, and systemd
 261.1-3, then ran `bootc --version` and `bootc container --help` in a bwrap
 root containing only that output. Repeat that build/root check when either the
 Frostyard debs or the selected systemd family changes.
+**Issue 517 (2026-08-06) — Forky udev moved the gpt-auto symlink rules out of
+dracut's reach:** systemd 257 shipped the udev rules creating
+`/dev/gpt-auto-root[-luks]` in `99-systemd.rules` (which dracut installs by
+name); systemd 261 moved them into `90-image-dissect.rules`, which dracut
+106's hardcoded rules list does not install. The initrd's
+`systemd-gpt-auto-generator` still unconditionally writes
+`systemd-cryptsetup@root.service` bound to `/dev/gpt-auto-root-luks` (the
+generator does not probe the disk; udev's blkid builtin sets
+`ID_PART_GPT_AUTO_ROOT` and the rules create the symlink), so the unit sits
+unactivated, `cryptsetup.target` completes empty, `sysroot.mount` times out
+on `dev-gpt-auto-root.device`, and every secure bootc install drops to
+emergency mode. Fixed by
+`shared/bootc-secure/tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf`
+(`install_items+=" /usr/lib/udev/rules.d/90-image-dissect.rules "`; the file
+is shipped by `udev/forky`). `test/bootc-secure-artifact-test.sh`'s
+initramfs validation now fails any UKI whose unpacked initramfs has no udev
+rule creating `gpt-auto-root-luks`, and `test/bootc-secure-static-test.sh`
+pins the drop-in. Native A/B profiles are unaffected (verity root via UKI
+`roothash=`, explicit `systemd-cryptsetup attach` for `var` — no gpt-auto
+dependency). Upstream dracut-ng (as of 2026-08) still lacks
+`90-image-dissect.rules` in `01systemd-udevd`; re-check this drop-in when
+dracut or the Forky systemd family changes.
 
 **Bootc UKI assembly (Task 5, 2026-07-28):**
 `shared/bootc-secure/assemble-uki.sh` and the secure branch of
