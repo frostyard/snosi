@@ -12,7 +12,7 @@ ASSEMBLER="$ROOT_DIR/shared/bootc-secure/assemble-uki.sh"
 # failure. That remains the responsibility of the secure-install VM lane.
 validate_gpt_auto_cryptsetup() (
     local uki scratch initrd initrd_root generator_root generator unit
-    for command in chroot lsinitrd objcopy; do
+    for command in chroot lsinitrd objcopy zstd; do
         if ! command -v "$command" >/dev/null; then
             if [[ ${SNOSI_REQUIRE_GPT_AUTO_VALIDATION:-0} == 1 ]]; then
                 echo "Error: required initramfs gpt-auto validation is missing $command" >&2
@@ -43,10 +43,13 @@ validate_gpt_auto_cryptsetup() (
     # Authenticode certificate table. Always write a disposable output and
     # leave the assembled, signed UKI byte-for-byte untouched.
     objcopy --dump-section ".initrd=$initrd" "$uki" "$scratch/uki.copy"
-    (
+    if ! (
         cd "$initrd_root"
         lsinitrd --unpack "$initrd"
-    )
+    ); then
+        echo "Error: failed to unpack the UKI initramfs with lsinitrd" >&2
+        return 1
+    fi
 
     generator=/usr/lib/systemd/system-generators/systemd-gpt-auto-generator
     [[ -x "$initrd_root$generator" ]] || {
@@ -73,7 +76,7 @@ validate_gpt_auto_cryptsetup() (
         echo "Error: initramfs gpt-auto-generator did not emit systemd-cryptsetup@root.service" >&2
         return 1
     }
-    grep -Fq "ExecStart=/usr/lib/systemd/systemd-cryptsetup attach 'root' '/dev/gpt-auto-root-luks'" "$unit" || {
+    grep -Eq "^ExecStart=/usr/(bin|lib/systemd)/systemd-cryptsetup attach 'root' '/dev/gpt-auto-root-luks'([[:space:]]|$)" "$unit" || {
         echo "Error: generated root cryptsetup unit has the wrong attach command" >&2
         return 1
     }
@@ -90,7 +93,7 @@ validate_gpt_auto_cryptsetup() (
 )
 
 gpt_auto_fixture() (
-    local fixture old_root before after
+    local fixture before after output status
     fixture=$(mktemp -d)
     trap 'rm -rf "$fixture"' EXIT
     mkdir -p "$fixture/bin" "$fixture/root/boot/EFI/Linux"
@@ -126,7 +129,7 @@ cat >"$unit" <<'UNIT'
 [Unit]
 BindsTo=dev-gpt\x2dauto\x2droot\x2dluks.device
 [Service]
-ExecStart=/usr/lib/systemd/systemd-cryptsetup attach 'root' '/dev/gpt-auto-root-luks' 'none' 'tpm2-device=auto'
+ExecStart=/usr/bin/systemd-cryptsetup attach 'root' '/dev/gpt-auto-root-luks' '' ''
 UNIT
 mkdir -p "$root$late/dev-gpt\\x2dauto\\x2droot\\x2dluks.device.wants"
 ln -s ../systemd-cryptsetup@root.service \
@@ -134,13 +137,31 @@ ln -s ../systemd-cryptsetup@root.service \
 EOF
     chmod +x "$fixture/bin/objcopy" "$fixture/bin/lsinitrd" "$fixture/bin/chroot"
 
-    old_root=${ROOTFS:-}
     ROOTFS="$fixture/root"
     PATH="$fixture/bin:$PATH" SNOSI_GPT_AUTO_FIXTURE=1 validate_gpt_auto_cryptsetup
-    ROOTFS=$old_root
     after=$(sha256sum "$fixture/root/boot/EFI/Linux/test.efi")
     [[ $after == "$before" ]] || {
         echo "Error: gpt-auto validation modified the signed UKI" >&2
+        return 1
+    }
+
+    cat >"$fixture/bin/lsinitrd" <<'EOF'
+#!/bin/bash
+echo "Need 'zstd' to unpack the initramfs." >&2
+exit 1
+EOF
+    chmod +x "$fixture/bin/lsinitrd"
+    set +e
+    output=$(PATH="$fixture/bin:$PATH" SNOSI_GPT_AUTO_FIXTURE=1 \
+        validate_gpt_auto_cryptsetup 2>&1)
+    status=$?
+    set -e
+    [[ $status -eq 1 && $output == *"Error: failed to unpack the UKI initramfs with lsinitrd"* ]] || {
+        echo "Error: initramfs unpack failure was not diagnosed correctly" >&2
+        return 1
+    }
+    [[ $output != *"initramfs is missing"* ]] || {
+        echo "Error: initramfs unpack failure was misreported as a missing generator" >&2
         return 1
     }
 )
