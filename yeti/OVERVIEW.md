@@ -1345,7 +1345,7 @@ Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GP
 - Debian Backports — Newer kernel + firmware + mesa
 - Debian Griffo.io (debian.griffo.io) — Additional Debian packages
 - Docker (docker.com) — Docker CE packages
-- Frostyard (repository.frostyard.org) — Custom packages: bootc, libostree-1-1 (built by frostyard/bootc-debian), nbc, chairlift, updex, igloo, intuneme, snow-first-setup.
+- Frostyard (repository.frostyard.org) — Custom packages: bootc, libostree-1-1 (built by frostyard/bootc-debian), nbc, chairlift, updex, intuneme, snow-first-setup.
 - Linux Surface (pkg.surfacelinux.com) — Surface kernel + tools
 - Microsoft Edge (packages.microsoft.com) — Edge browser
 - Microsoft VSCode (packages.microsoft.com) — VS Code editor
