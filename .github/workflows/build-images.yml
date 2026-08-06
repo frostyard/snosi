@@ -187,15 +187,23 @@ jobs:
             "org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/tree/${{ github.sha }}" \
             "org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/${{ github.sha }}/README.md"
 
+      - name: Install secure artifact validation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends dracut-core
+
       - name: Validate locally assembled secure artifact
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
         run: |
-          sudo ./test/bootc-secure-artifact-test.sh \
+          sudo SNOSI_REQUIRE_GPT_AUTO_VALIDATION=1 \
+            ./test/bootc-secure-artifact-test.sh \
             "output/${{ matrix.profile }}" \
             "$IMAGE:${{ steps.version.outputs.tag }}" \
             /var/tmp/bootc-secure-credentials/mok.crt \
             /var/tmp/bootc-secure-credentials/pcr.pub
+          echo '- Real assembled UKI: initramfs gpt-auto structural validation passed.' \
+            >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove protected bootc signing credentials
         if: always()
@@ -300,7 +308,8 @@ jobs:
         env:
           LOCAL_REF: localhost/snosi-verified-${{ matrix.profile }}:${{ steps.version.outputs.tag }}
         run: |
-          sudo ./test/bootc-secure-artifact-test.sh \
+          sudo SNOSI_REQUIRE_GPT_AUTO_VALIDATION=1 \
+            ./test/bootc-secure-artifact-test.sh \
             "output/${{ matrix.profile }}" "$LOCAL_REF" \
             "output/${{ matrix.profile }}/usr/lib/snosi/mok.crt" \
             "output/${{ matrix.profile }}/usr/lib/snosi/pcr-signing.pub"

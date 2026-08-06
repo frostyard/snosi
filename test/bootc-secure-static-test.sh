@@ -29,6 +29,10 @@ grep -Fq "'/dev/gpt-auto-root-luks'" "$artifact_validator"
 grep -Fq 'objcopy --dump-section ".initrd=$initrd" "$uki" "$scratch/uki.copy"' \
     "$artifact_validator"
 grep -Fq 'gpt_auto_fixture' "$artifact_validator"
+grep -Fq 'SNOSI_REQUIRE_GPT_AUTO_VALIDATION=1' \
+    "$root/.github/workflows/build-images.yml"
+grep -Fq 'sudo apt-get install --yes --no-install-recommends dracut-core' \
+    "$root/.github/workflows/build-images.yml"
 
 [[ -f "$secure" ]]
 [[ -f "$package_manager/etc/apt/sources.list.d/forky.sources" ]]

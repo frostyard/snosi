@@ -14,11 +14,19 @@ validate_gpt_auto_cryptsetup() (
     local uki scratch initrd initrd_root generator_root generator unit
     for command in chroot lsinitrd objcopy; do
         if ! command -v "$command" >/dev/null; then
+            if [[ ${SNOSI_REQUIRE_GPT_AUTO_VALIDATION:-0} == 1 ]]; then
+                echo "Error: required initramfs gpt-auto validation is missing $command" >&2
+                return 1
+            fi
             echo "SKIP: initramfs gpt-auto validation requires $command" >&2
             return 0
         fi
     done
     if (( EUID != 0 )) && [[ ${SNOSI_GPT_AUTO_FIXTURE:-0} != 1 ]]; then
+        if [[ ${SNOSI_REQUIRE_GPT_AUTO_VALIDATION:-0} == 1 ]]; then
+            echo "Error: required initramfs gpt-auto validation needs root for chroot" >&2
+            return 1
+        fi
         echo "SKIP: initramfs gpt-auto validation requires root for chroot" >&2
         return 0
     fi
@@ -78,6 +86,7 @@ validate_gpt_auto_cryptsetup() (
         echo "Error: generated root cryptsetup unit has no LUKS device dependency" >&2
         return 1
     }
+    echo "bootc secure initramfs gpt-auto structural validation passed"
 )
 
 gpt_auto_fixture() (
@@ -91,7 +100,10 @@ gpt_auto_fixture() (
     cat >"$fixture/bin/objcopy" <<'EOF'
 #!/bin/bash
 set -euo pipefail
-[[ $# -eq 4 && $1 == --dump-section && $2 == .initrd=* ]]
+[[ $# -eq 4 && $1 == --dump-section && $2 == .initrd=* ]] || {
+    echo "stub objcopy: expected dump section, input, and explicit output arguments" >&2
+    exit 1
+}
 printf 'initrd fixture\n' >"${2#.initrd=}"
 cp -- "$3" "$4"
 EOF
