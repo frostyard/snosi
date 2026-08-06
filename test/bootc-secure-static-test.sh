@@ -31,8 +31,13 @@ grep -Fq 'objcopy --dump-section ".initrd=$initrd" "$uki" "$scratch/uki.copy"' \
 grep -Fq 'gpt_auto_fixture' "$artifact_validator"
 grep -Fq 'SNOSI_REQUIRE_GPT_AUTO_VALIDATION=1' \
     "$root/.github/workflows/build-images.yml"
-grep -Fq 'sudo apt-get install --yes --no-install-recommends dracut-core' \
+grep -Fq 'sudo apt-get install --yes --no-install-recommends dracut-core zstd' \
     "$root/.github/workflows/build-images.yml"
+grep -Fq 'if ! (' "$artifact_validator"
+grep -Fq 'Error: failed to unpack the UKI initramfs with lsinitrd' \
+    "$artifact_validator"
+grep -Fq "ExecStart=/usr/bin/systemd-cryptsetup attach 'root' '/dev/gpt-auto-root-luks' '' ''" \
+    "$artifact_validator"
 
 [[ -f "$secure" ]]
 [[ -f "$package_manager/etc/apt/sources.list.d/forky.sources" ]]

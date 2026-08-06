@@ -190,7 +190,7 @@ jobs:
       - name: Install secure artifact validation dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends dracut-core
+          sudo apt-get install --yes --no-install-recommends dracut-core zstd
 
       - name: Validate locally assembled secure artifact
         env:
