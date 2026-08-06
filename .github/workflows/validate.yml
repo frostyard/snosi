@@ -149,6 +149,15 @@ jobs:
         # hooks. No root, no bind mount, no image build.
         run: ./test/snosi-etc-diff-test.sh
 
+      - name: Validate update-checksums split-file selection
+        # shared/download/update-checksums.sh resolves an existing key by
+        # searching sysext-checksums.json then image-checksums.json relative to
+        # its own directory, with CHECKSUMS_FILE as an explicit single-file
+        # override. Fixture test against a throwaway copy of that layout and
+        # file:// payloads: asserts the update lands in the right file and the
+        # siblings stay byte-identical. No root, no network, no image build.
+        run: ./test/update-checksums-split-test.sh
+
       - name: Validate sysext required paths finalizer
         # Fixture regression test for whitespace-preserving parsing of sysext
         # required-paths.txt entries. No root, network, or image build.
