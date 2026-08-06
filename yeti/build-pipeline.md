@@ -474,6 +474,26 @@ checksum file already contains the key:
 ./update-checksums.sh <key> <url> [version]
 ```
 
+Selection rules, locked in by `test/update-checksums-split-test.sh` (fixture
+test, wired into `validate.yml`; the read side is covered by
+`test/verified-download-split-checksums-test.sh`):
+
+- The search is ordered — `sysext-checksums.json` first, then
+  `image-checksums.json` — and stops at the first file that `has()` the key,
+  so exactly one file is ever rewritten and the siblings stay byte-identical.
+- A key present in neither file is an error (`Key '...' not found in split
+  checksum metadata`); the script never creates a key through the search path.
+- `CHECKSUMS_FILE` short-circuits the search entirely: it rewrites that one
+  file (creating the key if absent) and does not require either default file to
+  exist.
+- A *missing* default file is a hard error, not a skip — but only if the search
+  actually reaches it. A sysext key still resolves when `image-checksums.json`
+  is absent (the loop breaks first), while an image key is unreachable when
+  `sysext-checksums.json` is absent. This asymmetry is current behavior; the
+  test pins it so a deliberate change to it is visible rather than accidental.
+- Any failure before the `jq` rewrite (unfetchable URL, missing file, unknown
+  key) leaves every metadata file untouched.
+
 ## Tree Overlays
 
 Each profile has filesystem overlays (ExtraTrees) that are merged into the image:

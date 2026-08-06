@@ -1569,6 +1569,7 @@ The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput
 - External direct downloads must go through `verified_download()` with entries in `sysext-checksums.json` for sysext consumers or `image-checksums.json` for OCI profile consumers
 - Pin external URLs to specific versions/commits, never `latest` or branch names
 - When adding a new verified download, also add a corresponding update check to `.github/workflows/check-dependencies.yml`; sysext APT package sentinels go in `.github/workflows/check-packages.yml`
+- Both halves of the split checksum metadata (`sysext-checksums.json`, `image-checksums.json`) are covered by fixture tests: `test/verified-download-split-checksums-test.sh` for the read side (`verified_download`) and `test/update-checksums-split-test.sh` for the write side (`update-checksums.sh`'s ordered file selection, `CHECKSUMS_FILE` override, missing-file/absent-key hard-fails, and the no-partial-write guarantee). See `yeti/build-pipeline.md` "Verified Download System" for the exact rules those tests pin.
 
 ## User Service Enablement in Chroot
 
