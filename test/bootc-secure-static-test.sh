@@ -19,6 +19,21 @@ if grep -Eq '^for command in .*\bbootc\b' "$artifact_validator"; then
     exit 1
 fi
 
+# Exercise the exact initramfs generator with forced GPT discovery. This catches
+# missing binaries and cryptsetup build support, but deliberately does not claim
+# to reproduce production EFI discovery or the runtime failure in issue 517.
+grep -Fq "SYSTEMD_PROC_CMDLINE='root=gpt-auto-force'" "$artifact_validator"
+grep -Fq 'chroot "$initrd_root" "$generator"' "$artifact_validator"
+grep -Fq 'late/systemd-cryptsetup@root.service' "$artifact_validator"
+grep -Fq "'/dev/gpt-auto-root-luks'" "$artifact_validator"
+grep -Fq 'objcopy --dump-section ".initrd=$initrd" "$uki" "$scratch/uki.copy"' \
+    "$artifact_validator"
+grep -Fq 'gpt_auto_fixture' "$artifact_validator"
+grep -Fq 'SNOSI_REQUIRE_GPT_AUTO_VALIDATION=1' \
+    "$root/.github/workflows/build-images.yml"
+grep -Fq 'sudo apt-get install --yes --no-install-recommends dracut-core' \
+    "$root/.github/workflows/build-images.yml"
+
 [[ -f "$secure" ]]
 [[ -f "$package_manager/etc/apt/sources.list.d/forky.sources" ]]
 [[ -f "$package_manager/etc/apt/preferences.d/forky" ]]
