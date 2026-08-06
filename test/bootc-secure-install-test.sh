@@ -445,6 +445,13 @@ run_live() {
     SNOSI_SECURE_TPM_SOCKET="$SECURE_VM_TPM_SOCK" \
     run_marked_runner "$BOOTC_SECURE_INSTALLER" 'BOOTC_SECURE_INSTALLER: installed' \
         --non-interactive --iso "$DAKOTA_ISO" --recipe "$WORK/recipe.json"
+    # swtpm exits when its QEMU client does, and the installer runner's QEMU has
+    # just exited -- so without re-arming, this boot dies at
+    #   -chardev socket,id=tpmchr,path=.../swtpm-ctrl.sock: Failed to connect
+    # Same state directory, never reinitialised: the sealed TPM state lives
+    # there and a fresh one would silently invalidate the enrollment. This
+    # mirrors what the post-enrollment boot below already does.
+    secure_vm_start_swtpm_paths "$WORK/tpm" "$WORK/tpm/swtpm-ctrl.sock" "$WORK/tpm/swtpm.pid"
     start_vm
     pre_mok_rejection
     stop_vm
