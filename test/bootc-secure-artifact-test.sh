@@ -57,6 +57,16 @@ validate_gpt_auto_cryptsetup() (
         return 1
     }
 
+    # The generated unit binds to /dev/gpt-auto-root-luks, which only a udev
+    # rule creates. systemd 261 moved that rule from 99-systemd.rules into
+    # 90-image-dissect.rules, which dracut does not install by default; a
+    # dracut.conf.d drop-in in shared/bootc-secure/tree forces it in. Without
+    # it the unit sits unactivated and boot dies in emergency mode (issue 517).
+    grep -Frqs 'SYMLINK+="gpt-auto-root-luks"' "$initrd_root/usr/lib/udev/rules.d" || {
+        echo "Error: initramfs has no udev rule creating /dev/gpt-auto-root-luks (issue 517)" >&2
+        return 1
+    }
+
     generator_root=/run/snosi-gpt-auto-generator-test
     mkdir -p \
         "$initrd_root$generator_root/normal" \
@@ -117,6 +127,11 @@ set -euo pipefail
 mkdir -p usr/lib/systemd/system-generators
 printf '#!/bin/sh\nexit 0\n' >usr/lib/systemd/system-generators/systemd-gpt-auto-generator
 chmod +x usr/lib/systemd/system-generators/systemd-gpt-auto-generator
+if [[ ${FIXTURE_OMIT_GPT_AUTO_RULE:-0} != 1 ]]; then
+    mkdir -p usr/lib/udev/rules.d
+    printf 'ENV{ID_PART_GPT_AUTO_ROOT}=="1", ENV{ID_FS_TYPE}=="crypto_LUKS", SYMLINK+="gpt-auto-root-luks"\n' \
+        >usr/lib/udev/rules.d/90-image-dissect.rules
+fi
 EOF
     cat >"$fixture/bin/chroot" <<'EOF'
 #!/bin/bash
@@ -142,6 +157,16 @@ EOF
     after=$(sha256sum "$fixture/root/boot/EFI/Linux/test.efi")
     [[ $after == "$before" ]] || {
         echo "Error: gpt-auto validation modified the signed UKI" >&2
+        return 1
+    }
+
+    set +e
+    output=$(PATH="$fixture/bin:$PATH" SNOSI_GPT_AUTO_FIXTURE=1 \
+        FIXTURE_OMIT_GPT_AUTO_RULE=1 validate_gpt_auto_cryptsetup 2>&1)
+    status=$?
+    set -e
+    [[ $status -eq 1 && $output == *"no udev rule creating /dev/gpt-auto-root-luks"* ]] || {
+        echo "Error: missing gpt-auto-root-luks udev rule was not diagnosed" >&2
         return 1
     }
 

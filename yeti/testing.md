@@ -200,6 +200,43 @@ OVMF copying, MOK injection, and persistent swtpm startup/stop. Native wrappers
 retain that harness's existing assertions, logging, and QEMU lifecycle while
 the stateful primitives have one implementation shared with this spike.
 
+## Issue 517 initramfs gpt-auto validation (bootc-secure-artifact-test.sh)
+
+`validate_gpt_auto_cryptsetup` in `test/bootc-secure-artifact-test.sh`
+(added for issue 517, run by `--fixtures` via a stubbed fixture and by the
+real artifact validation after `assemble-uki.sh --validate`) unpacks the
+assembled signed UKI's `.initrd` (always through a disposable `objcopy`
+output copy — omitting the output rewrites the input in place and strips the
+Authenticode table) and asserts two independent halves of the encrypted-root
+unlock chain:
+
+1. **Generator capability:** it chroots into the unpacked initramfs and runs
+   the embedded `systemd-gpt-auto-generator` with
+   `SYSTEMD_PROC_CMDLINE='root=gpt-auto-force'`, requiring a generated
+   `systemd-cryptsetup@root.service` with the pinned attach command,
+   `BindsTo=dev-gpt\x2dauto\x2droot\x2dluks.device`, and the device-wants
+   symlink. Forced discovery bypasses `is_efi_boot()` +
+   `LoaderDevicePartUUID`, so this proves capability, not production EFI
+   discovery.
+2. **udev rule presence (the actual issue-517 defect):** the unpacked
+   `usr/lib/udev/rules.d/` must contain a rule with
+   `SYMLINK+="gpt-auto-root-luks"`. systemd 261 moved the gpt-auto symlink
+   rules from `99-systemd.rules` (in dracut's hardcoded install list) to
+   `90-image-dissect.rules` (not in it), so Forky-family initramfses lost
+   the only rule that materializes the device the generated unit binds to:
+   the generator ran, the unit existed, nothing ever activated it, and
+   secure installs died in emergency mode with `cryptsetup.target` reached
+   empty. The product fix is the
+   `shared/bootc-secure/tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf`
+   `install_items+=` drop-in; this assertion fails any future initramfs that
+   regresses it (e.g. dracut or systemd moving the rules again).
+
+The fixture mode covers the positive path, the missing-rule diagnosis
+(`FIXTURE_OMIT_GPT_AUTO_RULE=1`), the unpack-failure diagnosis, and that
+validation leaves the signed UKI byte-identical.
+`test/bootc-secure-static-test.sh` pins the drop-in's exact `install_items+=`
+line and the validator's rule assertion.
+
 ## Task 9 Secure Install Harness
 
 The normative operations status and recovery/evidence rules are in
