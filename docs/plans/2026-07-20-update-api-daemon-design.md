@@ -105,7 +105,7 @@ thin snosi service that composes updex's schema with transport detection.
   instead of reducing it.
 - **Forcing chairlift off its type-safe Go SDK.** That is a regression from 🟢
   to 🟡 for no benefit.
-- **Pulling igloo / intuneme / first-setup / repogen "under" the daemon.** The
+- **Pulling intuneme / first-setup / repogen "under" the daemon.** The
   map confirms these have zero update/sysext coupling. "& friends" is exactly
   where this idea over-reaches.
 

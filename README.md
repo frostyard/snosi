@@ -656,7 +656,6 @@ The Frostyard repository provides custom packages for Snow Linux:
 - **nbc** (Not BootC): CLI tool for installing, updating bootc-compatible container based Operating Systems
 - **chairlift**: System extension manager with GUI integration
 - **updex**: Update executor service for applying staged updates
-- **igloo**: System configuration tool
 - **intuneme**: Intune management agent
 - **snow-first-setup**: First-boot setup wizard
 

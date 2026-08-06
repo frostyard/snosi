@@ -30,9 +30,8 @@ Frostyard workspace root (the parent of `snosi/`).
 | nbc | `frostyard-nbc` | `snosi/mkosi.images/base/mkosi.conf:44` | all images (legacy updater) |
 | updex | `frostyard-updex` | `snosi/mkosi.images/base/mkosi.conf:45` | all images (sysext feature/update manager) |
 | chairlift | `frostyard-chairlift` | `snosi/shared/packages/snow/mkosi.conf:6` | snow, snowfield (+ `-ab`) |
-| igloo | `frostyard-igloo` | `snosi/shared/packages/snow/mkosi.conf:7` | snow, snowfield (+ `-ab`) |
-| snow-first-setup | `snow-first-setup` | `snosi/shared/packages/snow/mkosi.conf:8` | snow, snowfield (+ `-ab`) |
-| intuneme | `frostyard-intuneme` | `snosi/shared/packages/snow/mkosi.conf:67` | snow, snowfield (+ `-ab`) |
+| snow-first-setup | `snow-first-setup` | `snosi/shared/packages/snow/mkosi.conf:7` | snow, snowfield (+ `-ab`) |
+| intuneme | `frostyard-intuneme` | `snosi/shared/packages/snow/mkosi.conf:66` | snow, snowfield (+ `-ab`) |
 | bootc | `bootc` | `snosi/shared/packages/bootc/mkosi.conf:4` | bootc profiles (cayo, snow, snowfield) |
 | ostree | `libostree-1-1` | `snosi/shared/packages/bootc/mkosi.conf:5` | bootc profiles |
 | pilothouse | `frostyard-pilothouse` | `snosi/mkosi.images/pilothouse/mkosi.conf:23` (sysext) | opt-in sysext, all products |
@@ -55,9 +54,9 @@ wrap third-party tools). It is a pinned GitHub-release `.deb`
 | `repogen` | APT repo layout + sysext repo layout at `repository.frostyard.org` | snosi APT sources + `.transfer` files |
 | `snosi` | native OS + installer-ISO layout at `repository.frostyard.org` | snosi `.transfer` files, installer redirect Worker |
 
-`igloo` and `intuneme` have **no** update/sysext/native-OS integration
-(confirmed exhaustively) — they are Incus-container tools. They are listed for
-completeness and excluded from the contract catalog below.
+`intuneme` has **no** update/sysext/native-OS integration (confirmed
+exhaustively) — it is an Incus-container tool. It is listed for completeness
+and excluded from the contract catalog below.
 
 ---
 
