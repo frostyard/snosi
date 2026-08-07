@@ -296,6 +296,37 @@ files, MOK passwords, extracted public keys, and any copied private credential
 before handoff; no private key may be written to the target, installer logs, or
 provenance record.
 
+## Recovery State Manifest
+
+The harness writes a state manifest and passes its path to the external
+recovery runners (`BOOTC_SECURE_RECOVERY_COMMAND`,
+`BOOTC_SECURE_NEGATIVE_COMMAND`). It is **paths only** — the file names
+credentials, it never contains them — and it is mode `0600`.
+
+This schema was previously undocumented, and the two sides disagreed: the
+harness wrote `ssh_key` while Dakota's runner required `ssh_private_key`, so
+every manifest was rejected as "not path-only Task 9 state". Writing it down is
+what stops that recurring.
+
+| key | meaning |
+|---|---|
+| `schema` | integer `1` |
+| `profile` | `cayo`, `snow`, or `snowfield` |
+| `tracking_ref` | the same-repository tag being followed |
+| `accepted_oci_ref` | the immutable `…@sha256:…` reference installed |
+| `target_disk` | path to the installed disk image or block device |
+| `ovmf_code` / `ovmf_vars` | paths to the firmware the install used |
+| `tpm_state` / `tpm_socket` | paths to the swtpm state directory and control socket |
+| `recovery_key` | **path** to the recovery credential, never its bytes |
+| `mok_cert` / `pcr_public` | paths to the public MOK certificate and PCR public key |
+| `ssh_key` | **path** to the harness SSH private key, never its bytes |
+
+A runner must treat every value as a path it may read, and must not copy
+credential bytes into logs, evidence, or retained state. `ovmf_vars`,
+`tpm_state` and `tpm_socket` name the *same* firmware and TPM state the install
+used; a runner that substitutes fresh state invalidates the enrollment it is
+supposed to be exercising.
+
 ## Provenance And Repair
 
 Fisherman records `/var/lib/snosi/bootc-secure-install.json` in the encrypted
