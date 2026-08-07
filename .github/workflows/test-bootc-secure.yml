@@ -95,12 +95,33 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      - name: Enable KVM
+      # Assert KVM rather than granting it. This job runs on a self-hosted
+      # runner attached to a PUBLIC repository, so the account executing it
+      # must have no sudo at all: the previous `sudo tee /etc/udev/rules.d/...`
+      # plus `sudo udevadm control --reload-rules` required exactly the
+      # privilege an attacker would want, and required it on every run to set
+      # a rule that only ever needs setting once.
+      #
+      # The udev rule is now host setup, applied once by the operator (see
+      # docs/bootc-secure-operations.md). The runner account is a member of
+      # the `kvm` group and needs nothing further.
+      #
+      # Checking /dev/kvm is readable AND writable, rather than merely present:
+      # a missing group membership shows up as a permission error deep inside
+      # QEMU minutes later, which is a far worse place to discover it.
+      - name: Verify KVM is usable without privilege
         run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | \
-            sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
+          set -euo pipefail
+          [[ -c /dev/kvm ]] || {
+            echo "/dev/kvm is missing; the host is not set up for this runner" >&2
+            exit 1
+          }
+          [[ -r /dev/kvm && -w /dev/kvm ]] || {
+            echo "/dev/kvm is not read-write for $(id -un) (groups: $(id -Gn))." >&2
+            echo "Add the runner account to the kvm group; do NOT grant it sudo." >&2
+            exit 1
+          }
+          echo "/dev/kvm usable as $(id -un)"
       - name: Run prepared secure full window
         env:
           STATE_ROOT: ${{ inputs.state_root }}
