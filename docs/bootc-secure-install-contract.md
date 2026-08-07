@@ -312,13 +312,34 @@ systemd says so in its own record.
 The record is JSON with these required keys: `oci_ref`, `tracking_ref`, `repository`,
 `secure_capability`, `contract_schema`, `assembly_compatibility`, `composefs_id`,
 `uki_sha256`, `mok_fingerprint`, `pcr_fingerprint`, `esp_partuuid`, `luks_uuid`,
-`tpm_token_id`, `installer_versions`, and `completed_at`. `oci_ref` is the
-immutable accepted reference; `tracking_ref` is the same-repository tag from
-the harness recipe; `secure_capability` is JSON boolean `true`;
-`contract_schema` is JSON integer `1`; and `completed_at` is an RFC 3339 UTC
-timestamp. `installer_versions` is an object containing `fisherman`,
-`bootc_installer`, and `dakota_iso`. No key may contain a passphrase, private
-key, or temporary path.
+`tpm_token_id`, `installer_versions`, `validated_versions`, and `completed_at`.
+`oci_ref` is the immutable accepted reference; `tracking_ref` is the
+same-repository tag from the harness recipe; `secure_capability` is JSON boolean
+`true`; `contract_schema` is JSON integer `1`; and `completed_at` is an RFC 3339
+UTC timestamp. No key may contain a passphrase, private key, or temporary path.
+
+Two version keys, answering two different questions:
+
+- `installer_versions` — **what produced this system.** An object containing
+  `fisherman`.
+- `validated_versions` — **what the installer checked on the medium.** An object
+  containing `bootc`, `cosign`, and `systemd`. This is the floor-policy audit
+  trail described above: it is what makes "this install proceeded on an
+  above-floor, unvalidated systemd" answerable after the fact.
+
+This revision (2026-08-07) narrowed `installer_versions` from `fisherman`,
+`bootc_installer`, `dakota_iso` to `fisherman` alone, and moved the dependency
+versions into their own key. The original three could not be satisfied: the
+medium carries no identifier for the bootc-installer Flatpak or the Dakota ISO
+build, and the live environment deliberately sets `VERSION_ID=latest`. Fisherman
+was writing the dependency versions under `installer_versions`, which conflated
+the two questions and failed this check however the fields were spelled.
+
+Identifying the medium is a real capability — it is what would answer "which
+machines were installed by media carrying a fisherman older than v0.2.14" — but
+it needs Dakota to stamp a build identifier and something to consume it. Nothing
+reads this record back today. Design it when a consumer exists rather than
+requiring a value no installer can supply.
 
 `PROFILE=snowfield` exercises the generic secure-install chain only. It does
 not replace the representative Surface hardware install, input, power, update,
