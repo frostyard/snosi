@@ -15,9 +15,9 @@
     "version": "3.1.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_151.0.4129.59-1_amd64.deb",
-    "sha256": "5e443a1c2385950faaf60ae21aac85cfd117bc05f7e40c965720c40d7d4c75af",
-    "version": "151.0.4129.59-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_151.0.4129.72-1_amd64.deb",
+    "sha256": "babd5ea470a86c84615e23a7d5aaf4e1be6811b3af1229bc234d78bdc6b4f55a",
+    "version": "151.0.4129.72-1"
   },
   "code-server": {
     "url": "https://github.com/coder/code-server/releases/download/v4.131.0/code-server_4.131.0_amd64.deb",
@@ -30,9 +30,9 @@
     "version": "2.35.3"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.4/GitHub-Copilot-linux-x64.deb",
-    "sha256": "9d12163af84343b1fb757d0bcca0b879b881f6b8f92a3e747e3dafa585190bf3",
-    "version": "1.1.4"
+    "url": "https://github.com/github/app/releases/download/v1.1.5/GitHub-Copilot-linux-x64.deb",
+    "sha256": "9fcefebd04c7fdde8d2dd534871936287529915a8f442c0465b8c588fdf3548a",
+    "version": "1.1.5"
   },
   "k3s": {
     "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.3%2Bk3s1/k3s",
