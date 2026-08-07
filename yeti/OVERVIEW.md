@@ -17,6 +17,18 @@ serialization hazard class (the updex `features check` nil-slice bug that broke
 pilothouse) and lists every other site with the same exposure. Read it before
 changing any tool's output shape.
 
+## Agent memory (`.memory/`)
+
+`.memory/` is the committed, cross-session learning store for agents working in
+this repository. `.memory/README.md` defines the conventions;
+`.memory/corrections.jsonl` is an append-only JSON Lines log with the fields
+`date`, `scope`, `correction`, `evidence`, and `promoted_to`. Read it at the
+start of a session alongside this overview, and append an entry whenever a
+session proves a previously-held belief about the codebase wrong. Durable rules
+still belong in `CLAUDE.md` or the topic files here — the correction entry
+records how the rule was learned and points at it via `promoted_to`. It carries
+no secrets or personal data.
+
 ## Bootc Secure Operations
 
 The normative operator entry point for the secure bootc fresh-install path is
