@@ -65,7 +65,6 @@ run_full_window() {
     RECOVERY_KEY="$state_root/recovery.key" \
     TARGET_DISK="$state_root/target.raw" \
     BOOTC_SECURE_INSTALLER="$state_root/installer" \
-    BOOTC_SECURE_NEGATIVE_COMMAND="$state_root/negative-runner" \
     BOOTC_SECURE_RECOVERY_COMMAND="$state_root/recovery-runner" \
     BOOTC_SECURE_INSTALL_STATE="$state_root/install-state.json" \
     TRACKING_REF="$TRACKING_REF" \
@@ -74,7 +73,6 @@ run_full_window() {
 
     BOOTC_SECURE_INSTALL_STATE="$state_root/install-state.json" \
     BOOTC_SECURE_UPDATE_PUBLISH_COMMAND="$state_root/publisher" \
-    BOOTC_SECURE_UPDATE_NEGATIVE_COMMAND="$state_root/update-negative-runner" \
     UPDATE_N1_REF="$UPDATE_N1_REF" \
     UPDATE_N2_REF="$UPDATE_N2_REF" \
     UPDATE_N1_VERSION="$UPDATE_N1_VERSION" \

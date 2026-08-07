@@ -252,7 +252,7 @@ proves incomplete live inputs yield `BLOCKED` rather than a false pass.
 
 Live mode consumes `DAKOTA_ISO`, `OCI_REF`, `MOK_CERT`, `PCR_PUBLIC`,
 `RECOVERY_KEY`, `TARGET_DISK`, `BOOTC_SECURE_INSTALLER`, and
-`BOOTC_SECURE_NEGATIVE_COMMAND`, and `BOOTC_SECURE_RECOVERY_COMMAND`. The installer runner receives a generated
+`BOOTC_SECURE_RECOVERY_COMMAND`. The installer runner receives a generated
 non-interactive recipe and owns booting its fresh ISO through its documented
 test path; Snosi owns the Microsoft-only rejection, same-varstore MOK
 enrollment, OVMF/swtpm boot evidence, guest assertions, and bounded cleanup.

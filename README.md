@@ -503,8 +503,8 @@ harness contract without privileged artifacts. Its live mode is deliberately
 fail-closed: it requires `PROFILE` (`cayo`, `snow`, or `snowfield`), a freshly
 built secure Dakota ISO, an immutable matching `OCI_REF`, MOK/PCR public
 identities, a mode-0600 recovery credential, a blank 30 GiB target disk, and
-external supported-test runners in `BOOTC_SECURE_INSTALLER`,
-`BOOTC_SECURE_NEGATIVE_COMMAND`, and `BOOTC_SECURE_RECOVERY_COMMAND`. The
+external supported-test runners in `BOOTC_SECURE_INSTALLER` and
+`BOOTC_SECURE_RECOVERY_COMMAND`. The
 runners must follow the exact marked protocol in the secure-install contract;
 missing inputs print `BLOCKED:` and exit 2;
 this is not E2E evidence. Snowfield additionally requires the existing

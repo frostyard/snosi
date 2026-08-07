@@ -18,7 +18,6 @@ source "$ROOT_DIR/test/lib/ssh.sh"
 : "${RECOVERY_KEY:=}"
 : "${TARGET_DISK:=}"
 : "${BOOTC_SECURE_INSTALLER:=}"
-: "${BOOTC_SECURE_NEGATIVE_COMMAND:=}"
 : "${BOOTC_SECURE_RECOVERY_COMMAND:=}"
 : "${BOOTC_SECURE_INSTALL_STATE:=}"
 : "${TRACKING_REF:=}"
@@ -91,9 +90,6 @@ root_backing_device() { # cryptsetup status root output
 canonical_tpm_socket() { # workdir socket
     [[ $2 == "$1/tpm/swtpm-ctrl.sock" && $2 == "$1/tpm/"* ]]
 }
-negative_case() {
-    case $1 in unsigned|wrong-key|wrong-repository|false-capability|wrong-mok-uki|composefs-mismatch|esp-full|interrupted-finalize|reconcile-failure) return 0;; *) return 1;; esac
-}
 recovery_case() { [[ $1 == tpm-replacement || $1 == recovery-reenrollment ]]; }
 runner_output_has_marker() { grep -Fqx "$2" <<<"$1"; }
 runner_environment_is_complete() { [[ -n $1 && -n $2 && -n $3 ]]; }
@@ -154,7 +150,6 @@ require_live_inputs() {
     valid_recovery_key "$RECOVERY_KEY" || missing+=("RECOVERY_KEY (regular, nonempty, mode 0600)")
     disk_is_large_enough "$TARGET_DISK" || missing+=("TARGET_DISK (blank >=30GiB disk)")
     [[ -x $BOOTC_SECURE_INSTALLER ]] || missing+=("BOOTC_SECURE_INSTALLER (secure Dakota supported-test runner)")
-    [[ -x $BOOTC_SECURE_NEGATIVE_COMMAND ]] || missing+=("BOOTC_SECURE_NEGATIVE_COMMAND (negative-fixture runner)")
     [[ -x $BOOTC_SECURE_RECOVERY_COMMAND ]] || missing+=("BOOTC_SECURE_RECOVERY_COMMAND (positive recovery runner)")
     valid_tracking_ref "$TRACKING_REF" && [[ $TRACKING_REF == "ghcr.io/frostyard/$PROFILE:"* ]] || missing+=("TRACKING_REF=ghcr.io/frostyard/$PROFILE:<tracking-tag>")
     for command in jq qemu-img qemu-system-x86_64 swtpm virt-fw-vars cryptsetup objcopy sbverify ssh ssh-keygen ss; do
@@ -245,8 +240,6 @@ run_fixtures() {
         'prefix BOOTC_SECURE_INSTALLER: installed suffix' 'BOOTC_SECURE_INSTALLER: installed'
     assert_false 'runner output rejects /bin/true without its marker' runner_output_has_marker \
         '' 'BOOTC_SECURE_INSTALLER: installed'
-    assert_true 'negative vocabulary excludes positive recovery operations' negative_case unsigned
-    assert_false 'negative vocabulary excludes TPM replacement' negative_case tpm-replacement
     assert_true 'positive recovery vocabulary includes TPM replacement' recovery_case tpm-replacement
     assert_true 'runner environment exposes one persistent OVMF/TPM state' runner_environment_is_complete \
         "$work/OVMF_CODE.fd" "$work/OVMF_VARS.fd" "$work/tpm/swtpm-ctrl.sock"
@@ -272,19 +265,10 @@ run_fixtures() {
     assert_true 'install handoff preserves its tracking tag' jq -e '.tracking_ref == "ghcr.io/frostyard/cayo:secure-test"' "$work/install-state.json"
     assert_true 'recipe schema includes the tracking tag' jq -e '.tracking_ref == "ghcr.io/frostyard/cayo:secure-test"' "$work/recipe.json"
     assert_true 'recovery state is a mode-0600 path-only install handoff' recovery_state_is_ready "$work/install-state.json"
-    output=$(PROFILE=invalid DAKOTA_ISO='' OCI_REF='' MOK_CERT='' PCR_PUBLIC='' RECOVERY_KEY='' TARGET_DISK='' BOOTC_SECURE_INSTALLER='' BOOTC_SECURE_NEGATIVE_COMMAND='' require_live_inputs 2>&1) || true
+    output=$(PROFILE=invalid DAKOTA_ISO='' OCI_REF='' MOK_CERT='' PCR_PUBLIC='' RECOVERY_KEY='' TARGET_DISK='' BOOTC_SECURE_INSTALLER='' require_live_inputs 2>&1) || true
     if [[ $output == *'BLOCKED:'* ]]; then pass 'missing real inputs block rather than pass'; else fail 'missing real inputs block rather than pass'; fi
     printf '# Results: %d passed, %d failed, %d total\n' "$PASS" "$FAIL" "$((PASS + FAIL))"
     [[ $FAIL -eq 0 ]]
-}
-
-run_negative_hooks() {
-    local case_name
-    for case_name in unsigned wrong-key wrong-repository false-capability wrong-mok-uki composefs-mismatch esp-full interrupted-finalize reconcile-failure; do
-        run_marked_runner "$BOOTC_SECURE_NEGATIVE_COMMAND" "BOOTC_SECURE_NEGATIVE: $case_name: rejected" \
-            --case "$case_name" --profile "$PROFILE" --oci-ref "$OCI_REF" --recipe "$WORK/recipe.json" || {
-            echo "Error: negative fixture '$case_name' did not prove its required refusal" >&2; return 1; }
-    done
 }
 
 stop_vm() {
@@ -547,7 +531,6 @@ run_live() {
     secure_vm_start_swtpm_paths "$WORK/tpm" "$WORK/tpm/swtpm-ctrl.sock" "$WORK/tpm/swtpm.pid"; start_vm
     wait_for_ssh || { echo 'BLOCKED: MOK-enrolled installed target did not reach SSH' >&2; return 2; }
     assert_guest
-    run_negative_hooks
     if [[ -n $BOOTC_SECURE_INSTALL_STATE ]]; then
         stop_vm
         secure_vm_stop_swtpm

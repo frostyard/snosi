@@ -82,24 +82,29 @@ non-interactive Dakota path has completed and emits the literal line
 `BOOTC_SECURE_INSTALLER: installed`. Exit zero without that marker is a failure;
 `/bin/true` is not an acceptable test runner.
 
-The negative runner is invoked once per case as:
+This harness does not require a negative-fixture runner. It proves that a good
+image installs and boots; it does not prove that a bad one is refused.
 
-```text
-BOOTC_SECURE_NEGATIVE_COMMAND --case <case> --profile "$PROFILE" --oci-ref "$OCI_REF" --recipe "$RECIPE"
-```
+Refusal is enforced elsewhere and is not re-proven here: the shipped
+`/etc/containers/policy.json` rejects by default and accepts only the exact
+`sigstoreSigned` scopes (see `docs/bootc-secure-operations.md`), and
+`test/bootc-container-policy-test.sh RUN_LIVE=1` exercises unsigned, wrong-key,
+and wrong-repository rejection through Podman against real published images.
+What is NOT covered by that, and is currently unproven, is refusal at
+install time by this path: a deliberately-broken image reaching the installer.
 
-It must exit zero only after proving the case is rejected and emit the exact
-line `BOOTC_SECURE_NEGATIVE: <case>: rejected`. Nonzero exit is a runner
-failure, not proof of refusal. The frozen case vocabulary is `unsigned`,
-`wrong-key`, `wrong-repository`, `false-capability`, `wrong-mok-uki`,
-`composefs-mismatch`, `esp-full`, `interrupted-finalize`, and
-`reconcile-failure`.
-For example, the unsigned fixture's required line is
-`BOOTC_SECURE_NEGATIVE: unsigned: rejected`.
+The removed contract required nine causal fixtures (`unsigned`, `wrong-key`,
+`wrong-repository`, `false-capability`, `wrong-mok-uki`, `composefs-mismatch`,
+`esp-full`, `interrupted-finalize`, `reconcile-failure`). Six of them needed
+published, deliberately-broken, signed OCI artifacts -- valid in every respect
+except the single property under test, or the refusal proves nothing about the
+control it claims to exercise. That cost was judged not worth paying. If it is
+revisited, reinstate the causal requirement rather than a weaker check: a
+negative test that cannot distinguish "refused for this reason" from "refused
+for any reason" reports green while the control is absent.
 
-`tpm-replacement` and `recovery-reenrollment` are positive recovery operations,
-not negative cases. For each, the harness invokes:
-In particular, tpm-replacement is not a negative case.
+`tpm-replacement` and `recovery-reenrollment` are positive recovery operations.
+For each, the harness invokes:
 
 ```text
 BOOTC_SECURE_RECOVERY_COMMAND --case <case> --profile "$PROFILE" --oci-ref "$OCI_REF" --state "$STATE" --iso "$DAKOTA_ISO" --recipe "$RECIPE" --recovery-key "$RECOVERY_KEY"
@@ -154,20 +159,19 @@ reference and emit exactly the marker for its supplied slot,
 The installed host follows `TRACKING_REF`, while installer provenance records
 both `tracking_ref` and the accepted immutable N `oci_ref`.
 
-For each frozen negative case (`unsigned`, `wrong-key`, `wrong-repository`,
-`wrong-mok-uki`, `digest-mismatch`, `esp-full`, `interrupted-finalize`, and
-`reconcile-failure`), the external runner receives `--case`, `--profile`,
-`--state`, and `--tracking-ref`, exits zero only after causally exercising the
-case, and emits `BOOTC_SECURE_UPDATE_NEGATIVE: <case>: rejected`. It must leave
-the booted/rollback deployments intact where applicable, record
-`outcome=failed`, clear a stale update semaphore, and leave the target
-bootable. Before each invocation Snosi removes both runtime state files and
-then requires a newly-created `update-check` containing `outcome=failed` and
-`checked_at`, with no `update-staged` semaphore. Snosi then boots and verifies
-the retained secure deployment. While the VM is live, the negative runner may
+While the VM is live, an external runner may
 use only the registry and SSH to exercise the installed updater. It must never
 open or mutate the target disk, TPM state directory/socket, or OVMF vars
-directly.
+directly. This rule was written for the removed negative runner but is not
+specific to it: it applies to every runner the harness invokes against a
+running guest, the publisher included.
+
+The update harness requires no negative runner either, for the same reason and
+by the same decision as the install path above. It proves that a good N+1/N+2
+is taken, that rollback returns, and that secure invariants survive each hop;
+it does not prove that a bad update is refused. `bootc-update-stage`'s own
+policy rejection remains enforced at runtime and is covered by
+`test/bootc-container-policy-test.sh`, not by this harness.
 
 ## Task 10 Rotation Runner Protocol
 
@@ -299,8 +303,7 @@ provenance record.
 ## Recovery State Manifest
 
 The harness writes a state manifest and passes its path to the external
-recovery runners (`BOOTC_SECURE_RECOVERY_COMMAND`,
-`BOOTC_SECURE_NEGATIVE_COMMAND`). It is **paths only** — the file names
+recovery runner (`BOOTC_SECURE_RECOVERY_COMMAND`). It is **paths only** — the file names
 credentials, it never contains them — and it is mode `0600`.
 
 This schema was previously undocumented, and the two sides disagreed: the
