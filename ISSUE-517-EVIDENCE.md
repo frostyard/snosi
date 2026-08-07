@@ -1,5 +1,19 @@
 # Issue 517 — evidence dump
 
+> **CLOSED 2026-08-07.** Root cause was systemd 261 moving the
+> `gpt-auto-root[-luks]` udev rules from `99-systemd.rules` into
+> `90-image-dissect.rules`, which dracut does not install. Fixed by
+> [snosi#520](https://github.com/frostyard/snosi/pull/520); **proven on a real
+> published image** — the target installs and boots with Secure Boot enforced
+> and a TPM-unlocked LUKS root. The next assertion after it,
+> `cat /boot/loader/entries/*.conf`, was a harness bug (bootc leaves `/boot`
+> unmounted unless it is using it) and is fixed in
+> [snosi#524](https://github.com/frostyard/snosi/pull/524).
+>
+> Kept as a record of what was measured and where the reasoning went wrong.
+> Safe to delete.
+
+
 Everything gathered while chasing the secure bootc install to its current
 failure. Written for whoever picks up #517 next, so nothing has to be
 re-derived. Uncommitted scratch — delete it when the issue closes.
