@@ -377,11 +377,11 @@ cp "$source" "$mountpoint/EFI/BOOT/grubx64.efi"
 printf task9-corruption >>"$mountpoint/EFI/BOOT/grubx64.efi"
 sync
 systemctl start snosi-bootc-bootloader-reconcile.service
-cmp "$source" "$mountpoint/EFI/BOOT/grubx64.efi"
-test "$shim_before" = "$(sha256sum "$mountpoint/EFI/BOOT/BOOTX64.EFI")"
-test "$mm_before" = "$(sha256sum "$mountpoint/EFI/BOOT/mmx64.efi")"
-test "$source_hash" = "$(sha256sum "$mountpoint/EFI/BOOT/grubx64.efi")"
-sbverify --cert /usr/lib/snosi/mok.crt "$mountpoint/EFI/BOOT/grubx64.efi" >/dev/null'
+cmp "$source" "$mountpoint/EFI/BOOT/grubx64.efi" || { echo "reconciler: second stage was not restored from $source"; ls -l "$mountpoint/EFI/BOOT/grubx64.efi"; exit 1; }
+test "$shim_before" = "$(sha256sum "$mountpoint/EFI/BOOT/BOOTX64.EFI")" || { echo "reconciler: it modified shim, which it must never touch"; exit 1; }
+test "$mm_before" = "$(sha256sum "$mountpoint/EFI/BOOT/mmx64.efi")" || { echo "reconciler: it modified MokManager, which it must never touch"; exit 1; }
+test "$source_hash" = "$(sha256sum "$mountpoint/EFI/BOOT/grubx64.efi")" || { echo "reconciler: restored second stage does not match the immutable source"; exit 1; }
+sbverify --cert /usr/lib/snosi/mok.crt "$mountpoint/EFI/BOOT/grubx64.efi" >/dev/null || { echo "reconciler: restored second stage fails MOK verification"; sbverify --list "$mountpoint/EFI/BOOT/grubx64.efi" 2>&1 | head -4; exit 1; }'
 }
 
 runner_left_shared_state_stopped() { # captured TPM socket
@@ -436,7 +436,7 @@ run_recovery_hook() { # case old-token-identity; sets RECOVERY_TOKEN_ID
 }
 
 assert_guest() {
-    local boot_id cmdline token provenance entries old_token backing root_fstype mapper_fstype
+    local boot_id cmdline token provenance entries old_token backing root_fstype mapper_fstype var_mount etc_mount
     assert_true 'firmware Secure Boot is enforced' vm_ssh 'mokutil --sb-state | grep -q "SecureBoot enabled"'
     # NOTE: with /boot unmounted (bootc mounts it only while using it),
     # bootctl prints "Couldn't find EFI system partition" to stderr. The
@@ -471,6 +471,12 @@ assert_guest() {
     provenance=$(vm_ssh 'cat /var/lib/snosi/bootc-secure-install.json')
     if jq -e --arg ref "$OCI_REF" --arg tracking "$TRACKING_REF" '.oci_ref == $ref and .tracking_ref == $tracking and .repository and .secure_capability == true and .contract_schema == 1 and .assembly_compatibility and .composefs_id and .uki_sha256 and .mok_fingerprint and .pcr_fingerprint and .esp_partuuid and .luks_uuid and .tpm_token_id and .installer_versions.fisherman and .validated_versions.bootc and .validated_versions.cosign and .validated_versions.systemd and (.completed_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T.*Z$"))' <<<"$provenance" >/dev/null; then pass 'secure install provenance is complete and non-secret'; else fail 'secure install provenance is complete and non-secret'; fi
     assert_true 'bootc reports a managed deployment' vm_ssh 'bootc status --json | jq -e ".status.booted != null" >/dev/null'
+    # Reports the mounts it judged. Every check in this suite that failed
+    # silently cost a run to diagnose; on a composefs deployment the shape of
+    # /var and /etc is exactly the thing worth seeing rather than guessing.
+    var_mount=$(vm_ssh 'findmnt -no SOURCE,FSTYPE,FSROOT /var 2>/dev/null || echo unknown')
+    etc_mount=$(vm_ssh 'findmnt -no SOURCE,FSTYPE /etc 2>/dev/null || echo unknown')
+    echo "# persistent state: /var=[$var_mount]  /etc=[$etc_mount]" >&2
     assert_true 'persistent state and etc are ready' vm_ssh 'findmnt -no SOURCE /var | grep -q /dev/mapper/root && findmnt -no FSTYPE /etc | grep -q overlay'
     # shellcheck disable=SC2016 # The command substitution must execute in the guest.
     assert_true 'no system units failed' vm_ssh 'test -z "$(systemctl --failed --no-legend)"'
