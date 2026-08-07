@@ -361,14 +361,20 @@ exercise_reconciler() {
     # shellcheck disable=SC2016 # This complete script executes on the guest.
     vm_ssh 'set -euo pipefail
 source=/usr/lib/snosi/bootc/systemd-bootx64.efi
-backing=$(cryptsetup status root | awk "/device:/{print \$2; exit}")
-disk=$(lsblk -no PKNAME "$backing")
-esp=$(lsblk -J -o PATH,TYPE,PARTTYPE,PKNAME | jq -er --arg disk "$disk" ".. | objects | select(.type? == \"part\" and .pkname? == \$disk and (.parttype? | ascii_downcase) == \"c12a7328-f81f-11d2-ba4b-00a0c93ec93b\") | .path" | sort -u)
-    test -n "$esp" && test "$(printf "%s" "$esp" | wc -l)" -eq 0
+test -f "$source" || { echo "reconciler: immutable second-stage source is missing at $source"; exit 1; }
+esp=""
+while read -r path ptype; do
+    if [ "${ptype,,}" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ]; then esp="$path"; break; fi
+done < <(lsblk -rno PATH,PARTTYPE)
+if [ -z "$esp" ]; then
+    echo "reconciler: no partition carries the ESP type GUID; block layout follows"
+    lsblk -rno PATH,TYPE,PARTTYPE,PKNAME
+    exit 1
+fi
 mountpoint=/run/task9-esp
 mkdir "$mountpoint"
 trap "umount \"$mountpoint\" 2>/dev/null || true; rmdir \"$mountpoint\" 2>/dev/null || true" EXIT
-mount "$esp" "$mountpoint"
+mount "$esp" "$mountpoint" || { echo "reconciler: cannot mount ESP $esp"; exit 1; }
 shim_before=$(sha256sum "$mountpoint/EFI/BOOT/BOOTX64.EFI")
 mm_before=$(sha256sum "$mountpoint/EFI/BOOT/mmx64.efi")
 source_hash=$(sha256sum "$source")
@@ -376,7 +382,7 @@ grub_before=$(sha256sum "$mountpoint/EFI/BOOT/grubx64.efi")
 cp "$source" "$mountpoint/EFI/BOOT/grubx64.efi"
 printf task9-corruption >>"$mountpoint/EFI/BOOT/grubx64.efi"
 sync
-systemctl start snosi-bootc-bootloader-reconcile.service
+systemctl start snosi-bootc-bootloader-reconcile.service || { echo "reconciler: the service failed to start"; systemctl status snosi-bootc-bootloader-reconcile.service --no-pager -l | head -20; exit 1; }
 cmp "$source" "$mountpoint/EFI/BOOT/grubx64.efi" || { echo "reconciler: second stage was not restored from $source"; ls -l "$mountpoint/EFI/BOOT/grubx64.efi"; exit 1; }
 test "$shim_before" = "$(sha256sum "$mountpoint/EFI/BOOT/BOOTX64.EFI")" || { echo "reconciler: it modified shim, which it must never touch"; exit 1; }
 test "$mm_before" = "$(sha256sum "$mountpoint/EFI/BOOT/mmx64.efi")" || { echo "reconciler: it modified MokManager, which it must never touch"; exit 1; }
@@ -477,7 +483,18 @@ assert_guest() {
     var_mount=$(vm_ssh 'findmnt -no SOURCE,FSTYPE,FSROOT /var 2>/dev/null || echo unknown')
     etc_mount=$(vm_ssh 'findmnt -no SOURCE,FSTYPE /etc 2>/dev/null || echo unknown')
     echo "# persistent state: /var=[$var_mount]  /etc=[$etc_mount]" >&2
-    assert_true 'persistent state and etc are ready' vm_ssh 'findmnt -no SOURCE /var | grep -q /dev/mapper/root && findmnt -no FSTYPE /etc | grep -q overlay'
+    # /etc is NOT an overlay on a composefs deployment. Measured on a real
+    # installed target:
+    #
+    #   /var  /dev/mapper/root[/state/os/default/var]        btrfs
+    #   /etc  /dev/mapper/root[/state/deploy/<hash>/etc]     btrfs
+    #
+    # The writable /etc is a bind of the deployment's own state directory --
+    # which is what fisherman's secure image-root handling already documents --
+    # so requiring `overlay` failed every healthy install. What both halves
+    # should assert is that each comes off the encrypted root, which is the
+    # property that matters: persistent state survives on the LUKS volume.
+    assert_true 'persistent state and etc are ready' vm_ssh 'findmnt -no SOURCE /var | grep -q /dev/mapper/root && findmnt -no SOURCE /etc | grep -q "/dev/mapper/root\[/state/deploy/"'
     # shellcheck disable=SC2016 # The command substitution must execute in the guest.
     assert_true 'no system units failed' vm_ssh 'test -z "$(systemctl --failed --no-legend)"'
     assert_true 'real FAT ESP reconciler restores only the deliberately changed second stage' exercise_reconciler
