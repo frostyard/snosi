@@ -62,8 +62,20 @@ composefs_from_cmdline() {
 type2_only() { # path; materialize once because callers may provide a FIFO.
     local entries
     entries=$(cat "$1") || return
+    # `uki` OR `efi`. bootc writes `uki` -- verified from a real installed
+    # target, whose only BLS entry is:
+    #
+    #     title Cayo Linux 13
+    #     version 13
+    #     uki /EFI/Linux/bootc/bootc_composefs-<128 hex>.efi
+    #     sort-key bootc-cayo-0
+    #
+    # Requiring `efi` rejected every genuine install. Both spell a Type #2
+    # entry; what makes it Type #2 is a single bundled EFI image and the
+    # absence of `linux`/`initrd`, which is still enforced above.
+    # frostyard/fisherman#22 fixed the identical assumption in its validator.
     ! grep -Eq '^[[:space:]]*(linux|initrd)[[:space:]]+' <<<"$entries" \
-        && grep -Eq '^[[:space:]]*efi[[:space:]]+/EFI/Linux/bootc/bootc_composefs-[[:xdigit:]]{128}\.efi[[:space:]]*$' <<<"$entries"
+        && grep -Eq '^[[:space:]]*(uki|efi)[[:space:]]+/EFI/Linux/bootc/bootc_composefs-[[:xdigit:]]{128}\.efi[[:space:]]*$' <<<"$entries"
 }
 cmdline_has_root_or_luks() { [[ $1 =~ (^|[[:space:]])(root=|luks\.|rd\.luks\.) ]]; }
 exactly_one_line() { [[ -n $1 && $1 != *$'\n'* ]]; }
@@ -424,7 +436,7 @@ run_recovery_hook() { # case old-token-identity; sets RECOVERY_TOKEN_ID
 }
 
 assert_guest() {
-    local boot_id cmdline token provenance entries old_token backing
+    local boot_id cmdline token provenance entries old_token backing root_fstype mapper_fstype
     assert_true 'firmware Secure Boot is enforced' vm_ssh 'mokutil --sb-state | grep -q "SecureBoot enabled"'
     # NOTE: with /boot unmounted (bootc mounts it only while using it),
     # bootctl prints "Couldn't find EFI system partition" to stderr. The
@@ -440,6 +452,14 @@ assert_guest() {
     entries=$(esp_cat 'loader/entries/*.conf')
     if type2_only <(printf '%s\n' "$entries"); then pass 'installed BLS entries are Type #2-only'; else fail 'installed BLS entries are Type #2-only'; fi
     backing=$(root_backing_device "$(vm_ssh 'cryptsetup status root')") || { fail 'root mapper reports exactly one backing LUKS device'; return; }
+    # Reports what it saw. This fails on a target that is otherwise healthy,
+    # and "not ok" alone does not say whether cryptsetup isLuks failed or the
+    # filesystem probe disagreed -- and on a composefs deployment `/` is not
+    # the mapper's filesystem, so the probe is the likely suspect. Print both
+    # before judging, rather than guessing which half is wrong.
+    root_fstype=$(vm_ssh 'findmnt -no FSTYPE / 2>/dev/null || echo unknown')
+    mapper_fstype=$(vm_ssh "blkid -o value -s TYPE /dev/mapper/root 2>/dev/null || echo unknown")
+    echo "# root backing: backing=$backing  fstype(/)=$root_fstype  fstype(/dev/mapper/root)=$mapper_fstype" >&2
     assert_true 'root backing device is LUKS2 Btrfs' vm_ssh "cryptsetup isLuks '$backing' && findmnt -no FSTYPE / | grep -qx btrfs"
     token=$(vm_ssh "cryptsetup luksDump --dump-json-metadata '$backing'")
     if signed_pcr11_token <<<"$token"; then pass 'exactly one signed-PCR-11 TPM token exists'; else fail 'exactly one signed-PCR-11 TPM token exists'; fi
