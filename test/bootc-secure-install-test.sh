@@ -452,15 +452,19 @@ assert_guest() {
     entries=$(esp_cat 'loader/entries/*.conf')
     if type2_only <(printf '%s\n' "$entries"); then pass 'installed BLS entries are Type #2-only'; else fail 'installed BLS entries are Type #2-only'; fi
     backing=$(root_backing_device "$(vm_ssh 'cryptsetup status root')") || { fail 'root mapper reports exactly one backing LUKS device'; return; }
-    # Reports what it saw. This fails on a target that is otherwise healthy,
-    # and "not ok" alone does not say whether cryptsetup isLuks failed or the
-    # filesystem probe disagreed -- and on a composefs deployment `/` is not
-    # the mapper's filesystem, so the probe is the likely suspect. Print both
-    # before judging, rather than guessing which half is wrong.
+    # Probe the MAPPER, not `/`. On a composefs deployment `/` is an overlay,
+    # so `findmnt -no FSTYPE /` reports `overlay` and never `btrfs` -- measured
+    # on a real installed target:
+    #
+    #     backing=/dev/vda2  fstype(/)=overlay  fstype(/dev/mapper/root)=btrfs
+    #
+    # The assertion's own name is what is correct here: the backing device is
+    # LUKS2, and the filesystem inside it is Btrfs. Checking `/` asked a
+    # question about the composefs mount instead, and failed a healthy system.
     root_fstype=$(vm_ssh 'findmnt -no FSTYPE / 2>/dev/null || echo unknown')
     mapper_fstype=$(vm_ssh "blkid -o value -s TYPE /dev/mapper/root 2>/dev/null || echo unknown")
     echo "# root backing: backing=$backing  fstype(/)=$root_fstype  fstype(/dev/mapper/root)=$mapper_fstype" >&2
-    assert_true 'root backing device is LUKS2 Btrfs' vm_ssh "cryptsetup isLuks '$backing' && findmnt -no FSTYPE / | grep -qx btrfs"
+    assert_true 'root backing device is LUKS2 Btrfs' vm_ssh "cryptsetup isLuks '$backing' && blkid -o value -s TYPE /dev/mapper/root | grep -qx btrfs"
     token=$(vm_ssh "cryptsetup luksDump --dump-json-metadata '$backing'")
     if signed_pcr11_token <<<"$token"; then pass 'exactly one signed-PCR-11 TPM token exists'; else fail 'exactly one signed-PCR-11 TPM token exists'; fi
     if vm_ssh "cryptsetup open --test-passphrase --key-file=- '$backing'" <"$RECOVERY_KEY"; then pass 'recovery credential remains valid'; else fail 'recovery credential remains valid'; fi
