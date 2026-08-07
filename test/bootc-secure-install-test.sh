@@ -415,19 +415,26 @@ run_recovery_hook() { # case old-token-identity; sets RECOVERY_TOKEN_ID
     canonical_tpm_socket "$WORK" "$tpm_socket" || { echo "Error: recovery TPM socket is not owned by $WORK/tpm" >&2; return 1; }
     # External recovery owns the shared disk, TPM, and varstore only while both
     # QEMU and swtpm are stopped. It must leave that shared state stopped.
-    stop_vm || return 1
-    secure_vm_stop_swtpm || return 1
+    # Every step below used to return silently, so a failure anywhere in the
+    # hook surfaced as a bare "not ok" with nothing to act on. Name them.
+    stop_vm || { echo "recovery[$case_name]: could not stop the VM" >&2; return 1; }
+    secure_vm_stop_swtpm || { echo "recovery[$case_name]: could not stop swtpm" >&2; return 1; }
     rm -f -- "$tpm_socket" "$WORK/tpm/swtpm.pid"
     # shellcheck disable=SC2153 # ssh_keygen initializes SSH_KEY before assert_guest.
-    write_install_state "$WORK/recovery-state.json" "$WORK" "$RECOVERY_KEY" "$SSH_KEY" "$WORK/recipe.json" || return 1
-    recovery_state_is_ready "$WORK/recovery-state.json" || return 1
+    write_install_state "$WORK/recovery-state.json" "$WORK" "$RECOVERY_KEY" "$SSH_KEY" "$WORK/recipe.json" \
+        || { echo "recovery[$case_name]: could not write the state manifest" >&2; return 1; }
+    recovery_state_is_ready "$WORK/recovery-state.json" \
+        || { echo "recovery[$case_name]: state manifest failed its own readiness check" >&2; return 1; }
     SNOSI_SECURE_OVMF_CODE="$WORK/OVMF_CODE.fd" SNOSI_SECURE_OVMF_VARS="$WORK/OVMF_VARS.fd" \
     SNOSI_SECURE_TPM_STATE="$WORK/tpm" SNOSI_SECURE_TPM_SOCKET="$tpm_socket" \
     run_marked_runner "$BOOTC_SECURE_RECOVERY_COMMAND" "BOOTC_SECURE_RECOVERY: $case_name: complete" \
         --case "$case_name" --profile "$PROFILE" --oci-ref "$OCI_REF" --state "$WORK/recovery-state.json" \
-        --iso "$DAKOTA_ISO" --recipe "$WORK/recipe.json" --recovery-key "$RECOVERY_KEY" || return 1
-    runner_output_has_marker "$RUNNER_OUTPUT" "BOOTC_SECURE_RECOVERY: $case_name: old-token-unavailable" || return 1
-    runner_left_shared_state_stopped "$tpm_socket" || return 1
+        --iso "$DAKOTA_ISO" --recipe "$WORK/recipe.json" --recovery-key "$RECOVERY_KEY" \
+        || { echo "recovery[$case_name]: runner $BOOTC_SECURE_RECOVERY_COMMAND failed or omitted its completion marker" >&2; return 1; }
+    runner_output_has_marker "$RUNNER_OUTPUT" "BOOTC_SECURE_RECOVERY: $case_name: old-token-unavailable" \
+        || { echo "recovery[$case_name]: runner never reported the old token unavailable" >&2; return 1; }
+    runner_left_shared_state_stopped "$tpm_socket" \
+        || { echo "recovery[$case_name]: runner left QEMU or swtpm running on the shared state" >&2; return 1; }
     secure_vm_start_swtpm_paths "$WORK/tpm" "$tpm_socket" "$WORK/tpm/swtpm.pid"
     start_vm
     wait_for_ssh || return 1
