@@ -7,6 +7,7 @@ Thanks for contributing to snosi.
 - Read `README.md` for project goals and build outputs.
 - Read `CLAUDE.md` and `yeti/OVERVIEW.md` for repository architecture, contracts, and operational constraints.
 - For security issues, follow `SECURITY.md` and use GitHub Security Advisories (not public issues).
+- If you work with an AI coding agent, start from a prompt in `.github/prompts/`.
 
 ## Development workflow
 
