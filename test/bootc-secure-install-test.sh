@@ -377,7 +377,7 @@ trap "umount \"$mountpoint\" 2>/dev/null || true; rmdir \"$mountpoint\" 2>/dev/n
 mount "$esp" "$mountpoint" || { echo "reconciler: cannot mount ESP $esp"; exit 1; }
 shim_before=$(sha256sum "$mountpoint/EFI/BOOT/BOOTX64.EFI")
 mm_before=$(sha256sum "$mountpoint/EFI/BOOT/mmx64.efi")
-source_hash=$(sha256sum "$source")
+source_hash=$(sha256sum "$source" | cut -d" " -f1)
 grub_before=$(sha256sum "$mountpoint/EFI/BOOT/grubx64.efi")
 cp "$source" "$mountpoint/EFI/BOOT/grubx64.efi"
 printf task9-corruption >>"$mountpoint/EFI/BOOT/grubx64.efi"
@@ -386,7 +386,7 @@ systemctl start snosi-bootc-bootloader-reconcile.service || { echo "reconciler: 
 cmp "$source" "$mountpoint/EFI/BOOT/grubx64.efi" || { echo "reconciler: second stage was not restored from $source"; ls -l "$mountpoint/EFI/BOOT/grubx64.efi"; exit 1; }
 test "$shim_before" = "$(sha256sum "$mountpoint/EFI/BOOT/BOOTX64.EFI")" || { echo "reconciler: it modified shim, which it must never touch"; exit 1; }
 test "$mm_before" = "$(sha256sum "$mountpoint/EFI/BOOT/mmx64.efi")" || { echo "reconciler: it modified MokManager, which it must never touch"; exit 1; }
-test "$source_hash" = "$(sha256sum "$mountpoint/EFI/BOOT/grubx64.efi")" || { echo "reconciler: restored second stage does not match the immutable source"; exit 1; }
+test "$source_hash" = "$(sha256sum "$mountpoint/EFI/BOOT/grubx64.efi" | cut -d" " -f1)" || { echo "reconciler: restored second stage does not match the immutable source"; exit 1; }
 sbverify --cert /usr/lib/snosi/mok.crt "$mountpoint/EFI/BOOT/grubx64.efi" >/dev/null || { echo "reconciler: restored second stage fails MOK verification"; sbverify --list "$mountpoint/EFI/BOOT/grubx64.efi" 2>&1 | head -4; exit 1; }'
 }
 
