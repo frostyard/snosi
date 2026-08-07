@@ -329,14 +329,19 @@ pre_mok_rejection() {
 esp_cat() { # glob-relative-to-esp
     # shellcheck disable=SC2016 # This complete script executes on the guest.
     vm_ssh 'set -euo pipefail
-backing=$(cryptsetup status root | awk "/device:/{print \$2; exit}")
-disk=$(lsblk -no PKNAME "$backing")
-esp=$(lsblk -J -o PATH,TYPE,PARTTYPE,PKNAME | jq -er --arg disk "$disk" ".. | objects | select(.type? == \"part\" and .pkname? == \$disk and (.parttype? | ascii_downcase) == \"c12a7328-f81f-11d2-ba4b-00a0c93ec93b\") | .path" | sort -u)
-test -n "$esp" && test "$(printf "%s" "$esp" | wc -l)" -eq 0
+esp=""
+while read -r path ptype; do
+    if [ "${ptype,,}" = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b" ]; then esp="$path"; break; fi
+done < <(lsblk -rno PATH,PARTTYPE)
+if [ -z "$esp" ]; then
+    echo "esp_cat: no partition carries the ESP type GUID; block layout follows" >&2
+    lsblk -rno PATH,TYPE,PARTTYPE,PKNAME >&2
+    exit 1
+fi
 mountpoint=$(mktemp -d /run/task9-esp-read.XXXXXX)
 trap "umount \"$mountpoint\" 2>/dev/null || true; rmdir \"$mountpoint\" 2>/dev/null || true" EXIT
-mount -o ro "$esp" "$mountpoint"
-cat "$mountpoint"/'"$1"'
+mount -o ro "$esp" "$mountpoint" || { echo "esp_cat: cannot mount $esp" >&2; exit 1; }
+cat "$mountpoint"/'"$1"' || { echo "esp_cat: no match for '"$1"' on $esp; ESP contains:" >&2; find "$mountpoint" -maxdepth 3 >&2; exit 1; }
 '
 }
 
