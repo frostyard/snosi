@@ -6,3 +6,7 @@
 /usr/bin/gdb
 /usr/bin/ninja
 /usr/bin/automake
+# GTK4/WebKitGTK development headers (libgtk-4-dev, libwebkitgtk-6.0-dev) —
+# -dev packages are not in base, so their include trees must be in the delta.
+/usr/include/gtk-4.0
+/usr/include/webkitgtk-6.0
