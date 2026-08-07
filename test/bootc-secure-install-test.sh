@@ -318,6 +318,28 @@ pre_mok_rejection() {
     return 2
 }
 
+# Reads a path from the ESP of the installed system.
+#
+# bootc mounts /boot only while it is using it, and leaves it unmounted
+# otherwise -- so an installed target has no /boot to read, and
+# `cat /boot/loader/entries/*.conf` fails with "No such file or directory" on a
+# perfectly healthy system. Mount the ESP the same way exercise_reconciler
+# does: locate it by GPT type GUID on the disk backing the root mapper, rather
+# than assuming any mount point exists.
+esp_cat() { # glob-relative-to-esp
+    # shellcheck disable=SC2016 # This complete script executes on the guest.
+    vm_ssh 'set -euo pipefail
+backing=$(cryptsetup status root | awk "/device:/{print \$2; exit}")
+disk=$(lsblk -no PKNAME "$backing")
+esp=$(lsblk -J -o PATH,TYPE,PARTTYPE,PKNAME | jq -er --arg disk "$disk" ".. | objects | select(.type? == \"part\" and .pkname? == \$disk and (.parttype? | ascii_downcase) == \"c12a7328-f81f-11d2-ba4b-00a0c93ec93b\") | .path" | sort -u)
+test -n "$esp" && test "$(printf "%s" "$esp" | wc -l)" -eq 0
+mountpoint=$(mktemp -d /run/task9-esp-read.XXXXXX)
+trap "umount \"$mountpoint\" 2>/dev/null || true; rmdir \"$mountpoint\" 2>/dev/null || true" EXIT
+mount -o ro "$esp" "$mountpoint"
+cat "$mountpoint"/'"$1"'
+'
+}
+
 exercise_reconciler() {
     # shellcheck disable=SC2016 # This complete script executes on the guest.
     vm_ssh 'set -euo pipefail
@@ -399,12 +421,18 @@ run_recovery_hook() { # case old-token-identity; sets RECOVERY_TOKEN_ID
 assert_guest() {
     local boot_id cmdline token provenance entries old_token backing
     assert_true 'firmware Secure Boot is enforced' vm_ssh 'mokutil --sb-state | grep -q "SecureBoot enabled"'
+    # NOTE: with /boot unmounted (bootc mounts it only while using it),
+    # bootctl prints "Couldn't find EFI system partition" to stderr. The
+    # assertion still holds because "Measured UKI: yes" comes from the boot
+    # loader interface via EFI variables, not from the ESP -- but it is
+    # surviving a warning rather than being given the ESP. If bootctl ever
+    # promotes that to a hard error, pass --esp-path using esp_cat's discovery.
     assert_true 'booted chain is a measured UKI' vm_ssh 'bootctl --no-pager status | grep -q "Measured UKI: yes"'
     assert_true 'lockdown is integrity or confidentiality' vm_ssh 'grep -Eq "\[(integrity|confidentiality)\]" /sys/kernel/security/lockdown'
     cmdline=$(vm_ssh 'cat /proc/cmdline')
     if composefs_from_cmdline "$cmdline" >/dev/null; then pass 'kernel command line has a composefs binding without accepting raw root data'; else fail 'kernel command line has a composefs binding without accepting raw root data'; fi
     assert_false 'kernel command line contains no root or LUKS identifier' cmdline_has_root_or_luks "$cmdline"
-    entries=$(vm_ssh 'cat /boot/loader/entries/*.conf')
+    entries=$(esp_cat 'loader/entries/*.conf')
     if type2_only <(printf '%s\n' "$entries"); then pass 'installed BLS entries are Type #2-only'; else fail 'installed BLS entries are Type #2-only'; fi
     backing=$(root_backing_device "$(vm_ssh 'cryptsetup status root')") || { fail 'root mapper reports exactly one backing LUKS device'; return; }
     assert_true 'root backing device is LUKS2 Btrfs' vm_ssh "cryptsetup isLuks '$backing' && findmnt -no FSTYPE / | grep -qx btrfs"
