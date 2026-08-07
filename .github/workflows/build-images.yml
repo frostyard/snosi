@@ -323,7 +323,7 @@ jobs:
             "$IMAGE" "${{ steps.push.outputs.digest }}" "$AUTH_FILE"
 
       - name: Install ORAS
-        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
 
       - name: Login to GHCR with ORAS
         env:
@@ -559,7 +559,7 @@ jobs:
 
       - name: Install ORAS
         if: steps.current.outputs.tag != ''
-        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
 
       - name: Login to GHCR with ORAS
         if: steps.current.outputs.tag != ''
