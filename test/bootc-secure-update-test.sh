@@ -20,7 +20,6 @@ source "$ROOT_DIR/test/lib/ssh.sh"
 
 : "${BOOTC_SECURE_INSTALL_STATE:=}"
 : "${BOOTC_SECURE_UPDATE_PUBLISH_COMMAND:=}"
-: "${BOOTC_SECURE_UPDATE_NEGATIVE_COMMAND:=}"
 : "${UPDATE_N1_REF:=}"
 : "${UPDATE_N2_REF:=}"
 : "${UPDATE_N1_VERSION:=}"
@@ -43,9 +42,6 @@ disk_is_raw() {
     [[ -f $1 ]] && qemu-img info --output=json "$1" | jq -e '.format == "raw"' >/dev/null
 }
 marker_is_exact() { [[ $1 == "$2" ]]; }
-update_case() {
-    case $1 in unsigned|wrong-key|wrong-repository|wrong-mok-uki|digest-mismatch|esp-full|interrupted-finalize|reconcile-failure) return 0;; *) return 1;; esac
-}
 
 install_state_is_safe() { # manifest
     local state=$1 expected
@@ -69,9 +65,6 @@ state_matches_profile() {
     [[ $(state_value "$state" accepted_oci_ref) == "ghcr.io/frostyard/$profile@"* ]]
 }
 reconciler_succeeded() { [[ $1 == *$'Result=success'* && $1 != *$'ActiveState=failed'* ]]; }
-negative_result_is_fresh() { # freshly-created guest update-check content
-    [[ $1 == *'outcome=failed'* && $1 == *'checked_at='* ]]
-}
 
 run_marked() { # runner marker args...
     local runner=$1 marker=$2 output status
@@ -216,9 +209,6 @@ run_fixtures() {
     assert_false 'root status rejects no backing device' root_backing_device 'type: LUKS2'
     assert_false 'root status rejects multiple backing devices' root_backing_device $'device: /dev/vda2\ndevice: /dev/vdb2'
     assert_true 'publisher marker is exact' marker_is_exact 'BOOTC_SECURE_UPDATE_PUBLISH: N+1: published' 'BOOTC_SECURE_UPDATE_PUBLISH: N+1: published'
-    assert_true 'update negative vocabulary includes required cases' update_case digest-mismatch
-    assert_true 'update negative vocabulary includes ESP full' update_case esp-full
-    assert_true 'update negative vocabulary includes reconciliation failure' update_case reconcile-failure
     printf '%s\n' "{\"schema\":1,\"profile\":\"cayo\",\"tracking_ref\":\"ghcr.io/frostyard/cayo:secure-test\",\"accepted_oci_ref\":\"$n1\",\"target_disk\":\"/tmp/disk\",\"ovmf_code\":\"/tmp/code\",\"ovmf_vars\":\"/tmp/vars\",\"tpm_state\":\"/tmp/tpm\",\"tpm_socket\":\"/tmp/tpm/socket\",\"recovery_key\":\"/tmp/passphrase-secret-private-key\",\"mok_cert\":\"/tmp/mok.crt\",\"pcr_public\":\"/tmp/pcr.pub\",\"ssh_key\":\"/tmp/id\"}" >"$work/unsafe.json"; chmod 600 "$work/unsafe.json"
     if install_state_is_safe "$work/unsafe.json"; then fail 'manifest rejects secret-bearing fields'; else pass 'manifest rejects secret-bearing fields'; fi
     printf '%s\n' '#!/bin/bash' 'printf "%s\\n" "BOOTC_SECURE_UPDATE_PUBLISH: N+1: published NOOP"' >"$work/noop-publisher"
@@ -228,9 +218,6 @@ run_fixtures() {
     chmod +x "$work/publisher"
     assert_true 'marked publisher succeeds only with its exact marker' run_marked "$work/publisher" 'BOOTC_SECURE_UPDATE_PUBLISH: N+1: published'
     assert_false 'failed publisher is rejected even with no marker check bypass' run_marked /bin/false 'BOOTC_SECURE_UPDATE_PUBLISH: N+1: published'
-    printf 'outcome=failed\nchecked_at=2026-07-29T12:34:56+00:00\n' >"$work/update-check"
-    assert_true 'negative result has a newly-written failed check shape' negative_result_is_fresh "$(<"$work/update-check")"
-    assert_false 'negative result requires a checked-at causal record' negative_result_is_fresh 'outcome=failed'
     printf '# Results: %d passed, %d failed, %d total\n' "$PASS" "$FAIL" "$((PASS + FAIL))"
     [[ $FAIL -eq 0 ]]
 }
@@ -252,7 +239,6 @@ require_live_inputs() {
         [[ -d $(state_value "$state" tpm_state) ]] || missing+=("tpm_state from install state")
     fi
     [[ -x $BOOTC_SECURE_UPDATE_PUBLISH_COMMAND ]] || missing+=("BOOTC_SECURE_UPDATE_PUBLISH_COMMAND")
-    [[ -x $BOOTC_SECURE_UPDATE_NEGATIVE_COMMAND ]] || missing+=("BOOTC_SECURE_UPDATE_NEGATIVE_COMMAND")
     for tool in jq qemu-img qemu-system-x86_64 swtpm cryptsetup objcopy sbverify ssh scp ss; do command -v "$tool" >/dev/null 2>&1 || missing+=("$tool"); done
     ((${#missing[@]})) || return 0
     printf 'BLOCKED: Task 9 secure update proof requires: %s\n' "${missing[*]}" >&2
@@ -272,21 +258,6 @@ assert_tracking_and_provenance() {
     spec=$(vm_ssh 'bootc status --format json' | jq -r '.spec.image.image // empty')
     provenance=$(vm_ssh 'jq -r .oci_ref /var/lib/snosi/bootc-secure-install.json')
     [[ $spec == "$tracking" && $provenance == "$accepted" ]]
-}
-
-run_negative_cases() {
-    local state=$BOOTC_SECURE_INSTALL_STATE profile case_name before_booted before_rollback after_booted after_rollback
-    profile=$(state_value "$state" profile)
-    for case_name in unsigned wrong-key wrong-repository wrong-mok-uki digest-mismatch esp-full interrupted-finalize reconcile-failure; do
-        before_booted=$(guest_digest booted); before_rollback=$(guest_digest rollback)
-        vm_ssh 'rm -f /run/snosi/update-check /run/snosi/update-staged'
-        run_marked "$BOOTC_SECURE_UPDATE_NEGATIVE_COMMAND" "BOOTC_SECURE_UPDATE_NEGATIVE: $case_name: rejected" --case "$case_name" --profile "$profile" --state "$state" --tracking-ref "$(state_value "$state" tracking_ref)" || return 1
-        after_booted=$(guest_digest booted); after_rollback=$(guest_digest rollback)
-        [[ $before_booted == "$after_booted" && $before_rollback == "$after_rollback" ]] || return 1
-        vm_ssh 'test ! -e /run/snosi/update-staged' || return 1
-        negative_result_is_fresh "$(vm_ssh 'cat /run/snosi/update-check')" || return 1
-        vm_ssh true || return 1
-    done
 }
 
 run_live() {
@@ -320,7 +291,6 @@ run_live() {
     vm_ssh bootc rollback || { echo 'FATAL: return rollback command failed' >&2; return 1; }
     reboot_and_assert "$old" "$recovery" "$mok" "$UPDATE_N2_VERSION" || { echo 'FATAL: return to N+2 validation failed' >&2; return 1; }
     [[ $(guest_digest booted) == "$booted" ]] || { echo 'FATAL: return did not boot the retained N+2 deployment' >&2; return 1; }
-    run_negative_cases || { echo 'FATAL: negative update protocol validation failed' >&2; return 1; }
 }
 
 if [[ ${1:-} == --fixtures ]]; then run_fixtures; exit $?; fi

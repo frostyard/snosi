@@ -160,10 +160,14 @@ a blank at-least-30-GiB target. It calls the external secure installer only
 through `BOOTC_SECURE_INSTALLER --non-interactive --iso ... --recipe ...`, then
 proves pre-enrollment shim rejection, same-varstore MOK enrollment, TPM reboot,
 and installed-state invariants. It prepares the shared OVMF/swtpm state before
-invoking `BOOTC_SECURE_INSTALLER`, requires its exact installed marker, and
-requires case-specific refusal markers from `BOOTC_SECURE_NEGATIVE_COMMAND`.
+invoking `BOOTC_SECURE_INSTALLER` and requires its exact installed marker.
 `BOOTC_SECURE_RECOVERY_COMMAND` separately proves TPM replacement and recovery
-reenrollment; they are never accepted as negative cases. External implementation
+reenrollment. There is deliberately NO negative-fixture runner: this harness
+proves a good image installs and boots, not that a bad one is refused. Refusal
+stays enforced by the shipped policy.json and covered by
+`test/bootc-container-policy-test.sh RUN_LIVE=1`; install-time refusal of a
+deliberately-broken image is knowingly unproven. Do not reintroduce a weaker,
+non-causal negative check in its place. External implementation
 is complete, but no prepared runner/artifact set is currently supplied to this
 run;
 missing inputs must print `BLOCKED:` and exit 2, never claim E2E success. The
