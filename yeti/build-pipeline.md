@@ -119,6 +119,36 @@ cayo Buildah proof validates immutable-source assembly/retention and signer
 binding, not runtime reconciliation on an installed FAT ESP; that execution is
 deferred to the Task 9 secure-install runtime harness.
 
+**Persistent kernel arguments (issue 601):** base `mkosi.extra` ships
+`usr/bin/snosi-kargs` and the shared `usr/lib/snosi/esp.sh`. The ESP helper is
+also sourced by `snosi-bootc-bootloader-reconcile`, preventing the two runtime
+writers from developing different ESP discovery or read-only-mount policy.
+Resolution prefers `bootctl --print-esp-path` (native resolves `/boot`) and
+falls back to the bootc encrypted-root backing disk's single ESP.
+
+`snosi-kargs` persists one token per line under `/var/lib/snosi/kargs/`, invokes
+`ukify build --cmdline ... --output ...` with **no `--linux` argument** (the
+switch that selects `addonx64.efi.stub`), signs with either an enrolled local
+MOK or caller-provided offline key/certificate, verifies with `sbverify`, and
+same-filesystem atomically replaces
+`loader/addons/50-snosi-local.addon.efi`. A failed post-replacement sync
+restores the old artifact. `revert` first renames to a dotfile, which
+systemd-stub skips, before removal. Secure Boot state and MOK enrollment are
+fail-closed; unsigned output is accepted only with Secure Boot disabled.
+
+Arguments are append-only and measured into PCR 12, while native and bootc LUKS
+policies bind signed PCR 11 only. The CLI refuses root, verity, LUKS, init, and
+emergency-shell arguments plus whitespace/quotes unless `--force` receives its
+exact interactive typed confirmation. The local-key path deliberately warns
+that disk-resident MOK authority can sign arbitrary EFI binaries and may also
+enter kernel module trust depending on shim/kernel MOK routing; offline signing
+is the narrower option. `test/snosi-kargs-test.sh` is the non-root PATH-stubbed
+contract. The native secure QEMU harness now requires PCR 11 to remain stable,
+PCR 12 to change, TPM unlock to survive, a corrupt addon to be skipped without
+bricking, and the global addon to survive sysupdate. Bootc deployment-update
+persistence stays `BLOCKED:` until its external live runner and authorized
+artifacts exist.
+
 **Protected bootc publication and evidence boundary (Task 10):**
 `build-images.yml` keeps pull-request builds to local mechanics images labelled
 `io.snosi.bootc.secureboot-capable=false`; they receive no secrets and never

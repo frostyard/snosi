@@ -243,6 +243,31 @@ recovery, rotation, incident response, and evidence retention. It links to the
 installer and assembly contracts rather than replacing them. Operations and
 documentation contracts are complete; live release evidence remains BLOCKED.
 
+**Persistent custom kernel arguments (`snosi-kargs`, issue 601, 2026-08-08):**
+secure bootc and production native A/B profiles ship systemd 261's addon stub,
+`systemd-ukify`, `sbsigntool`, and OpenSSL. The base
+`usr/bin/snosi-kargs` CLI stores state and optional machine-local signing
+material under `/var/lib/snosi/kargs/`, builds an addon by invoking `ukify
+build` WITHOUT `--linux`, and atomically installs the verified artifact at
+`<ESP>/loader/addons/50-snosi-local.addon.efi`. This is a GLOBAL addon:
+arguments append after the embedded UKI command line, apply to every UKI, and
+measure into PCR 12; they never remove embedded arguments and do not enter the
+signed-PCR-11 LUKS policy. Keep the root/verity/LUKS/emergency refusal list and
+typed `--force` confirmation fail-closed. `--unsigned` is permitted only when
+`mokutil` reports Secure Boot disabled. A generated local key is mode 0600 and
+requires explicit MOK enrollment; docs must retain the warning that a
+disk-resident MOK key widens boot trust and may widen module trust depending on
+the kernel/shim MOK policy. Offline `--key`/`--cert` signing remains supported.
+`usr/lib/snosi/esp.sh` is the shared ESP authority for this CLI and the bootc
+second-stage reconciler: `bootctl --print-esp-path` first, then the encrypted
+root's single colocated ESP, never remounting an existing read-only mount.
+`test/snosi-kargs-test.sh` covers the fixture/security matrix.
+`test/native-ab-secure-boot-test.sh` now requires signed load, PCR 11
+stability/PCR 12 change, TPM unlock, corrupt-signature fail-open, and native
+sysupdate survival. Bootc update persistence is still `BLOCKED:` pending its
+external live runner/artifacts and must not be claimed from fixture or native
+evidence. User and recovery guidance lives in `docs/snosi-kargs.md`.
+
 **Bootc OCI signature policy (Task 6, 2026-07-28):** secure bootc profiles ship
 `/etc/containers/policy.json` with global `reject` and exact
 `sigstoreSigned` scopes only for `ghcr.io/frostyard/cayo`, `snow`, and

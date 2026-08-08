@@ -5,6 +5,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RECONCILER="$ROOT_DIR/shared/bootc-secure/tree/usr/libexec/snosi-bootc-bootloader-reconcile"
+ESP_LIBRARY="$ROOT_DIR/mkosi.images/base/mkosi.extra/usr/lib/snosi/esp.sh"
 
 PASS=0
 FAIL=0
@@ -41,6 +42,10 @@ setup_fixture() {
     cat >"$WORK/bin/cryptsetup" <<'EOF'
 #!/bin/bash
 printf '  device:  /dev/vda1\n'
+EOF
+    cat >"$WORK/bin/bootctl" <<'EOF'
+#!/bin/bash
+exit 1
 EOF
     cat >"$WORK/bin/lsblk" <<'EOF'
 #!/bin/bash
@@ -87,6 +92,7 @@ run_reconciler() {
     SNOSI_BOOTC_RECONCILE_SOURCE="$WORK/root/usr/lib/snosi/bootc/systemd-bootx64.efi" \
     SNOSI_BOOTC_RECONCILE_CERT="$WORK/root/usr/lib/snosi/mok.crt" \
     SNOSI_BOOTC_RECONCILE_RUN_DIR="$WORK/run" \
+    SNOSI_ESP_LIBRARY="$ESP_LIBRARY" \
     SNOSI_TEST_LAYOUT="$WORK/layout.json" \
     SNOSI_TEST_CERT="$WORK/root/usr/lib/snosi/mok.crt" \
     SNOSI_TEST_ESP=/dev/vda3 \
