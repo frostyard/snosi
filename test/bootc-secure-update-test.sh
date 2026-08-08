@@ -140,7 +140,23 @@ secure_runtime_subset() { # recovery MOK certificate
     vm_ssh 'mokutil --sb-state | grep -q "SecureBoot enabled"'                     || subset_fail "Secure Boot is not enabled" || return 1
     vm_ssh 'bootctl --no-pager status | grep -q "Measured UKI: yes"'                || subset_fail "booted chain is not a measured UKI" || return 1
     vm_ssh 'grep -Eq "\[(integrity|confidentiality)\]" /sys/kernel/security/lockdown' || subset_fail "kernel lockdown is not integrity/confidentiality" || return 1
-    vm_ssh "test -z \"\$(systemctl --failed --no-legend)\""                         || subset_fail "system units have failed" || return 1
+    # Print WHICH units, not just that some did. "system units have failed" is
+    # a fact nobody can act on, and this check runs after the recovery legs --
+    # the install harness asserts the same thing BEFORE them and passes, so
+    # anything failing here was left behind by TPM replacement or recovery
+    # re-enrolment, and the unit name is the entire finding.
+    local failed
+    failed=$(vm_ssh 'systemctl --failed --no-legend --plain' 2>/dev/null || true)
+    [[ -z $failed ]] || {
+        subset_fail "system units have failed:"
+        printf '%s\n' "$failed" | sed 's/^/      /' >&2
+        printf '    --- status of each ---\n' >&2
+        while read -r unit _; do
+            [[ -n $unit ]] || continue
+            vm_ssh "systemctl status --no-pager --lines=15 '$unit'" 2>&1 | sed 's/^/      /' >&2
+        done <<<"$failed"
+        return 1
+    }
 
     reconciler=$(vm_ssh 'systemctl show --property=ActiveState --property=Result snosi-bootc-bootloader-reconcile.service')
     reconciler_succeeded "$reconciler" || subset_fail "ESP reconciler did not succeed: $reconciler" || return 1
