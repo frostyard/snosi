@@ -293,13 +293,13 @@ promotion gate remains the Tier 1 smoke test inside
 not a blocker; `if: failure()` uploads `nightly-harness-logs-<profile>`
 for exactly that purpose.
 
-### check-dependencies.yml — Direct Download Updates
+### check-dependencies.yml — External Dependency Updates
 
 **Trigger:** Weekly (Monday 9am UTC), manual dispatch
 
 Checks for updates to resources managed by the verified download system. The
-workflow has two independent jobs so update PRs touch only the metadata file
-for the build artifact that must be rebuilt.
+workflow has two independent jobs so update PRs touch only the dependency state
+and inline pins for the build artifact that must be rebuilt.
 
 **Sysext dependency job (`shared/download/sysext-checksums.json`):**
 - 1Password desktop .deb (stable apt channel metadata, installed as a pinned
@@ -323,21 +323,28 @@ channel therefore stays put until the channel passes it.
 Updates open `auto-update-sysext-checksums` PRs. Those PRs should trigger
 `build.yml` and skip the OCI image matrix.
 
-**OCI image dependency job (`shared/download/image-checksums.json`):**
+**OCI image dependency job (`shared/download/image-checksums.json` and inline pins):**
 - Homebrew install script
 - Surface secure boot certificate
 - Hotedge GNOME extension
 - Logomenu GNOME extension
 - Bazaar Companion GNOME extension
+- Syft CLI version used for SBOM generation
+- Cosign CLI version used for signing; tracks stable v2 only because v3 cannot
+  verify the repository's key-signed images when GitHub provenance attestations
+  are present
+- Immutable chunkah image digest corresponding to `chunkah:latest`
 
 Updates open `auto-update-image-checksums` PRs. Those PRs should trigger
 `build-images.yml` and skip the sysext publishing workflow.
 
 **Process:**
 1. Checks each upstream release/commit/package index
-2. Downloads changed resources
-3. Computes SHA256 checksums
-4. Updates the target-specific checksum file and creates a PR
+2. Downloads changed checksum-managed resources and computes SHA256 checksums
+3. Updates the target-specific checksum file
+4. Validates inline pin formats and requires exactly one matching source line
+   before editing Syft, Cosign, or chunkah in place
+5. Creates a target-specific PR
 
 ### check-packages.yml — Sysext APT Package Version Updates
 

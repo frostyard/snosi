@@ -404,6 +404,10 @@ jobs:
               "$1" || true
           }
 
+          ver_gt() {
+            [[ "$1" != "$2" && "$(printf '%s\n' "$1" "$2" | sort -V | tail -n1)" == "$1" ]]
+          }
+
           # ostree + bootc are NOT checked here: they are consumed as debs
           # from the frostyard APT repo, built by frostyard/bootc-debian,
           # which has its own weekly upstream-version check.
@@ -455,6 +459,41 @@ jobs:
             echo "bazaar_commit=$LATEST_BZ" >> $GITHUB_OUTPUT
           fi
 
+          # Check Syft CLI used for SBOM generation
+          CURRENT_SYFT=$(awk '$1 == "syft-version:" { print $2; exit }' .github/workflows/build-images.yml)
+          LATEST_SYFT=$(gh_api https://api.github.com/repos/anchore/syft/releases/latest | jq -r '.tag_name')
+          if [[ "$LATEST_SYFT" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
+             ver_gt "${LATEST_SYFT#v}" "${CURRENT_SYFT#v}"; then
+            UPDATES="${UPDATES}syft: $CURRENT_SYFT -> $LATEST_SYFT\n"
+            echo "syft_update=true" >> "$GITHUB_OUTPUT"
+            echo "syft_version=$LATEST_SYFT" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Cosign v3 cannot verify these key-signed images when GitHub
+          # provenance attestations are present, so follow stable v2 only.
+          CURRENT_COSIGN=$(awk '$1 == "cosign-release:" { gsub(/"/, "", $2); print $2; exit }' .github/workflows/build-images.yml)
+          LATEST_COSIGN=$(gh_api 'https://api.github.com/repos/sigstore/cosign/releases?per_page=100' |
+            jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name | select(test("^v2\\.[0-9]+\\.[0-9]+$"))' |
+            sort -V | tail -n1)
+          if [[ "$LATEST_COSIGN" =~ ^v2\.[0-9]+\.[0-9]+$ ]] &&
+             ver_gt "${LATEST_COSIGN#v}" "${CURRENT_COSIGN#v}"; then
+            UPDATES="${UPDATES}cosign: $CURRENT_COSIGN -> $LATEST_COSIGN\n"
+            echo "cosign_update=true" >> "$GITHUB_OUTPUT"
+            echo "cosign_version=$LATEST_COSIGN" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check the immutable digest currently published by chunkah:latest.
+          CURRENT_CHUNKAH=$(sed -n -E 's|^CHUNKAH_IMAGE=.*@(sha256:[a-f0-9]{64}).*$|\1|p' shared/outformat/image/chunkah-package.sh)
+          LATEST_CHUNKAH=$(curl -fsSL --retry 3 --retry-delay 2 \
+            'https://quay.io/api/v1/repository/coreos/chunkah/tag/?onlyActiveTags=true' |
+            jq -r '[.tags[] | select(.name == "latest") | .manifest_digest][0] // empty' || true)
+          if [[ "$LATEST_CHUNKAH" =~ ^sha256:[a-f0-9]{64}$ &&
+                "$LATEST_CHUNKAH" != "$CURRENT_CHUNKAH" ]]; then
+            UPDATES="${UPDATES}chunkah: $CURRENT_CHUNKAH -> $LATEST_CHUNKAH\n"
+            echo "chunkah_update=true" >> "$GITHUB_OUTPUT"
+            echo "chunkah_digest=$LATEST_CHUNKAH" >> "$GITHUB_OUTPUT"
+          fi
+
           if [[ -n "$UPDATES" ]]; then
             echo "has_updates=true" >> $GITHUB_OUTPUT
             echo -e "Updates available:\n$UPDATES"
@@ -463,7 +502,7 @@ jobs:
             echo "All image dependencies up to date"
           fi
 
-      - name: Update image checksums
+      - name: Update image dependencies
         if: steps.check.outputs.has_updates == 'true'
         env:
           BREW_UPDATE: ${{ steps.check.outputs.brew_update }}
@@ -476,8 +515,32 @@ jobs:
           LOGOMENU_COMMIT: ${{ steps.check.outputs.logomenu_commit }}
           BAZAAR_UPDATE: ${{ steps.check.outputs.bazaar_update }}
           BAZAAR_COMMIT: ${{ steps.check.outputs.bazaar_commit }}
+          SYFT_UPDATE: ${{ steps.check.outputs.syft_update }}
+          SYFT_VERSION: ${{ steps.check.outputs.syft_version }}
+          COSIGN_UPDATE: ${{ steps.check.outputs.cosign_update }}
+          COSIGN_VERSION: ${{ steps.check.outputs.cosign_version }}
+          CHUNKAH_UPDATE: ${{ steps.check.outputs.chunkah_update }}
+          CHUNKAH_DIGEST: ${{ steps.check.outputs.chunkah_digest }}
         run: |
           CHECKSUMS="shared/download/image-checksums.json"
+
+          validate_update_value() {
+            local name=$1 value=$2 pattern=$3
+            if [[ ! "$value" =~ $pattern ]]; then
+              echo "::error::Refusing to update ${name}; unexpected value: ${value}"
+              exit 1
+            fi
+          }
+
+          replace_exactly_once() {
+            local file=$1 pattern=$2 replacement=$3 count
+            count=$(grep -Ec -- "$pattern" "$file" || true)
+            if [[ "$count" != 1 ]]; then
+              echo "::error::Expected one ${pattern} match in ${file}, found ${count}"
+              exit 1
+            fi
+            sed -Ei "s|${pattern}|${replacement}|" "$file"
+          }
 
           if [[ "$BREW_UPDATE" == "true" ]]; then
             COMMIT="$BREW_COMMIT"
@@ -539,17 +602,40 @@ jobs:
             rm -f "$TMP"
           fi
 
+          if [[ "$SYFT_UPDATE" == "true" ]]; then
+            validate_update_value "syft-version" "$SYFT_VERSION" '^v[0-9]+\.[0-9]+\.[0-9]+$'
+            replace_exactly_once .github/workflows/build-images.yml \
+              'syft-version: v[0-9]+\.[0-9]+\.[0-9]+$' \
+              "syft-version: ${SYFT_VERSION}"
+          fi
+
+          if [[ "$COSIGN_UPDATE" == "true" ]]; then
+            validate_update_value "cosign-release" "$COSIGN_VERSION" '^v2\.[0-9]+\.[0-9]+$'
+            replace_exactly_once .github/workflows/build-images.yml \
+              'cosign-release: "v2\.[0-9]+\.[0-9]+"$' \
+              "cosign-release: \"${COSIGN_VERSION}\""
+          fi
+
+          if [[ "$CHUNKAH_UPDATE" == "true" ]]; then
+            validate_update_value "chunkah digest" "$CHUNKAH_DIGEST" '^sha256:[a-f0-9]{64}$'
+            replace_exactly_once shared/outformat/image/chunkah-package.sh \
+              'quay\.io/coreos/chunkah@sha256:[a-f0-9]{64}' \
+              "quay.io/coreos/chunkah@${CHUNKAH_DIGEST}"
+          fi
+
       - name: Create image dependency PR
         if: steps.check.outputs.has_updates == 'true'
         uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
         with:
           token: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
-          commit-message: "chore: update image dependency checksums"
-          title: "chore: update image dependency checksums"
+          commit-message: "chore: update image dependencies"
+          title: "chore: update image dependencies"
           body: |
-            Automated update of pinned direct-download dependencies consumed by OCI image profile builds.
+            Automated update of dependencies consumed by OCI image profile builds.
 
-            These updates modify `shared/download/image-checksums.json` and should trigger `build-images.yml`, not the sysext publishing workflow.
+            These updates modify `shared/download/image-checksums.json` and/or
+            inline Syft, Cosign, and chunkah pins. They should trigger
+            `build-images.yml`, not the sysext publishing workflow.
 
             **Please verify the image builds work before merging.**
           branch: auto-update-image-checksums

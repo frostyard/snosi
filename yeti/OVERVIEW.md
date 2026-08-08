@@ -1268,6 +1268,8 @@ Scripts use `verified_download(key, output_path)` from
 `shared/download/verified-download.sh`; by default it searches both checksum
 files. CI workflow `check-dependencies.yml` detects updates weekly and opens
 target-specific PRs so sysext-only changes do not spend the OCI image matrix.
+Its OCI job also tracks the inline Syft, compatible Cosign v2, and immutable
+chunkah digest pins that cannot live in checksum metadata.
 
 Package versions for selected APT-based sysext externals (VSCode `code`,
 Docker, 1Password) are tracked separately in
@@ -1378,7 +1380,7 @@ Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GP
 | `build-images.yml` | Push/PR/repository_dispatch/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, generate SBOMs, sign with Cosign |
 | `build-native-images.yml` | Push/PR/repository_dispatch/dispatch; promotion excluded from PRs | Native A/B products + installer ISO build, candidate publish, public-origin verify, protected promote (Phase 7/8) |
 | `deploy-native-installer-redirect.yml` | Main changes under the Worker / dispatch | Test and deploy the R2-index-derived stable installer redirect |
-| `check-dependencies.yml` | Weekly (Mon 9am UTC) | Check external download updates, create PRs |
+| `check-dependencies.yml` | Weekly (Mon 9am UTC) | Check external downloads and inline OCI tool pins, create PRs |
 | `check-packages.yml` | Daily (8am UTC) | Check APT package version updates, create PRs |
 | `validate.yml` | PR/push/dispatch | shellcheck + mkosi summary validation + profile dependency guard |
 | `test-install.yml` | Manual dispatch | Bootc install test in QEMU/KVM |
