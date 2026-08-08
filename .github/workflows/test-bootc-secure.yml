@@ -128,51 +128,74 @@ jobs:
             exit 1
           }
           echo "/dev/kvm usable as $(id -un)"
-      # The runner host has a read-only /usr and no apt. It is NOT bare: the
-      # incus sysext ships swtpm (and its whole suite), qemu-system-x86_64,
-      # qemu-img and skopeo under /usr/incus/bin, and brew supplies the rest.
-      # Put both on PATH rather than assuming /usr/bin has everything -- an
-      # earlier audit of /usr/bin alone concluded swtpm was missing when it was
-      # simply somewhere else.
-      - name: Resolve the host toolchain
-        run: |
-          set -euo pipefail
-          for d in /usr/incus/bin /home/linuxbrew/.linuxbrew/bin "$HOME/.local/bin"; do
-            [[ -d $d ]] && echo "$d" >> "$GITHUB_PATH"
-          done
-          echo "--- resolved ---"
-          PATH="/usr/incus/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.local/bin:$PATH"
-          missing=()
-          for t in qemu-system-x86_64 qemu-img swtpm skopeo cryptsetup objcopy \
-                   sbverify virt-fw-vars socat ssh scp ss jq python3; do
-            p=$(command -v "$t" 2>/dev/null) || { missing+=("$t"); printf '  %-20s MISSING\n' "$t"; continue; }
-            printf '  %-20s %s\n' "$t" "$p"
-          done
-          if (( ${#missing[@]} )); then
-            echo "::error::host is missing: ${missing[*]}" >&2
-            echo "See shared/bootc-secure/ci/setup-self-hosted-runner.sh for how to add them." >&2
-            exit 1
-          fi
-
-      - name: Log in to GHCR for the update publisher
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          # The publisher shells out to skopeo, which reads this login. Scoped
-          # to the job's own token; nothing is written to the runner's HOME
-          # beyond the containers auth file, which the job-completed hook does
-          # not clear -- so log out again at the end (see the final step).
-          printf '%s' "$GHCR_TOKEN" | skopeo login ghcr.io \
-            --username "${{ github.actor }}" --password-stdin
-
-      - name: Run prepared secure full window
+      # The harness runs in a CONTAINER, not on the host.
+      #
+      # This host has a read-only /usr and no apt. It is not bare -- the incus
+      # sysext supplies swtpm, qemu and skopeo -- but sbverify, socat and
+      # virt-firmware are genuinely absent, and virt-firmware in particular
+      # resolves onto `crypt_r`, which has to be COMPILED. Installing a build
+      # toolchain on the lab host to satisfy a test dependency is the wrong
+      # trade; the containerised toolchain the Argo lane already uses is
+      # proven, and leaves nothing behind on selfie.
+      #
+      # Rootless podman, so the container maps to the unprivileged ghrunner
+      # account rather than root. That mapping is also what makes the harness's
+      # own ownership check pass: the host files are owned by ghrunner, which
+      # appears as uid 0 inside, and the process runs as uid 0.
+      - name: Run the secure window in a container
         env:
           STATE_ROOT: ${{ inputs.state_root }}
           PROFILE: ${{ inputs.profile }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         run: |
           set -o pipefail
-          ./shared/bootc-secure/ci/run-full-window.sh "$STATE_ROOT" "$PROFILE" |& tee /var/tmp/bootc-secure-full-window.log
+          # --group-add keep-groups is load-bearing, not defensive. /dev/kvm on
+          # this host is 0660 root:kvm with NO acl, so access depends entirely
+          # on ghrunner's kvm supplementary group -- and rootless podman drops
+          # supplementary groups unless told otherwise. Without this the device
+          # is passed through but unopenable.
+          #
+          # --runtime crun because keep-groups is a crun feature; the host has
+          # both crun and runc, and leaving the choice to podman's default
+          # would make this work or not depending on configuration elsewhere.
+          podman run --rm \
+            --runtime crun \
+            --group-add keep-groups \
+            --device /dev/kvm \
+            -v "$PWD:/src/snosi" \
+            -v "${STATE_ROOT}:${STATE_ROOT}" \
+            -e STATE_ROOT -e PROFILE -e GHCR_TOKEN -e GHCR_USER \
+            -w /src/snosi \
+            docker.io/library/debian:trixie-slim \
+            bash -euo pipefail -c '
+              export DEBIAN_FRONTEND=noninteractive
+              # Assert the device is actually usable before spending minutes on
+              # apt. A dropped supplementary group shows up here in seconds
+              # instead of as an opaque QEMU failure much later.
+              [ -r /dev/kvm ] && [ -w /dev/kvm ] || {
+                echo "/dev/kvm not usable in-container (uid $(id -u), groups $(id -G))" >&2
+                echo "check --group-add keep-groups and ghrunner kvm membership" >&2
+                exit 1
+              }
+              apt-get update -qq
+              # Same set the Argo secure lane installs, which is the only
+              # toolchain this harness has ever run green against.
+              apt-get install -y -qq --no-install-recommends \
+                qemu-system-x86 qemu-utils ovmf swtpm swtpm-tools \
+                cryptsetup-bin binutils sbsigntool openssh-client iproute2 \
+                jq python3 python3-pip socat git skopeo curl ca-certificates \
+                gcc python3-dev libc6-dev >/dev/null
+              # Not packaged in trixie; provides virt-fw-vars. Needs the gcc and
+              # headers above because pip resolves it onto crypt_r.
+              pip install --quiet --break-system-packages virt-firmware
+              # The publisher writes a tracking tag, so log in INSIDE the
+              # container: the credential never touches the host filesystem and
+              # dies with the container.
+              printf "%s" "$GHCR_TOKEN" | skopeo login ghcr.io \
+                --username "$GHCR_USER" --password-stdin
+              ./shared/bootc-secure/ci/run-full-window.sh "$STATE_ROOT" "$PROFILE"
+            ' |& tee /var/tmp/bootc-secure-full-window.log
       - name: Upload full-window log
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -182,13 +205,19 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-      # always(), because a registry credential left behind by a FAILED run is
-      # exactly the one nobody goes back for. The workspace hook does not touch
-      # the containers auth file -- it lives in the runner account's HOME, not
-      # in _work -- so this step is the only thing that removes it.
-      - name: Log out of GHCR
+      # No host-side GHCR logout is needed: the login happens inside the
+      # container and dies with it. What CAN outlive the job is a container
+      # left running if the step was cancelled mid-run, holding /dev/kvm and
+      # the target disk open -- which would make the next run fail in a way
+      # that looks nothing like its cause.
+      - name: Ensure no container survived the job
         if: always()
-        run: skopeo logout ghcr.io || true
+        run: |
+          left=$(podman ps -q) || exit 0
+          if [[ -n "$left" ]]; then
+            echo "removing containers left behind: $left" >&2
+            podman rm -f $left || true
+          fi
 
   snowfield-hardware:
     if: github.event_name == 'workflow_dispatch' && inputs.run_snowfield_hardware
