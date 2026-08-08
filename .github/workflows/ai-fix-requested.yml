@@ -1,0 +1,66 @@
+name: Assign AI Fix
+
+on:
+  issues:
+    types: [labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: Open issue carrying the ai-fix-requested label
+        required: true
+        type: number
+
+permissions: {}
+
+concurrency:
+  group: ai-fix-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  assign-copilot:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.label.name == 'ai-fix-requested' &&
+       github.event.issue.state == 'open')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate request and assign Copilot
+        env:
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ secrets.COPILOT_ASSIGNMENT_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number || inputs.issue_number }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::COPILOT_ASSIGNMENT_TOKEN is not configured"
+            exit 1
+          fi
+
+          issue_path="repos/${TARGET_REPOSITORY}/issues/${ISSUE_NUMBER}"
+          if [[ $(gh api "$issue_path" --jq '.state') != "open" ]]; then
+            echo "::error::Issue #${ISSUE_NUMBER} is not open"
+            exit 1
+          fi
+          if [[ $(gh api "$issue_path" --jq 'any(.labels[]; .name == "ai-fix-requested")') != "true" ]]; then
+            echo "::error::Issue #${ISSUE_NUMBER} is missing the ai-fix-requested label"
+            exit 1
+          fi
+
+          jq -n \
+            --arg repository "$TARGET_REPOSITORY" \
+            --arg base "$BASE_BRANCH" \
+            '{
+              assignees: ["copilot-swe-agent[bot]"],
+              agent_assignment: {
+                target_repo: $repository,
+                base_branch: $base
+              }
+            }' \
+          | gh api \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$issue_path/assignees" \
+              --input -
