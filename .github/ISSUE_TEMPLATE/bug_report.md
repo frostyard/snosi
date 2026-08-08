@@ -2,7 +2,7 @@
 name: Bug report
 about: Report a reproducible problem with snosi
 title: ""
-labels: ""
+labels: "bug"
 assignees: ""
 ---
 

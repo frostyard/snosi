@@ -378,6 +378,20 @@ during the sysext build.
 2. Compares against `shared/download/package-versions.json`
 3. If changed: updates `package-versions.json`, creates a sysext package-version PR
 
+### triage.yml — Automated Issue Classification
+
+**Trigger:** Issue opened, edited, or reopened.
+
+The workflow fetches the issue with `gh api`, classifies only from explicit
+title signals, and adds at most one of the existing `acmm`, `bug`,
+`documentation`, `enhancement`, or `question` labels. If any classification
+label is already present, it does nothing; it never removes or replaces human
+labels. The label output is allowlisted before `gh issue edit`, issue text is
+not interpolated into workflow expressions or evaluated by the shell, and the
+job receives only `issues: write`. Bug reports created from the repository
+template receive `bug` directly from template front matter, so they do not
+depend on title heuristics.
+
 ### validate.yml — Code Validation
 
 **Trigger:** PR/push to main, manual dispatch

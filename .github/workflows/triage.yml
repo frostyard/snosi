@@ -1,0 +1,79 @@
+name: Label Issues
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+permissions: {}
+
+concurrency:
+  group: issue-label-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Add missing classification label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          label=$(
+            gh api "repos/${TARGET_REPOSITORY}/issues/${ISSUE_NUMBER}" \
+            | jq -r '
+                (.title | ascii_downcase) as $title
+                | [.labels[].name] as $labels
+                | if ($labels | map(select(
+                    . == "acmm"
+                    or . == "bug"
+                    or . == "documentation"
+                    or . == "enhancement"
+                    or . == "question"
+                  )) | length > 0) then
+                    ""
+                  elif ($title | test("^\\[acmm\\b")) then
+                    "acmm"
+                  elif ($title | test(
+                    "(^|[^[:alnum:]])(bug|broken|cannot|crash|emergency|error|fail(ed|s|ure)?|fix|missing|regression|unsigned)([^[:alnum:]]|$)"
+                  )) then
+                    "bug"
+                  elif ($title | test(
+                    "(^|[^[:alnum:]])(doc|docs|documentation|guide|readme)([^[:alnum:]]|$)"
+                  )) then
+                    "documentation"
+                  elif (($title | endswith("?")) or ($title | test(
+                    "^(can|does|how|is|should|what|when|where|why)\\b"
+                  ))) then
+                    "question"
+                  elif ($title | test(
+                    "(^|[^[:alnum:]])(add|enhance(ment)?|feat(ure)?|proposal|request|support)([^[:alnum:]]|$)"
+                  )) then
+                    "enhancement"
+                  else
+                    ""
+                  end
+              '
+          )
+
+          if [[ -z "$label" ]]; then
+            echo "No missing classification label detected for issue #${ISSUE_NUMBER}"
+            exit 0
+          fi
+
+          case "$label" in
+            acmm|bug|documentation|enhancement|question) ;;
+            *)
+              echo "::error::Unexpected classification label: $label"
+              exit 1
+              ;;
+          esac
+
+          gh issue edit "$ISSUE_NUMBER" \
+            --repo "$TARGET_REPOSITORY" \
+            --add-label "$label"
