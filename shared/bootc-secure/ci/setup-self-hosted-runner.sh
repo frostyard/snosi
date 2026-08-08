@@ -66,6 +66,10 @@ LABELS=self-hosted,linux,x64,bootc-secure
 # re-derive BOTH -- do not carry the old hash forward.
 RUNNER_VERSION=2.336.0
 RUNNER_SHA256=04cf0be1aff4c3ec3554466c39124ca250e3effd8873bb7e8d68535aa9505d5d
+RUNNER_NAME=selfie-bootc-secure
+# Derived the way svc.sh derives it, verified against the unit actually
+# installed on selfie.
+UNIT="actions.runner.$(printf '%s' "${REPO_URL#https://github.com/}" | tr '/' '-').${RUNNER_NAME}.service"
 
 TOKEN=${1:-}
 [[ -n "$TOKEN" ]] || { echo "usage: $0 <registration-token>" >&2; exit 1; }
@@ -125,6 +129,49 @@ if [[ ! -x ./run.sh ]]; then
     chown -R "$RUNNER_USER:$RUNNER_USER" "$RUNNER_HOME"
 fi
 
+# ---------------------------------------------------------------------------
+# TEAR DOWN ANY PREVIOUS INSTALLATION, BEFORE TOUCHING ANYTHING ELSE.
+#
+# Re-running this script is the normal case, not the exception: it is how a
+# fix gets applied. Three separate things refuse to be reconfigured in place,
+# and each one was found the hard way, one re-run at a time:
+#
+#   * `svc.sh install` exits 1 if the unit file exists. Under `set -e` that
+#     aborted the rest of the script, leaving a registered-but-never-started
+#     runner.
+#   * `config.sh` exits with "Cannot configure the runner because it is
+#     already configured" when .runner exists. `--replace` does NOT cover this
+#     -- it replaces the SERVER-side registration, not local state.
+#   * The service holds the config open, so it must stop before either.
+#
+# Order matters: service down, then runner config, then rebuild.
+# ---------------------------------------------------------------------------
+step "tear down any previous installation"
+if [[ -f "/etc/systemd/system/${UNIT}" ]]; then
+    echo "  stopping and removing existing service"
+    ./svc.sh stop      >/dev/null 2>&1 || true
+    ./svc.sh uninstall >/dev/null 2>&1 || true
+    rm -f "/etc/systemd/system/${UNIT}"
+    rm -rf "/etc/systemd/system/${UNIT}.d"
+    systemctl daemon-reload
+else
+    echo "  no existing service"
+fi
+
+if [[ -f "$RUNNER_HOME/.runner" ]]; then
+    echo "  removing existing runner configuration"
+    # Prefer the supported path. If the token type is not accepted for removal,
+    # clear local state instead -- `--replace` below then takes over the
+    # server-side registration of the same name, so the end state is identical.
+    sudo -u "$RUNNER_USER" ./config.sh remove --token "$TOKEN" >/dev/null 2>&1 \
+        || rm -f "$RUNNER_HOME/.runner" "$RUNNER_HOME/.credentials" \
+                 "$RUNNER_HOME/.credentials_rsaparams"
+    [[ ! -f "$RUNNER_HOME/.runner" ]] \
+        || { echo "could not clear the existing runner configuration" >&2; exit 1; }
+else
+    echo "  no existing runner configuration"
+fi
+
 step "job-completed hook: wipe the workspace between jobs"
 # This is what recovers most of --ephemeral's value without it. See the note on
 # layer 4 at the top of this file for why --ephemeral itself is not usable here.
@@ -159,19 +206,20 @@ step "configure (persistent registration; workspace wiped per job)"
 sudo -u "$RUNNER_USER" ./config.sh \
     --url "$REPO_URL" \
     --token "$TOKEN" \
-    --name "selfie-bootc-secure" \
+    --name "$RUNNER_NAME" \
     --labels "$LABELS" \
     --work _work \
     --unattended \
     --replace
 
 step "install as a systemd service"
+# The teardown step above already removed any previous unit, so this cannot hit
+# svc.sh's "Service already exists" exit-1 path.
 ./svc.sh install "$RUNNER_USER"
 
 # svc.sh generates the unit, so configure restart behaviour in a drop-in rather
 # than editing it -- a later `svc.sh install` would overwrite the unit and
 # silently take the setting with it.
-UNIT="actions.runner.$(printf '%s' "${REPO_URL#https://github.com/}" | tr '/' '-').selfie-bootc-secure.service"
 install -d -m 0755 "/etc/systemd/system/${UNIT}.d"
 install -m 0644 /dev/stdin "/etc/systemd/system/${UNIT}.d/10-restart.conf" <<'DROPIN'
 [Service]
