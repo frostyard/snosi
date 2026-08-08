@@ -149,6 +149,12 @@ jobs:
         # hooks. No root, no bind mount, no image build.
         run: ./test/snosi-etc-diff-test.sh
 
+      - name: Validate verified-download split checksum lookup
+        # Fixture test ensures verified_download() resolves keys from both split
+        # metadata files and honors CHECKSUMS_FILE overrides. No root, network,
+        # or image build.
+        run: ./test/verified-download-split-checksums-test.sh
+
       - name: Validate update-checksums split-file selection
         # shared/download/update-checksums.sh resolves an existing key by
         # searching sysext-checksums.json then image-checksums.json relative to
