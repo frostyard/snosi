@@ -51,15 +51,14 @@ check is a blocker to fix, not a reason to disable or relax the check.
 
 ## Risk assessment
 
-Before editing, classify the change by its highest applicable risk:
+Before editing, assess the change by its highest applicable risk. Security
+boundaries such as signing, boot trust, TPM/LUKS, installer disk writes,
+credentials, protected CI, and publication controls are high risk. For these
+changes, document the threat and rollback model, test both success and
+rejection paths, and obtain maintainer review. Documentation-only work is not
+low risk when it changes a security or operational contract.
 
-| Risk | Examples | Minimum evidence |
-| --- | --- | --- |
-| Low | Documentation or comments with no operational effect | Link and formatting checks |
-| Medium | Build configuration, packages, tests, or non-publishing automation | Targeted tests and relevant CI |
-| High | Signing, boot trust, TPM/LUKS, installer disk writes, credentials, protected CI, or publication | Documented threat/failure analysis, positive and negative tests, and maintainer review |
-
-When risk is uncertain, use the higher class. Scope expansion or an unexpected
+When risk is uncertain, treat it as high risk. Scope expansion or an unexpected
 security-sensitive finding requires reassessment before continuing.
 
 ## Review and enforcement
@@ -69,7 +68,7 @@ performed, and any validation that could not be run. Reviewers apply
 [the PR review rubric](review-rubric.md), while
 [AI Quality Assurance](AI-QUALITY-ASSURANCE.md) describes the repository's
 quality signals. Repository-specific implementation constraints live in
-[`AGENTS.md`](../AGENTS.md), [`CLAUDE.md`](../CLAUDE.md), and `yeti/`.
+[`AGENTS.md`](../AGENTS.md) and `yeti/`.
 
 The workflows in `.github/workflows/` are structural gates; policy text does
 not replace them. Exceptions must be proposed transparently in a pull request,
