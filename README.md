@@ -646,6 +646,7 @@ installation or the root update service.
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
+| `triage.yml` | Issue open/edit/reopen | Adds a missing classification label from explicit title signals without replacing human labels |
 | `check-dependencies.yml` | Weekly | Checks pinned direct downloads and inline image-tool pins, opens target-specific PRs |
 | `check-packages.yml` | Daily | Checks external APT package versions for sysexts, updates `package-versions.json`, opens PRs |
 | `nightly-compliance.yml` | Nightly / manual | Re-runs secretless security and publication policy contracts to detect compliance drift |
