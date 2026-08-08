@@ -100,6 +100,32 @@ usermod -aG kvm "$RUNNER_USER"
 # membership are each equivalent to root on this host.
 install -d -m 0750 -o "$RUNNER_USER" -g "$RUNNER_USER" "$RUNNER_HOME"
 
+step "subuid/subgid ranges for rootless podman"
+# The harness runs inside a container, because this host has a read-only /usr
+# and cannot install swtpm/sbverify/virt-firmware natively. Rootless podman
+# needs a subordinate id range, and `useradd --system` does not create one --
+# without this, podman fails with "no subuid ranges found".
+#
+# Range chosen to avoid the two that already exist on this host:
+#   builder  100000 .. 165535
+#   root    1000000 .. 1000999999
+# so ghrunner takes 200000 .. 265535, between them and overlapping neither.
+# Overlapping ranges would let one account's containers map onto another's
+# files, which is the whole thing subordinate ids exist to prevent.
+for f in /etc/subuid /etc/subgid; do
+    touch "$f"
+    if ! grep -q "^${RUNNER_USER}:" "$f"; then
+        printf '%s:200000:65536\n' "$RUNNER_USER" >>"$f"
+        echo "  added $RUNNER_USER range to $f"
+    else
+        echo "  $f already has a range for $RUNNER_USER"
+    fi
+done
+command -v podman >/dev/null || { echo "podman is required on this host" >&2; exit 1; }
+for h in /usr/bin/newuidmap /usr/bin/newgidmap; do
+    [[ -u $h ]] || { echo "$h is missing or not setuid; rootless podman cannot map ids" >&2; exit 1; }
+done
+
 step "verify the account really is unprivileged"
 fail=0
 if sudo -l -U "$RUNNER_USER" 2>/dev/null | grep -qv "not allowed"; then
