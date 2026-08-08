@@ -747,10 +747,11 @@ shipped NvPCR definition plus the product/login writers. Keep TPM SRK setup and
 the signed-PCR-11 LUKS path enabled. Do not delete/recreate the anchor or TPM NV
 indexes as a key-rotation shortcut; that changes the attestation baseline.
 
-**Update signing pubring (Phase 3; .pgp fix 2026-07-17):** every native image
-(including `cayo-ab-raw`) ships the committed pubring at BOTH
-`/usr/lib/systemd/import-pubring.gpg` AND `/usr/lib/systemd/import-pubring.pgp`
-via `file:target` `ExtraTrees=` pairs in `shared/outformat/ab-root/mkosi.conf`
+**Update signing pubring (Phase 3; .pgp fix 2026-07-17):** every image ships
+the combined runtime pubring (`shared/sysext/keys/import-pubring.gpg`) at BOTH
+`/usr/lib/systemd/import-pubring.gpg` AND `/usr/lib/systemd/import-pubring.pgp`;
+base wires it for bootc and `shared/outformat/ab-root/mkosi.conf` repeats the
+`file:target` `ExtraTrees=` pairs for native profiles
 (the pinned mkosi's `install_tree()` copies a single file when a target is
 given — confirmed in `.mkosi/mkosi/__init__.py`). **The `.pgp` name is the one
 systemd 261 actually reads** (meson: `VENDOR_KEYRING_PATH =
@@ -783,8 +784,10 @@ absence in-guest, verifies its Step 6 signed update hop through the vendor
 through the same shipped ring (Step 6c). Its `SKIP_BUILD=1` mode therefore
 also requires `SIGNING_GNUPGHOME` (the homedir whose key the prebuilt
 images embed).
-The committed public keyring carries the PRODUCTION update-signing key
-(`shared/native-ab/keys/import-pubring.gpg`, ed25519; fingerprint, custody,
+The combined runtime ring carries both the PRODUCTION update-signing key and
+the Frostyard repository key used to verify signed sysext manifests. The
+narrower native publication trust root remains
+`shared/native-ab/keys/import-pubring.gpg` (ed25519; fingerprint, custody,
 and rotation procedure in `shared/native-ab/keys/README.md`); its private
 half is offline-only (for CI, the `native-promotion` environment's
 `NATIVE_UPDATE_SIGNING_KEY` secret) and is never committed and never placed
@@ -793,14 +796,14 @@ injected at `/etc/systemd/import-pubring.gpg` (the `cayo-ab-raw` harnesses)
 or baked over the `/usr` pair at build time
 (`test/native-ab-secure-boot-test.sh`, above) — and never need this key.
 
-**Accepted risk — unsigned sysexts on native installs:** native production
-candidates (`cayo-ab`, `snow-ab`, `snowfield-ab`) ship every sysext transfer
-with `Verify=false` and every sysext `.feature` defaulting to `Enabled=false`.
-Unlike the three OS transfers (`Verify=yes`, signed-manifest enforced), sysext
-downloads are not currently signature-verified. This is an explicit accepted
-risk until signed per-component metadata ships for sysexts — do not flip any
-sysext `.feature` to `Enabled=true` by default on a native production
-candidate before that lands.
+**Signed sysext metadata:** every sysext transfer uses `Verify=true` and
+repogen publishes a detached `SHA256SUMS.gpg` beside each component manifest.
+The combined runtime keyring closes that trust path on bootc and native images;
+`test/sysext-signature-verification-test.sh` freezes the transfer and keyring
+wiring. Keep every sysext `.feature` defaulting to `Enabled=false`: signature
+verification authenticates updates but does not change the opt-in policy.
+The repogen signing release and signature backfill for every existing component
+must precede publication of an image containing this client-side change.
 
 **Release-ordering constraint (sysext component migration):** as of the
 migration that split the shared `/usr/lib/sysupdate.d/` target into

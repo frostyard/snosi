@@ -1159,12 +1159,11 @@ do not merge/publish base images built after this migration until that updex
 release is published to the Frostyard APT repo, or an old updex silently
 fails to discover any component-scoped sysext.
 
-**Accepted risk — unsigned sysexts on native installs:** on native A/B
-production candidates (`cayo-ab`, `snow-ab`, `snowfield-ab`), sysext
-transfers keep `Verify=false` and every `.feature` defaults to
-`Enabled=false`. This is an explicit accepted risk until signed
-per-component metadata ships for sysexts; do not enable sysexts by default
-on a native production candidate before that lands.
+**Signed sysext metadata:** all sysext transfers set `Verify=true`. Repogen
+publishes detached `SHA256SUMS.gpg` signatures and every image carries the
+combined native-update and repository-signing public ring at both systemd
+vendor-keyring names. Every `.feature` still defaults to `Enabled=false`.
+The signing release and signature backfill must precede the verifying image.
 
 See [sysexts.md](sysexts.md) for details.
 

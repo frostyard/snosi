@@ -1,6 +1,6 @@
 [Transfer]
 Features=incus
-Verify=false
+Verify=true
 
 [Source]
 Type=url-file

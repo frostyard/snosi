@@ -16,9 +16,14 @@ Builds the base image and all 22 sysexts, publishes to the Frostyard repository 
 3. Run `check-duplicate-packages.sh` to validate no duplicate packages across configs
 4. Build base + all sysext images via mkosi
 5. Run `sysextmv.sh` and `manifestmv.sh` to organize output into `output/sysexts/` and `output/manifests/`
-6. Upload sysext artifacts to Frostyard R2 repository via `frostyard/repogen` action
+6. Upload sysext artifacts and GPG-signed `SHA256SUMS` metadata to Frostyard R2 via the `frostyard/repogen` action
 7. Upload manifest files to R2
 8. Uses concurrent workflow cancellation (newer pushes cancel in-progress builds)
+
+Repogen uses `REPOGEN_GPG_KEY` to emit a detached `SHA256SUMS.gpg` per
+component; clients authenticate it because shipped transfers use `Verify=true`.
+A signing-capable repogen release and a signature backfill for every existing
+component are a release-ordering prerequisite for the verifying client image.
 
 The publish step uses `skip-duplicates: true`: a sysext raw whose versioned
 filename already exists in R2 is not re-uploaded. Since the filename version

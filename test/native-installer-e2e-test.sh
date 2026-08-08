@@ -11,10 +11,11 @@
 # Controller scoping (this is a local rehearsal, not a real R2 fetch): a
 # local origin (test/lib/range-http-server.py) stands in for
 # repository.frostyard.org -- identical URL layout
-# (os/native/v1/<product>/x86-64), a real signed index, and the SAME stock
-# shipped pubring (shared/native-ab/keys/import-pubring.gpg) every real
-# client trusts. No keyring is ever injected into a built image or the ISO;
-# every gpgv call in this test verifies against exactly what ships. MokManager's
+# (os/native/v1/<product>/x86-64), a real signed index, and the canonical
+# native update pubring (shared/native-ab/keys/import-pubring.gpg), which is a
+# subset of the combined runtime ring real clients ship. No keyring is injected
+# into a built image or the ISO; every gpgv call verifies the native signer.
+# MokManager's
 # one-time interactive UI approval is simulated by host-side `virt-fw-vars
 # --add-mok` injection into the SAME OVMF varstore the install ran against --
 # the mokutil staging itself (mokutil --import, --list-new, --restage-mok) IS

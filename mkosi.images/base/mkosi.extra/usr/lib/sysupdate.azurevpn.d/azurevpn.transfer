@@ -1,6 +1,6 @@
 [Transfer]
 Features=azurevpn
-Verify=false
+Verify=true
 
 [Source]
 Type=url-file
