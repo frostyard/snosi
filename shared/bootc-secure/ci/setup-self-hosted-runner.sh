@@ -34,9 +34,22 @@
 #      Compromise costs that account's files and /dev/kvm -- not root, not the
 #      k3s state, not the operator's home directory.
 #
-#   4. The runner is EPHEMERAL: it accepts exactly one job, then de-registers.
-#      Nothing persists between jobs, so one job cannot stage anything for the
-#      next.
+#   4. The workspace is wiped after every job, so one job cannot stage files
+#      for the next.
+#
+# Layer 4 was originally `--ephemeral`, which is strictly stronger. It is not
+# usable with a systemd-managed runner: an ephemeral runner de-registers and
+# deletes its own .runner/.credentials after one job, and svc.sh's unit cannot
+# recreate them. That was observed live -- the runner took exactly one job (run
+# 31227792302), disappeared from the API, and never came back. --ephemeral is
+# designed for orchestrators that mint a fresh JIT config per job.
+#
+# The cleanup hook recovers the file-isolation half of that property. It does
+# NOT defend against a job that tampers with the runner installation itself.
+# Restoring that would mean storing a PAT on this host to re-register after
+# every job, which trades a bounded risk for a standing credential; layers 1-3
+# already require an attacker to hold repository write access before any of
+# this is reachable.
 #
 # Do not weaken any layer on the assumption that the others hold. They cover
 # different failure modes: 1 is a workflow property, 2 is a repository setting,
@@ -112,20 +125,73 @@ if [[ ! -x ./run.sh ]]; then
     chown -R "$RUNNER_USER:$RUNNER_USER" "$RUNNER_HOME"
 fi
 
-step "configure (ephemeral: one job per registration)"
+step "job-completed hook: wipe the workspace between jobs"
+# This is what recovers most of --ephemeral's value without it. See the note on
+# layer 4 at the top of this file for why --ephemeral itself is not usable here.
+install -m 0755 /dev/stdin "$RUNNER_HOME/wipe-work.sh" <<'HOOK'
+#!/usr/bin/bash
+# Runs after every job (ACTIONS_RUNNER_HOOK_JOB_COMPLETED), as the runner user.
+# Leaves _work itself in place -- the runner expects its work dir to exist --
+# and removes only its contents, so one job cannot leave files for the next.
+set -uo pipefail
+work="$(dirname "$0")/_work"
+[[ -d "$work" ]] || exit 0
+find "$work" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null
+echo "runner workspace wiped"
+exit 0
+HOOK
+chown "$RUNNER_USER:$RUNNER_USER" "$RUNNER_HOME/wipe-work.sh"
+
+# .env is read by the runner service at start; this is the supported way to set
+# the hook without editing the generated unit.
+touch "$RUNNER_HOME/.env"
+sed -i '/^ACTIONS_RUNNER_HOOK_JOB_COMPLETED=/d' "$RUNNER_HOME/.env"
+echo "ACTIONS_RUNNER_HOOK_JOB_COMPLETED=${RUNNER_HOME}/wipe-work.sh" >>"$RUNNER_HOME/.env"
+chown "$RUNNER_USER:$RUNNER_USER" "$RUNNER_HOME/.env"
+
+step "configure (persistent registration; workspace wiped per job)"
+# NOT --ephemeral. An ephemeral runner de-registers after one job and deletes
+# its own .runner/.credentials, which svc.sh's unit cannot recreate -- the
+# result is a runner that works exactly once and then silently disappears.
+# Observed live: run 31227792302 completed, after which the runner vanished
+# from the API and never returned. --ephemeral is for orchestrators that mint
+# a fresh JIT config per job, not for a systemd service.
 sudo -u "$RUNNER_USER" ./config.sh \
     --url "$REPO_URL" \
     --token "$TOKEN" \
     --name "selfie-bootc-secure" \
     --labels "$LABELS" \
     --work _work \
-    --ephemeral \
     --unattended \
     --replace
 
 step "install as a systemd service"
 ./svc.sh install "$RUNNER_USER"
+
+# svc.sh generates the unit, so configure restart behaviour in a drop-in rather
+# than editing it -- a later `svc.sh install` would overwrite the unit and
+# silently take the setting with it.
+UNIT="actions.runner.$(printf '%s' "${REPO_URL#https://github.com/}" | tr '/' '-').selfie-bootc-secure.service"
+install -d -m 0755 "/etc/systemd/system/${UNIT}.d"
+install -m 0644 /dev/stdin "/etc/systemd/system/${UNIT}.d/10-restart.conf" <<'DROPIN'
+[Service]
+Restart=always
+RestartSec=5
+DROPIN
+systemctl daemon-reload
 ./svc.sh start
+
+step "confirm the runner survives a restart"
+# The whole point of the change away from --ephemeral. Restart it and require
+# it to come back, rather than assuming.
+systemctl restart "$UNIT"
+for _ in $(seq 1 30); do
+    systemctl is-active --quiet "$UNIT" && break
+    sleep 2
+done
+systemctl is-active --quiet "$UNIT" \
+    || { echo "runner service did not come back after restart" >&2; exit 1; }
+echo "  ok: $UNIT active after restart"
 
 cat <<EOF
 
@@ -134,11 +200,11 @@ Done.
   account : $RUNNER_USER  (groups: $(id -nG "$RUNNER_USER"))
   home    : $RUNNER_HOME
   labels  : $LABELS
-  mode    : ephemeral (de-registers after each job)
+  mode    : persistent registration, workspace wiped after each job
 
-Because the runner is ephemeral it de-registers after every job. The systemd
-unit restarts it, which re-registers it -- that is the intended loop, not a
-fault.
+The runner stays registered between jobs. Confirm it is still listed AFTER a
+job completes -- an earlier version of this script used --ephemeral, which made
+the runner take exactly one job and then vanish.
 
 Verify from a machine with gh:
   gh api repos/frostyard/snosi/actions/runners \\
