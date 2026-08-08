@@ -306,6 +306,25 @@ promotion gate remains the Tier 1 smoke test inside
 not a blocker; `if: failure()` uploads `nightly-harness-logs-<profile>`
 for exactly that purpose.
 
+### nightly-compliance.yml — Nightly Policy Drift Detection
+
+**Trigger:** Scheduled daily at `04:30 UTC`, plus manual dispatch.
+
+This secretless workflow re-runs the repository's existing static security and
+publication contracts independently of pull request activity. It checks the
+runtime `/etc` mutation guard, frozen native A/B contracts and publication
+guard, bootc secure CI wiring and publication guard, and signed sysext metadata
+policy. These are selected because they are fast, deterministic, require no
+root or network after checkout, and cover policy that must remain true even
+when no code is changing. Deep image-build and boot evidence remains in
+`native-nightly.yml` and `bootc-secure-nightly.yml`; this workflow does not
+duplicate those expensive jobs or publish artifacts.
+
+Default permissions are empty and the sole job receives only `contents: read`.
+Checkout credentials are not persisted, no environment or repository secret is
+referenced, and `cancel-in-progress: false` prevents a delayed run from being
+silently replaced by the next schedule.
+
 ### check-dependencies.yml — External Dependency Updates
 
 **Trigger:** Weekly (Monday 9am UTC), manual dispatch
