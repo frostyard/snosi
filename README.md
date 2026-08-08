@@ -646,6 +646,7 @@ installation or the root update service.
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
+| `copilot-review-apply.yml` | Submitted PR review / manual | Validates actionable feedback on an internal PR and asks Copilot to apply it once |
 | `check-dependencies.yml` | Weekly | Checks pinned direct downloads and inline image-tool pins, opens target-specific PRs |
 | `check-packages.yml` | Daily | Checks external APT package versions for sysexts, updates `package-versions.json`, opens PRs |
 | `validate.yml` | PR/push | shellcheck (all shebang-discovered scripts, `-S warning`) + `mkosi summary` validation for every profile |
