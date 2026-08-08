@@ -166,12 +166,30 @@ sudo -u "$RUNNER_USER" ./config.sh \
     --replace
 
 step "install as a systemd service"
+# Derived, not hardcoded: svc.sh builds the unit name from the repo path and
+# runner name. Verified against the name actually installed on selfie.
+UNIT="actions.runner.$(printf '%s' "${REPO_URL#https://github.com/}" | tr '/' '-').selfie-bootc-secure.service"
+
+# svc.sh install EXITS 1 if the unit already exists ("Service ... already
+# exists"), which under `set -e` aborts everything after it: no drop-in, no
+# start, and a runner left registered-but-offline. `--replace` on config.sh
+# makes the REGISTRATION idempotent; it does nothing for the service. Tear the
+# old unit down first so re-running this script is genuinely idempotent.
+#
+# Observed live: a re-run left the 23:36 unit in place beside a 00:20
+# registration, and the runner sat offline until this was fixed.
+if [[ -f "/etc/systemd/system/${UNIT}" ]]; then
+    echo "  existing service found; removing it before reinstalling"
+    ./svc.sh stop      || true
+    ./svc.sh uninstall || true
+    rm -f "/etc/systemd/system/${UNIT}"
+    systemctl daemon-reload
+fi
 ./svc.sh install "$RUNNER_USER"
 
 # svc.sh generates the unit, so configure restart behaviour in a drop-in rather
 # than editing it -- a later `svc.sh install` would overwrite the unit and
 # silently take the setting with it.
-UNIT="actions.runner.$(printf '%s' "${REPO_URL#https://github.com/}" | tr '/' '-').selfie-bootc-secure.service"
 install -d -m 0755 "/etc/systemd/system/${UNIT}.d"
 install -m 0644 /dev/stdin "/etc/systemd/system/${UNIT}.d/10-restart.conf" <<'DROPIN'
 [Service]
