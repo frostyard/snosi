@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "rolling_window_days": 30,
+  "minimum_sample_size": 10,
+  "signals": {
+    "pr_acceptance_rate": "docs/metrics.md#1-pr-acceptance-rate",
+    "review_iterations": "docs/metrics.md#2-review-iterations-to-merge",
+    "ci_first_pass_rate": "docs/metrics.md#4-ci-first-pass-rate"
+  },
+  "thresholds": {
+    "relative_regression": 0.1,
+    "consecutive_improved_windows_to_relax": 2
+  },
+  "actions": {
+    "pr_acceptance_rate": [
+      "tighten affected change guidance in AGENTS.md, CLAUDE.md, or yeti/"
+    ],
+    "review_iterations": [
+      "make the recurring expectation explicit in the pull request template or docs"
+    ],
+    "ci_first_pass_rate": [
+      "add or document the missing targeted local check"
+    ]
+  },
+  "guardrails": {
+    "insufficient_data": "hold",
+    "required_checks": "never_relax",
+    "security_checks": "never_relax",
+    "changes_via_pull_request": true
+  }
+}

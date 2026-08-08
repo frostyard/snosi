@@ -14,6 +14,14 @@ This repository uses existing build, test, and validation workflows as its quali
 2. Review failing job logs to identify regressions in build output, tests, or publication checks.
 3. Confirm issue-specific changes include targeted verification and preserve existing contract tests.
 
+## Auto-QA Self-Tuning
+
+`.github/auto-qa-tuning.json` defines the machine-readable feedback policy for
+the live outcome signals in `docs/metrics.md`. A meaningful regression routes
+to the relevant guidance or local-check improvement; small samples hold the
+current policy. Required and security checks are never relaxed, and any
+adjustment must be proposed through a pull request.
+
 ## Quality-Gated Change Expectation
 
 Changes should be considered ready only when relevant existing validations pass and no new security or secret-scanning concerns are introduced.
