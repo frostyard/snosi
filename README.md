@@ -649,6 +649,11 @@ installation or the root update service.
 | `test-install.yml` | Manual | Signature-verified bootc installation test in QEMU/KVM |
 | `scorecard.yml` | Weekly | OpenSSF supply-chain security analysis |
 
+Delivery metrics for the change process itself — PR acceptance rate, review
+iterations, time to merge, and CI first-pass rate, with the exact `gh`/`jq`
+queries that collect each one — are defined in
+[`docs/metrics.md`](docs/metrics.md).
+
 ## Frostyard Custom Packages
 
 The Frostyard repository provides custom packages for Snow Linux:
