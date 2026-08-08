@@ -1,6 +1,6 @@
 [Transfer]
 Features=k3s
-Verify=false
+Verify=true
 
 [Source]
 Type=url-file

@@ -1,6 +1,6 @@
 [Transfer]
 Features=lemonade
-Verify=false
+Verify=true
 
 [Source]
 Type=url-file

@@ -83,6 +83,7 @@ IMAGE_ID=cayo
 CHANNEL="${IMAGE_ID}-ab"
 SIGNING_KEY="$ROOT_DIR/.snosi-private/os-update-signing.key"
 PUBRING="$ROOT_DIR/shared/native-ab/keys/import-pubring.gpg"
+RUNTIME_PUBRING="$ROOT_DIR/shared/sysext/keys/import-pubring.gpg"
 
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/ssh.sh"
@@ -445,8 +446,8 @@ vm_ssh 'systemctl is-system-running --wait' >/dev/null || true
 assert_no_update_activity
 
 vm_ssh 'cat /usr/lib/systemd/import-pubring.gpg' >"$WORK_DIR/guest-pubring.gpg"
-assert_true "guest's shipped pubring is the committed DEV pubring (byte-identical)" \
-    cmp -s "$WORK_DIR/guest-pubring.gpg" "$PUBRING"
+assert_true "guest's shipped pubring is the combined runtime pubring (byte-identical)" \
+    cmp -s "$WORK_DIR/guest-pubring.gpg" "$RUNTIME_PUBRING"
 assert_false "no /etc pubring override present (this test never installs one -- the whole point)" \
     vm_ssh 'test -e /etc/systemd/import-pubring.gpg'
 

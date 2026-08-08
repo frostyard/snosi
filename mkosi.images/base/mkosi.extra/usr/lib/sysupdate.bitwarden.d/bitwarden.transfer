@@ -1,6 +1,6 @@
 [Transfer]
 Features=bitwarden
-Verify=false
+Verify=true
 
 [Source]
 Type=url-file

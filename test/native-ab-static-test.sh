@@ -26,18 +26,20 @@ fi
 # keeps working there too.
 grep -q '^[[:space:]]*dm_crypt$' "$root/mkosi.profiles/cayo-ab-raw/mkosi.conf"
 
-# Update signing pubring (docs/native-ab-contracts.md §7): one canonical
-# committed copy, wired into every native image (including cayo-ab-raw) via
-# a file:target ExtraTrees= pair in the generic ab-root fragment.
+# The runtime ring combines the native OS-update key with the repository key
+# used for signed sysext manifests. Native publication verification keeps using
+# the narrower native-only ring.
 pubring="$root/shared/native-ab/keys/import-pubring.gpg"
+runtime_pubring="$root/shared/sysext/keys/import-pubring.gpg"
 [[ -s "$pubring" ]]
-grep -q '^ExtraTrees=%D/shared/native-ab/keys/import-pubring.gpg:/usr/lib/systemd/import-pubring.gpg$' \
+[[ -s "$runtime_pubring" ]]
+grep -q '^ExtraTrees=%D/shared/sysext/keys/import-pubring.gpg:/usr/lib/systemd/import-pubring.gpg$' \
     "$ab/mkosi.conf"
 # systemd 261 renamed the vendor keyring to import-pubring.pgp with NO legacy
 # .gpg fallback for the /usr path (only /etc keeps a legacy name) -- shipping
 # only .gpg made every real systemd-sysupdate pull fail "No public key"
 # (minisnow, 2026-07-17). Both names must ship from the same committed source.
-grep -q '^ExtraTrees=%D/shared/native-ab/keys/import-pubring.gpg:/usr/lib/systemd/import-pubring.pgp$' \
+grep -q '^ExtraTrees=%D/shared/sysext/keys/import-pubring.gpg:/usr/lib/systemd/import-pubring.pgp$' \
     "$ab/mkosi.conf"
 [[ -f "$root/shared/native-ab/keys/README.md" ]]
 

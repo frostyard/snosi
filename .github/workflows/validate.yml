@@ -164,6 +164,11 @@ jobs:
         # siblings stay byte-identical. No root, no network, no image build.
         run: ./test/update-checksums-split-test.sh
 
+      - name: Validate sysext signature verification
+        # Static guard: every component requires signed metadata and both
+        # systemd vendor-keyring names carry the canonical combined trust ring.
+        run: ./test/sysext-signature-verification-test.sh
+
       - name: Validate sysext required paths finalizer
         # Fixture regression test for whitespace-preserving parsing of sysext
         # required-paths.txt entries. No root, network, or image build.
