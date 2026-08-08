@@ -332,13 +332,13 @@ CurrentSymlink=<name>.raw
 
 `Verify=true` makes systemd-sysupdate authenticate the component's detached
 `SHA256SUMS.gpg` before trusting the hashes in `SHA256SUMS`. Repogen signs each
-manifest with the Frostyard repository key. The base image ships
-`shared/sysext/keys/import-pubring.gpg` at both systemd vendor-keyring names;
-that runtime ring combines the repository key with the separate native OS
-update key because systemd has one vendor keyring for all transfers. The `gpg`
-package is a runtime dependency of this verification and must remain in the
-base package set. Publish and backfill signatures for every component before
-shipping an image that enables verification.
+manifest with the Frostyard repository key. The base image ships that
+repository-only key at both systemd vendor-keyring names. Native A/B profiles
+overlay `shared/sysext/keys/import-pubring.gpg`, which combines it with the
+separate native OS-update key because systemd has one vendor keyring for all
+transfers. The `gpg` package is a runtime dependency of this verification and
+must remain in the base package set. Publish and backfill signatures for every
+component before shipping an image that enables verification.
 
 ### Feature file (`<name>.feature`)
 

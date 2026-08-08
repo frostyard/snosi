@@ -747,11 +747,12 @@ shipped NvPCR definition plus the product/login writers. Keep TPM SRK setup and
 the signed-PCR-11 LUKS path enabled. Do not delete/recreate the anchor or TPM NV
 indexes as a key-rotation shortcut; that changes the attestation baseline.
 
-**Update signing pubring (Phase 3; .pgp fix 2026-07-17):** every image ships
-the combined runtime pubring (`shared/sysext/keys/import-pubring.gpg`) at BOTH
-`/usr/lib/systemd/import-pubring.gpg` AND `/usr/lib/systemd/import-pubring.pgp`;
-base wires it for bootc and `shared/outformat/ab-root/mkosi.conf` repeats the
-`file:target` `ExtraTrees=` pairs for native profiles
+**Update signing pubring (Phase 3; .pgp fix 2026-07-17):** bootc images ship
+only the Frostyard repository key at BOTH
+`/usr/lib/systemd/import-pubring.gpg` AND `/usr/lib/systemd/import-pubring.pgp`.
+Native profiles overlay those paths with the combined repository + OS-update
+ring (`shared/sysext/keys/import-pubring.gpg`) through `file:target`
+`ExtraTrees=` pairs in `shared/outformat/ab-root/mkosi.conf`
 (the pinned mkosi's `install_tree()` copies a single file when a target is
 given — confirmed in `.mkosi/mkosi/__init__.py`). **The `.pgp` name is the one
 systemd 261 actually reads** (meson: `VENDOR_KEYRING_PATH =
@@ -798,10 +799,11 @@ or baked over the `/usr` pair at build time
 
 **Signed sysext metadata:** every sysext transfer uses `Verify=true` and
 repogen publishes a detached `SHA256SUMS.gpg` beside each component manifest.
-The combined runtime keyring closes that trust path on bootc and native images;
-`test/sysext-signature-verification-test.sh` freezes the transfer and keyring
-wiring. Keep every sysext `.feature` defaulting to `Enabled=false`: signature
-verification authenticates updates but does not change the opt-in policy.
+The repository-only bootc ring and combined native ring close that trust path;
+`test/sysext-signature-verification-test.sh` freezes the least-privilege
+keyring wiring. Keep every sysext `.feature` defaulting to `Enabled=false`:
+signature verification authenticates updates but does not change the opt-in
+policy.
 The repogen signing release and signature backfill for every existing component
 must precede publication of an image containing this client-side change.
 

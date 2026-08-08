@@ -1160,10 +1160,11 @@ release is published to the Frostyard APT repo, or an old updex silently
 fails to discover any component-scoped sysext.
 
 **Signed sysext metadata:** all sysext transfers set `Verify=true`. Repogen
-publishes detached `SHA256SUMS.gpg` signatures and every image carries the
-combined native-update and repository-signing public ring at both systemd
-vendor-keyring names. Every `.feature` still defaults to `Enabled=false`.
-The signing release and signature backfill must precede the verifying image.
+publishes detached `SHA256SUMS.gpg` signatures. Bootc images carry only the
+repository signer; native images overlay the combined native-update and
+repository-signing public ring at both systemd vendor-keyring names. Every
+`.feature` still defaults to `Enabled=false`. The signing release and signature
+backfill must precede the verifying image.
 
 See [sysexts.md](sysexts.md) for details.
 
