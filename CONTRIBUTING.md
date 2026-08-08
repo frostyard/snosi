@@ -12,9 +12,10 @@ Thanks for contributing to snosi.
 ## Development workflow
 
 1. Create a branch from `main`.
-2. Make focused, minimal changes.
-3. Run the most relevant local checks before opening a PR.
-4. Open a PR with clear context and test evidence.
+2. Classify the change using [`docs/risk-tiers.md`](docs/risk-tiers.md).
+3. Make focused, minimal changes.
+4. Run the most relevant local checks before opening a PR.
+5. Open a PR with clear context and test evidence.
 
 ## Build and test
 
