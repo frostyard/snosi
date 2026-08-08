@@ -49,6 +49,14 @@ Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependen
 
 **Jobs:** `mechanics-build` runs on pull requests with read-only permissions. It performs the three-profile disk preparation, build, insecure local package, smoke test, and cleanup path without secrets or registry writes. `secure-build` runs only on `main` non-PR events inside the protected `native-build` environment.
 
+GHCR authentication is repository- and run-scoped: `secure-build` grants
+`packages: write`, while `release` grants only `packages: read`; both use
+`secrets.GITHUB_TOKEN`. Buildah and ORAS consume the token through stdin, and
+Docker login writes the user-context auth file used by Cosign and Skopeo. No
+long-lived GHCR PAT is required. Scheduled mechanics run `31150007630`
+successfully pushed all three profiles with the same repository token, proving
+the cayo, snow, and snowfield package access needed by secure publication.
+
 **Protected publication steps:**
 1. Transiently materialize the durable production MOK/PCR signing credentials supplied by the four `NATIVE_*` secrets, then build and package each profile. The supplied MOK certificate and derived PCR public key must byte-match the committed public identities; runner-local credential files are removed unconditionally after local artifact validation and before registry writes. The distinct disposable PR keys remain ephemeral.
    The package command repeats all five `SNOSI_BOOTC_*` names as explicit sudo
@@ -58,7 +66,7 @@ Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependen
    Local validation requires host Podman, not host bootc: the validator runs the
    candidate image's pinned bootc 1.16.3 to recompute its storage composefs digest.
    The same boundary applies to the policy-copied validation after registry pull.
-2. Chunk, smoke test, and generate the SBOM, then use root Buildah's stdin login to push only the immutable timestamp tag and capture its digest.
+2. Chunk, smoke test, and generate the SBOM, then use root Buildah's stdin login with the job-scoped `GITHUB_TOKEN` to push only the immutable timestamp tag and capture its digest.
 3. Use the Docker credential context to sign `IMAGE@DIGEST`, verify its remote digest/secure labels and Cosign signature, and copy it through the restrictive repository policy before validating the copied UKI/composefs artifact.
 4. Copy the verified immutable digest registry-to-registry to `latest`, and assert that `latest` resolves to that same digest. No local Buildah bytes are pushed under the mutable tag.
 5. Only after promotion, attach/sign the SBOM, attest provenance, and upload manifests to R2. The Snow tag artifact is recorded only after all of those metadata steps succeed, so its presence authorizes the release job to use the current image.

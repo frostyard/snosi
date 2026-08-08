@@ -531,7 +531,10 @@ mechanics images labelled `io.snosi.bootc.secureboot-capable=false`; they do not
 receive publication credentials or write a registry. Protected builds publish
 an immutable version tag, validate its digest, labels, signature, restrictive
 policy copy, and artifact before moving `latest`; a failed candidate cannot
-move `latest`. Native pull requests likewise use disposable RSA-4096 MOK and
+move `latest`. GHCR authentication uses only the run-scoped `GITHUB_TOKEN`
+(`packages: write` for secure publication and `packages: read` for release
+discovery); command-line logins receive it through stdin, never process
+arguments. Native pull requests likewise use disposable RSA-4096 MOK and
 RSA-2048 PCR credentials and cannot publish. Fixture success proves runner and
 publication-contract behavior only, not a live secure installation, update,
 rotation, full rollback window, or Snowfield hardware result.

@@ -207,7 +207,13 @@ sudo implicitly, and secret bytes remain only in the mode-0600 files.
 Every GHCR read and write in secure verification and promotion receives the
 Docker login config explicitly: inspections use `--authfile`, root policy copy
 uses source-only `--src-authfile`, and promotion uses source and destination
-auth files. Pinned Cosign v2.6.1 receives registry auth through command-scoped
+auth files. The run-scoped `GITHUB_TOKEN` is the only GHCR credential:
+`secure-build` grants `packages: write`, while `release` grants only
+`packages: read`; Buildah and ORAS receive it through stdin. The successful
+three-profile mechanics publication run `31150007630` proves repository-token
+write access to the same cayo, snow, and snowfield packages, so a long-lived
+GHCR PAT is neither required nor permitted. Pinned Cosign v2.6.1 receives
+registry auth through command-scoped
 `DOCKER_CONFIG`; it has no registry-config flag. Version-tag resolution must
 equal the pushed digest before policy copy. The verifier never relies on sudo
 preserving a usable user runtime auth path or on root Buildah's credential-store

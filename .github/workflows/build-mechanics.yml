@@ -154,8 +154,8 @@ jobs:
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
           TAG: mechanics-${{ steps.version.outputs.tag }}
-          # Scoped to this repository and this run, unlike the PAT used by the
-          # secure publisher. A mechanics push needs nothing broader.
+          # Scoped to this repository and this run, matching the secure
+          # publisher's least-privilege credential model.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Login via stdin so the token never appears in process arguments.
