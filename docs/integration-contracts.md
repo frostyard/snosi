@@ -368,7 +368,7 @@ staged_at=<iso-8601>          staged_at=<iso-8601>
 ### 7.2 Sysext (repogen → snosi .transfer files)
 - Layout: `ext/index`, `ext/<name>/{SHA256SUMS,<name>.transfer,<name>_<version>_<osversion>_<arch>.raw[.zst|.xz|.gz]}` (`repogen/internal/generator/sysext/generator.go:21-364`).
 - **Filename grammar:** exactly four `_`-separated non-empty fields — **no field may contain an underscore** (`generator.go:342-353`).
-- **Signing posture:** sysext `SHA256SUMS` is **unsigned**; generated transfers are `Verify=false`. This matches snosi's "accepted risk — unsigned sysexts on native installs" (`CLAUDE.md`). 🟡 (accepted risk, documented).
+- **Signing posture:** repogen signs each sysext `SHA256SUMS` as detached `SHA256SUMS.gpg`; generated and shipped transfers use `Verify=true`. Bootc images trust only the Frostyard repository signer; native A/B images overlay a combined ring containing that signer and their separate OS-update signer. Signature publication/backfill must precede the verifying client image. 🟢
 
 ### 7.3 Native OS + ISO (snosi's own pipeline → snosi .transfer files)
 - OS layout: `os/native/v1/<product>/x86-64/`, transfers `Verify=yes`, signed `SHA256SUMS.gpg` (`snosi/shared/native-ab/channels/*/tree/usr/lib/sysupdate.d/*.transfer`, `snosi/shared/native-ab/publish/promote.sh:300-313`).

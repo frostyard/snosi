@@ -1,6 +1,6 @@
 [Transfer]
 Features=paseo
-Verify=false
+Verify=true
 
 [Source]
 Type=url-file

@@ -310,7 +310,7 @@ Defines how systemd-sysupdate downloads the sysext:
 ```ini
 [Transfer]
 Features=<name>
-Verify=false
+Verify=true
 
 [Source]
 Type=url-file
@@ -329,6 +329,16 @@ MatchPattern=<name>_@v_%w_%a.raw.zst \
              <name>_@v_%w_%a.raw
 CurrentSymlink=<name>.raw
 ```
+
+`Verify=true` makes systemd-sysupdate authenticate the component's detached
+`SHA256SUMS.gpg` before trusting the hashes in `SHA256SUMS`. Repogen signs each
+manifest with the Frostyard repository key. The base image ships that
+repository-only key at both systemd vendor-keyring names. Native A/B profiles
+overlay `shared/sysext/keys/import-pubring.gpg`, which combines it with the
+separate native OS-update key because systemd has one vendor keyring for all
+transfers. The `gpg` package is a runtime dependency of this verification and
+must remain in the base package set. Publish and backfill signatures for every
+component before shipping an image that enables verification.
 
 ### Feature file (`<name>.feature`)
 

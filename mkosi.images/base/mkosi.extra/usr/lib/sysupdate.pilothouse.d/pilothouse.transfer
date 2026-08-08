@@ -1,6 +1,6 @@
 [Transfer]
 Features=pilothouse
-Verify=false
+Verify=true
 
 [Source]
 Type=url-file

@@ -1,6 +1,6 @@
 [Transfer]
 Features=docker
-Verify=false
+Verify=true
 
 [Source]
 Type=url-file

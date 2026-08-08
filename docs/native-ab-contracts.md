@@ -292,11 +292,13 @@ Suspend/resume (S3) is a different kernel mechanism and is unaffected by
 lockdown.
 
 The public update key is committed in-repo at
-`shared/native-ab/keys/import-pubring.gpg` and shipped at
+`shared/native-ab/keys/import-pubring.gpg`. The image ships the combined
+runtime ring `shared/sysext/keys/import-pubring.gpg` (native update key plus
+the Frostyard repository key for signed sysext metadata) at
 `/usr/lib/systemd/import-pubring.gpg` AND `/usr/lib/systemd/import-pubring.pgp`
 (the latter is the name systemd 261's pull verification actually reads --
-its vendor path has no legacy `.gpg` fallback; both ship from the same
-committed source). (This path was created in Phase 3 as a
+its vendor path has no legacy `.gpg` fallback). Native publication verification
+continues to use the narrower native-only ring. (This path was created in Phase 3 as a
 DEV-only key — see `shared/native-ab/keys/README.md` — to unblock the
 publication guard ahead of schedule; the protected signing pipeline that
 replaces it with the real production key lands in Phase 7.)

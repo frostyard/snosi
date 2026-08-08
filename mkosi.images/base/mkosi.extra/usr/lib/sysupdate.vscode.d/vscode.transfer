@@ -1,6 +1,6 @@
 [Transfer]
 Features=vscode
-Verify=false
+Verify=true
 
 [Source]
 Type=url-file
