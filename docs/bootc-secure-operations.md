@@ -124,6 +124,40 @@ unlock test result as evidence.
 **External privileged action:** Dakota/bootc-installer/Fisherman owns TPM
 replacement and reenrollment. Snosi provides no CLI for it.
 
+### Clear the stale SRK after replacing a TPM
+
+Rotating the LUKS TPM token is not sufficient. systemd separately stores the
+SRK public key of the TPM it last saw, and after a **replacement** that stored
+key belongs to the old device. `systemd-tpm2-setup` and
+`systemd-tpm2-setup-early` then fail on every subsequent boot:
+
+```text
+TPM key integrity check failed. Key most likely does not belong to this TPM.
+```
+
+The system still boots and still TPM-unlocks — the LUKS token is independent of
+this — but it is permanently `degraded`. Remove the stale key so systemd
+re-derives it from the new TPM on the next boot:
+
+```bash
+# /var on a composefs deployment is state/os/<stateroot>/var. <root>/var also
+# exists, is a different directory, and nothing mounts it.
+rm -f /var/lib/systemd/tpm2-srk-public-key.pem
+```
+
+Offline, with the root mounted at `$m`, that path is
+`$m/state/os/<stateroot>/var/lib/systemd/tpm2-srk-public-key.pem`; assert the
+stateroot glob matches exactly one existing directory before writing, or the
+removal silently does nothing.
+
+This is not required for reenrollment against the **same** TPM, where the
+stored key is still correct.
+
+NvPCR is a separate matter and needs no operator action: the secure profiles do
+not consume NvPCR attestation, and `systemd-pcrproduct`/`systemd-pcrlogin@` are
+masked in the shipped image precisely because their anchor cannot survive a
+TPM change or a PCR signing key rotation.
+
 `/dev/mapper/root` remains the opened Btrfs mapper for mounting and runtime; it
 is not the LUKS2 device. Before recovery authentication or TPM enrollment,
 derive and validate exactly one LUKS2 backing device:

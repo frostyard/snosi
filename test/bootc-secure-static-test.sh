@@ -50,6 +50,34 @@ grep -Fqx 'install_items+=" /usr/lib/udev/rules.d/90-image-dissect.rules "' \
 grep -Fq 'SYMLINK+="gpt-auto-root-luks"' "$artifact_validator"
 grep -Fq 'no udev rule creating /dev/gpt-auto-root-luks' "$artifact_validator"
 
+# systemd 261 cannot migrate its NvPCR anchor between PCR signing keys, and a
+# replaced TPM makes the anchor unreadable outright. The secure bootc profiles
+# do not consume NvPCR attestation, so the stale-anchor consumers are masked --
+# exactly as shared/native-ab-secure/finalize/disable-nvpcr.chroot already does
+# for the native profiles.
+#
+# Unmasked, they fail permanently after a TPM replacement:
+#     TPM key integrity check failed. Key most likely does not belong to this TPM.
+# leaving a recovered system degraded forever. Observed on run 31235071207.
+# The native decision simply had not been carried across to bootc.
+#
+# Masks are /dev/null symlinks in the shipped tree, the same mechanism ab-root
+# uses for the bootc/nbc updater units. SRK setup and the signed-PCR-11 LUKS
+# path are deliberately NOT masked -- those are load-bearing.
+for masked in systemd-pcrproduct.service 'systemd-pcrlogin@.service'; do
+    mask="$tree/usr/lib/systemd/system/$masked"
+    [[ -L "$mask" && $(readlink "$mask") == /dev/null ]] || {
+        echo "bootc secure tree must mask $masked with a /dev/null symlink" >&2
+        exit 1
+    }
+done
+for kept in systemd-tpm2-setup.service systemd-tpm2-setup-early.service; do
+    [[ -e "$tree/usr/lib/systemd/system/$kept" ]] && {
+        echo "bootc secure tree must NOT mask $kept; SRK setup is required" >&2
+        exit 1
+    }
+done
+
 [[ -f "$secure" ]]
 [[ -f "$package_manager/etc/apt/sources.list.d/forky.sources" ]]
 [[ -f "$package_manager/etc/apt/preferences.d/forky" ]]
