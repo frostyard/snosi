@@ -23,6 +23,7 @@ shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.git
 shared/cayo/tree/usr/share/homebrew.tar.zst
 .claude/*
 !.claude/settings.json
+!.claude/session-summary.md
 shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io/stylesheet.css
 shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io/metadata.json
 shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io/extension.js
