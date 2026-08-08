@@ -128,31 +128,63 @@ root_backing_device() { # cryptsetup status root output
     [[ $device == /dev/* && $device != *$'\n'* ]] && printf '%s\n' "$device"
 }
 
+# Every check names itself on failure. This used to be one unbroken && chain
+# reported as a bare "FATAL: installed target failed secure runtime
+# assertions", which says which FUNCTION failed and nothing about which of its
+# twelve checks did -- the same diagnostic gap that cost the recovery runner
+# several whole lane runs before it was closed.
+subset_fail() { echo "  secure_runtime_subset: FAILED -- $1" >&2; return 1; }
+
 secure_runtime_subset() { # recovery MOK certificate
     local recovery=$1 mok=$2 cmdline entries token reconciler backing guest_mok
-    vm_ssh 'mokutil --sb-state | grep -q "SecureBoot enabled"' &&
-        vm_ssh 'bootctl --no-pager status | grep -q "Measured UKI: yes"' &&
-        vm_ssh 'grep -Eq "\[(integrity|confidentiality)\]" /sys/kernel/security/lockdown' &&
-        vm_ssh 'findmnt -no FSTYPE / | grep -qx btrfs' &&
-        vm_ssh "test -z \"\$(systemctl --failed --no-legend)\"" || return 1
+    vm_ssh 'mokutil --sb-state | grep -q "SecureBoot enabled"'                     || subset_fail "Secure Boot is not enabled" || return 1
+    vm_ssh 'bootctl --no-pager status | grep -q "Measured UKI: yes"'                || subset_fail "booted chain is not a measured UKI" || return 1
+    vm_ssh 'grep -Eq "\[(integrity|confidentiality)\]" /sys/kernel/security/lockdown' || subset_fail "kernel lockdown is not integrity/confidentiality" || return 1
+    vm_ssh "test -z \"\$(systemctl --failed --no-legend)\""                         || subset_fail "system units have failed" || return 1
+
     reconciler=$(vm_ssh 'systemctl show --property=ActiveState --property=Result snosi-bootc-bootloader-reconcile.service')
-    reconciler_succeeded "$reconciler" || return 1
-    backing=$(root_backing_device "$(vm_ssh 'cryptsetup status root')") || return 1
-    vm_ssh "cryptsetup isLuks '$backing'" || return 1
+    reconciler_succeeded "$reconciler" || subset_fail "ESP reconciler did not succeed: $reconciler" || return 1
+
+    backing=$(root_backing_device "$(vm_ssh 'cryptsetup status root')") || subset_fail "could not derive the root backing device" || return 1
+    vm_ssh "cryptsetup isLuks '$backing'" || subset_fail "$backing is not LUKS" || return 1
+
+    # Probe the MAPPER, not `/`. On a composefs deployment `/` is an overlay,
+    # so `findmnt -no FSTYPE /` reports `overlay` and never `btrfs`. This
+    # function asserted exactly that impossible thing, so it could not pass on
+    # any composefs install -- the install harness had already measured the
+    # real shape (fstype(/)=overlay, fstype(/dev/mapper/root)=btrfs) and been
+    # fixed; this sibling was not. Observed live: run 31232569446 completed the
+    # entire install leg, then failed here on the first update assertion.
+    # And probe the DECRYPTED mapper, not $backing: $backing is the LUKS
+    # container, which reports crypto_LUKS. The filesystem lives behind it.
+    vm_ssh "blkid -o value -s TYPE /dev/mapper/root | grep -qx btrfs" \
+        || subset_fail "/dev/mapper/root is not btrfs (backing=$backing)" || return 1
+
     cmdline=$(vm_ssh 'cat /proc/cmdline')
-    composefs_from_cmdline "$cmdline" >/dev/null && [[ $cmdline != *root=* && $cmdline != *luks.* && $cmdline != *rd.luks.* ]] || return 1
+    composefs_from_cmdline "$cmdline" >/dev/null || subset_fail "no composefs= in the kernel command line: $cmdline" || return 1
+    [[ $cmdline != *root=* && $cmdline != *luks.* && $cmdline != *rd.luks.* ]] \
+        || subset_fail "kernel command line carries a root/LUKS identifier: $cmdline" || return 1
+
     entries=$(vm_ssh 'cat /boot/loader/entries/*.conf')
-    type2_only <(printf '%s\n' "$entries") || return 1
+    type2_only <(printf '%s\n' "$entries") || subset_fail "BLS entries are not Type #2-only" || return 1
+
     token=$(vm_ssh "cryptsetup luksDump --dump-json-metadata '$backing'")
-    signed_pcr11_token <<<"$token" || return 1
-    vm_ssh "cryptsetup open --test-passphrase --key-file=- '$backing'" <"$recovery" &&
-        vm_ssh "source=/usr/lib/snosi/bootc/systemd-bootx64.efi; test -s \"\$source\"; sbverify --cert /usr/lib/snosi/mok.crt \"\$source\" >/dev/null" &&
-        vm_ssh "test -e /boot/EFI/Linux/bootc/bootc_composefs-$(composefs_from_cmdline "$cmdline").efi" &&
-        vm_ssh "sbverify --cert /usr/lib/snosi/mok.crt /boot/EFI/Linux/bootc/bootc_composefs-$(composefs_from_cmdline "$cmdline").efi >/dev/null" || return 1
+    signed_pcr11_token <<<"$token" || subset_fail "not exactly one signed-PCR-11 TPM token" || return 1
+
+    vm_ssh "cryptsetup open --test-passphrase --key-file=- '$backing'" <"$recovery" \
+        || subset_fail "the recovery credential no longer opens $backing" || return 1
+    vm_ssh "source=/usr/lib/snosi/bootc/systemd-bootx64.efi; test -s \"\$source\"; sbverify --cert /usr/lib/snosi/mok.crt \"\$source\" >/dev/null" \
+        || subset_fail "the immutable second-stage source is missing or not MOK-signed" || return 1
+    vm_ssh "test -e /boot/EFI/Linux/bootc/bootc_composefs-$(composefs_from_cmdline "$cmdline").efi" \
+        || subset_fail "no UKI at the composefs path for $(composefs_from_cmdline "$cmdline")" || return 1
+    vm_ssh "sbverify --cert /usr/lib/snosi/mok.crt /boot/EFI/Linux/bootc/bootc_composefs-$(composefs_from_cmdline "$cmdline").efi >/dev/null" \
+        || subset_fail "the installed UKI is not MOK-signed" || return 1
+
     guest_mok=$(mktemp "$WORK/mok-guest.XXXXXX") || return 1
     rm -f -- "$guest_mok"
-    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" root@localhost:/usr/lib/snosi/mok.crt "$guest_mok" || return 1
-    cmp -s "$mok" "$guest_mok"
+    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" root@localhost:/usr/lib/snosi/mok.crt "$guest_mok" \
+        || subset_fail "could not fetch the guest MOK certificate" || return 1
+    cmp -s "$mok" "$guest_mok" || subset_fail "guest MOK certificate differs from the supplied one" || return 1
 }
 
 copy_and_run_persistence() { # write|verify
