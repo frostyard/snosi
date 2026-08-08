@@ -251,11 +251,11 @@ jobs:
         id: push
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Login via stdin instead of --creds so the secret never appears in
-          # process arguments (visible in /proc to every process on the runner)
-          echo "$GHCR_PAT" | sudo buildah login -u "${{ github.actor }}" --password-stdin ghcr.io
+          # The job-scoped token has only this repository's packages:write.
+          # Pass it via stdin so it never appears in process arguments.
+          printf '%s' "$GH_TOKEN" | sudo buildah login -u "${{ github.actor }}" --password-stdin ghcr.io
 
           sudo TMPDIR="$TMPDIR" buildah push \
             --compression-format=zstd:chunked \
@@ -275,7 +275,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GHCR_PAT }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
@@ -327,9 +327,9 @@ jobs:
 
       - name: Login to GHCR with ORAS
         env:
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "${GHCR_PAT}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Upload SBOM
         id: upload-sbom
@@ -532,6 +532,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !cancelled()
     permissions:
       contents: write
+      packages: read
     steps:
       - name: Download snow tag artifact
         # Missing artifact = the snow leg didn't push; skip the release.
@@ -564,8 +565,9 @@ jobs:
       - name: Login to GHCR with ORAS
         if: steps.current.outputs.tag != ''
         env:
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
-        run: echo "${GHCR_PAT}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Resolve previous and current snow tags
         id: versions

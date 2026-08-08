@@ -207,7 +207,13 @@ sudo implicitly, and secret bytes remain only in the mode-0600 files.
 Every GHCR read and write in secure verification and promotion receives the
 Docker login config explicitly: inspections use `--authfile`, root policy copy
 uses source-only `--src-authfile`, and promotion uses source and destination
-auth files. Pinned Cosign v2.6.1 receives registry auth through command-scoped
+auth files. The run-scoped `GITHUB_TOKEN` is the only GHCR credential:
+`secure-build` grants `packages: write`, while `release` grants only
+`packages: read`; Buildah and ORAS receive it through stdin. The successful
+three-profile mechanics publication run `31150007630` proves repository-token
+write access to the same cayo, snow, and snowfield packages, so a long-lived
+GHCR PAT is neither required nor permitted. Pinned Cosign v2.6.1 receives
+registry auth through command-scoped
 `DOCKER_CONFIG`; it has no registry-config flag. Version-tag resolution must
 equal the pushed digest before policy copy. The verifier never relies on sudo
 preserving a usable user runtime auth path or on root Buildah's credential-store
@@ -1630,4 +1636,3 @@ The target (e.g. `gnome-session.target`) comes from the service's `WantedBy=` in
 **.memory/ directory** `.memory/` is the repository's committed agent-learning store: `.memory/README.md` documents the conventions and `.memory/corrections.jsonl` is an append-only JSON Lines log of corrections (fields: `date`, `scope`, `correction`, `evidence`, `promoted_to`). Append an entry whenever a session establishes that a previously-held belief about this codebase was wrong, with the evidence that settled it; when a correction hardens into a general rule, promote it into `CLAUDE.md` or `yeti/` and set `promoted_to`. Never record secrets or personal data there — the directory is committed.
 
 **Delivery metrics** `docs/metrics.md` defines the metrics snosi tracks about its own change-delivery process — PR acceptance rate (split by author, to detect drift between agent-authored and human-authored PRs), review iterations to merge, time to merge, and `validate.yml` first-pass rate — each with the exact on-demand `gh`/`jq` query that collects it. There is deliberately no scheduled collector, stored time series, or committed snapshot: the queries are the definition. Its "Acting on the numbers" table routes each adverse signal to a documentation or tooling fix (agent-PR acceptance drop → `AGENTS.md`/`CLAUDE.md`/`yeti/`; recurring corrections → `.memory/corrections.jsonl`, then promotion), never to a process reminder.
-

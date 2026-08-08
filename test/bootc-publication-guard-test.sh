@@ -81,6 +81,8 @@ jobs:
       github.event_name != 'pull_request' &&
       github.ref == 'refs/heads/main'
     environment: native-build
+    permissions:
+      packages: write
     steps:
       - name: Materialize protected bootc signing credentials
         env:
@@ -115,8 +117,14 @@ jobs:
         if: always()
         run: sudo rm -rf /var/tmp/bootc-secure-credentials
        - name: Push immutable version tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GH_TOKEN" | sudo buildah login -u "${{ github.actor }}" --password-stdin ghcr.io
        - name: Log in to ghcr.io
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          password: ${{ secrets.GITHUB_TOKEN }}
        - name: Sign immutable image digest
       - name: Verify pushed secure image
         run: |
@@ -132,6 +140,11 @@ jobs:
           AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
           ./shared/bootc-secure/ci/promote-published-image.sh \
             "$IMAGE" "${{ steps.push.outputs.digest }}" "$AUTH_FILE"
+       - name: Login to GHCR with ORAS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
        - name: Upload SBOM
        - name: Sign SBOM
        - name: Attest build provenance
@@ -141,6 +154,8 @@ jobs:
        - name: Upload snow tag artifact
         if: matrix.profile == 'snow'
   release:
+    permissions:
+      packages: read
     steps:
       - name: Read snow tag
       - name: Checkout repository
@@ -152,8 +167,9 @@ jobs:
         uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
       - name: Login to GHCR with ORAS
         env:
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
-        run: echo "${GHCR_PAT}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Resolve previous and current snow tags
         run: |
           ./shared/bootc-secure/ci/resolve-snow-release-predecessor.sh \
@@ -234,6 +250,29 @@ remove_tag_binding() {
     perl -0pi -e 's/^tag_digest=.*?^fi\n//ms' \
         "$1/shared/bootc-secure/ci/verify-published-image.sh"
 }
+add_ghcr_pat_reference() { printf '\n# GHCR_PAT\n' >>"$1/.github/workflows/build-images.yml"; }
+remove_secure_packages_write() { perl -0pi -e 's/^      packages: write\n//m' "$1/.github/workflows/build-images.yml"; }
+remove_release_packages_read() { perl -0pi -e 's/^      packages: read\n//m' "$1/.github/workflows/build-images.yml"; }
+remove_push_github_token() {
+    perl -0pi -e 's/(      - name: Push immutable version tag\n        env:\n)          GH_TOKEN:[^\n]*\n/$1/' \
+        "$1/.github/workflows/build-images.yml"
+}
+replace_docker_login_token() {
+    perl -0pi -e 's/password: \$\{\{ secrets\.GITHUB_TOKEN \}\}/password: \${{ secrets.SIGNING_SECRET }}/' \
+        "$1/.github/workflows/build-images.yml"
+}
+remove_secure_oras_token() {
+    perl -0pi -e 's/(      - name: Login to GHCR with ORAS\n        env:\n)          GH_TOKEN:[^\n]*\n/$1/' \
+        "$1/.github/workflows/build-images.yml"
+}
+remove_release_oras_token() {
+    perl -0pi -e 's/(  release:.*?      - name: Login to GHCR with ORAS\n        env:\n)          GH_TOKEN:[^\n]*\n/$1/s' \
+        "$1/.github/workflows/build-images.yml"
+}
+remove_buildah_password_stdin() {
+    perl -0pi -e 's/ --password-stdin ghcr\.io/ ghcr.io/' \
+        "$1/.github/workflows/build-images.yml"
+}
 move_promotion_early() {
     perl -0pi -e 's/      - name: Promote validated digest to latest\n//; s/(      - name: Push immutable version tag\n)/$1      - name: Promote validated digest to latest\n/' "$1/.github/workflows/build-images.yml"
 }
@@ -289,6 +328,14 @@ assert_guard 'pull-request publishing condition fails' 1 permit_pull_request
 assert_guard 'permissive publishing condition with || fails' 1 permit_pull_request_with_or
 assert_guard 'missing main publishing condition fails' 1 remove_main_condition
 assert_guard 'shell || in a secure-build run block passes' 0 allow_shell_or
+assert_guard 'long-lived GHCR PAT reference fails' 1 add_ghcr_pat_reference
+assert_guard 'missing secure packages write permission fails' 1 remove_secure_packages_write
+assert_guard 'missing release packages read permission fails' 1 remove_release_packages_read
+assert_guard 'missing secure push GITHUB_TOKEN fails' 1 remove_push_github_token
+assert_guard 'wrong Docker login token fails' 1 replace_docker_login_token
+assert_guard 'missing secure ORAS GITHUB_TOKEN fails' 1 remove_secure_oras_token
+assert_guard 'missing release ORAS GITHUB_TOKEN fails' 1 remove_release_oras_token
+assert_guard 'Buildah login without password stdin fails' 1 remove_buildah_password_stdin
 for variable in SNOSI_BOOTC_SECURE SNOSI_BOOTC_MOK_KEY SNOSI_BOOTC_MOK_CERT SNOSI_BOOTC_PCR_KEY SNOSI_BOOTC_PCR_CERT; do
     assert_guard "missing $variable fails" 1 remove_package_variable "$variable"
 done

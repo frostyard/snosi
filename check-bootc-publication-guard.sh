@@ -72,6 +72,10 @@ workflow="$guard_root/.github/workflows/build-images.yml"
 if [[ ! -f $workflow ]]; then
     fail_check "missing publication workflow: .github/workflows/build-images.yml"
 else
+    if grep -Fq 'GHCR_PAT' "$workflow"; then
+        fail_check "$workflow: long-lived GHCR_PAT references are forbidden"
+    fi
+
     secure_job=$(awk '
         /^  secure-build:$/ { capture=1 }
         capture && /^  [A-Za-z0-9_-]+:$/ && $0 != "  secure-build:" { exit }
@@ -87,6 +91,7 @@ else
             capture { print }
         ' <<<"$secure_job")
         require_text "$workflow secure-build" "$secure_job" '    environment: native-build'
+        require_text "$workflow secure-build permissions" "$secure_job" '      packages: write'
         require_text "$workflow secure-build condition" "$job_condition" "      github.event_name != 'pull_request' &&"
         require_text "$workflow secure-build condition" "$job_condition" "      github.ref == 'refs/heads/main'"
         if grep -Fq '||' <<<"$job_condition"; then
@@ -195,6 +200,19 @@ else
         require_text "$workflow secure verifier auth argument" \
             "$verifier_step" '            "$IMAGE" "$VERSION_TAG" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"'
 
+        push_step=$(awk '
+            /^      - name: Push immutable version tag$/ { capture=1 }
+            capture && /^      - name: / && $0 != "      - name: Push immutable version tag" { exit }
+            capture { print }
+        ' <<<"$secure_job")
+        require_text "$workflow secure push token" "$push_step" \
+            '          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}'
+        push_login_line=$(cat <<'EOF'
+          printf '%s' "$GH_TOKEN" | sudo buildah login -u "${{ github.actor }}" --password-stdin ghcr.io
+EOF
+)
+        require_text "$workflow secure Buildah login" "$push_step" "$push_login_line"
+
         login_step=$(awk '
             /^      - name: Log in to ghcr.io$/ { capture=1 }
             capture && /^      - name: / && $0 != "      - name: Log in to ghcr.io" { exit }
@@ -202,6 +220,21 @@ else
         ' <<<"$secure_job")
         require_text "$workflow secure registry login" "$login_step" \
             '        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3'
+        require_text "$workflow secure registry token" "$login_step" \
+            '          password: ${{ secrets.GITHUB_TOKEN }}'
+
+        oras_login_step=$(awk '
+            /^      - name: Login to GHCR with ORAS$/ { capture=1 }
+            capture && /^      - name: / && $0 != "      - name: Login to GHCR with ORAS" { exit }
+            capture { print }
+        ' <<<"$secure_job")
+        require_text "$workflow secure ORAS token" "$oras_login_step" \
+            '          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}'
+        oras_login_line=$(cat <<'EOF'
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+EOF
+)
+        require_text "$workflow secure ORAS login" "$oras_login_step" "$oras_login_line"
 
         promotion_step=$(awk '
             /^      - name: Promote validated digest to latest$/ { capture=1 }
@@ -276,6 +309,8 @@ else
     if [[ -z $release_job ]]; then
         fail_check "$workflow: missing release job"
     else
+        require_text "$workflow release permissions" "$release_job" '      packages: read'
+
         release_checkout=$(awk '
             /^      - name: Checkout repository$/ { capture=1 }
             capture && /^      - name: / && $0 != "      - name: Checkout repository" { exit }
@@ -285,6 +320,20 @@ else
         require_text "$workflow release checkout" "$release_checkout" \
             '        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4'
         require_text "$workflow release checkout" "$release_checkout" '          persist-credentials: false'
+
+        release_oras_login=$(awk '
+            /^      - name: Login to GHCR with ORAS$/ { capture=1 }
+            capture && /^      - name: / && $0 != "      - name: Login to GHCR with ORAS" { exit }
+            capture { print }
+        ' <<<"$release_job")
+        require_text "$workflow release ORAS token" "$release_oras_login" \
+            '          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}'
+        release_oras_login_line=$(cat <<'EOF'
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+EOF
+)
+        require_text "$workflow release ORAS login" \
+            "$release_oras_login" "$release_oras_login_line"
 
         resolver_step=$(awk '
             /^      - name: Resolve previous and current snow tags$/ { capture=1 }
