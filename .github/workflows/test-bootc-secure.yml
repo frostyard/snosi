@@ -90,6 +90,12 @@ jobs:
     timeout-minutes: 360
     permissions:
       contents: read
+      # The update leg's publisher advances a tracking tag with `skopeo copy`,
+      # which is a real registry write. Granted here rather than as a standing
+      # credential on the runner host: this token lives only for the job, and
+      # the job is reachable only by workflow_dispatch, which already requires
+      # repository write access.
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -122,6 +128,44 @@ jobs:
             exit 1
           }
           echo "/dev/kvm usable as $(id -un)"
+      # The runner host has a read-only /usr and no apt. It is NOT bare: the
+      # incus sysext ships swtpm (and its whole suite), qemu-system-x86_64,
+      # qemu-img and skopeo under /usr/incus/bin, and brew supplies the rest.
+      # Put both on PATH rather than assuming /usr/bin has everything -- an
+      # earlier audit of /usr/bin alone concluded swtpm was missing when it was
+      # simply somewhere else.
+      - name: Resolve the host toolchain
+        run: |
+          set -euo pipefail
+          for d in /usr/incus/bin /home/linuxbrew/.linuxbrew/bin "$HOME/.local/bin"; do
+            [[ -d $d ]] && echo "$d" >> "$GITHUB_PATH"
+          done
+          echo "--- resolved ---"
+          PATH="/usr/incus/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.local/bin:$PATH"
+          missing=()
+          for t in qemu-system-x86_64 qemu-img swtpm skopeo cryptsetup objcopy \
+                   sbverify virt-fw-vars socat ssh scp ss jq python3; do
+            p=$(command -v "$t" 2>/dev/null) || { missing+=("$t"); printf '  %-20s MISSING\n' "$t"; continue; }
+            printf '  %-20s %s\n' "$t" "$p"
+          done
+          if (( ${#missing[@]} )); then
+            echo "::error::host is missing: ${missing[*]}" >&2
+            echo "See shared/bootc-secure/ci/setup-self-hosted-runner.sh for how to add them." >&2
+            exit 1
+          fi
+
+      - name: Log in to GHCR for the update publisher
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # The publisher shells out to skopeo, which reads this login. Scoped
+          # to the job's own token; nothing is written to the runner's HOME
+          # beyond the containers auth file, which the job-completed hook does
+          # not clear -- so log out again at the end (see the final step).
+          printf '%s' "$GHCR_TOKEN" | skopeo login ghcr.io \
+            --username "${{ github.actor }}" --password-stdin
+
       - name: Run prepared secure full window
         env:
           STATE_ROOT: ${{ inputs.state_root }}
@@ -137,6 +181,14 @@ jobs:
           path: /var/tmp/bootc-secure-full-window.log
           retention-days: 14
           if-no-files-found: ignore
+
+      # always(), because a registry credential left behind by a FAILED run is
+      # exactly the one nobody goes back for. The workspace hook does not touch
+      # the containers auth file -- it lives in the runner account's HOME, not
+      # in _work -- so this step is the only thing that removes it.
+      - name: Log out of GHCR
+        if: always()
+        run: skopeo logout ghcr.io || true
 
   snowfield-hardware:
     if: github.event_name == 'workflow_dispatch' && inputs.run_snowfield_hardware
