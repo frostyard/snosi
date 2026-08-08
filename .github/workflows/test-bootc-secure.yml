@@ -28,6 +28,11 @@ on:
         required: false
         default: ""
         type: string
+      dakota_ref:
+        description: frostyard/dakota-iso ref supplying the external runner adapters
+        required: false
+        default: "main"
+        type: string
 
 permissions: {}
 
@@ -148,6 +153,7 @@ jobs:
           PROFILE: ${{ inputs.profile }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
+          DAKOTA_REF: ${{ inputs.dakota_ref }}
         run: |
           set -o pipefail
           # --group-add keep-groups is load-bearing, not defensive. /dev/kvm on
@@ -165,7 +171,7 @@ jobs:
             --device /dev/kvm \
             -v "$PWD:/src/snosi" \
             -v "${STATE_ROOT}:${STATE_ROOT}" \
-            -e STATE_ROOT -e PROFILE -e GHCR_TOKEN -e GHCR_USER \
+            -e STATE_ROOT -e PROFILE -e GHCR_TOKEN -e GHCR_USER -e DAKOTA_REF \
             -w /src/snosi \
             docker.io/library/debian:trixie-slim \
             bash -euo pipefail -c '
@@ -189,6 +195,24 @@ jobs:
               # Not packaged in trixie; provides virt-fw-vars. Needs the gcc and
               # headers above because pip resolves it onto crypt_r.
               pip install --quiet --break-system-packages virt-firmware
+
+              # Dakota supplies the external runner adapters. Cloned HERE, not
+              # staged on the host: the runner home is 0750 ghrunner-owned so a
+              # host-side clone needs sudo, and a root-owned checkout is then
+              # unusable by the account that has to execute it. This also keeps
+              # the adapters at a known ref instead of whatever happens to be
+              # sitting on the box, which is how the Argo lane already works.
+              git clone -q --depth 1 --branch "$DAKOTA_REF" \
+                https://github.com/frostyard/dakota-iso.git /tmp/dakota
+              echo "dakota @ $(git -C /tmp/dakota rev-parse --short HEAD) (${DAKOTA_REF})"
+
+              # run-full-window invokes these by fixed name under STATE_ROOT,
+              # and each sources lib/ relative to its own directory.
+              install -m 0700 /tmp/dakota/test/bootc-secure-installer-runner.sh "$STATE_ROOT/installer"
+              install -m 0700 /tmp/dakota/test/bootc-secure-recovery-runner.sh  "$STATE_ROOT/recovery-runner"
+              install -m 0700 /tmp/dakota/test/bootc-secure-update-publish.sh   "$STATE_ROOT/publisher"
+              mkdir -p "$STATE_ROOT/lib"
+              cp -a /tmp/dakota/test/lib/. "$STATE_ROOT/lib/"
               # The publisher writes a tracking tag, so log in INSIDE the
               # container: the credential never touches the host filesystem and
               # dies with the container.

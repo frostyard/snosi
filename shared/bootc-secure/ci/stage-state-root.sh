@@ -93,21 +93,14 @@ fi
 chmod 0600 "$STATE_ROOT/recovery.key"
 chown "$RUNNER_USER:$RUNNER_USER" "$STATE_ROOT/recovery.key"
 
-# Dakota's runner adapters. Copied, not symlinked: the harness runs them as the
-# runner user and a symlink into a root-owned checkout would break on re-clone.
-DAKOTA_SRC=${DAKOTA_SRC:-/var/lib/ghrunner/dakota-iso}
-if [[ -d "$DAKOTA_SRC/test" ]]; then
-    install -d -m 0700 -o "$RUNNER_USER" -g "$RUNNER_USER" "$STATE_ROOT/lib"
-    install -m 0700 -o "$RUNNER_USER" -g "$RUNNER_USER" "$DAKOTA_SRC/test/bootc-secure-installer-runner.sh" "$STATE_ROOT/installer"
-    install -m 0700 -o "$RUNNER_USER" -g "$RUNNER_USER" "$DAKOTA_SRC/test/bootc-secure-recovery-runner.sh"  "$STATE_ROOT/recovery-runner"
-    install -m 0700 -o "$RUNNER_USER" -g "$RUNNER_USER" "$DAKOTA_SRC/test/bootc-secure-update-publish.sh"   "$STATE_ROOT/publisher"
-    cp -a "$DAKOTA_SRC/test/lib/." "$STATE_ROOT/lib/"
-    chown -R "$RUNNER_USER:$RUNNER_USER" "$STATE_ROOT/lib"
-    echo "  staged installer, recovery-runner, publisher from $DAKOTA_SRC"
-else
-    echo "  WARNING: $DAKOTA_SRC/test not found; clone frostyard/dakota-iso there" >&2
-    echo "           and re-run, or the window will block on missing runners." >&2
-fi
+# Dakota's runner adapters are NOT staged here. The workflow clones them into
+# STATE_ROOT inside its container at run time, at a named ref.
+#
+# Staging them on the host meant cloning into the runner's 0750 home, which
+# needs sudo and then leaves a root-owned checkout the runner account cannot
+# execute. Cloning in-container also pins the adapters to a ref instead of
+# whatever happens to be sitting on the box -- the same reason the Argo lane
+# clones both repos per run rather than trusting a checkout.
 
 step "target disk"
 if [[ -f "$STATE_ROOT/target.raw" ]]; then
