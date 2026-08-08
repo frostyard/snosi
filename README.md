@@ -643,7 +643,7 @@ installation or the root update service.
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `check-dependencies.yml` | Weekly | Checks pinned direct downloads, updates `sysext-checksums.json` and/or `image-checksums.json`, opens target-specific PRs |
+| `check-dependencies.yml` | Weekly | Checks pinned direct downloads and inline image-tool pins, opens target-specific PRs |
 | `check-packages.yml` | Daily | Checks external APT package versions for sysexts, updates `package-versions.json`, opens PRs |
 | `validate.yml` | PR/push | shellcheck (all shebang-discovered scripts, `-S warning`) + `mkosi summary` validation for every profile |
 | `test-install.yml` | Manual | Signature-verified bootc installation test in QEMU/KVM |
@@ -1065,8 +1065,9 @@ independent jobs:
 
 1. `check-sysext-updates` compares sysext direct-download pins and opens
    `auto-update-sysext-checksums` PRs against `sysext-checksums.json`.
-2. `check-image-updates` compares OCI profile direct-download pins and opens
-   `auto-update-image-checksums` PRs against `image-checksums.json`.
+2. `check-image-updates` compares OCI profile direct-download pins plus the
+   inline Syft, Cosign v2, and chunkah pins, then opens
+   `auto-update-image-checksums` PRs against the affected files.
 
 The `.github/workflows/check-packages.yml` workflow runs daily for external APT
 packages consumed by sysexts (`code`, `docker-ce`, `1password-cli`,
