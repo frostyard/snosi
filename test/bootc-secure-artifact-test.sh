@@ -150,7 +150,10 @@ mkdir -p "$root$late/dev-gpt\\x2dauto\\x2droot\\x2dluks.device.wants"
 ln -s ../systemd-cryptsetup@root.service \
     "$root$late/dev-gpt\\x2dauto\\x2droot\\x2dluks.device.wants/systemd-cryptsetup@root.service"
 EOF
-    chmod +x "$fixture/bin/objcopy" "$fixture/bin/lsinitrd" "$fixture/bin/chroot"
+    # The fixture's lsinitrd stub does not decompress data, but the validator
+    # deliberately requires zstd for real artifact validation.
+    printf '#!/bin/sh\nexit 0\n' >"$fixture/bin/zstd"
+    chmod +x "$fixture/bin/objcopy" "$fixture/bin/lsinitrd" "$fixture/bin/chroot" "$fixture/bin/zstd"
 
     ROOTFS="$fixture/root"
     PATH="$fixture/bin:$PATH" SNOSI_GPT_AUTO_FIXTURE=1 validate_gpt_auto_cryptsetup
