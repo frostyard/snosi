@@ -9,19 +9,9 @@ A bootable container image build system using [mkosi](https://github.com/systemd
 - [Native A/B network installer (latest x86-64)](https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso)
 - [Native installer checksums](https://repository.frostyard.org/isos/native/v1/SHA256SUMS) and [OpenPGP signature](https://repository.frostyard.org/isos/native/v1/SHA256SUMS.gpg)
 
-The native installer's `latest` URL redirects without caching to the immutable,
-versioned ISO named by the signed checksum index. To verify a download from a
-repository checkout:
-
-```bash
-curl -fL https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso \
-  -o snosi-native-installer.iso
-curl -fLO https://repository.frostyard.org/isos/native/v1/SHA256SUMS
-curl -fLO https://repository.frostyard.org/isos/native/v1/SHA256SUMS.gpg
-gpgv --keyring shared/native-ab/keys/import-pubring.gpg SHA256SUMS.gpg SHA256SUMS
-expected="$(awk '$2 ~ /^snosi-native-installer_[0-9]{14}_x86-64\.iso$/ {print $1}' SHA256SUMS)"
-printf '%s  %s\n' "$expected" snosi-native-installer.iso | sha256sum -c -
-```
+See the [supported installation guide](docs/installing.md) to choose an image,
+verify the native installer, create boot media, install safely, and recover or
+update the installed system.
 
 ## What This Project Does
 
