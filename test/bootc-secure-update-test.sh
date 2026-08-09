@@ -219,12 +219,21 @@ secure_runtime_subset() { # recovery MOK certificate
 }
 
 copy_and_run_persistence() { # write|verify
+    # Four steps behind one caller-side FATAL. Name them: "could not write
+    # persistence markers" does not distinguish a missing script, a failed
+    # copy, and the guest script itself failing -- and the guest script is the
+    # interesting case, since its output is the finding.
     local action=$1
     local script="$ROOT_DIR/test/update-tests/persistence-$action.sh"
-    vm_ssh 'mkdir -p /tmp/task9-lib'
-    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" "$ROOT_DIR/test/lib/helpers.sh" root@localhost:/tmp/task9-lib/helpers.sh
-    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" "$script" root@localhost:/tmp/task9-persistence.sh
-    vm_ssh 'TEST_LIB_DIR=/tmp/task9-lib bash /tmp/task9-persistence.sh'
+    [[ -f $script ]] || { echo "  persistence: no such script: $script" >&2; return 1; }
+    vm_ssh 'mkdir -p /tmp/task9-lib' \
+        || { echo "  persistence: could not create /tmp/task9-lib in the guest" >&2; return 1; }
+    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" "$ROOT_DIR/test/lib/helpers.sh" root@localhost:/tmp/task9-lib/helpers.sh \
+        || { echo "  persistence: could not copy helpers.sh to the guest" >&2; return 1; }
+    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" "$script" root@localhost:/tmp/task9-persistence.sh \
+        || { echo "  persistence: could not copy ${script##*/} to the guest" >&2; return 1; }
+    vm_ssh 'TEST_LIB_DIR=/tmp/task9-lib bash /tmp/task9-persistence.sh' \
+        || { echo "  persistence: ${script##*/} failed IN THE GUEST (its output is above)" >&2; return 1; }
 }
 
 guest_digest() { vm_ssh 'bootc status --format json' | jq -r ".status.$1.image.imageDigest // empty"; }

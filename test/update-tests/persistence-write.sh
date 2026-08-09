@@ -22,10 +22,28 @@ fi
 echo "home-marker" > /var/home/persisttest/marker.txt
 chown persisttest:persisttest /var/home/persisttest/marker.txt
 
-# Container image in /var/lib/containers, built offline (no registry pull)
+# Container image in /var/lib/containers, built offline (no registry pull).
+#
+# `podman import` of a rootfs tarball is REJECTED on a secure system and that
+# is correct: the shipped policy.json defaults to reject and permits only the
+# three signed ghcr scopes plus containers-storage, so the `tarball:` transport
+# has no accepting scope. Observed on run 31293719998:
+#
+#     Error: Source image rejected: Running image tarball:/var/tmp/podman... is
+#     rejected by policy.
+#
+# `podman build` FROM scratch pulls no source image, so no transport is
+# consulted and no policy exception is needed. Verified directly against a
+# reject-by-default policy: the import is refused with the exact error above,
+# the build succeeds. The marker is still a real image in the store, so this
+# proves what it always did -- that /var/lib/containers survives an update.
+#
+# Do NOT "fix" this by adding a tarball/dir/oci scope to policy.json. The test
+# must fit the shipped security posture, not the other way round.
 tmpf=$(mktemp -d)
 echo "container-marker" > "$tmpf/marker"
-tar -C "$tmpf" -cf - marker | podman import --quiet - localhost/persist-test:1 >/dev/null
+printf 'FROM scratch\nCOPY marker /marker\n' > "$tmpf/Containerfile"
+podman build --quiet --tag localhost/persist-test:1 --file "$tmpf/Containerfile" "$tmpf" >/dev/null
 rm -rf "$tmpf"
 
 # /opt is a bind to /var/opt
