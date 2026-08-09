@@ -164,6 +164,11 @@ jobs:
         # siblings stay byte-identical. No root, no network, no image build.
         run: ./test/update-checksums-split-test.sh
 
+      - name: Validate bounded APT package-index parsing
+        # PATH-stubbed curl fixtures cover transfer deadlines, decompressed-size
+        # limits, gzip integrity, and Debian version ordering without network.
+        run: ./test/check-packages-test.sh
+
       - name: Validate expensive-workflow path filters
         # Static guard: docs and the standalone redirect worker must not fan
         # out into image matrices, and Scorecard remains schedule-driven.
