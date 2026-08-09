@@ -397,6 +397,21 @@ during the sysext build.
 2. Compares against `shared/download/package-versions.json`
 3. If changed: updates `package-versions.json`, creates a sysext package-version PR
 
+### ai-fix-requested.yml — Copilot Issue Handoff
+
+**Trigger:** An issue receives the `ai-fix-requested` label, or a maintainer
+manually dispatches the workflow with an issue number.
+
+The workflow re-fetches the issue and fails unless it is open and still has
+the label, then calls GitHub's issue-assignment API with
+`copilot-swe-agent[bot]`, the current repository, and its default branch.
+The API requires a user-to-server token, so the repository must provide the
+fine-grained `COPILOT_ASSIGNMENT_TOKEN` secret with read/write access to
+Actions, Contents, Issues, and Pull requests. Do not replace it with
+`GITHUB_TOKEN`, which is an installation token and cannot start this agent
+assignment. Default workflow permissions remain empty, no checkout occurs,
+and issue title/body text never enters the shell.
+
 ### copilot-review-apply.yml — Automated Review Application
 
 **Trigger:** A pull request review is submitted, or a maintainer manually
