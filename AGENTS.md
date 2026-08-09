@@ -177,6 +177,28 @@ Before a recovery runner, the install harness creates an owned mode-0600,
 path-only state manifest from its recipe and passes it with the Dakota ISO;
 the final exported handoff copies that same manifest shape.
 
+**Assertions shared by the install and update harnesses live in exactly ONE
+place: `test/lib/bootc-secure-assertions.sh`** (`esp_cat`,
+`composefs_from_cmdline`, `type2_only`, `signed_pcr11_token`,
+`root_backing_device`). Neither harness may re-define them;
+`test/bootc-secure-static-test.sh` fails the build if either does. Independent
+copies drift silently and the drift is load-bearing — three of four had
+diverged, and `type2_only` had come to accept only `efi` while bootc writes
+`uki`, so the update leg could not pass on any composefs install while the
+install harness asserted the same property and passed. Two facts these
+assertions encode are easy to get wrong from first principles and must not be
+"simplified" back: bootc leaves `/boot` UNMOUNTED unless it is using it, so BLS
+entries are read off the ESP located by GPT type GUID, never from
+`/boot/loader/entries`; and on a composefs deployment `/` is an overlay, so the
+root filesystem is probed on `/dev/mapper/root`, never with `findmnt /`.
+
+This is the sixth defect in this subsystem caused by a fix landing in one of
+two sibling paths (`ssh_key`/`ssh_private_key`, `uki`/`efi` in the recovery
+runner, `findmnt /` vs the composefs mapper, NvPCR masked on native but not
+bootc, the nightly's stale copy of the KVM step, and this). When a fix applies
+to a behaviour that exists twice, move the behaviour rather than copying the
+fix.
+
 **Task 9 secure update harness (2026-07-29):**
 `test/bootc-secure-update-test.sh --fixtures` validates the mode-0600,
 path-only install handoff and marked external update protocol. Live mode
