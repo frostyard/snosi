@@ -1,0 +1,121 @@
+name: Apply Review Feedback
+
+on:
+  pull_request_review:
+    types: [submitted]
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: Open same-repository pull request to update
+        required: true
+        type: number
+      review_id:
+        description: Submitted review to address
+        required: true
+        type: number
+
+permissions: {}
+
+concurrency:
+  group: copilot-review-apply-${{ github.event.review.id || inputs.review_id }}
+  cancel-in-progress: false
+
+jobs:
+  apply-review:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.draft == false &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate review and request fixes
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_ASSIGNMENT_TOKEN }}
+          PULL_NUMBER: ${{ github.event.pull_request.number || inputs.pull_number }}
+          REVIEW_ID: ${{ github.event.review.id || inputs.review_id }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo "::error::COPILOT_ASSIGNMENT_TOKEN is not configured"
+            exit 1
+          fi
+          if [[ ! "$PULL_NUMBER" =~ ^[0-9]+$ || ! "$REVIEW_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::Pull number and review ID must be numeric"
+            exit 1
+          fi
+
+          pr_path="repos/${TARGET_REPOSITORY}/pulls/${PULL_NUMBER}"
+          pr_json=$(gh api "$pr_path")
+          if [[ $(jq -r '.state' <<<"$pr_json") != "open" ]]; then
+            echo "::error::Pull request #${PULL_NUMBER} is not open"
+            exit 1
+          fi
+          if [[ $(jq -r '.draft' <<<"$pr_json") != "false" ]]; then
+            echo "::error::Pull request #${PULL_NUMBER} is a draft"
+            exit 1
+          fi
+          if [[ $(jq -r '.head.repo.full_name // ""' <<<"$pr_json") != "$TARGET_REPOSITORY" ]]; then
+            echo "::error::Review application is restricted to same-repository branches"
+            exit 1
+          fi
+
+          review_json=$(gh api "${pr_path}/reviews/${REVIEW_ID}")
+          review_state=$(jq -r '.state' <<<"$review_json")
+          case "$review_state" in
+            COMMENTED|CHANGES_REQUESTED) ;;
+            *)
+              echo "Review ${REVIEW_ID} has no actionable state (${review_state})"
+              exit 0
+              ;;
+          esac
+
+          review_comment_count=$(
+            gh api "${pr_path}/reviews/${REVIEW_ID}/comments?per_page=100" \
+              --paginate \
+              --jq 'length' \
+            | awk '{ total += $1 } END { print total + 0 }'
+          )
+          review_body_length=$(
+            jq -r '(.body // "") | gsub("[[:space:]]"; "") | length' \
+              <<<"$review_json"
+          )
+          if (( review_comment_count == 0 && review_body_length == 0 )); then
+            echo "Review ${REVIEW_ID} contains no feedback"
+            exit 0
+          fi
+          if [[ "$review_state" == "COMMENTED" && "$review_comment_count" -eq 0 ]]; then
+            echo "Review ${REVIEW_ID} contains no inline feedback to apply"
+            exit 0
+          fi
+
+          marker="<!-- copilot-review-apply:${REVIEW_ID} -->"
+          existing_comment_ids=$(
+            gh api "repos/${TARGET_REPOSITORY}/issues/${PULL_NUMBER}/comments?per_page=100" \
+              --paginate \
+            | jq -r --arg marker "$marker" \
+                '.[] | select((.body // "") | contains($marker)) | .id'
+          )
+          if [[ -n "$existing_comment_ids" ]]; then
+            echo "Review ${REVIEW_ID} was already handed to Copilot"
+            exit 0
+          fi
+
+          review_url=$(jq -r '.html_url' <<<"$review_json")
+          reviewer=$(jq -r '.user.login' <<<"$review_json")
+          body=$(
+            jq -nr \
+              --arg marker "$marker" \
+              --arg reviewer "$reviewer" \
+              --arg review_url "$review_url" \
+              '"@copilot Please address all unresolved feedback from @" +
+               $reviewer + " in " + $review_url +
+               ", update this pull request, and run the relevant checks.\n\n" +
+               $marker'
+          )
+          jq -n --arg body "$body" '{body: $body}' \
+          | gh api \
+              --method POST \
+              "repos/${TARGET_REPOSITORY}/issues/${PULL_NUMBER}/comments" \
+              --input -
