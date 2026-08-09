@@ -78,6 +78,31 @@ for kept in systemd-tpm2-setup.service systemd-tpm2-setup-early.service; do
     }
 done
 
+# Masking the two consumer units is NOT sufficient, and assuming it was cost a
+# live run. systemd-tpm2-setup{,-early} also reach for the anchor --
+# "Failed to acquire anchor secret: Object is remote" -- and they cannot be
+# masked because SRK setup is required. Removing the DEFINITIONS is what stops
+# anything asking for an anchor at all, which is why native does both and this
+# must too.
+nvpcr_finalize="$root/shared/bootc-secure/finalize/disable-nvpcr.chroot"
+[[ -x "$nvpcr_finalize" ]] || {
+    echo "bootc secure must ship an executable disable-nvpcr finalize script" >&2
+    exit 1
+}
+grep -Fq '/usr/lib/nvpcr/*.nvpcr' "$nvpcr_finalize"
+grep -Fq 'ln -sfn /dev/null "/etc/nvpcr/' "$nvpcr_finalize"
+grep -Fq 'FinalizeScripts=%D/shared/bootc-secure/finalize/disable-nvpcr.chroot' \
+    "$root/shared/bootc-secure/mkosi.conf"
+# SRK setup must survive: the finalize must not mask those units either.
+# Comments are stripped first -- the script explains at length WHY it leaves
+# systemd-tpm2-setup alone, and that prose must not trip the guard against
+# touching it. (A grep that matches its own documentation is a recurring shape
+# in this repo; it already caught the ssh_private_key check once.)
+if sed 's/#.*//' "$nvpcr_finalize" | grep -Fq 'systemd-tpm2-setup'; then
+    echo "disable-nvpcr must not touch systemd-tpm2-setup; SRK setup is required" >&2
+    exit 1
+fi
+
 [[ -f "$secure" ]]
 [[ -f "$package_manager/etc/apt/sources.list.d/forky.sources" ]]
 [[ -f "$package_manager/etc/apt/preferences.d/forky" ]]
