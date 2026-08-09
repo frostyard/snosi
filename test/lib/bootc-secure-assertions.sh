@@ -47,6 +47,15 @@ composefs_from_cmdline() {
     done
     [[ $count -eq 1 && $value =~ ^[[:xdigit:]]{128}$ ]] && printf '%s\n' "$value"
 }
+cmdline_has_lockdown_integrity() {
+    local token count=0
+    for token in $1; do
+        [[ $token == lockdown=* ]] || continue
+        [[ $token == lockdown=integrity ]] || return 1
+        count=$((count + 1))
+    done
+    [[ $count -eq 1 ]]
+}
 type2_only() { # path; materialize once because callers may provide a FIFO.
     local entries
     entries=$(cat "$1") || return

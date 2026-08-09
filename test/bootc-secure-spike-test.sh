@@ -328,15 +328,17 @@ require_stable_oci_digest() { # first-pass-digest final-digest
 }
 
 validate_task2_ukify_cmdline() { # cmdline expected-composefs-digest
-    local cmdline=$1 expected_digest=$2 token composefs_count=0 rw_count=0 token_count=0
+    local cmdline=$1 expected_digest=$2 token composefs_count=0 rw_count=0 lockdown_count=0 token_count=0
     valid_composefs_digest "$expected_digest" || return 1
     for token in $cmdline; do
         token_count=$((token_count + 1))
         [[ "$token" == rw ]] && rw_count=$((rw_count + 1))
         [[ "$token" == composefs=* ]] && composefs_count=$((composefs_count + 1))
+        [[ "$token" == lockdown=integrity ]] && lockdown_count=$((lockdown_count + 1))
+        [[ "$token" != lockdown=* || "$token" == lockdown=integrity ]] || return 1
         [[ "$token" != root=* && "$token" != luks.* && "$token" != rd.luks.* ]] || return 1
     done
-    [[ $token_count -eq 2 && $rw_count -eq 1 && $composefs_count -eq 1 ]] || return 1
+    [[ $token_count -eq 3 && $rw_count -eq 1 && $composefs_count -eq 1 && $lockdown_count -eq 1 ]] || return 1
     [[ "$(composefs_digest_from_cmdline "$cmdline")" == "$expected_digest" ]]
 }
 
@@ -505,15 +507,19 @@ EOF
     fi
     assert_failure "a final OCI image changing the first-pass composefs ID is rejected" \
         require_stable_oci_digest "$(printf 'd%.0s' {1..128})" "$(printf 'e%.0s' {1..128})"
-    if validate_task2_ukify_cmdline "rw composefs=?$(printf 'f%.0s' {1..128})" "$(printf 'f%.0s' {1..128})"; then
-        pass "Task 2 UKI cmdline carries rw plus only its composefs binding"
+    if validate_task2_ukify_cmdline "rw composefs=?$(printf 'f%.0s' {1..128}) lockdown=integrity" "$(printf 'f%.0s' {1..128})"; then
+        pass "Task 2 UKI cmdline carries rw, its composefs binding, and lockdown policy"
     else
-        fail "Task 2 UKI cmdline carries rw plus only its composefs binding"
+        fail "Task 2 UKI cmdline carries rw, its composefs binding, and lockdown policy"
     fi
+    assert_failure "Task 2 UKI cmdline rejects a missing lockdown policy" \
+        validate_task2_ukify_cmdline "rw composefs=?$(printf 'f%.0s' {1..128})" "$(printf 'f%.0s' {1..128})"
+    assert_failure "Task 2 UKI cmdline rejects a divergent lockdown policy" \
+        validate_task2_ukify_cmdline "rw composefs=?$(printf 'f%.0s' {1..128}) lockdown=none" "$(printf 'f%.0s' {1..128})"
     assert_failure "Task 2 UKI cmdline rejects dynamic root identifiers" \
-        validate_task2_ukify_cmdline "rw composefs=?$(printf 'f%.0s' {1..128}) root=/dev/vda2" "$(printf 'f%.0s' {1..128})"
+        validate_task2_ukify_cmdline "rw composefs=?$(printf 'f%.0s' {1..128}) lockdown=integrity root=/dev/vda2" "$(printf 'f%.0s' {1..128})"
     assert_failure "Task 2 UKI cmdline rejects dynamic LUKS identifiers" \
-        validate_task2_ukify_cmdline "rw composefs=?$(printf 'f%.0s' {1..128}) rd.luks.uuid=luks-test" "$(printf 'f%.0s' {1..128})"
+        validate_task2_ukify_cmdline "rw composefs=?$(printf 'f%.0s' {1..128}) lockdown=integrity rd.luks.uuid=luks-test" "$(printf 'f%.0s' {1..128})"
 
     printf 'dracut first error\nemergency\n' >"$fixture_root/console.raw"
     fixture_console_diagnostics="$(task3_console_diagnostics "$fixture_root/console.raw")"
@@ -587,7 +593,7 @@ storage_composefs_digest() { # local-image-reference
 validate_uki() { # rootfs uki kernel initrd pcr-public-key expected-digest
 (
     local rootfs=$1 uki=$2 kernel=$3 initrd=$4 pcr_public=$5 expected_digest=$6
-    local work composefs_value cmdline
+    local work cmdline
     work=$(mktemp -d)
     trap 'rm -rf "$work"' EXIT
 
@@ -604,9 +610,8 @@ validate_uki() { # rootfs uki kernel initrd pcr-public-key expected-digest
     objdump -h "$uki" | grep -q '[[:space:]]\.pcrpkey[[:space:]]'
     objdump -h "$uki" | grep -q '[[:space:]]\.pcrsig[[:space:]]'
     cmdline=$(tr '\0' ' ' <"$work/cmdline")
-    composefs_value=$(composefs_digest_from_cmdline "$cmdline")
-    [[ "$composefs_value" == "$expected_digest" ]] || {
-        echo "Error: UKI composefs value '$composefs_value' does not match '$expected_digest'" >&2
+    validate_task2_ukify_cmdline "$cmdline" "$expected_digest" || {
+        echo "Error: UKI command line does not match the composefs and lockdown policy: $cmdline" >&2
         return 1
     }
     sbverify --cert "$BOOTC_SECURE_MOK_CERT" "$uki" >/dev/null
@@ -680,7 +685,7 @@ run_task2_live_proof() {
         --linux "$kernel" \
         --initrd "$initrd" \
         --os-release "@$ROOTFS/usr/lib/os-release" \
-        --cmdline "rw composefs=?$first_digest" \
+        --cmdline "rw composefs=?$first_digest lockdown=integrity" \
         --uname "$version" \
         --pcrpkey "$PCR_PUBLIC" \
         --pcr-private-key "$BOOTC_SECURE_PCR_KEY" \
@@ -926,7 +931,8 @@ run_task3_live_proof() {
         return 2
     fi
     lockdown="$(vm_ssh 'cat /sys/kernel/security/lockdown')"; grep -Eq '\[(integrity|confidentiality)\]' <<<"$lockdown" || return 2
-    cmdline="$(vm_ssh 'cat /proc/cmdline')"; [[ "$(composefs_digest_from_cmdline "$cmdline")" == "$TASK2_FINAL_DIGEST" ]] || return 2
+    cmdline="$(vm_ssh 'cat /proc/cmdline')"
+    validate_task2_ukify_cmdline "$cmdline" "$TASK2_FINAL_DIGEST" || return 2
     failed="$(vm_ssh 'systemctl --failed --no-legend')"; [[ -z "$failed" ]] || return 2
     var_device="$(vm_ssh "lsblk -J -o PATH,FSTYPE | jq -er '.. | objects | select(.fstype? == \"crypto_LUKS\") | .path'" || true)"
     scp "${SSH_OPTS[@]}" -P "$SSH_PORT" -i "$SSH_KEY" "$PCR_PUBLIC" root@localhost:/run/task3-pcr.pub

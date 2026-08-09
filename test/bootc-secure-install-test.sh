@@ -178,6 +178,14 @@ run_fixtures() {
     else
         fail 'composefs parser accepts its one digest'
     fi
+    assert_true 'lockdown parser accepts exactly one integrity policy' \
+        cmdline_has_lockdown_integrity 'rw composefs=?fixture lockdown=integrity'
+    assert_false 'lockdown parser rejects a missing policy' \
+        cmdline_has_lockdown_integrity 'rw composefs=?fixture'
+    assert_false 'lockdown parser rejects a divergent policy' \
+        cmdline_has_lockdown_integrity 'rw composefs=?fixture lockdown=none'
+    assert_false 'lockdown parser rejects duplicate policy arguments' \
+        cmdline_has_lockdown_integrity 'rw composefs=?fixture lockdown=integrity lockdown=integrity'
     if composefs_from_cmdline 'root=/dev/vda2' >/dev/null 2>&1; then
         fail 'composefs parser rejects root arguments'
     else
@@ -331,6 +339,7 @@ post_recovery_security_subset() {
     vm_ssh 'mokutil --sb-state | grep -q "SecureBoot enabled"' \
         && vm_ssh 'bootctl --no-pager status | grep -q "Measured UKI: yes"' \
         && vm_ssh 'grep -Eq "\[(integrity|confidentiality)\]" /sys/kernel/security/lockdown' \
+        && cmdline_has_lockdown_integrity "$(vm_ssh 'cat /proc/cmdline')" \
         && vm_ssh "cryptsetup isLuks '$backing'" \
         && vm_ssh "cryptsetup luksDump --dump-json-metadata '$backing'" | signed_pcr11_token \
         && vm_ssh "cryptsetup open --test-passphrase --key-file=- '$backing'" <"$RECOVERY_KEY"
@@ -389,6 +398,7 @@ assert_guest() {
     assert_true 'lockdown is integrity or confidentiality' vm_ssh 'grep -Eq "\[(integrity|confidentiality)\]" /sys/kernel/security/lockdown'
     cmdline=$(vm_ssh 'cat /proc/cmdline')
     if composefs_from_cmdline "$cmdline" >/dev/null; then pass 'kernel command line has a composefs binding without accepting raw root data'; else fail 'kernel command line has a composefs binding without accepting raw root data'; fi
+    if cmdline_has_lockdown_integrity "$cmdline"; then pass 'kernel command line seals exactly one lockdown=integrity policy'; else fail 'kernel command line seals exactly one lockdown=integrity policy'; fi
     assert_false 'kernel command line contains no root or LUKS identifier' cmdline_has_root_or_luks "$cmdline"
     entries=$(esp_cat 'loader/entries/*.conf')
     if type2_only <(printf '%s\n' "$entries"); then pass 'installed BLS entries are Type #2-only'; else fail 'installed BLS entries are Type #2-only'; fi

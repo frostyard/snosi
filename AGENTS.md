@@ -39,11 +39,14 @@ established bootc installation/testing path because of it.
 **Bootc secure composition (Task 4, 2026-07-28):** `cayo`, `snow`, and
 `snowfield` include `shared/bootc-secure/mkosi.conf`; native A/B profiles never
 include it. The fragment uses an isolated low-priority Forky APT sandbox and
-explicitly selects its coherent systemd family, adds `lockdown=integrity` via
-`/usr/lib/bootc/kargs.d/10-lockdown.toml` (the only effective immutable-karg
-mechanism for the directory-format bootc profiles; do not use mkosi
-`KernelCommandLine=` here), and ships only the existing native public MOK
-certificate and RSA-2048 PCR public key at `/usr/lib/snosi/`. Its schema-1
+explicitly selects its coherent systemd family, and declares
+`lockdown=integrity` in `/usr/lib/bootc/kargs.d/10-lockdown.toml`. The secure
+direct-ukify path bypasses bootc's kargs merge, so `assemble-uki.sh` must also
+seal that exact argument beside `rw composefs=?<digest>` and reject any rootfs
+declaration or final `.cmdline` that differs. Do not use mkosi
+`KernelCommandLine=` for these directory-format bootc profiles. The fragment
+ships only the existing native public MOK certificate and RSA-2048 PCR public
+key at `/usr/lib/snosi/`. Its schema-1
 `/usr/lib/snosi/bootc-secure.json` is the rootfs contract for later assembly
 and installer tasks; schema 1 pins its encrypted root mapper as `root`, which
 the reconciler and deferred installer must use. It is not a signed-UKI production path: do not add private
@@ -356,9 +359,11 @@ That focused proof now passes after Task 2 switched its recovery producer to
 1 cannot populate `/etc` during first boot (`Read-only file system`), followed
 by failed TPM setup/drift-report/logind units and no SSH. This is a distinct
 post-switch-root investigation; do not change `/etc` or services in this gate.
-The next `rw`-only cmdline proof passes real-root first boot and reaches SSH;
-the direct ukify command now carries exactly `rw composefs=?<OCI-digest>` and
-fixture-rejects root/LUKS identifiers. Task 3 now has a fail-closed temporary
+The next minimal cmdline proof passes real-root first boot and reaches SSH;
+the direct ukify command now carries exactly
+`rw composefs=?<OCI-digest> lockdown=integrity` and fixture-rejects missing or
+divergent lockdown policy plus root/LUKS identifiers. Task 3 now has a
+fail-closed temporary
 ESP assertion: it derives the backing disk from the booted root LUKS partition,
 requires exactly one sibling EFI System Partition, mounts it read-only at
 `/run/task3-esp`, and runs `bootctl --esp-path=/run/task3-esp --no-pager

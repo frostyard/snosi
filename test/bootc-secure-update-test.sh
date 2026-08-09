@@ -168,6 +168,8 @@ secure_runtime_subset() { # recovery MOK certificate
 
     cmdline=$(vm_ssh 'cat /proc/cmdline')
     composefs_from_cmdline "$cmdline" >/dev/null || subset_fail "no composefs= in the kernel command line: $cmdline" || return 1
+    cmdline_has_lockdown_integrity "$cmdline" \
+        || subset_fail "kernel command line does not contain exactly one lockdown=integrity: $cmdline" || return 1
     [[ $cmdline != *root=* && $cmdline != *luks.* && $cmdline != *rd.luks.* ]] \
         || subset_fail "kernel command line carries a root/LUKS identifier: $cmdline" || return 1
 
