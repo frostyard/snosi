@@ -103,9 +103,16 @@ dangerous_reason() { # argument
         printf 'arguments containing whitespace or quotes are ambiguous'
     elif [[ $arg == root=* || $arg == rootfstype=* || $arg == rootflags=* ||
         $arg == roothash=* || $arg == usrhash=* || $arg == composefs=* ||
-        $arg == systemd.gpt_auto=* || $arg == init=* ||
-        $arg == systemd.verity* || $arg == rd.luks.* ||
-        $arg == rd.break || $arg == rd.shell || $arg == emergency ||
+        $arg == systemd.gpt_auto=* || $arg == rd.systemd.gpt_auto ||
+        $arg == rd.systemd.gpt_auto=* || $arg == init=* ||
+        $arg == rdinit || $arg == rdinit=* ||
+        $arg == systemd.verity* || $arg == rd.luks ||
+        $arg == rd.luks=* || $arg == rd.luks.* ||
+        $arg == rd.break || $arg == rd.shell ||
+        $arg == systemd.break || $arg == systemd.break=* ||
+        $arg == systemd.debug_shell || $arg == systemd.debug_shell=* ||
+        $arg == emergency || $arg == rescue ||
+        $arg == rd.emergency || $arg == rd.emergency=* ||
         $arg == rd.systemd.unit=emergency.target ||
         $arg == rd.systemd.unit=rescue.target ||
         $arg == systemd.unit=emergency.target ||

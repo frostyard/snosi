@@ -146,13 +146,22 @@ assert_contains() { # description haystack needle
 
 echo "# refusal matrix"
 setup_fixture
+newly_rejected=(
+    rdinit rdinit=/bin/sh
+    systemd.debug_shell systemd.debug_shell=1
+    systemd.break systemd.break=pre-mount
+    rescue
+    rd.emergency rd.emergency=reboot
+    rd.luks rd.luks=0
+    rd.systemd.gpt_auto rd.systemd.gpt_auto=0
+)
 for rejected in \
     root=/dev/vda2 rootfstype=ext4 rootflags=rw roothash=deadbeef \
     usrhash=deadbeef systemd.verity_root_data=/dev/vda2 rd.luks.uuid=deadbeef \
     composefs=deadbeef systemd.gpt_auto=no init=/bin/sh rd.break rd.shell \
     emergency systemd.unit=emergency.target systemd.unit=rescue.target \
     rd.systemd.unit=emergency.target rd.systemd.unit=rescue.target \
-    "console=ttyS0 debug"; do
+    "console=ttyS0 debug" "${newly_rejected[@]}"; do
     if run_cli set --no-apply "$rejected" >/dev/null 2>&1; then
         fail "refuses $rejected"
     else
@@ -169,7 +178,7 @@ SNOSI_ESP_TEST_PATH="$WORK/esp" \
 SNOSI_TEST_TOOL_LOG="$WORK/tool.log" \
 SNOSI_TEST_UKIFY_ARGS="$WORK/ukify.args" \
 SNOSI_TEST_SYNC_COUNT="$WORK/sync.count" \
-python3 - "$SCRIPT" <<'PY'
+python3 - "$SCRIPT" "${newly_rejected[@]}" <<'PY'
 import os
 import pty
 import sys
@@ -178,7 +187,14 @@ pid, fd = pty.fork()
 if pid == 0:
     os.execve(
         sys.argv[1],
-        [sys.argv[1], "set", "--force", "--no-apply", "root=/dev/vda2"],
+        [
+            sys.argv[1],
+            "set",
+            "--force",
+            "--no-apply",
+            "root=/dev/vda2",
+            *sys.argv[2:],
+        ],
         os.environ,
     )
 
@@ -202,8 +218,9 @@ if exit_code != 0:
     sys.stderr.buffer.write(transcript)
     raise SystemExit(exit_code)
 PY
-assert_eq "interactive --force override persists a refused argument" \
-    "$(cat "$WORK/state/args")" "root=/dev/vda2"
+expected_forced=$(printf '%s\n' root=/dev/vda2 "${newly_rejected[@]}")
+assert_eq "interactive --force override persists refused arguments" \
+    "$(cat "$WORK/state/args")" "$expected_forced"
 
 run_cli set --no-apply mitigations=off console=tty0
 assert_eq "safe arguments persist one per line" \
