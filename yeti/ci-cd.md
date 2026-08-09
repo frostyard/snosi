@@ -57,8 +57,10 @@ Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependen
 GHCR authentication is repository- and run-scoped: `secure-build` grants
 `packages: write`, while `release` grants only `packages: read`; both use
 `secrets.GITHUB_TOKEN`. Buildah and ORAS consume the token through stdin, and
-Docker login writes the user-context auth file used by Cosign and Skopeo. No
-long-lived GHCR PAT is required. Scheduled mechanics run `31150007630`
+Docker login writes the user-context auth file used by Cosign and Skopeo.
+Registry-login `run:` steps map `github.actor` to `GHCR_USER` in `env:` and
+quote that shell variable; direct GitHub context interpolation in shell source
+is forbidden. No long-lived GHCR PAT is required. Scheduled mechanics run `31150007630`
 successfully pushed all three profiles with the same repository token, proving
 the cayo, snow, and snowfield package access needed by secure publication.
 
