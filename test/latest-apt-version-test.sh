@@ -74,6 +74,20 @@ export MOCK_CURL_PAYLOAD="$work/Packages.gz"
 assert_fails_with 'a missing package is rejected' 'no version found for missing' \
     "$SCRIPT" https://example.invalid/Packages.gz missing
 
+export MOCK_CURL_STATUS=28
+assert_fails_with 'a failed download is rejected' \
+    'failed to download bounded APT index' \
+    "$SCRIPT" https://example.invalid/Packages.gz demo
+unset MOCK_CURL_STATUS
+
+cp "$work/Packages.gz" "$work/truncated.gz"
+truncate -s -8 "$work/truncated.gz"
+export MOCK_CURL_PAYLOAD="$work/truncated.gz"
+assert_fails_with 'a truncated gzip stream is rejected' \
+    'invalid or truncated APT Packages.gz index' \
+    "$SCRIPT" https://example.invalid/Packages.gz demo
+
+export MOCK_CURL_PAYLOAD="$work/Packages.gz"
 assert_fails_with 'invalid resource limits are rejected' \
     'invalid APT index resource limit' \
     env APT_INDEX_MAX_DECOMPRESSED_BYTES=unlimited \

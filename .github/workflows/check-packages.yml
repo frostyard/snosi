@@ -25,23 +25,32 @@ jobs:
       # resolves packages from APT during the sysext build.
       - name: Check latest package versions
         run: |
+          set -euo pipefail
+
           get_latest_version() {
             ./shared/download/latest-apt-version.sh "$1" "$2"
           }
 
           {
-            echo "code=$(get_latest_version \
+            version="$(get_latest_version \
               'https://packages.microsoft.com/repos/code/dists/stable/main/binary-amd64/Packages.gz' \
               'code')"
-            echo "docker-ce=$(get_latest_version \
+            printf 'code=%s\n' "$version"
+
+            version="$(get_latest_version \
               'https://download.docker.com/linux/debian/dists/trixie/stable/binary-amd64/Packages.gz' \
               'docker-ce')"
-            echo "1password-cli=$(get_latest_version \
+            printf 'docker-ce=%s\n' "$version"
+
+            version="$(get_latest_version \
               'https://downloads.1password.com/linux/debian/amd64/dists/stable/main/binary-amd64/Packages.gz' \
               '1password-cli')"
-            echo "claude-desktop=$(get_latest_version \
+            printf '1password-cli=%s\n' "$version"
+
+            version="$(get_latest_version \
               'https://downloads.claude.ai/claude-desktop/apt/stable/dists/stable/main/binary-amd64/Packages.gz' \
               'claude-desktop')"
+            printf 'claude-desktop=%s\n' "$version"
           } > latest-versions.txt
           cat latest-versions.txt
 
