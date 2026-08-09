@@ -524,7 +524,9 @@ policy copy, and artifact before moving `latest`; a failed candidate cannot
 move `latest`. GHCR authentication uses only the run-scoped `GITHUB_TOKEN`
 (`packages: write` for secure publication and `packages: read` for release
 discovery); command-line logins receive it through stdin, never process
-arguments. Native pull requests likewise use disposable RSA-4096 MOK and
+arguments. Shell login steps pass `github.actor` through a quoted `GHCR_USER`
+environment variable instead of interpolating context data into shell source.
+Native pull requests likewise use disposable RSA-4096 MOK and
 RSA-2048 PCR credentials and cannot publish. Fixture success proves runner and
 publication-contract behavior only, not a live secure installation, update,
 rotation, full rollback window, or Snowfield hardware result.

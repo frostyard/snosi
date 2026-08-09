@@ -157,9 +157,10 @@ jobs:
           # Scoped to this repository and this run, matching the secure
           # publisher's least-privilege credential model.
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         run: |
           # Login via stdin so the token never appears in process arguments.
-          echo "$GH_TOKEN" | sudo buildah login -u "${{ github.actor }}" --password-stdin ghcr.io
+          printf '%s' "$GH_TOKEN" | sudo buildah login -u "$GHCR_USER" --password-stdin ghcr.io
 
           # Immutable, version-stamped.
           sudo TMPDIR="$TMPDIR" buildah push --compression-format=zstd:chunked \

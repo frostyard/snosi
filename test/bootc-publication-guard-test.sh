@@ -119,8 +119,9 @@ jobs:
        - name: Push immutable version tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         run: |
-          printf '%s' "$GH_TOKEN" | sudo buildah login -u "${{ github.actor }}" --password-stdin ghcr.io
+          printf '%s' "$GH_TOKEN" | sudo buildah login -u "$GHCR_USER" --password-stdin ghcr.io
        - name: Log in to ghcr.io
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -143,8 +144,9 @@ jobs:
        - name: Login to GHCR with ORAS
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         run: |
-          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "$GHCR_USER" --password-stdin
        - name: Upload SBOM
        - name: Sign SBOM
        - name: Attest build provenance
@@ -168,8 +170,9 @@ jobs:
       - name: Login to GHCR with ORAS
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
         run: |
-          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "$GHCR_USER" --password-stdin
       - name: Resolve previous and current snow tags
         run: |
           ./shared/bootc-secure/ci/resolve-snow-release-predecessor.sh \
@@ -269,6 +272,10 @@ remove_release_oras_token() {
     perl -0pi -e 's/(  release:.*?      - name: Login to GHCR with ORAS\n        env:\n)          GH_TOKEN:[^\n]*\n/$1/s' \
         "$1/.github/workflows/build-images.yml"
 }
+interpolate_actor_directly() {
+    perl -pi -e 's/"\$GHCR_USER"/"\${{ github.actor }}"/g' \
+        "$1/.github/workflows/build-images.yml"
+}
 remove_buildah_password_stdin() {
     perl -0pi -e 's/ --password-stdin ghcr\.io/ ghcr.io/' \
         "$1/.github/workflows/build-images.yml"
@@ -335,6 +342,7 @@ assert_guard 'missing secure push GITHUB_TOKEN fails' 1 remove_push_github_token
 assert_guard 'wrong Docker login token fails' 1 replace_docker_login_token
 assert_guard 'missing secure ORAS GITHUB_TOKEN fails' 1 remove_secure_oras_token
 assert_guard 'missing release ORAS GITHUB_TOKEN fails' 1 remove_release_oras_token
+assert_guard 'direct actor interpolation in registry logins fails' 1 interpolate_actor_directly
 assert_guard 'Buildah login without password stdin fails' 1 remove_buildah_password_stdin
 for variable in SNOSI_BOOTC_SECURE SNOSI_BOOTC_MOK_KEY SNOSI_BOOTC_MOK_CERT SNOSI_BOOTC_PCR_KEY SNOSI_BOOTC_PCR_CERT; do
     assert_guard "missing $variable fails" 1 remove_package_variable "$variable"

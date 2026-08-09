@@ -205,10 +205,14 @@ else
             capture && /^      - name: / && $0 != "      - name: Push immutable version tag" { exit }
             capture { print }
         ' <<<"$secure_job")
+        # shellcheck disable=SC2016 # GitHub expressions are exact literal markers.
         require_text "$workflow secure push token" "$push_step" \
             '          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}'
+        # shellcheck disable=SC2016 # GitHub expression is an exact literal marker.
+        require_text "$workflow secure push actor" "$push_step" \
+            '          GHCR_USER: ${{ github.actor }}'
         push_login_line=$(cat <<'EOF'
-          printf '%s' "$GH_TOKEN" | sudo buildah login -u "${{ github.actor }}" --password-stdin ghcr.io
+          printf '%s' "$GH_TOKEN" | sudo buildah login -u "$GHCR_USER" --password-stdin ghcr.io
 EOF
 )
         require_text "$workflow secure Buildah login" "$push_step" "$push_login_line"
@@ -220,6 +224,7 @@ EOF
         ' <<<"$secure_job")
         require_text "$workflow secure registry login" "$login_step" \
             '        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3'
+        # shellcheck disable=SC2016 # GitHub expression is an exact literal marker.
         require_text "$workflow secure registry token" "$login_step" \
             '          password: ${{ secrets.GITHUB_TOKEN }}'
 
@@ -228,10 +233,14 @@ EOF
             capture && /^      - name: / && $0 != "      - name: Login to GHCR with ORAS" { exit }
             capture { print }
         ' <<<"$secure_job")
+        # shellcheck disable=SC2016 # GitHub expressions are exact literal markers.
         require_text "$workflow secure ORAS token" "$oras_login_step" \
             '          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}'
+        # shellcheck disable=SC2016 # GitHub expression is an exact literal marker.
+        require_text "$workflow secure ORAS actor" "$oras_login_step" \
+            '          GHCR_USER: ${{ github.actor }}'
         oras_login_line=$(cat <<'EOF'
-          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "$GHCR_USER" --password-stdin
 EOF
 )
         require_text "$workflow secure ORAS login" "$oras_login_step" "$oras_login_line"
@@ -326,10 +335,14 @@ EOF
             capture && /^      - name: / && $0 != "      - name: Login to GHCR with ORAS" { exit }
             capture { print }
         ' <<<"$release_job")
+        # shellcheck disable=SC2016 # GitHub expressions are exact literal markers.
         require_text "$workflow release ORAS token" "$release_oras_login" \
             '          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}'
+        # shellcheck disable=SC2016 # GitHub expression is an exact literal marker.
+        require_text "$workflow release ORAS actor" "$release_oras_login" \
+            '          GHCR_USER: ${{ github.actor }}'
         release_oras_login_line=$(cat <<'EOF'
-          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "$GHCR_USER" --password-stdin
 EOF
 )
         require_text "$workflow release ORAS login" \

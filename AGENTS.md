@@ -231,7 +231,10 @@ Docker login config explicitly: inspections use `--authfile`, root policy copy
 uses source-only `--src-authfile`, and promotion uses source and destination
 auth files. The run-scoped `GITHUB_TOKEN` is the only GHCR credential:
 `secure-build` grants `packages: write`, while `release` grants only
-`packages: read`; Buildah and ORAS receive it through stdin. The successful
+`packages: read`; Buildah and ORAS receive it through stdin. Shell `run:`
+steps expose `github.actor` only through the quoted `GHCR_USER` environment
+variable; never interpolate GitHub context values directly into shell source.
+The successful
 three-profile mechanics publication run `31150007630` proves repository-token
 write access to the same cayo, snow, and snowfield packages, so a long-lived
 GHCR PAT is neither required nor permitted. Pinned Cosign v2.6.1 receives
