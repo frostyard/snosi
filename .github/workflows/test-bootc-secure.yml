@@ -101,7 +101,10 @@ jobs:
         run: ./test/bootc-secure-promotion-test.sh
 
   live-full-window:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_live
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.run_live
     runs-on: [self-hosted, linux, x64, bootc-secure]
     timeout-minutes: 360
     permissions:
@@ -125,7 +128,7 @@ jobs:
         env:
           STATE_ROOT: ${{ inputs.state_root }}
           PROFILE: ${{ inputs.profile }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_TOKEN: ${{ github.token }}
           GHCR_USER: ${{ github.actor }}
           DAKOTA_REF: ${{ inputs.dakota_ref }}
         run: ./shared/bootc-secure/ci/run-window-in-container.sh
@@ -147,14 +150,17 @@ jobs:
       - name: Ensure no container survived the job
         if: always()
         run: |
-          left=$(podman ps -q) || exit 0
-          if [[ -n "$left" ]]; then
-            echo "removing containers left behind: $left" >&2
-            podman rm -f $left || true
+          mapfile -t left < <(podman ps -q) || exit 0
+          if ((${#left[@]})); then
+            printf 'removing container left behind: %s\n' "${left[@]}" >&2
+            podman rm -f "${left[@]}" || true
           fi
 
   snowfield-hardware:
-    if: github.event_name == 'workflow_dispatch' && inputs.run_snowfield_hardware
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.run_snowfield_hardware
     runs-on: [self-hosted, linux, x64, snowfield-hardware]
     timeout-minutes: 360
     permissions:

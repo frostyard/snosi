@@ -248,6 +248,34 @@ enrolled firmware trust. Remove the old MOK only after every old-signed rollback
 | Hardware | The required representative device's install, input, power, update, rollback, and fallback evidence | Other hardware models or a generalized production claim |
 | Legacy mechanics | Existing bootc/nbc behavior and migration mechanics | Conversion to the secure DPS LUKS/MOK/TPM layout |
 
+### Self-hosted runner trust boundary
+
+The `bootc-secure` and `snowfield-hardware` runners are persistent registrations,
+not ephemeral VMs. `setup-self-hosted-runner.sh` runs them as a dedicated
+no-login, no-sudo account and wipes the Actions workspace after every job, but
+that cleanup is not equivalent to reimaging the host and cannot recover a
+compromised runner installation.
+
+All self-hosted jobs are therefore restricted at the job level to
+`refs/heads/main`. The live and hardware jobs additionally require an explicit
+`workflow_dispatch`; the nightly accepts only its scheduled or manually
+requested runs. `test/bootc-secure-ci-test.sh` inventories every self-hosted job
+and fails if any lacks the main-ref guard. Maintainers must also keep Actions
+approval required for all external contributors as described by the setup
+script.
+
+The full-window jobs receive only their job-scoped `GITHUB_TOKEN`, exposed to
+the container as `GHCR_TOKEN`, with `packages: write` for the required tracking
+tag update. It expires with the job and is not a durable registry credential.
+The production MOK/PCR signing keys, Cosign key, and R2 credentials remain in
+the hosted, protected `native-build` environment and must never be added to a
+self-hosted job.
+
+After suspected runner compromise, stop dispatching these jobs, remove the
+runner registration, reimage the host, rerun `setup-self-hosted-runner.sh`, and
+restage only reviewed mode-0700 state. A workspace wipe alone is not sufficient
+incident recovery.
+
 ## Existing Installations
 
 Existing bootc and nbc installations cannot be converted in place to this secure layout.
