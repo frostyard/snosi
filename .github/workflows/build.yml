@@ -7,10 +7,28 @@ on:
       # Image-only direct-download metadata should rebuild OCI profiles, not
       # the base+sysext publishing workflow.
       - "shared/download/image-checksums.json"
+      # These paths cannot affect base/sysext composition or publication.
+      - "**/*.md"
+      - ".claude/**"
+      - ".knowledge/**"
+      - ".memory/**"
+      - "skills/**"
+      - "yeti/**"
+      - "workers/**"
+      - ".github/workflows/deploy-native-installer-redirect.yml"
   pull_request:
     branches: [main]
     paths-ignore:
       - "shared/download/image-checksums.json"
+      # These paths cannot affect base/sysext composition or publication.
+      - "**/*.md"
+      - ".claude/**"
+      - ".knowledge/**"
+      - ".memory/**"
+      - "skills/**"
+      - "yeti/**"
+      - "workers/**"
+      - ".github/workflows/deploy-native-installer-redirect.yml"
   workflow_dispatch:
 
 permissions: {}
@@ -97,11 +115,11 @@ jobs:
 
       - name: Generate build date
         id: date
-        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_OUTPUT
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       - name: Generate version tag
         id: version
-        run: echo "tag=$(date +%Y%m%d%H%M%S)" >> $GITHUB_OUTPUT
+        run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
 
       - name: setup-mkosi
         uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf

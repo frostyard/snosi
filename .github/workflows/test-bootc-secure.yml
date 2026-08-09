@@ -3,8 +3,16 @@ name: Test bootc secure contracts
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      # The redirect worker is deployed and validated by its own workflows;
+      # it cannot affect bootc secure contracts or runner harnesses.
+      - "workers/**"
+      - ".github/workflows/deploy-native-installer-redirect.yml"
   push:
     branches: [main]
+    paths-ignore:
+      - "workers/**"
+      - ".github/workflows/deploy-native-installer-redirect.yml"
   workflow_dispatch:
     inputs:
       run_live:
