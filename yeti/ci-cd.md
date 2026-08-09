@@ -306,6 +306,25 @@ promotion gate remains the Tier 1 smoke test inside
 not a blocker; `if: failure()` uploads `nightly-harness-logs-<profile>`
 for exactly that purpose.
 
+### nightly-compliance.yml — Nightly Policy Drift Detection
+
+**Trigger:** Scheduled daily at `04:30 UTC`, plus manual dispatch.
+
+This secretless workflow re-runs the repository's existing static security and
+publication contracts independently of pull request activity. It checks the
+runtime `/etc` mutation guard, frozen native A/B contracts and publication
+guard, bootc secure CI wiring and publication guard, and signed sysext metadata
+policy. These are selected because they are fast, deterministic, require no
+root or network after checkout, and cover policy that must remain true even
+when no code is changing. Deep image-build and boot evidence remains in
+`native-nightly.yml` and `bootc-secure-nightly.yml`; this workflow does not
+duplicate those expensive jobs or publish artifacts.
+
+Default permissions are empty and the sole job receives only `contents: read`.
+Checkout credentials are not persisted, no environment or repository secret is
+referenced, and `cancel-in-progress: false` prevents a delayed run from being
+silently replaced by the next schedule.
+
 ### check-dependencies.yml — External Dependency Updates
 
 **Trigger:** Weekly (Monday 9am UTC), manual dispatch
@@ -377,6 +396,56 @@ during the sysext build.
 1. Queries APT repositories for current versions
 2. Compares against `shared/download/package-versions.json`
 3. If changed: updates `package-versions.json`, creates a sysext package-version PR
+
+### ai-fix-requested.yml — Copilot Issue Handoff
+
+**Trigger:** An issue receives the `ai-fix-requested` label, or a maintainer
+manually dispatches the workflow with an issue number.
+
+The workflow re-fetches the issue and fails unless it is open and still has
+the label, then calls GitHub's issue-assignment API with
+`copilot-swe-agent[bot]`, the current repository, and its default branch.
+The API requires a user-to-server token, so the repository must provide the
+fine-grained `COPILOT_ASSIGNMENT_TOKEN` secret with read/write access to
+Actions, Contents, Issues, and Pull requests. Do not replace it with
+`GITHUB_TOKEN`, which is an installation token and cannot start this agent
+assignment. Default workflow permissions remain empty, no checkout occurs,
+and issue title/body text never enters the shell.
+
+### copilot-review-apply.yml — Automated Review Application
+
+**Trigger:** A pull request review is submitted, or a maintainer manually
+dispatches the workflow with a pull request number and review ID.
+
+Automatic runs are admitted only for non-draft pull requests whose head branch
+belongs to this repository; the script re-fetches and enforces those conditions
+again so manual dispatch cannot bypass them. `APPROVED`, dismissed, and empty
+reviews are no-ops, as is a `COMMENTED` review with no inline feedback. For an
+actionable `COMMENTED` or `CHANGES_REQUESTED` review, the workflow posts a fixed
+`@copilot` instruction referencing the review URL. The Copilot coding agent
+reads the unresolved threads and updates the existing pull request. A hidden
+review-ID marker makes reruns idempotent.
+
+The comment uses the user-scoped `COPILOT_ASSIGNMENT_TOKEN` secret because
+comments created by the workflow's installation `GITHUB_TOKEN` cannot invoke
+the coding agent. The token owner must have write access and Copilot coding
+agent access. Default workflow permissions are empty, fork pull requests never
+receive the secret, no code is checked out, and untrusted review text is neither
+executed nor copied into the agent instruction.
+
+### triage.yml — Automated Issue Classification
+
+**Trigger:** Issue opened, edited, or reopened.
+
+The workflow fetches the issue with `gh api`, classifies only from explicit
+title signals, and adds at most one of the existing `acmm`, `bug`,
+`documentation`, `enhancement`, or `question` labels. If any classification
+label is already present, it does nothing; it never removes or replaces human
+labels. The label output is allowlisted before `gh issue edit`, issue text is
+not interpolated into workflow expressions or evaluated by the shell, and the
+job receives only `issues: write`. Bug reports created from the repository
+template receive `bug` directly from template front matter, so they do not
+depend on title heuristics.
 
 ### validate.yml — Code Validation
 

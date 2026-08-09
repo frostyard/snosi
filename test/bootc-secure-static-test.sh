@@ -78,6 +78,31 @@ for kept in systemd-tpm2-setup.service systemd-tpm2-setup-early.service; do
     }
 done
 
+# Masking the two consumer units is NOT sufficient, and assuming it was cost a
+# live run. systemd-tpm2-setup{,-early} also reach for the anchor --
+# "Failed to acquire anchor secret: Object is remote" -- and they cannot be
+# masked because SRK setup is required. Removing the DEFINITIONS is what stops
+# anything asking for an anchor at all, which is why native does both and this
+# must too.
+nvpcr_finalize="$root/shared/bootc-secure/finalize/disable-nvpcr.chroot"
+[[ -x "$nvpcr_finalize" ]] || {
+    echo "bootc secure must ship an executable disable-nvpcr finalize script" >&2
+    exit 1
+}
+grep -Fq '/usr/lib/nvpcr/*.nvpcr' "$nvpcr_finalize"
+grep -Fq 'ln -sfn /dev/null "/etc/nvpcr/' "$nvpcr_finalize"
+grep -Fq 'FinalizeScripts=%D/shared/bootc-secure/finalize/disable-nvpcr.chroot' \
+    "$root/shared/bootc-secure/mkosi.conf"
+# SRK setup must survive: the finalize must not mask those units either.
+# Comments are stripped first -- the script explains at length WHY it leaves
+# systemd-tpm2-setup alone, and that prose must not trip the guard against
+# touching it. (A grep that matches its own documentation is a recurring shape
+# in this repo; it already caught the ssh_private_key check once.)
+if sed 's/#.*//' "$nvpcr_finalize" | grep -Fq 'systemd-tpm2-setup'; then
+    echo "disable-nvpcr must not touch systemd-tpm2-setup; SRK setup is required" >&2
+    exit 1
+fi
+
 [[ -f "$secure" ]]
 [[ -f "$package_manager/etc/apt/sources.list.d/forky.sources" ]]
 [[ -f "$package_manager/etc/apt/preferences.d/forky" ]]
@@ -180,6 +205,48 @@ done
 for profile in cayo-ab-raw cayo-ab snow-ab snowfield-ab; do
     if grep -q 'shared/bootc-secure' "$root/mkosi.profiles/$profile/mkosi.conf"; then
         echo "native profile $profile must not include the bootc secure fragment" >&2
+        exit 1
+    fi
+done
+
+# The install and update harnesses must not carry private copies of these.
+# Independent copies are what produced the update leg's failure: type2_only
+# had drifted to accept only `efi` while bootc writes `uki`, so it could never
+# pass -- while the install harness asserted the same property and passed.
+# Sixth defect of that shape in this subsystem; the shared library is the fix,
+# and this check is what keeps it shared.
+lib="$root/test/lib/bootc-secure-assertions.sh"
+[[ -f "$lib" ]] || { echo "missing $lib" >&2; exit 1; }
+for harness in "$root/test/bootc-secure-install-test.sh" "$root/test/bootc-secure-update-test.sh"; do
+    grep -Fq 'test/lib/bootc-secure-assertions.sh' "$harness" || {
+        echo "${harness##*/} must source the shared assertions library" >&2
+        exit 1
+    }
+    for shared in esp_cat composefs_from_cmdline type2_only signed_pcr11_token root_backing_device; do
+        if grep -Eq "^${shared}\(\)" "$harness"; then
+            echo "${harness##*/} redefines ${shared}; it belongs to the shared library" >&2
+            exit 1
+        fi
+    done
+done
+# bootc writes `uki`; requiring `efi` alone rejects every genuine install.
+grep -Fq '(uki|efi)' "$lib"
+
+# No guest command in these harnesses may reach into /boot. bootc mounts it only
+# while it is using it, so every /boot path reports absent on a HEALTHY system:
+# it produced "BLS entries are not Type #2-only" on one run and "no UKI at the
+# composefs path" on the next, both for state that was present the whole time.
+# Boot assets are read off the ESP (esp_cat) or from /usr.
+#
+# Comments are stripped first: the harnesses explain this at length, and that
+# prose must not trip the guard. Same shape as the ssh_private_key check that
+# matched its own documentation.
+for harness in "$root/test/bootc-secure-install-test.sh" \
+               "$root/test/bootc-secure-update-test.sh" \
+               "$lib"; do
+    if sed 's/#.*//' "$harness" | grep -Eq '(vm_ssh|scp)[^#]*/boot/'; then
+        echo "${harness##*/} reaches into /boot in a guest command; use esp_cat" >&2
+        sed 's/#.*//' "$harness" | grep -nE '(vm_ssh|scp)[^#]*/boot/' >&2
         exit 1
     fi
 done

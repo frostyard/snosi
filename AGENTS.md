@@ -177,6 +177,28 @@ Before a recovery runner, the install harness creates an owned mode-0600,
 path-only state manifest from its recipe and passes it with the Dakota ISO;
 the final exported handoff copies that same manifest shape.
 
+**Assertions shared by the install and update harnesses live in exactly ONE
+place: `test/lib/bootc-secure-assertions.sh`** (`esp_cat`,
+`composefs_from_cmdline`, `type2_only`, `signed_pcr11_token`,
+`root_backing_device`). Neither harness may re-define them;
+`test/bootc-secure-static-test.sh` fails the build if either does. Independent
+copies drift silently and the drift is load-bearing — three of four had
+diverged, and `type2_only` had come to accept only `efi` while bootc writes
+`uki`, so the update leg could not pass on any composefs install while the
+install harness asserted the same property and passed. Two facts these
+assertions encode are easy to get wrong from first principles and must not be
+"simplified" back: bootc leaves `/boot` UNMOUNTED unless it is using it, so BLS
+entries are read off the ESP located by GPT type GUID, never from
+`/boot/loader/entries`; and on a composefs deployment `/` is an overlay, so the
+root filesystem is probed on `/dev/mapper/root`, never with `findmnt /`.
+
+This is the sixth defect in this subsystem caused by a fix landing in one of
+two sibling paths (`ssh_key`/`ssh_private_key`, `uki`/`efi` in the recovery
+runner, `findmnt /` vs the composefs mapper, NvPCR masked on native but not
+bootc, the nightly's stale copy of the KVM step, and this). When a fix applies
+to a behaviour that exists twice, move the behaviour rather than copying the
+fix.
+
 **Task 9 secure update harness (2026-07-29):**
 `test/bootc-secure-update-test.sh --fixtures` validates the mode-0600,
 path-only install handoff and marked external update protocol. Live mode
@@ -275,10 +297,23 @@ evidence. User and recovery guidance lives in `docs/snosi-kargs.md`.
 `/usr/lib/snosi/cosign.pub`. Cosign v2.6.1 signatures record repository rather
 than tag identities, so this MUST use `signedIdentity: matchRepository` and
 the GHCR `registries.d` entry MUST retain `use-sigstore-attachments: true`.
-The sole local exception is the empty `containers-storage` transport scope with
-`insecureAcceptAnything`: it permits bootc to consume only the image already
-accepted by Podman's signed `docker` pull; do not broaden `docker` to a namespace
-or global acceptance. Secure install
+LOCAL transports are accepted with `insecureAcceptAnything`: `containers-storage`
+(so bootc consumes the image Podman's signed `docker` pull already accepted),
+plus `tarball`, `docker-archive`, `oci-archive`, `dir`, and `oci` so an operator
+can do ordinary image work on an installed system — `podman load`, `podman
+import`, OCI layouts. Those bytes are already on the machine and under the
+operator's control; the boundary this policy exists to enforce is the REGISTRY
+one. Blocking them was also inconsistent rather than strict: `podman build`
+FROM scratch consults no transport at all, so arbitrary local images were always
+constructible — the prohibition cost usability and bought nothing.
+
+**Do not broaden `docker`** to a namespace or global acceptance, and do not
+change `default` from `reject`. That is the half that matters, and
+`test/bootc-container-policy-test.sh` fails if either moves: it requires every
+`docker` scope to stay `sigstoreSigned`, forbids a catch-all `docker` scope, and
+pins the default to `reject`. Verified against the real policy that an unsigned
+`docker.io` pull and an unsigned `ghcr.io/frostyard/cayo` pull are both still
+refused while `podman import` succeeds. Secure install
 paths must not use `--skip-fetch-check`. Local rootfs test fixtures use their
 own disposable permissive policy only; registry paths use a disposable HOME
 containing the restrictive policy so host configuration is never changed.
@@ -1649,9 +1684,13 @@ The target (e.g. `gnome-session.target`) comes from the service's `WantedBy=` in
 
 ## CI/CD
 
+- `ai-fix-requested.yml` - Assigns an open issue to the Copilot coding agent when a maintainer applies `ai-fix-requested`, with manual dispatch for missed events. The REST assignment API requires the user-scoped `COPILOT_ASSIGNMENT_TOKEN` secret with fine-grained Actions, Contents, Issues, and Pull requests read/write access; `GITHUB_TOKEN` is an installation token and must not replace it. The workflow keeps default permissions empty, reads no issue text, revalidates the open state and label, and sends the repository's default branch as the agent base.
+- `copilot-review-apply.yml` - Hands actionable submitted reviews on non-draft, same-repository pull requests to the Copilot coding agent, with manual dispatch for missed events. The workflow re-fetches the pull request and review, ignores approvals and empty reviews, and uses a review-ID marker to prevent duplicate handoffs. It requires the user-scoped `COPILOT_ASSIGNMENT_TOKEN` secret because a `GITHUB_TOKEN`-authored comment cannot invoke the agent. Default permissions stay empty; fork pull requests cannot access the token; no checkout occurs; and review text is never interpolated into the shell, executed, or copied into the handoff comment.
+- `triage.yml` - Adds one missing classification label (`acmm`, `bug`, `documentation`, `enhancement`, or `question`) from explicit issue-title signals on open, edit, or reopen. It never removes labels or overrides an existing classification, uses only job-scoped `issues: write`, and passes no issue text through workflow expressions or shell evaluation. The bug-report template applies `bug` exactly before heuristic triage runs.
 - `build.yml` - Builds base + sysexts, publishes to Frostyard repo (Cloudflare R2)
 - `build-images.yml` - Three-profile PR `mechanics-build` packages and smoke-tests locally with no secrets or registry writes. Protected `secure-build` runs only for main non-PR events in `native-build`: it transiently materializes the durable production MOK/PCR identities supplied by the four `NATIVE_*` secrets, deletes those runner-local files before registry writes, validates the local artifact, pushes/signs the immutable version digest, verifies labels/signature and policy-copied bytes remotely, then copies that verified digest to `latest`. Both jobs select the runner-bundled `runc` through a job-local `containers.conf.d` drop-in and verify it before building, avoiding the hosted Podman 5.8.4/default-crun incompatibility without changing shipped-image runtime policy. The Snow tag artifact is emitted only after its SBOM upload/signature, provenance attestation, and R2 manifest upload all succeed. The `release` job needs `secure-build`; it derives a predecessor only from newest-first GitHub Release `<!-- snow-tag: ... -->` markers whose older immutable Snow image has an exact `application/vnd.syft+json` referrer. It never falls back to arbitrary registry tags. If no eligible marker exists, it warns and safely skips changelog and release creation. Run `30627996880` passed all three protected secure image jobs (`cayo`, `snow`, `snowfield`), but its release changelog failed because the old fallback selected failed-build tag `20260731030941`, which had no SBOM. This repair is fixture-verified only, not live-proven, until a main-branch run creates or cleanly skips a Snow release using this resolver.
 - `build-native-images.yml` (Phase 7) - Native A/B (`cayo-ab`/`snow-ab`/`snowfield-ab`) build/publish pipeline; a thin caller of `shared/native-ab/publish/*.sh` and `shared/native-ab/ci/*.sh` — see `docs/native-ab-publication.md`'s "CI publication flow" section for the full job graph, secret inventory, and the "First production publication checklist" that must be completed before it is allowed to touch real R2. Triggers on push + PR to main (same sysext `paths-ignore` as `build-images.yml`), plus `workflow_dispatch`/`repository_dispatch`. PRs run only the non-publishing `build-pr` matrix with runner-generated RSA-4096 MOK and RSA-2048 PCR credentials; it has no environment, secret, artifact-upload, R2, or promotion access. The independent production `build-{cayo,snow,snowfield}` jobs run only outside PRs in the protected/default-branch `native-build` environment, retain the production credentials and candidate upload, and feed the existing public-origin checks. Promotion remains gated out of PRs at the job level (`github.event_name != 'pull_request'`), so only main pushes + manual dispatch sign and mutate the live R2 index (the `native-promotion` environment also restricts to protected/main branches). `build-*`/`promote-*` are independent per-product jobs, not a matrix, so one product's failure never blocks another's. Production R2 upload has NOT been exercised through this workflow — only local rehearsal (`test/native-ab-publication-test.sh`, `test/native-publication-pipeline-test.sh`) and the workflow's structure (actionlint-clean, every script reference hand-verified) have been. Each fresh promotion runner refreshes APT immediately before installing rclone; never rely on the hosted image's preloaded package index, because reruns can reference package revisions already removed from Ubuntu mirrors. **Boot validation (2026-07-17):** `test-public-origin`/`test-public-origin-iso` additionally BOOT the candidate bytes in QEMU/KVM before the verified marker is earned (`test/native-boot-smoke-test.sh`: multi-user.target reached, `systemctl is-system-running` = running, os-release identity match, clean poweroff; `test/native-iso-boot-smoke-test.sh`: serial login prompt). An unbootable image can no longer be promoted. SSH access is seeded via the `/etc`-overlay upperdir on var (the `snosi-install` `seed_var()` path) — root/verity bytes boot pristine; Secure Boot is NOT enforced in this tier (MOK never enrolled in the throwaway varstore) — SB/TPM fidelity belongs to the nightly.
+- `nightly-compliance.yml` - Runs the existing secretless runtime `/etc`, native publication, bootc publication, and signed-sysext policy contracts every day at 04:30 UTC and on manual dispatch. It has read-only contents access, performs no publication, and uses a non-cancelling concurrency group so a slow run is not hidden by the next schedule.
 - `native-nightly.yml` - Nightly (cron + dispatch) deep secure-chain validation: runs `test/native-ab-secure-boot-test.sh` default mode on a hosted runner with KVM+swtpm+virt-firmware, rotating profiles by day of week (Sun snowfield-ab, Tue/Thu/Sat cayo-ab, else snow-ab). Uses NO secrets/environments — all key material is ephemeral per-run (PCR key RSA-2048 per contract §7). Non-blocking: promotion gating stays with the Tier 1 smoke test. Design: `docs/plans/2026-07-17-native-boot-validation-design.md`.
 - `check-dependencies.yml` - Weekly check for external dependency updates, creates target-specific PRs with updated checksums or inline OCI build-tool pins (Syft, compatible Cosign v2, chunkah digest). Version-based checks are downgrade-guarded (`ver_gt`, sort -V strictly-newer) — coder deliberately tracks its stable channel (GitHub "latest"), whose version numbers run behind mainline
 - `check-packages.yml` - Daily check for APT package version updates, creates PRs

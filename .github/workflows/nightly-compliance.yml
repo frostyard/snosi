@@ -1,0 +1,40 @@
+name: Nightly Compliance
+
+on:
+  schedule:
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: nightly-compliance
+  cancel-in-progress: false
+
+jobs:
+  policy-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate immutable runtime policy
+        run: ./check-runtime-etc-guard.sh
+
+      - name: Validate native publication policy
+        run: |
+          ./test/native-ab-contracts-test.sh
+          ./check-native-publication-guard.sh
+
+      - name: Validate bootc publication policy
+        run: |
+          ./test/bootc-secure-ci-test.sh
+          ./check-bootc-publication-guard.sh
+
+      - name: Validate signed sysext metadata
+        run: ./test/sysext-signature-verification-test.sh

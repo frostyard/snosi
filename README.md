@@ -658,8 +658,12 @@ installation or the root update service.
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
+| `ai-fix-requested.yml` | `ai-fix-requested` issue label / manual | Validates the request and assigns the issue to the Copilot coding agent |
+| `copilot-review-apply.yml` | Submitted PR review / manual | Validates actionable feedback on an internal PR and asks Copilot to apply it once |
+| `triage.yml` | Issue open/edit/reopen | Adds a missing classification label from explicit title signals without replacing human labels |
 | `check-dependencies.yml` | Weekly | Checks pinned direct downloads and inline image-tool pins, opens target-specific PRs |
 | `check-packages.yml` | Daily | Checks external APT package versions for sysexts, updates `package-versions.json`, opens PRs |
+| `nightly-compliance.yml` | Nightly / manual | Re-runs secretless security and publication policy contracts to detect compliance drift |
 | `validate.yml` | PR/push | shellcheck (all shebang-discovered scripts, `-S warning`) + `mkosi summary` validation for every profile |
 | `test-install.yml` | Manual | Signature-verified bootc installation test in QEMU/KVM |
 | `scorecard.yml` | Weekly | OpenSSF supply-chain security analysis |

@@ -17,6 +17,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/test/lib/secure-vm.sh"
 # shellcheck disable=SC1091
 source "$ROOT_DIR/test/lib/ssh.sh"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
 
 : "${BOOTC_SECURE_INSTALL_STATE:=}"
 : "${BOOTC_SECURE_UPDATE_PUBLISH_COMMAND:=}"
@@ -115,18 +117,6 @@ start_vm() { # disk firmware-code firmware-vars TPM-socket workdir
     QEMU_PID=$(<"$work/qemu.pid")
 }
 
-composefs_from_cmdline() {
-    local token value='' count=0
-    for token in $1; do [[ $token == composefs=* ]] || continue; value=${token#composefs=}; value=${value#\?}; value=${value%%,*}; count=$((count + 1)); done
-    [[ $count -eq 1 && $value =~ ^[[:xdigit:]]{128}$ ]] && printf '%s\n' "$value"
-}
-type2_only() { local text; text=$(cat "$1") || return; ! grep -Eq '^[[:space:]]*(linux|initrd)[[:space:]]+' <<<"$text" && grep -Eq '^[[:space:]]*efi[[:space:]]+/EFI/Linux/bootc/bootc_composefs-[[:xdigit:]]{128}\.efi[[:space:]]*$' <<<"$text"; }
-signed_pcr11_token() { jq -e '[.tokens[] | select(.type == "systemd-tpm2")] as $t | ($t | length == 1) and $t[0]."tpm2-pcrs" == [] and $t[0].tpm2_pubkey_pcrs == [11] and ($t[0] | has("tpm2-pcrlock") | not)' >/dev/null; }
-root_backing_device() { # cryptsetup status root output
-    local device
-    device=$(awk '/^[[:space:]]*device:/{print $2}' <<<"$1")
-    [[ $device == /dev/* && $device != *$'\n'* ]] && printf '%s\n' "$device"
-}
 
 # Every check names itself on failure. This used to be one unbroken && chain
 # reported as a bare "FATAL: installed target failed secure runtime
@@ -181,7 +171,12 @@ secure_runtime_subset() { # recovery MOK certificate
     [[ $cmdline != *root=* && $cmdline != *luks.* && $cmdline != *rd.luks.* ]] \
         || subset_fail "kernel command line carries a root/LUKS identifier: $cmdline" || return 1
 
-    entries=$(vm_ssh 'cat /boot/loader/entries/*.conf')
+    # Off the ESP, not /boot. bootc leaves /boot unmounted unless it is using
+    # it, so `cat /boot/loader/entries/*.conf` fails on a HEALTHY system --
+    # which is exactly what this reported as "BLS entries are not Type #2-only"
+    # on run 31292423836, eleven seconds after the install harness asserted the
+    # same property and passed. It was fixed there (snosi#524) and not here.
+    entries=$(esp_cat 'loader/entries/*.conf')
     type2_only <(printf '%s\n' "$entries") || subset_fail "BLS entries are not Type #2-only" || return 1
 
     token=$(vm_ssh "cryptsetup luksDump --dump-json-metadata '$backing'")
@@ -191,10 +186,30 @@ secure_runtime_subset() { # recovery MOK certificate
         || subset_fail "the recovery credential no longer opens $backing" || return 1
     vm_ssh "source=/usr/lib/snosi/bootc/systemd-bootx64.efi; test -s \"\$source\"; sbverify --cert /usr/lib/snosi/mok.crt \"\$source\" >/dev/null" \
         || subset_fail "the immutable second-stage source is missing or not MOK-signed" || return 1
-    vm_ssh "test -e /boot/EFI/Linux/bootc/bootc_composefs-$(composefs_from_cmdline "$cmdline").efi" \
-        || subset_fail "no UKI at the composefs path for $(composefs_from_cmdline "$cmdline")" || return 1
-    vm_ssh "sbverify --cert /usr/lib/snosi/mok.crt /boot/EFI/Linux/bootc/bootc_composefs-$(composefs_from_cmdline "$cmdline").efi >/dev/null" \
-        || subset_fail "the installed UKI is not MOK-signed" || return 1
+    # The UKI is read off the ESP, for the same reason the BLS entries are:
+    # bootc leaves /boot unmounted unless it is using it, so `test -e
+    # /boot/EFI/Linux/...` reports absent on a perfectly healthy system. That is
+    # exactly what it did on run 31293274112 -- "no UKI at the composefs path"
+    # for a UKI that was present the whole time.
+    #
+    # Fixing only the BLS read last time and not sweeping the rest of this
+    # function for the same mistake is what produced that run. Every remaining
+    # guest path here is now ESP-relative or /usr.
+    #
+    # Signature verification runs HOST-side against the MOK identity the caller
+    # supplied, rather than in-guest against the guest's own copy: the guest
+    # certificate is separately compared to the supplied one below, so verifying
+    # against the supplied identity is the stronger check and needs no second
+    # in-guest tool.
+    local composefs_id uki_local
+    composefs_id=$(composefs_from_cmdline "$cmdline")
+    uki_local="$WORK/uki-installed.efi"
+    esp_cat "EFI/Linux/bootc/bootc_composefs-${composefs_id}.efi" >"$uki_local" 2>/dev/null \
+        || subset_fail "no UKI on the ESP at EFI/Linux/bootc/bootc_composefs-${composefs_id}.efi" || return 1
+    [[ -s $uki_local ]] \
+        || subset_fail "the UKI on the ESP for ${composefs_id} is empty" || return 1
+    sbverify --cert "$mok" "$uki_local" >/dev/null 2>&1 \
+        || subset_fail "the installed UKI is not signed by the supplied MOK identity" || return 1
 
     guest_mok=$(mktemp "$WORK/mok-guest.XXXXXX") || return 1
     rm -f -- "$guest_mok"
@@ -204,12 +219,21 @@ secure_runtime_subset() { # recovery MOK certificate
 }
 
 copy_and_run_persistence() { # write|verify
+    # Four steps behind one caller-side FATAL. Name them: "could not write
+    # persistence markers" does not distinguish a missing script, a failed
+    # copy, and the guest script itself failing -- and the guest script is the
+    # interesting case, since its output is the finding.
     local action=$1
     local script="$ROOT_DIR/test/update-tests/persistence-$action.sh"
-    vm_ssh 'mkdir -p /tmp/task9-lib'
-    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" "$ROOT_DIR/test/lib/helpers.sh" root@localhost:/tmp/task9-lib/helpers.sh
-    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" "$script" root@localhost:/tmp/task9-persistence.sh
-    vm_ssh 'TEST_LIB_DIR=/tmp/task9-lib bash /tmp/task9-persistence.sh'
+    [[ -f $script ]] || { echo "  persistence: no such script: $script" >&2; return 1; }
+    vm_ssh 'mkdir -p /tmp/task9-lib' \
+        || { echo "  persistence: could not create /tmp/task9-lib in the guest" >&2; return 1; }
+    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" "$ROOT_DIR/test/lib/helpers.sh" root@localhost:/tmp/task9-lib/helpers.sh \
+        || { echo "  persistence: could not copy helpers.sh to the guest" >&2; return 1; }
+    scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" "$script" root@localhost:/tmp/task9-persistence.sh \
+        || { echo "  persistence: could not copy ${script##*/} to the guest" >&2; return 1; }
+    vm_ssh 'TEST_LIB_DIR=/tmp/task9-lib bash /tmp/task9-persistence.sh' \
+        || { echo "  persistence: ${script##*/} failed IN THE GUEST (its output is above)" >&2; return 1; }
 }
 
 guest_digest() { vm_ssh 'bootc status --format json' | jq -r ".status.$1.image.imageDigest // empty"; }
