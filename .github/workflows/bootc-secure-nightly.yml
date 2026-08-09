@@ -101,6 +101,48 @@ jobs:
       # the runner host.
       packages: write
     steps:
+      - name: Check and reclaim disk space
+        run: |
+          set -euo pipefail
+          available_kb() {
+            df -Pk / | awk 'NR == 2 { print $4 }'
+          }
+
+          echo "=== Disk space before cleanup ==="
+          df -h /
+          before_kb=$(available_kb)
+          [[ $before_kb =~ ^[0-9]+$ ]] || {
+            echo "::error::Could not determine available disk space on the runner." >&2
+            exit 1
+          }
+
+          command -v podman >/dev/null || {
+            echo "::error::Podman is not installed on the bootc-secure runner." >&2
+            exit 1
+          }
+          containers=$(podman ps --all --quiet)
+          if [[ -n $containers ]]; then
+            while IFS= read -r container; do
+              podman rm --force "$container"
+            done <<< "$containers"
+          fi
+          podman system prune --all --force
+
+          echo "=== Disk space after cleanup ==="
+          df -h /
+          after_kb=$(available_kb)
+          [[ $after_kb =~ ^[0-9]+$ ]] || {
+            echo "::error::Could not determine available disk space after cleanup." >&2
+            exit 1
+          }
+
+          min_kb=$((10 * 1024 * 1024))
+          if ((after_kb < min_kb)); then
+            echo "::error::Insufficient disk space: $((after_kb / 1024)) MiB available; 10240 MiB required." >&2
+            echo "::error::Runner 'selfie-bootc-secure' needs manual cleanup; see issue #618." >&2
+            exit 1
+          fi
+          echo "Disk space OK: $((after_kb / 1024)) MiB available."
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
