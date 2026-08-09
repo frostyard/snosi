@@ -44,7 +44,7 @@ bootc and ostree install as regular APT packages from the Frostyard repository (
 `shared/bootc-secure/mkosi.conf` immediately after the bootc runtime package
 fragment. It owns an isolated, low-priority Forky APT sandbox and an explicit,
 ABI-coherent Forky systemd family, avoiding accidental Trixie/Forky library
-mixes in systemd-boot, cryptsetup, and TPM tooling. It adds
+mixes in systemd-boot, cryptsetup, and TPM tooling. It declares
 `lockdown=integrity` through
 `/usr/lib/bootc/kargs.d/10-lockdown.toml`, not mkosi `KernelCommandLine=`:
 these directory-format profiles do not have an mkosi-built UKI for that setting
@@ -52,7 +52,11 @@ to affect. Pinned bootc 1.16.3 loads sorted `*.toml` files from that directory;
 the strict schema is `kargs = ["..."]` with optional
 `match-architectures = ["x86_64"]`. The fragment also carries explicit
 MOK/recovery/TPM/UKI tools and the public-only native MOK certificate plus
-RSA-2048 PCR signing public key. The image contract is
+RSA-2048 PCR signing public key. Secure production assembly invokes ukify
+directly rather than bootc's kargs merge, so it independently requires the
+declaration above to match its canonical policy, seals
+`rw composefs=?<digest> lockdown=integrity`, and validates that exact final
+`.cmdline`. The image contract is
 `/usr/lib/snosi/bootc-secure.json` (schema 1). Task 5 adds
 `shared/bootc-secure/assemble-uki.sh`, called only through
 `buildah-package.sh` when `SNOSI_BOOTC_SECURE=1`: the pristine first OCI package

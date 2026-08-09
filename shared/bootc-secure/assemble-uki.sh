@@ -13,9 +13,20 @@ readonly CANDIDATE_UKIFY_PREVIOUS_KEY=/run/snosi-ukify-previous-pcr.key
 readonly CANDIDATE_UKIFY_WORK=/run/snosi-ukify-work
 readonly CANDIDATE_UKIFY_LINUX="$CANDIDATE_UKIFY_WORK/linux"
 readonly CANDIDATE_UKIFY_INITRD="$CANDIDATE_UKIFY_WORK/initrd"
+readonly LOCKDOWN_KARG="lockdown=integrity"
+readonly LOCKDOWN_CONFIG_RELATIVE="usr/lib/bootc/kargs.d/10-lockdown.toml"
 
 die() { echo "Error: $*" >&2; exit 1; }
 valid_digest() { [[ ${1:-} =~ ^[[:xdigit:]]{128}$ ]]; }
+sealed_cmdline() { printf 'rw composefs=?%s %s' "$1" "$LOCKDOWN_KARG"; }
+
+validate_lockdown_config() { # rootfs
+    local config="$1/$LOCKDOWN_CONFIG_RELATIVE"
+    [[ -f "$config" ]] ||
+        die "bootc lockdown configuration is missing"
+    cmp -s "$config" <(printf 'kargs = ["%s"]\n' "$LOCKDOWN_KARG") ||
+        die "bootc lockdown configuration does not match the sealed UKI policy"
+}
 
 discover_kernel() { # rootfs
     local root=$1 path version
@@ -64,6 +75,7 @@ validate_root_contract() { # rootfs
     contract="$root/usr/lib/snosi/bootc-secure.json"
     [[ -f "$contract" ]] || die "missing bootc secure rootfs contract"
     jq -e '.schema == 1 and .mok_certificate == "/usr/lib/snosi/mok.crt" and .pcr_public_key == "/usr/lib/snosi/pcr-signing.pub" and .encrypted_root_mapper == "root" and .systemd_suite == "forky" and ((has("assembly") | not) or .assembly == {compatibility: "bootc-1.16.3-storage-digest-v1", bootc_version: "1.16.3", storage_digest_command: "bootc container compute-composefs-digest-from-storage", ukify: "direct-two-pass"})' "$contract" >/dev/null || die "unexpected bootc secure rootfs contract"
+    validate_lockdown_config "$root"
 }
 
 # The gate tracks only caller-owned private keys. Generic PEM scans reject
@@ -190,7 +202,7 @@ validate_pcrsig() { # json primary-public [previous-public]
 }
 
 validate_uki() ( # uki kernel initrd MOK-cert primary-pub digest [previous-pub]
-    local uki=$1 kernel=$2 initrd=$3 mok=$4 primary=$5 digest=$6 previous=${7:-} work cmdline section count sections
+    local uki=$1 kernel=$2 initrd=$3 mok=$4 primary=$5 digest=$6 previous=${7:-} work cmdline expected_cmdline section count sections
     work=$(mktemp -d)
     trap 'rm -rf -- "$work"' RETURN
     sections=$(objdump -h "$uki") || die "UKI section table is unreadable"
@@ -205,7 +217,9 @@ validate_uki() ( # uki kernel initrd MOK-cert primary-pub digest [previous-pub]
     cmp -s "$initrd" "$work/initrd" || die "UKI initrd section mismatch"
     cmp -s "$primary" "$work/pcrpkey" || die "UKI PCR public-key section mismatch"
     cmdline=$(tr '\0' ' ' <"$work/cmdline")
-    [[ "$cmdline" == "rw composefs=?$digest" ]] || die "UKI command line is not the pinned composefs-only shape"
+    expected_cmdline=$(sealed_cmdline "$digest")
+    [[ "$cmdline" == "$expected_cmdline" ]] ||
+        die "UKI command line does not match the pinned composefs and lockdown policy"
     validate_pcrsig "$work/pcrsig" "$work/pcrpkey" "$previous"
     sbverify --cert "$mok" "$uki" >/dev/null || die "UKI MOK Authenticode signature failed"
 )
@@ -362,12 +376,13 @@ verify_exposed_pcr_public_keys() { # active-public work-directory [previous-publ
 }
 
 candidate_ukify_args() { # rootfs kernel initrd digest version previous-key output-array
-    local root=$1 kernel=$2 initrd=$3 digest=$4 version=$5 previous_key=$6 output_name=$7
+    local root=$1 kernel=$2 initrd=$3 digest=$4 version=$5 previous_key=$6 output_name=$7 cmdline
     local -n output="$output_name"
     rootfs_image_path "$root" "$kernel" >/dev/null
     rootfs_image_path "$root" "$initrd" >/dev/null
+    cmdline=$(sealed_cmdline "$digest")
     output=(build --linux "$CANDIDATE_UKIFY_LINUX" --initrd "$CANDIDATE_UKIFY_INITRD"
-        --os-release @/usr/lib/os-release --cmdline "rw composefs=?$digest"
+        --os-release @/usr/lib/os-release --cmdline "$cmdline"
         --uname "$version" --pcr-private-key "$CANDIDATE_UKIFY_PCR_KEY"
         --secureboot-private-key "$CANDIDATE_UKIFY_MOK_KEY"
         --secureboot-certificate "$CANDIDATE_UKIFY_MOK_CERT" --measure
@@ -473,7 +488,7 @@ EOF
     candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
         fixture one "" fixture_args
     expected_args=(build --linux /run/snosi-ukify-work/linux --initrd /run/snosi-ukify-work/initrd
-        --os-release @/usr/lib/os-release --cmdline 'rw composefs=?fixture' --uname one
+        --os-release @/usr/lib/os-release --cmdline 'rw composefs=?fixture lockdown=integrity' --uname one
         --pcr-private-key "$CANDIDATE_UKIFY_PCR_KEY" --secureboot-private-key "$CANDIDATE_UKIFY_MOK_KEY"
         --secureboot-certificate "$CANDIDATE_UKIFY_MOK_CERT" --measure --output "$CANDIDATE_UKIFY_WORK/uki.efi"
         --pcrpkey "$CANDIDATE_UKIFY_WORK/pcr.pub")
@@ -754,10 +769,11 @@ self_test() {
     local work key cert pcr pcr_cert rc=0
     work=$(mktemp -d); trap 'rm -rf -- "$work"' RETURN
     mkdir -p "$work/root/boot/EFI/Linux" "$work/root/usr/lib/modules/one"
-    mkdir -p "$work/root/usr/lib/snosi"
+    mkdir -p "$work/root/usr/lib/snosi" "$work/root/$(dirname "$LOCKDOWN_CONFIG_RELATIVE")"
     cat >"$work/root/usr/lib/snosi/bootc-secure.json" <<'EOF'
 {"schema":1,"mok_certificate":"/usr/lib/snosi/mok.crt","pcr_public_key":"/usr/lib/snosi/pcr-signing.pub","encrypted_root_mapper":"root","systemd_suite":"forky"}
 EOF
+    printf 'kargs = ["%s"]\n' "$LOCKDOWN_KARG" >"$work/root/$LOCKDOWN_CONFIG_RELATIVE"
     validate_root_contract "$work/root"
     touch "$work/root/boot/EFI/Linux/old.efi"
     if (refuse_existing_uki "$work/root") >/dev/null 2>&1; then rc=1; fi
@@ -849,13 +865,25 @@ scan_image() { # OCI-image MOK-key PCR-key [previous-PCR-key]
 
 negative_self_test() {
     self_test
-    local work fp section
+    local work fp section digest
     work=$(mktemp -d); trap 'rm -rf -- "$work"' RETURN
+    mkdir -p "$work/root/$(dirname "$LOCKDOWN_CONFIG_RELATIVE")"
+    printf 'kargs = ["%s"]\n' "$LOCKDOWN_KARG" >"$work/root/$LOCKDOWN_CONFIG_RELATIVE"
+    validate_lockdown_config "$work/root"
+    printf 'kargs = ["lockdown=none"]\n' >"$work/root/$LOCKDOWN_CONFIG_RELATIVE"
+    if (validate_lockdown_config "$work/root") >/dev/null 2>&1; then
+        die "divergent bootc lockdown configuration accepted"
+    fi
+    rm -f "$work/root/$LOCKDOWN_CONFIG_RELATIVE"
+    if (validate_lockdown_config "$work/root") >/dev/null 2>&1; then
+        die "missing bootc lockdown configuration accepted"
+    fi
     openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$work/key" >/dev/null 2>&1
     openssl pkey -in "$work/key" -pubout -out "$work/pub" >/dev/null
     fp=$(pcr_fingerprint "$work/pub")
+    digest=$(printf '%0128d' 0)
     printf 'kernel' >"$work/kernel"; printf 'initrd' >"$work/initrd"; touch "$work/uki"
-    printf 'rw composefs=?%0128d' 0 >"$work/uki.cmdline"
+    sealed_cmdline "$digest" >"$work/uki.cmdline"
     cp "$work/kernel" "$work/uki.linux"; cp "$work/initrd" "$work/uki.initrd"; cp "$work/pub" "$work/uki.pcrpkey"
     jq -n --arg fp "$fp" '{sha256: [range(0; 4) | {pol: ("phase-" + tostring), pkfp: $fp}]}' >"$work/uki.pcrsig"
     mkdir "$work/bin"
@@ -889,11 +917,21 @@ EOF
 [[ ! -e "${@: -1}.bad-signature" ]]
 EOF
     chmod +x "$work/bin/objcopy" "$work/bin/objdump" "$work/bin/sbverify"
-    PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)"
+    PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$digest"
+    cp "$work/uki.cmdline" "$work/uki.cmdline.saved"
+    printf 'rw composefs=?%s' "$digest" >"$work/uki.cmdline"
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$digest") >/dev/null 2>&1; then
+        die "UKI command line without lockdown accepted"
+    fi
+    printf 'rw composefs=?%s lockdown=none' "$digest" >"$work/uki.cmdline"
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$digest") >/dev/null 2>&1; then
+        die "UKI command line with divergent lockdown accepted"
+    fi
+    mv "$work/uki.cmdline.saved" "$work/uki.cmdline"
     for section in cmdline linux initrd pcrpkey pcrsig; do
         cp "$work/uki.$section" "$work/uki.$section.saved"
         printf 'mutated' >"$work/uki.$section"
-        if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+        if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$digest") >/dev/null 2>&1; then
             die "mutation fixture accepted UKI .$section mutation"
         fi
         mv "$work/uki.$section.saved" "$work/uki.$section"
@@ -904,7 +942,7 @@ EOF
     fi
     rm "$work/uki.duplicate-pcrsig"
     touch "$work/uki.bad-signature"
-    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$digest") >/dev/null 2>&1; then
         die "mutation fixture accepted UKI Authenticode mutation"
     fi
 }

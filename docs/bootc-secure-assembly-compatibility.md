@@ -14,9 +14,9 @@ The adapter relies on all of the following observed behavior:
    128-hex-character composefs ID.
 2. Adding files only below `/boot` to an image derived from that chunked
    candidate does not change that OCI-derived ID.
-3. Direct `ukify build` can produce a MOK-signed UKI with `rw` and exactly one
-   `composefs=?<ID>` argument, one kernel/initramfs pair, an RSA-2048 PCR public
-   key, and four PCR policies per signer.
+3. Direct `ukify build` can produce a MOK-signed UKI with exactly
+   `rw composefs=?<ID> lockdown=integrity`, one kernel/initramfs pair, an
+   RSA-2048 PCR public key, and four PCR policies per signer.
 4. `bootc install to-filesystem` consumes the resulting image as a Type #2 UKI
    deployment without raw `linux` or `initrd` BLS fallback.
 5. Forky `systemd-ukify 261.1-3` ships executable `/usr/bin/ukify` (package

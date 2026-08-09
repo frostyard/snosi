@@ -221,7 +221,7 @@ for harness in "$root/test/bootc-secure-install-test.sh" "$root/test/bootc-secur
         echo "${harness##*/} must source the shared assertions library" >&2
         exit 1
     }
-    for shared in esp_cat composefs_from_cmdline type2_only signed_pcr11_token root_backing_device; do
+    for shared in esp_cat composefs_from_cmdline cmdline_has_lockdown_integrity type2_only signed_pcr11_token root_backing_device; do
         if grep -Eq "^${shared}\(\)" "$harness"; then
             echo "${harness##*/} redefines ${shared}; it belongs to the shared library" >&2
             exit 1
