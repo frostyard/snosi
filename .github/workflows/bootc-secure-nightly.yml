@@ -96,28 +96,32 @@ jobs:
     timeout-minutes: 360
     permissions:
       contents: read
+      # The update leg's publisher advances a tracking tag with `skopeo copy`,
+      # a real registry write. Job-scoped so no standing credential lands on
+      # the runner host.
+      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | \
-            sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Run prepared secure full window
+      - name: Run the secure window in a container
         env:
           PROFILE: ${{ needs.fixtures.outputs.profile }}
+          STATE_ROOT: ${{ vars.BOOTC_SECURE_STATE_ROOT || '/var/lib/ghrunner/state-root' }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          DAKOTA_REF: main
+          WINDOW_LOG: /var/tmp/bootc-secure-nightly.log
         run: |
-          set -o pipefail
-          state_root="/var/lib/snosi/bootc-secure/$PROFILE"
-          if [[ ! -d $state_root ]]; then
-            ./test/bootc-secure-rotation-test.sh |& tee /var/tmp/bootc-secure-nightly.log
-          else
-            ./shared/bootc-secure/ci/run-full-window.sh "$state_root" "$PROFILE" |& tee /var/tmp/bootc-secure-nightly.log
+          set -euo pipefail
+          if [[ ! -d "$STATE_ROOT" ]]; then
+            echo "BLOCKED: $STATE_ROOT is not staged on this runner." >&2
+            echo "Run shared/bootc-secure/ci/stage-state-root.sh there first." >&2
+            exit 2
           fi
+          ./shared/bootc-secure/ci/run-window-in-container.sh
+
       - name: Upload harness logs
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

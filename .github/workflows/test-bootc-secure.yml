@@ -106,47 +106,10 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      # Assert KVM rather than granting it. This job runs on a self-hosted
-      # runner attached to a PUBLIC repository, so the account executing it
-      # must have no sudo at all: the previous `sudo tee /etc/udev/rules.d/...`
-      # plus `sudo udevadm control --reload-rules` required exactly the
-      # privilege an attacker would want, and required it on every run to set
-      # a rule that only ever needs setting once.
-      #
-      # The udev rule is now host setup, applied once by the operator (see
-      # docs/bootc-secure-operations.md). The runner account is a member of
-      # the `kvm` group and needs nothing further.
-      #
-      # Checking /dev/kvm is readable AND writable, rather than merely present:
-      # a missing group membership shows up as a permission error deep inside
-      # QEMU minutes later, which is a far worse place to discover it.
-      - name: Verify KVM is usable without privilege
-        run: |
-          set -euo pipefail
-          [[ -c /dev/kvm ]] || {
-            echo "/dev/kvm is missing; the host is not set up for this runner" >&2
-            exit 1
-          }
-          [[ -r /dev/kvm && -w /dev/kvm ]] || {
-            echo "/dev/kvm is not read-write for $(id -un) (groups: $(id -Gn))." >&2
-            echo "Add the runner account to the kvm group; do NOT grant it sudo." >&2
-            exit 1
-          }
-          echo "/dev/kvm usable as $(id -un)"
-      # The harness runs in a CONTAINER, not on the host.
-      #
-      # This host has a read-only /usr and no apt. It is not bare -- the incus
-      # sysext supplies swtpm, qemu and skopeo -- but sbverify, socat and
-      # virt-firmware are genuinely absent, and virt-firmware in particular
-      # resolves onto `crypt_r`, which has to be COMPILED. Installing a build
-      # toolchain on the lab host to satisfy a test dependency is the wrong
-      # trade; the containerised toolchain the Argo lane already uses is
-      # proven, and leaves nothing behind on selfie.
-      #
-      # Rootless podman, so the container maps to the unprivileged ghrunner
-      # account rather than root. That mapping is also what makes the harness's
-      # own ownership check pass: the host files are owned by ghrunner, which
-      # appears as uid 0 inside, and the process runs as uid 0.
+      # Both this workflow and bootc-secure-nightly.yml drive the same window.
+      # The invocation lives in one script so a change cannot land in one and
+      # miss the other -- which is exactly how the nightly ended up still doing
+      # `sudo tee /etc/udev/rules.d/...` on a runner account with no sudo.
       - name: Run the secure window in a container
         env:
           STATE_ROOT: ${{ inputs.state_root }}
@@ -154,72 +117,8 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GHCR_USER: ${{ github.actor }}
           DAKOTA_REF: ${{ inputs.dakota_ref }}
-        run: |
-          set -o pipefail
-          # --group-add keep-groups is load-bearing, not defensive. /dev/kvm on
-          # this host is 0660 root:kvm with NO acl, so access depends entirely
-          # on ghrunner's kvm supplementary group -- and rootless podman drops
-          # supplementary groups unless told otherwise. Without this the device
-          # is passed through but unopenable.
-          #
-          # --runtime crun because keep-groups is a crun feature; the host has
-          # both crun and runc, and leaving the choice to podman's default
-          # would make this work or not depending on configuration elsewhere.
-          podman run --rm \
-            --runtime crun \
-            --group-add keep-groups \
-            --device /dev/kvm \
-            -v "$PWD:/src/snosi" \
-            -v "${STATE_ROOT}:${STATE_ROOT}" \
-            -e STATE_ROOT -e PROFILE -e GHCR_TOKEN -e GHCR_USER -e DAKOTA_REF \
-            -w /src/snosi \
-            docker.io/library/debian:trixie-slim \
-            bash -euo pipefail -c '
-              export DEBIAN_FRONTEND=noninteractive
-              # Assert the device is actually usable before spending minutes on
-              # apt. A dropped supplementary group shows up here in seconds
-              # instead of as an opaque QEMU failure much later.
-              [ -r /dev/kvm ] && [ -w /dev/kvm ] || {
-                echo "/dev/kvm not usable in-container (uid $(id -u), groups $(id -G))" >&2
-                echo "check --group-add keep-groups and ghrunner kvm membership" >&2
-                exit 1
-              }
-              apt-get update -qq
-              # Same set the Argo secure lane installs, which is the only
-              # toolchain this harness has ever run green against.
-              apt-get install -y -qq --no-install-recommends \
-                qemu-system-x86 qemu-utils ovmf swtpm swtpm-tools \
-                cryptsetup-bin binutils sbsigntool openssh-client iproute2 \
-                jq python3 python3-pip socat git skopeo curl ca-certificates \
-                gcc python3-dev libc6-dev >/dev/null
-              # Not packaged in trixie; provides virt-fw-vars. Needs the gcc and
-              # headers above because pip resolves it onto crypt_r.
-              pip install --quiet --break-system-packages virt-firmware
+        run: ./shared/bootc-secure/ci/run-window-in-container.sh
 
-              # Dakota supplies the external runner adapters. Cloned HERE, not
-              # staged on the host: the runner home is 0750 ghrunner-owned so a
-              # host-side clone needs sudo, and a root-owned checkout is then
-              # unusable by the account that has to execute it. This also keeps
-              # the adapters at a known ref instead of whatever happens to be
-              # sitting on the box, which is how the Argo lane already works.
-              git clone -q --depth 1 --branch "$DAKOTA_REF" \
-                https://github.com/frostyard/dakota-iso.git /tmp/dakota
-              echo "dakota @ $(git -C /tmp/dakota rev-parse --short HEAD) (${DAKOTA_REF})"
-
-              # run-full-window invokes these by fixed name under STATE_ROOT,
-              # and each sources lib/ relative to its own directory.
-              install -m 0700 /tmp/dakota/test/bootc-secure-installer-runner.sh "$STATE_ROOT/installer"
-              install -m 0700 /tmp/dakota/test/bootc-secure-recovery-runner.sh  "$STATE_ROOT/recovery-runner"
-              install -m 0700 /tmp/dakota/test/bootc-secure-update-publish.sh   "$STATE_ROOT/publisher"
-              mkdir -p "$STATE_ROOT/lib"
-              cp -a /tmp/dakota/test/lib/. "$STATE_ROOT/lib/"
-              # The publisher writes a tracking tag, so log in INSIDE the
-              # container: the credential never touches the host filesystem and
-              # dies with the container.
-              printf "%s" "$GHCR_TOKEN" | skopeo login ghcr.io \
-                --username "$GHCR_USER" --password-stdin
-              ./shared/bootc-secure/ci/run-full-window.sh "$STATE_ROOT" "$PROFILE"
-            ' |& tee /var/tmp/bootc-secure-full-window.log
       - name: Upload full-window log
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
