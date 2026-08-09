@@ -231,4 +231,23 @@ done
 # bootc writes `uki`; requiring `efi` alone rejects every genuine install.
 grep -Fq '(uki|efi)' "$lib"
 
+# No guest command in these harnesses may reach into /boot. bootc mounts it only
+# while it is using it, so every /boot path reports absent on a HEALTHY system:
+# it produced "BLS entries are not Type #2-only" on one run and "no UKI at the
+# composefs path" on the next, both for state that was present the whole time.
+# Boot assets are read off the ESP (esp_cat) or from /usr.
+#
+# Comments are stripped first: the harnesses explain this at length, and that
+# prose must not trip the guard. Same shape as the ssh_private_key check that
+# matched its own documentation.
+for harness in "$root/test/bootc-secure-install-test.sh" \
+               "$root/test/bootc-secure-update-test.sh" \
+               "$lib"; do
+    if sed 's/#.*//' "$harness" | grep -Eq '(vm_ssh|scp)[^#]*/boot/'; then
+        echo "${harness##*/} reaches into /boot in a guest command; use esp_cat" >&2
+        sed 's/#.*//' "$harness" | grep -nE '(vm_ssh|scp)[^#]*/boot/' >&2
+        exit 1
+    fi
+done
+
 echo "Bootc secure static validation passed"
