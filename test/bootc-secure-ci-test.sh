@@ -18,6 +18,58 @@ workflow_invokes_static_coverage_test() { # workflow
     grep -Fq 'run: ./test/bootc-secure-ci-test.sh' "$1"
 }
 
+workflow_job_block() { # workflow job
+    local workflow=$1 job=$2
+    awk -v header="  $job:" '
+        $0 == header { in_job=1 }
+        in_job && $0 ~ /^  [[:alnum:]_-]+:$/ && $0 != header { exit }
+        in_job { print }
+    ' "$workflow"
+}
+
+self_hosted_job_is_main_only() { # workflow job
+    local block
+    block=$(workflow_job_block "$1" "$2")
+    [[ $block == *'runs-on: [self-hosted,'* ]] \
+        && [[ $block == *"github.ref == 'refs/heads/main'"* ]]
+}
+
+self_hosted_jobs() { # workflow directory
+    local workflow
+    for workflow in "$1"/*.yml; do
+        awk -v workflow="$workflow" '
+            /^  [[:alnum:]_-]+:$/ { job=$1; sub(/:$/, "", job) }
+            /runs-on: \[self-hosted,/ { print workflow, job }
+        ' "$workflow"
+    done
+}
+
+all_self_hosted_jobs_are_main_only() { # workflow directory
+    local workflow job found=0
+    while read -r workflow job; do
+        found=1
+        self_hosted_job_is_main_only "$workflow" "$job" || return 1
+    done < <(self_hosted_jobs "$1")
+    ((found == 1))
+}
+
+all_self_hosted_jobs_avoid_repository_secrets() { # workflow directory
+    local workflow job block found=0
+    while read -r workflow job; do
+        found=1
+        block=$(workflow_job_block "$workflow" "$job")
+        [[ $block != *'${{ secrets.'* ]] || return 1
+    done < <(self_hosted_jobs "$1")
+    ((found == 1))
+}
+
+self_hosted_job_uses_job_token() { # workflow job
+    local block
+    block=$(workflow_job_block "$1" "$2")
+    [[ $block == *'GHCR_TOKEN: ${{ github.token }}'* ]] \
+        && [[ $block != *'GHCR_TOKEN: ${{ secrets.'* ]]
+}
+
 workflow_job_selects_runc() { # workflow job
     local workflow=$1 job=$2 block
     block=$(awk -v header="  $job:" '
@@ -101,6 +153,14 @@ assert_true 'validate workflow runs Task 1-3 fixture coverage' \
     task123_fixture_coverage_is_present "$ROOT_DIR/.github/workflows/validate.yml"
 assert_true 'validate workflow runs the bootc secure CI wiring regression' \
     workflow_invokes_static_coverage_test "$ROOT_DIR/.github/workflows/validate.yml"
+assert_true 'every self-hosted workflow job is restricted to main' \
+    all_self_hosted_jobs_are_main_only "$ROOT_DIR/.github/workflows"
+assert_true 'no self-hosted workflow job receives a repository secret' \
+    all_self_hosted_jobs_avoid_repository_secrets "$ROOT_DIR/.github/workflows"
+assert_true 'manual full-window uses only its job-scoped token for GHCR' \
+    self_hosted_job_uses_job_token "$ROOT_DIR/.github/workflows/test-bootc-secure.yml" live-full-window
+assert_true 'nightly full-window uses only its job-scoped token for GHCR' \
+    self_hosted_job_uses_job_token "$ROOT_DIR/.github/workflows/bootc-secure-nightly.yml" live-full-window
 assert_true 'secure-build selects and verifies the runc OCI runtime' \
     workflow_job_selects_runc "$ROOT_DIR/.github/workflows/build-images.yml" secure-build
 assert_true 'mechanics-build selects and verifies the runc OCI runtime' \

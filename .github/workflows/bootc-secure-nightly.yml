@@ -91,6 +91,10 @@ jobs:
         run: ./test/bootc-secure-promotion-test.sh
 
   live-full-window:
+    # Never schedule persistent runner capacity from an arbitrary dispatch ref.
+    # Scheduled runs already use the default branch; make that trust boundary
+    # explicit for manual dispatches too.
+    if: github.ref == 'refs/heads/main'
     needs: fixtures
     runs-on: [self-hosted, linux, x64, bootc-secure]
     timeout-minutes: 360
@@ -151,7 +155,7 @@ jobs:
         env:
           PROFILE: ${{ needs.fixtures.outputs.profile }}
           STATE_ROOT: ${{ vars.BOOTC_SECURE_STATE_ROOT || '/var/lib/ghrunner/state-root' }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_TOKEN: ${{ github.token }}
           GHCR_USER: ${{ github.actor }}
           DAKOTA_REF: main
           WINDOW_LOG: /var/tmp/bootc-secure-nightly.log

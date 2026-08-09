@@ -21,9 +21,10 @@
 # can propose a workflow that executes on the runner. That risk is mitigated
 # here in four independent layers, and every one of them matters:
 #
-#   1. The two self-hosted jobs are gated on
-#        github.event_name == 'workflow_dispatch'
-#      so they never run from a pull_request at all.
+#   1. Every self-hosted job is restricted to refs/heads/main. Interactive
+#      jobs additionally require workflow_dispatch; the nightly job accepts
+#      only schedule or workflow_dispatch because those are its only triggers.
+#      None can be selected by a pull_request event or an arbitrary branch.
 #
 #   2. The repository requires approval for ALL external contributors, not
 #      just first-time ones. Without this, one merged typo fix earns a
@@ -286,5 +287,5 @@ Verify from a machine with gh:
 
 Then dispatch a live run:
   gh workflow run test-bootc-secure.yml -R frostyard/snosi \\
-    -f run_live=true -f profile=cayo -f state_root=<STATE_ROOT>
+    --ref main -f run_live=true -f profile=cayo -f state_root=<STATE_ROOT>
 EOF
