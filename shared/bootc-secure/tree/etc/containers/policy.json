@@ -40,6 +40,41 @@
           "type": "insecureAcceptAnything"
         }
       ]
+    },
+    "tarball": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    },
+    "docker-archive": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    },
+    "oci-archive": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    },
+    "dir": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
+    },
+    "oci": {
+      "": [
+        {
+          "type": "insecureAcceptAnything"
+        }
+      ]
     }
   }
 }
