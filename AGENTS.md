@@ -272,10 +272,23 @@ documentation contracts are complete; live release evidence remains BLOCKED.
 `/usr/lib/snosi/cosign.pub`. Cosign v2.6.1 signatures record repository rather
 than tag identities, so this MUST use `signedIdentity: matchRepository` and
 the GHCR `registries.d` entry MUST retain `use-sigstore-attachments: true`.
-The sole local exception is the empty `containers-storage` transport scope with
-`insecureAcceptAnything`: it permits bootc to consume only the image already
-accepted by Podman's signed `docker` pull; do not broaden `docker` to a namespace
-or global acceptance. Secure install
+LOCAL transports are accepted with `insecureAcceptAnything`: `containers-storage`
+(so bootc consumes the image Podman's signed `docker` pull already accepted),
+plus `tarball`, `docker-archive`, `oci-archive`, `dir`, and `oci` so an operator
+can do ordinary image work on an installed system — `podman load`, `podman
+import`, OCI layouts. Those bytes are already on the machine and under the
+operator's control; the boundary this policy exists to enforce is the REGISTRY
+one. Blocking them was also inconsistent rather than strict: `podman build`
+FROM scratch consults no transport at all, so arbitrary local images were always
+constructible — the prohibition cost usability and bought nothing.
+
+**Do not broaden `docker`** to a namespace or global acceptance, and do not
+change `default` from `reject`. That is the half that matters, and
+`test/bootc-container-policy-test.sh` fails if either moves: it requires every
+`docker` scope to stay `sigstoreSigned`, forbids a catch-all `docker` scope, and
+pins the default to `reject`. Verified against the real policy that an unsigned
+`docker.io` pull and an unsigned `ghcr.io/frostyard/cayo` pull are both still
+refused while `podman import` succeeds. Secure install
 paths must not use `--skip-fetch-check`. Local rootfs test fixtures use their
 own disposable permissive policy only; registry paths use a disposable HOME
 containing the restrictive policy so host configuration is never changed.

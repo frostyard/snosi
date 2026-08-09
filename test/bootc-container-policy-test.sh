@@ -76,6 +76,41 @@ if [[ -f "$POLICY" ]] && command -v jq >/dev/null; then
     else
         fail "only the three supported GHCR repositories are trusted"
     fi
+
+    # LOCAL file transports are accepted so an operator can actually do image
+    # work on an installed system -- podman load/import, dir:/oci: layouts.
+    # The bytes are already on the machine and under their control; the trust
+    # boundary this policy exists to enforce is the REGISTRY one.
+    #
+    # Blocking them was also inconsistent rather than strict: `podman build`
+    # FROM scratch consults no transport, so arbitrary local images were always
+    # constructible. The prohibition cost usability and bought nothing.
+    for transport in tarball docker-archive oci-archive dir oci; do
+        if jq -e --arg t "$transport" '.transports[$t][""] == [{"type":"insecureAcceptAnything"}]' "$POLICY" >/dev/null; then
+            pass "local $transport images are accepted"
+        else
+            fail "local $transport images are accepted"
+        fi
+    done
+
+    # The half that must NOT move. Permitting local transports must never turn
+    # into permitting unsigned registry pulls: `docker` keeps exactly the three
+    # sigstoreSigned scopes and the default stays reject.
+    if jq -e '.default == [{"type":"reject"}]' "$POLICY" >/dev/null; then
+        pass "the default policy is still reject"
+    else
+        fail "the default policy is still reject"
+    fi
+    if jq -e '[.transports.docker[][] | select(.type != "sigstoreSigned")] | length == 0' "$POLICY" >/dev/null; then
+        pass "every docker scope is still sigstoreSigned"
+    else
+        fail "every docker scope is still sigstoreSigned"
+    fi
+    if jq -e '.transports.docker[""] == null' "$POLICY" >/dev/null; then
+        pass "no catch-all docker scope was introduced"
+    else
+        fail "no catch-all docker scope was introduced"
+    fi
 else
     fail "policy is valid JSON (jq and the policy are required)"
 fi
