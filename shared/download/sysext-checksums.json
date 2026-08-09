@@ -30,9 +30,9 @@
     "version": "2.35.3"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.5/GitHub-Copilot-linux-x64.deb",
-    "sha256": "9fcefebd04c7fdde8d2dd534871936287529915a8f442c0465b8c588fdf3548a",
-    "version": "1.1.5"
+    "url": "https://github.com/github/app/releases/download/v1.1.6/GitHub-Copilot-linux-x64.deb",
+    "sha256": "720f7eed7fd7a411c80a070eb38681b1158cc8589889ba20da06d4c66fa3dd90",
+    "version": "1.1.6"
   },
   "k3s": {
     "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.3%2Bk3s1/k3s",
@@ -45,9 +45,9 @@
     "version": "11.5.2"
   },
   "paseo": {
-    "url": "https://github.com/getpaseo/paseo/releases/download/v0.2.5/Paseo-0.2.5-amd64.deb",
-    "sha256": "2159168b005f9d95e446ac38a58d0e6d3a21c45da6813c9ff9917d0d71414ea5",
-    "version": "0.2.5"
+    "url": "https://github.com/getpaseo/paseo/releases/download/v0.3.0/Paseo-0.3.0-amd64.deb",
+    "sha256": "27ab6e1597ab9af4deec4dabaa3551a257a9135d919413636c9ae88fa9d90875",
+    "version": "0.3.0"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.7.0/frostyard-pilothouse_0.7.0_amd64.deb",
