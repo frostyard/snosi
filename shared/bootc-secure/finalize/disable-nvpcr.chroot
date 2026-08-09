@@ -1,0 +1,26 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+set -euo pipefail
+# systemd 261 cannot migrate its NvPCR anchor credential between PCR signing
+# keys, and a REPLACED TPM makes the anchor unreadable outright. The secure
+# bootc profiles do not consume NvPCR attestation, so disable the stale-anchor
+# consumers while keeping SRK setup and the signed-PCR-11 LUKS path, which are
+# load-bearing.
+#
+# This mirrors shared/native-ab-secure/finalize/disable-nvpcr.chroot. The
+# decision was made for native and simply never carried across to bootc.
+#
+# Masking the two consumer UNITS is not sufficient, which is how the first
+# attempt at this failed. systemd-tpm2-setup{,-early} also reach for the anchor:
+#
+#     TPM key integrity check failed. Key most likely does not belong to this TPM.
+#     Failed to acquire anchor secret: Object is remote
+#
+# and they cannot be masked, because SRK setup is required. Removing the
+# DEFINITIONS is what stops anything asking for an anchor at all. Observed on
+# run 31286871002, where masking only the units left these two still failing.
+mkdir -p /etc/nvpcr /etc/systemd/system
+for definition in /usr/lib/nvpcr/*.nvpcr; do
+    [[ -e "$definition" ]] || continue
+    ln -sfn /dev/null "/etc/nvpcr/${definition##*/}"
+done
