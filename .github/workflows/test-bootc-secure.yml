@@ -37,7 +37,18 @@ on:
 permissions: {}
 
 concurrency:
-  group: test-bootc-secure-${{ github.workflow }}-${{ github.ref }}
+  # github.event_name is part of the group so a push to main cannot cancel a
+  # dispatched LIVE run. It could, and did: run 31293104405 (workflow_dispatch,
+  # 03:45:45) was killed by an ordinary merge at 03:47:05, ~90 seconds in.
+  #
+  # The live job holds the single self-hosted runner and a real VM for 15-25
+  # minutes, so on a repository taking frequent merges it was effectively
+  # unrunnable -- and the failure looked like "cancelled", which reads as
+  # someone intervening rather than as a scheduling defect.
+  #
+  # Two dispatches still cancel each other, which is what we want: there is one
+  # runner and one target disk, so a newer live run should supersede an older.
+  group: test-bootc-secure-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
