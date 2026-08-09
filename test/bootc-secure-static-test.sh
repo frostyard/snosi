@@ -208,4 +208,27 @@ for profile in cayo-ab-raw cayo-ab snow-ab snowfield-ab; do
     fi
 done
 
+# The install and update harnesses must not carry private copies of these.
+# Independent copies are what produced the update leg's failure: type2_only
+# had drifted to accept only `efi` while bootc writes `uki`, so it could never
+# pass -- while the install harness asserted the same property and passed.
+# Sixth defect of that shape in this subsystem; the shared library is the fix,
+# and this check is what keeps it shared.
+lib="$root/test/lib/bootc-secure-assertions.sh"
+[[ -f "$lib" ]] || { echo "missing $lib" >&2; exit 1; }
+for harness in "$root/test/bootc-secure-install-test.sh" "$root/test/bootc-secure-update-test.sh"; do
+    grep -Fq 'test/lib/bootc-secure-assertions.sh' "$harness" || {
+        echo "${harness##*/} must source the shared assertions library" >&2
+        exit 1
+    }
+    for shared in esp_cat composefs_from_cmdline type2_only signed_pcr11_token root_backing_device; do
+        if grep -Eq "^${shared}\(\)" "$harness"; then
+            echo "${harness##*/} redefines ${shared}; it belongs to the shared library" >&2
+            exit 1
+        fi
+    done
+done
+# bootc writes `uki`; requiring `efi` alone rejects every genuine install.
+grep -Fq '(uki|efi)' "$lib"
+
 echo "Bootc secure static validation passed"

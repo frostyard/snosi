@@ -17,6 +17,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT_DIR/test/lib/secure-vm.sh"
 # shellcheck disable=SC1091
 source "$ROOT_DIR/test/lib/ssh.sh"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
 
 : "${BOOTC_SECURE_INSTALL_STATE:=}"
 : "${BOOTC_SECURE_UPDATE_PUBLISH_COMMAND:=}"
@@ -115,18 +117,6 @@ start_vm() { # disk firmware-code firmware-vars TPM-socket workdir
     QEMU_PID=$(<"$work/qemu.pid")
 }
 
-composefs_from_cmdline() {
-    local token value='' count=0
-    for token in $1; do [[ $token == composefs=* ]] || continue; value=${token#composefs=}; value=${value#\?}; value=${value%%,*}; count=$((count + 1)); done
-    [[ $count -eq 1 && $value =~ ^[[:xdigit:]]{128}$ ]] && printf '%s\n' "$value"
-}
-type2_only() { local text; text=$(cat "$1") || return; ! grep -Eq '^[[:space:]]*(linux|initrd)[[:space:]]+' <<<"$text" && grep -Eq '^[[:space:]]*efi[[:space:]]+/EFI/Linux/bootc/bootc_composefs-[[:xdigit:]]{128}\.efi[[:space:]]*$' <<<"$text"; }
-signed_pcr11_token() { jq -e '[.tokens[] | select(.type == "systemd-tpm2")] as $t | ($t | length == 1) and $t[0]."tpm2-pcrs" == [] and $t[0].tpm2_pubkey_pcrs == [11] and ($t[0] | has("tpm2-pcrlock") | not)' >/dev/null; }
-root_backing_device() { # cryptsetup status root output
-    local device
-    device=$(awk '/^[[:space:]]*device:/{print $2}' <<<"$1")
-    [[ $device == /dev/* && $device != *$'\n'* ]] && printf '%s\n' "$device"
-}
 
 # Every check names itself on failure. This used to be one unbroken && chain
 # reported as a bare "FATAL: installed target failed secure runtime
@@ -181,7 +171,12 @@ secure_runtime_subset() { # recovery MOK certificate
     [[ $cmdline != *root=* && $cmdline != *luks.* && $cmdline != *rd.luks.* ]] \
         || subset_fail "kernel command line carries a root/LUKS identifier: $cmdline" || return 1
 
-    entries=$(vm_ssh 'cat /boot/loader/entries/*.conf')
+    # Off the ESP, not /boot. bootc leaves /boot unmounted unless it is using
+    # it, so `cat /boot/loader/entries/*.conf` fails on a HEALTHY system --
+    # which is exactly what this reported as "BLS entries are not Type #2-only"
+    # on run 31292423836, eleven seconds after the install harness asserted the
+    # same property and passed. It was fixed there (snosi#524) and not here.
+    entries=$(esp_cat 'loader/entries/*.conf')
     type2_only <(printf '%s\n' "$entries") || subset_fail "BLS entries are not Type #2-only" || return 1
 
     token=$(vm_ssh "cryptsetup luksDump --dump-json-metadata '$backing'")
