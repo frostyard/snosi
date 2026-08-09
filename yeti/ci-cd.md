@@ -306,6 +306,25 @@ promotion gate remains the Tier 1 smoke test inside
 not a blocker; `if: failure()` uploads `nightly-harness-logs-<profile>`
 for exactly that purpose.
 
+### nightly-compliance.yml — Nightly Policy Drift Detection
+
+**Trigger:** Scheduled daily at `04:30 UTC`, plus manual dispatch.
+
+This secretless workflow re-runs the repository's existing static security and
+publication contracts independently of pull request activity. It checks the
+runtime `/etc` mutation guard, frozen native A/B contracts and publication
+guard, bootc secure CI wiring and publication guard, and signed sysext metadata
+policy. These are selected because they are fast, deterministic, require no
+root or network after checkout, and cover policy that must remain true even
+when no code is changing. Deep image-build and boot evidence remains in
+`native-nightly.yml` and `bootc-secure-nightly.yml`; this workflow does not
+duplicate those expensive jobs or publish artifacts.
+
+Default permissions are empty and the sole job receives only `contents: read`.
+Checkout credentials are not persisted, no environment or repository secret is
+referenced, and `cancel-in-progress: false` prevents a delayed run from being
+silently replaced by the next schedule.
+
 ### check-dependencies.yml — External Dependency Updates
 
 **Trigger:** Weekly (Monday 9am UTC), manual dispatch
@@ -398,6 +417,20 @@ the coding agent. The token owner must have write access and Copilot coding
 agent access. Default workflow permissions are empty, fork pull requests never
 receive the secret, no code is checked out, and untrusted review text is neither
 executed nor copied into the agent instruction.
+
+### triage.yml — Automated Issue Classification
+
+**Trigger:** Issue opened, edited, or reopened.
+
+The workflow fetches the issue with `gh api`, classifies only from explicit
+title signals, and adds at most one of the existing `acmm`, `bug`,
+`documentation`, `enhancement`, or `question` labels. If any classification
+label is already present, it does nothing; it never removes or replaces human
+labels. The label output is allowlisted before `gh issue edit`, issue text is
+not interpolated into workflow expressions or evaluated by the shell, and the
+job receives only `issues: write`. Bug reports created from the repository
+template receive `bug` directly from template front matter, so they do not
+depend on title heuristics.
 
 ### validate.yml — Code Validation
 
