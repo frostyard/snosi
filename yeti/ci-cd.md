@@ -397,6 +397,27 @@ during the sysext build.
 2. Compares against `shared/download/package-versions.json`
 3. If changed: updates `package-versions.json`, creates a sysext package-version PR
 
+### copilot-review-apply.yml — Automated Review Application
+
+**Trigger:** A pull request review is submitted, or a maintainer manually
+dispatches the workflow with a pull request number and review ID.
+
+Automatic runs are admitted only for non-draft pull requests whose head branch
+belongs to this repository; the script re-fetches and enforces those conditions
+again so manual dispatch cannot bypass them. `APPROVED`, dismissed, and empty
+reviews are no-ops, as is a `COMMENTED` review with no inline feedback. For an
+actionable `COMMENTED` or `CHANGES_REQUESTED` review, the workflow posts a fixed
+`@copilot` instruction referencing the review URL. The Copilot coding agent
+reads the unresolved threads and updates the existing pull request. A hidden
+review-ID marker makes reruns idempotent.
+
+The comment uses the user-scoped `COPILOT_ASSIGNMENT_TOKEN` secret because
+comments created by the workflow's installation `GITHUB_TOKEN` cannot invoke
+the coding agent. The token owner must have write access and Copilot coding
+agent access. Default workflow permissions are empty, fork pull requests never
+receive the secret, no code is checked out, and untrusted review text is neither
+executed nor copied into the agent instruction.
+
 ### triage.yml — Automated Issue Classification
 
 **Trigger:** Issue opened, edited, or reopened.
