@@ -15,7 +15,7 @@ readonly LOCAL_CERT="$STATE_DIR/signing.crt"
 readonly LOCK_FILE="$STATE_DIR/lock"
 readonly RUN_DIR="${SNOSI_KARGS_RUN_DIR:-/run/snosi-kargs}"
 readonly ESP_LIBRARY="${SNOSI_ESP_LIBRARY:-/usr/lib/snosi/esp.sh}"
-readonly ADDON_RELATIVE="loader/addons/50-snosi-local.addon.efi"
+readonly ADDON_RELATIVE="loader/addons/50-snosi-cmdline-local.addon.efi"
 readonly FORCE_CONFIRMATION="I understand this may make the system unbootable"
 
 WORK_DIR=""
@@ -211,7 +211,7 @@ install_addon() { # candidate certificate-or-empty unsigned
     destination_dir=$(dirname "$ADDON_PATH")
     mkdir -p "$destination_dir"
 
-    ESP_TEMP=$(mktemp "$destination_dir/.50-snosi-local.addon.efi.XXXXXX")
+    ESP_TEMP=$(mktemp "$destination_dir/.50-snosi-cmdline-local.addon.efi.XXXXXX")
     cp -- "$candidate" "$ESP_TEMP"
     if [[ $unsigned -eq 0 ]]; then
         sbverify --cert "$cert" "$ESP_TEMP" >/dev/null ||
@@ -220,7 +220,7 @@ install_addon() { # candidate certificate-or-empty unsigned
     sync -f "$ESP_TEMP"
 
     if [[ -e $ADDON_PATH ]]; then
-        ESP_BACKUP=$(mktemp "$destination_dir/.50-snosi-local.previous.XXXXXX")
+        ESP_BACKUP=$(mktemp "$destination_dir/.50-snosi-cmdline-local.previous.XXXXXX")
         cp -- "$ADDON_PATH" "$ESP_BACKUP"
         sync -f "$ESP_BACKUP"
     fi
@@ -249,7 +249,7 @@ revert_addon() {
     resolve_addon
     destination_dir=$(dirname "$ADDON_PATH")
     if [[ -e $ADDON_PATH ]]; then
-        hidden=$(mktemp "$destination_dir/.50-snosi-local.disabled.XXXXXX")
+        hidden=$(mktemp "$destination_dir/.50-snosi-cmdline-local.disabled.XXXXXX")
         rm -f -- "$hidden"
         mv -- "$ADDON_PATH" "$hidden"
         if ! sync -f "$destination_dir"; then

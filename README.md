@@ -492,7 +492,7 @@ incident procedures; it does not make the secure fresh-install path supported.
 Secure profiles also ship [`snosi-kargs`](docs/snosi-kargs.md), a root CLI for
 persistent machine-specific kernel arguments. It builds a MOK-signed
 systemd-stub command-line addon at
-`<ESP>/loader/addons/50-snosi-local.addon.efi`, so one global artifact follows
+`<ESP>/loader/addons/50-snosi-cmdline-local.addon.efi`, so one global artifact follows
 native A/B UKI changes and bootc deployments. Addon arguments are append-only,
 measured into PCR 12, and deliberately excluded from Snosi's signed-PCR-11
 LUKS policy. Dangerous root, verity, LUKS, and emergency arguments are refused

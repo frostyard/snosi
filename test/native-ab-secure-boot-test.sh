@@ -1335,7 +1335,7 @@ vm_ssh "snosi-kargs set --no-apply snosi.kargs.test=addon"
 apply_out="$(vm_ssh 'snosi-kargs apply --key /run/mkosi.key --cert /run/mkosi.crt' 2>&1)"
 echo "$apply_out"
 assert_contains "snosi-kargs installed the global signed addon" \
-    "$apply_out" "/loader/addons/50-snosi-local.addon.efi"
+    "$apply_out" "/loader/addons/50-snosi-cmdline-local.addon.efi"
 vm_ssh 'shred -u /run/mkosi.key; rm -f /run/mkosi.crt'
 
 reboot_guest
@@ -1359,9 +1359,9 @@ assert_nvpcr_journal_clean "no NvPCR-related journal errors after the addon boot
 
 echo ""
 echo "=== Step 4d: corrupt addon signature fails open ==="
-addon_hash_before="$(vm_ssh 'sha256sum /boot/loader/addons/50-snosi-local.addon.efi | cut -d" " -f1')"
-vm_ssh "printf '\\377' | dd of=/boot/loader/addons/50-snosi-local.addon.efi bs=1 seek=4096 count=1 conv=notrunc status=none"
-addon_hash_after="$(vm_ssh 'sha256sum /boot/loader/addons/50-snosi-local.addon.efi | cut -d" " -f1')"
+addon_hash_before="$(vm_ssh 'sha256sum /boot/loader/addons/50-snosi-cmdline-local.addon.efi | cut -d" " -f1')"
+vm_ssh "printf '\\377' | dd of=/boot/loader/addons/50-snosi-cmdline-local.addon.efi bs=1 seek=4096 count=1 conv=notrunc status=none"
+addon_hash_after="$(vm_ssh 'sha256sum /boot/loader/addons/50-snosi-cmdline-local.addon.efi | cut -d" " -f1')"
 assert_true "addon corruption changed the signed artifact bytes" \
     bash -c "[[ '$addon_hash_before' != '$addon_hash_after' ]]"
 reboot_guest

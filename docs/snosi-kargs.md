@@ -5,7 +5,7 @@ installations without rebuilding an image or disabling Secure Boot. It builds a
 systemd-stub UKI command-line addon and installs it globally at:
 
 ```text
-<ESP>/loader/addons/50-snosi-local.addon.efi
+<ESP>/loader/addons/50-snosi-cmdline-local.addon.efi
 ```
 
 The global location applies to every installed UKI, so it follows native A/B

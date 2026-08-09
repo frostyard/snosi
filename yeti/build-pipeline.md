@@ -131,7 +131,7 @@ falls back to the bootc encrypted-root backing disk's single ESP.
 switch that selects `addonx64.efi.stub`), signs with either an enrolled local
 MOK or caller-provided offline key/certificate, verifies with `sbverify`, and
 same-filesystem atomically replaces
-`loader/addons/50-snosi-local.addon.efi`. A failed post-replacement sync
+`loader/addons/50-snosi-cmdline-local.addon.efi`. A failed post-replacement sync
 restores the old artifact. `revert` first renames to a dotfile, which
 systemd-stub skips, before removal. Secure Boot state and MOK enrollment are
 fail-closed; unsigned output is accepted only with Secure Boot disabled.

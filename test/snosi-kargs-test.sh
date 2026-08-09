@@ -247,7 +247,7 @@ setup_fixture
 run_cli set --no-apply mitigations=off driver.option=1
 rm -f "$WORK/sync.count"
 run_cli apply
-addon="$WORK/esp/loader/addons/50-snosi-local.addon.efi"
+addon="$WORK/esp/loader/addons/50-snosi-cmdline-local.addon.efi"
 assert_eq "signed addon is installed globally" "$(cat "$addon")" "signed-addon"
 assert_eq "applied arguments are recorded" \
     "$(cat "$WORK/state/applied.args")" $'mitigations=off\ndriver.option=1'
@@ -276,7 +276,7 @@ if SNOSI_TEST_MOK_ENROLLED=0 run_cli apply >/dev/null 2>&1; then
 else
     pass "signed apply refuses an unenrolled certificate under Secure Boot"
 fi
-[[ ! -e $WORK/esp/loader/addons/50-snosi-local.addon.efi ]] &&
+[[ ! -e $WORK/esp/loader/addons/50-snosi-cmdline-local.addon.efi ]] &&
     pass "unenrolled certificate failure writes no addon" ||
     fail "unenrolled certificate failure writes no addon"
 
@@ -288,7 +288,7 @@ fi
 
 SNOSI_TEST_SB_STATE=disabled run_cli apply --unsigned
 assert_eq "unsigned addon is allowed only with Secure Boot disabled" \
-    "$(cat "$WORK/esp/loader/addons/50-snosi-local.addon.efi")" "unsigned-addon"
+    "$(cat "$WORK/esp/loader/addons/50-snosi-cmdline-local.addon.efi")" "unsigned-addon"
 if grep -Fxq -- '--secureboot-private-key' "$WORK/ukify.args"; then
     fail "unsigned ukify invocation omits signing options"
 else
@@ -300,13 +300,13 @@ setup_fixture
 run_cli set --no-apply debug
 dry_out=$(run_cli apply --dry-run)
 assert_contains "dry-run reports the global addon destination" "$dry_out" \
-    "$WORK/esp/loader/addons/50-snosi-local.addon.efi"
-[[ ! -e $WORK/esp/loader/addons/50-snosi-local.addon.efi ]] &&
+    "$WORK/esp/loader/addons/50-snosi-cmdline-local.addon.efi"
+[[ ! -e $WORK/esp/loader/addons/50-snosi-cmdline-local.addon.efi ]] &&
     pass "dry-run does not install an addon" ||
     fail "dry-run does not install an addon"
 
 mkdir -p "$WORK/esp/loader/addons"
-printf 'old-addon\n' >"$WORK/esp/loader/addons/50-snosi-local.addon.efi"
+printf 'old-addon\n' >"$WORK/esp/loader/addons/50-snosi-cmdline-local.addon.efi"
 rm -f "$WORK/sync.count"
 if SNOSI_TEST_SYNC_FAIL_ON=3 run_cli apply >/dev/null 2>&1; then
     fail "post-replacement sync failure is surfaced"
@@ -314,7 +314,7 @@ else
     pass "post-replacement sync failure is surfaced"
 fi
 assert_eq "post-replacement sync failure restores the old addon" \
-    "$(cat "$WORK/esp/loader/addons/50-snosi-local.addon.efi")" "old-addon"
+    "$(cat "$WORK/esp/loader/addons/50-snosi-cmdline-local.addon.efi")" "old-addon"
 
 rm -f "$WORK/sync.count"
 if SNOSI_TEST_SYNC_FAIL_ON=1 run_cli revert >/dev/null 2>&1; then
@@ -323,7 +323,7 @@ else
     pass "revert sync failure is surfaced"
 fi
 assert_eq "revert sync failure restores the active addon" \
-    "$(cat "$WORK/esp/loader/addons/50-snosi-local.addon.efi")" "old-addon"
+    "$(cat "$WORK/esp/loader/addons/50-snosi-cmdline-local.addon.efi")" "old-addon"
 
 echo "# MOK enrollment argv"
 setup_fixture

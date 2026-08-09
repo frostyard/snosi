@@ -271,7 +271,7 @@ secure bootc and production native A/B profiles ship systemd 261's addon stub,
 `usr/bin/snosi-kargs` CLI stores state and optional machine-local signing
 material under `/var/lib/snosi/kargs/`, builds an addon by invoking `ukify
 build` WITHOUT `--linux`, and atomically installs the verified artifact at
-`<ESP>/loader/addons/50-snosi-local.addon.efi`. This is a GLOBAL addon:
+`<ESP>/loader/addons/50-snosi-cmdline-local.addon.efi`. This is a GLOBAL addon:
 arguments append after the embedded UKI command line, apply to every UKI, and
 measure into PCR 12; they never remove embedded arguments and do not enter the
 signed-PCR-11 LUKS policy. Keep the root/verity/LUKS/emergency refusal list and

@@ -197,7 +197,7 @@ record.
 repair. Snosi provides no general ESP reconstruction CLI.
 
 The narrow exception is [`snosi-kargs`](snosi-kargs.md), which owns only
-`loader/addons/50-snosi-local.addon.efi`. It may mount the one ESP beside the
+`loader/addons/50-snosi-cmdline-local.addon.efi`. It may mount the one ESP beside the
 encrypted root when `bootctl` cannot identify an existing writable mount, and
 uses verified same-filesystem replacement with restoration on sync failure. It
 does not repair or modify shim, MokManager, systemd-boot, UKIs, or BLS metadata.
