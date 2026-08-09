@@ -186,10 +186,30 @@ secure_runtime_subset() { # recovery MOK certificate
         || subset_fail "the recovery credential no longer opens $backing" || return 1
     vm_ssh "source=/usr/lib/snosi/bootc/systemd-bootx64.efi; test -s \"\$source\"; sbverify --cert /usr/lib/snosi/mok.crt \"\$source\" >/dev/null" \
         || subset_fail "the immutable second-stage source is missing or not MOK-signed" || return 1
-    vm_ssh "test -e /boot/EFI/Linux/bootc/bootc_composefs-$(composefs_from_cmdline "$cmdline").efi" \
-        || subset_fail "no UKI at the composefs path for $(composefs_from_cmdline "$cmdline")" || return 1
-    vm_ssh "sbverify --cert /usr/lib/snosi/mok.crt /boot/EFI/Linux/bootc/bootc_composefs-$(composefs_from_cmdline "$cmdline").efi >/dev/null" \
-        || subset_fail "the installed UKI is not MOK-signed" || return 1
+    # The UKI is read off the ESP, for the same reason the BLS entries are:
+    # bootc leaves /boot unmounted unless it is using it, so `test -e
+    # /boot/EFI/Linux/...` reports absent on a perfectly healthy system. That is
+    # exactly what it did on run 31293274112 -- "no UKI at the composefs path"
+    # for a UKI that was present the whole time.
+    #
+    # Fixing only the BLS read last time and not sweeping the rest of this
+    # function for the same mistake is what produced that run. Every remaining
+    # guest path here is now ESP-relative or /usr.
+    #
+    # Signature verification runs HOST-side against the MOK identity the caller
+    # supplied, rather than in-guest against the guest's own copy: the guest
+    # certificate is separately compared to the supplied one below, so verifying
+    # against the supplied identity is the stronger check and needs no second
+    # in-guest tool.
+    local composefs_id uki_local
+    composefs_id=$(composefs_from_cmdline "$cmdline")
+    uki_local="$WORK/uki-installed.efi"
+    esp_cat "EFI/Linux/bootc/bootc_composefs-${composefs_id}.efi" >"$uki_local" 2>/dev/null \
+        || subset_fail "no UKI on the ESP at EFI/Linux/bootc/bootc_composefs-${composefs_id}.efi" || return 1
+    [[ -s $uki_local ]] \
+        || subset_fail "the UKI on the ESP for ${composefs_id} is empty" || return 1
+    sbverify --cert "$mok" "$uki_local" >/dev/null 2>&1 \
+        || subset_fail "the installed UKI is not signed by the supplied MOK identity" || return 1
 
     guest_mok=$(mktemp "$WORK/mok-guest.XXXXXX") || return 1
     rm -f -- "$guest_mok"
