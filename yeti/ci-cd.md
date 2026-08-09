@@ -389,13 +389,18 @@ Checks for version updates to external APT packages installed by sysext images:
 - code (VS Code sysext)
 - docker-ce
 - 1password-cli
+- claude-desktop
 
 `shared/download/package-versions.json` is only a change-detection sentinel.
 It does not pin installed package versions; mkosi resolves the package from APT
 during the sysext build.
 
 **Process:**
-1. Queries APT repositories for current versions
+1. Queries APT repositories for current versions through
+   `shared/download/latest-apt-version.sh`. Each transfer is capped at 60
+   seconds and 50 MiB compressed; decompressed `Packages` output has an
+   independent 50 MiB cap, so a small gzip bomb cannot exhaust the runner.
+   Truncated, malformed, and oversized indexes fail closed.
 2. Compares against `shared/download/package-versions.json`
 3. If changed: updates `package-versions.json`, creates a sysext package-version PR
 
