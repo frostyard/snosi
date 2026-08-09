@@ -37,7 +37,7 @@ jobs:
           sudo mount --bind /mnt/var-tmp /var/tmp
           echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Enable KVM
@@ -144,7 +144,7 @@ jobs:
           fi
           echo "Disk space OK: $((after_kb / 1024)) MiB available."
       - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Run the secure window in a container

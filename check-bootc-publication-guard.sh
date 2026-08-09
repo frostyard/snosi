@@ -318,7 +318,7 @@ EOF
         ' <<<"$release_job")
         require_text "$workflow release checkout" "$release_checkout" "        if: steps.current.outputs.tag != ''"
         require_text "$workflow release checkout" "$release_checkout" \
-            '        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4'
+            '        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1'
         require_text "$workflow release checkout" "$release_checkout" '          persist-credentials: false'
 
         release_oras_login=$(awk '
