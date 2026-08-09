@@ -159,7 +159,7 @@ jobs:
           # Check 1Password desktop (stable apt channel; installed as a pinned
           # .deb because the deb postinst needs network the buildroot lacks)
           CURRENT_OP=$(jq -r '.["1password"].version' "$CHECKSUMS")
-          LATEST_OP=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 https://downloads.1password.com/linux/debian/amd64/dists/stable/main/binary-amd64/Packages.gz | zcat | head -c 52428800 | awk '/^Package: 1password$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
+          LATEST_OP=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 https://downloads.1password.com/linux/debian/amd64/dists/stable/main/binary-amd64/Packages.gz | head -c 52428800 | zcat | head -c 52428800 | awk '/^Package: 1password$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
           if [[ -n "$LATEST_OP" ]] && ver_gt "$LATEST_OP" "$CURRENT_OP"; then
             UPDATES="${UPDATES}1password: $CURRENT_OP -> $LATEST_OP\n"
             echo "onepassword_update=true" >> $GITHUB_OUTPUT
