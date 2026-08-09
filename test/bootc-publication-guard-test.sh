@@ -160,7 +160,7 @@ jobs:
       - name: Read snow tag
       - name: Checkout repository
         if: steps.current.outputs.tag != ''
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Install ORAS
@@ -299,7 +299,7 @@ add_oras_tag_fallback() {
     printf "          oras repo tags \"\$IMAGE\"\n" >>"$1/.github/workflows/build-images.yml"
 }
 remove_release_checkout() {
-    perl -0pi -e 's/^        uses: actions\/checkout\@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4\n//m' "$1/.github/workflows/build-images.yml"
+    perl -0pi -e 's/^        uses: actions\/checkout\@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\.0\.1\n//m' "$1/.github/workflows/build-images.yml"
 }
 remove_snow_tag_record_condition() {
     perl -0pi -e "s/(      - name: Record snow tag for release job\\n)        if: matrix\\.profile == 'snow'\\n/\$1/" "$1/.github/workflows/build-images.yml"
