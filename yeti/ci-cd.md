@@ -391,6 +391,9 @@ Checks for version updates to external APT packages installed by sysext images:
 - 1password-cli
 - claude-desktop
 
+The job-level 15-minute timeout bounds the lifetime of its `contents: write`
+and `pull-requests: write` token if an external APT request stalls.
+
 `shared/download/package-versions.json` is only a change-detection sentinel.
 It does not pin installed package versions; mkosi resolves the package from APT
 during the sysext build.
