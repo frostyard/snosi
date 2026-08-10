@@ -45,7 +45,8 @@ printf '  device:  /dev/vda1\n'
 EOF
     cat >"$WORK/bin/bootctl" <<'EOF'
 #!/bin/bash
-exit 1
+[[ -n ${SNOSI_TEST_BOOTCTL_PATH+x} ]] || exit 1
+printf '%s\n' "$SNOSI_TEST_BOOTCTL_PATH"
 EOF
     cat >"$WORK/bin/lsblk" <<'EOF'
 #!/bin/bash
@@ -53,6 +54,14 @@ cat "$SNOSI_TEST_LAYOUT"
 EOF
 cat >"$WORK/bin/findmnt" <<'EOF'
 #!/bin/bash
+if [[ ${2:-} == -T ]]; then
+    [[ ${SNOSI_TEST_BOOTCTL_MOUNTED:-1} == 1 ]] || exit 0
+    case "${!#}" in
+        OPTIONS) printf '%s\n' "${SNOSI_TEST_BOOTCTL_MOUNT_OPTIONS:-rw,relatime}" ;;
+        SOURCE) printf '%s\n' "${SNOSI_TEST_BOOTCTL_DEVICE:-/dev/vda3}" ;;
+    esac
+    exit 0
+fi
 [[ ${SNOSI_TEST_MOUNTED_ESP:-0} == 1 ]] || exit 0
 case "${!#}" in
     TARGET) printf '%s\n' "$SNOSI_TEST_ESP_ROOT" ;;
@@ -153,6 +162,41 @@ test_existing_read_only_mount() {
     cleanup; WORK=""
 }
 
+test_bootctl_mount() {
+    setup_fixture
+    mkdir -p "$WORK/bootctl-esp/EFI/BOOT"
+    printf 'good-bootctl-old\n' >"$WORK/bootctl-esp/EFI/BOOT/grubx64.efi"
+    cp "$WORK/esp/EFI/BOOT/grubx64.efi" "$WORK/fallback-before"
+    if SNOSI_TEST_BOOTCTL_PATH="$WORK/bootctl-esp" run_reconciler; then
+        pass "bootctl ESP path is reconciled"
+    else
+        fail "bootctl ESP path is reconciled"
+    fi
+    assert_same "bootctl ESP receives the replacement" "$WORK/root/usr/lib/snosi/bootc/systemd-bootx64.efi" "$WORK/bootctl-esp/EFI/BOOT/grubx64.efi"
+    assert_same "bootctl ESP selection leaves the fallback ESP unchanged" "$WORK/fallback-before" "$WORK/esp/EFI/BOOT/grubx64.efi"
+    cleanup; WORK=""
+}
+
+test_invalid_bootctl_paths() {
+    setup_fixture
+    SNOSI_TEST_BOOTCTL_PATH=relative/esp assert_failure_keeps_stage "non-absolute bootctl ESP path"
+    cleanup; WORK=""
+
+    setup_fixture
+    SNOSI_TEST_BOOTCTL_PATH="$WORK/missing" assert_failure_keeps_stage "non-existent bootctl ESP path"
+    cleanup; WORK=""
+}
+
+test_invalid_bootctl_mounts() {
+    setup_fixture
+    SNOSI_TEST_BOOTCTL_PATH="$WORK/esp" SNOSI_TEST_BOOTCTL_MOUNTED=0 assert_failure_keeps_stage "unmounted bootctl ESP path"
+    cleanup; WORK=""
+
+    setup_fixture
+    SNOSI_TEST_BOOTCTL_PATH="$WORK/esp" SNOSI_TEST_BOOTCTL_MOUNT_OPTIONS=ro,relatime assert_failure_keeps_stage "read-only bootctl ESP path"
+    cleanup; WORK=""
+}
+
 test_wrong_source_signer() {
     setup_fixture
     printf 'wrong-signer\n' >"$WORK/root/usr/lib/snosi/bootc/systemd-bootx64.efi"
@@ -221,6 +265,9 @@ test_temporary_mount() {
 test_noop
 test_valid_update
 test_existing_read_only_mount
+test_bootctl_mount
+test_invalid_bootctl_paths
+test_invalid_bootctl_mounts
 test_wrong_source_signer
 test_wrong_temporary_copy
 test_interrupted_write
