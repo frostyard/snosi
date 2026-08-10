@@ -1068,8 +1068,8 @@ independent jobs:
    inline Syft, Cosign v2, and chunkah pins, then opens
    `auto-update-image-checksums` PRs against the affected files.
 
-All workflow curl transfers have a 120-second maximum. Compressed APT metadata
-is additionally capped at 50 MiB after decompression.
+All of this workflow's curl transfers have a 120-second maximum. Compressed
+APT metadata is additionally capped at 50 MiB before and after decompression.
 
 The `.github/workflows/check-packages.yml` workflow runs daily for external APT
 packages consumed by sysexts (`code`, `docker-ce`, `1password-cli`,

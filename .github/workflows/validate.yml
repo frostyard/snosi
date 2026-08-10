@@ -155,6 +155,11 @@ jobs:
         # or image build.
         run: ./test/verified-download-split-checksums-test.sh
 
+      - name: Validate bounded APT package index parsing
+        # PATH-stubbed network fixture covers transfer/decompression limits,
+        # malformed gzip rejection, and Debian version selection.
+        run: ./test/latest-apt-version-test.sh
+
       - name: Validate update-checksums split-file selection
         # shared/download/update-checksums.sh resolves an existing key by
         # searching sysext-checksums.json then image-checksums.json relative to
