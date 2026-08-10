@@ -1068,6 +1068,12 @@ independent jobs:
    inline Syft, Cosign v2, and chunkah pins, then opens
    `auto-update-image-checksums` PRs against the affected files.
 
+Syft and Cosign updates modify `.github/workflows/build-images.yml`, so GitHub
+requires the `WORKFLOW_PAT` repository secret to have workflow-write access
+before those edits can be pushed. Without that secret, the job warns and skips
+only those workflow-file pins; checksum and chunkah updates still produce PRs
+using `GITHUB_TOKEN`.
+
 The `.github/workflows/check-packages.yml` workflow runs daily for external APT
 packages consumed by sysexts (`code`, `docker-ce`, `1password-cli`,
 `claude-desktop`). It updates

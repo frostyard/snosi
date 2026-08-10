@@ -174,6 +174,11 @@ jobs:
         # out into image matrices, and Scorecard remains schedule-driven.
         run: ./test/workflow-path-filter-test.sh
 
+      - name: Validate dependency workflow token fallback
+        # Workflow-file pin updates require WORKFLOW_PAT; checksum and chunkah
+        # updates must remain publishable through the ordinary job token.
+        run: ./test/check-dependencies-workflow-token-test.sh
+
       - name: Validate sysext signature verification
         # Static guard: every component requires signed metadata and both
         # systemd vendor-keyring names carry the canonical combined trust ring.
