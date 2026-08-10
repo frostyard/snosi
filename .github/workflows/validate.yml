@@ -72,6 +72,11 @@ jobs:
         # protected-boundary testing, or exception controls are weakened.
         run: python3 ./test/policy-as-code-test.py
 
+      - name: Validate PR-facing build permissions
+        # build.yml executes PR-controlled mkosi configuration as root, so its
+        # build job must never regain package, OIDC, or attestation write scope.
+        run: python3 ./test/build-workflow-permissions-test.py
+
       - name: Validate native A/B invariants
         run: ./test/native-ab-static-test.sh
 

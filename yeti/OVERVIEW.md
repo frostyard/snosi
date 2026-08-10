@@ -1386,7 +1386,7 @@ Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GP
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `build.yml` | Push/PR/dispatch | Build base + sysexts, publish to R2 |
+| `build.yml` | Push/PR/dispatch | Build base + sysexts; publish to R2 only outside PRs. The root mkosi build job retains only `contents: read`. |
 | `build-images.yml` | Push/PR/repository_dispatch/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, generate SBOMs, sign with Cosign |
 | `build-native-images.yml` | Push/PR/repository_dispatch/dispatch; promotion excluded from PRs | Native A/B products + installer ISO build, candidate publish, public-origin verify, protected promote (Phase 7/8) |
 | `deploy-native-installer-redirect.yml` | Main changes under the Worker / dispatch | Test and deploy the R2-index-derived stable installer redirect |

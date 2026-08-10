@@ -50,11 +50,10 @@ jobs:
     runs-on: ubuntu-latest
     # A hung mkosi/apt otherwise burns the 6-hour default.
     timeout-minutes: 120
+    # This job executes PR-controlled mkosi configuration as root. It does not
+    # publish through GITHUB_TOKEN, mint OIDC tokens, or create attestations.
     permissions:
       contents: read
-      packages: write
-      id-token: write
-      attestations: write
 
     steps:
       - name: Aggressive cleanup
