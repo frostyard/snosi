@@ -24,6 +24,16 @@ async function putValidPublication(): Promise<void> {
   await env.REPOSITORY.put(ISO_KEY, "fixture");
 }
 
+async function expectBodylessHead503(): Promise<void> {
+  const response = await exports.default.fetch(STABLE_URL, { method: "HEAD" });
+
+  expect(response.status).toBe(503);
+  expect(response.headers.get("retry-after")).toBe("60");
+  expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+  expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+  expect(await response.text()).toBe("");
+}
+
 afterEach(clearBucket);
 
 describe("installerNameFromIndex", () => {
@@ -74,16 +84,33 @@ describe("native installer redirect", () => {
   });
 
   it("rejects unsupported methods", async () => {
-    const response = await exports.default.fetch(STABLE_URL, { method: "POST" });
+    const response = await exports.default.fetch(STABLE_URL, {
+      method: "POST",
+    });
 
     expect(response.status).toBe(405);
     expect(response.headers.get("allow")).toBe("GET, HEAD");
     expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+    expect(await response.text()).toBe("Method not allowed\n");
   });
 
   it("rejects suffix paths caught by the route wildcard", async () => {
     const response = await exports.default.fetch(`${STABLE_URL}.backup`);
     expect(response.status).toBe(404);
+    expect(await response.text()).toBe("Not found\n");
+  });
+
+  it("returns a bodyless 404 for HEAD suffix paths", async () => {
+    const response = await exports.default.fetch(`${STABLE_URL}.backup`, {
+      method: "HEAD",
+    });
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toBe(
+      "text/plain; charset=utf-8",
+    );
+    expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+    expect(await response.text()).toBe("");
   });
 
   it("returns 503 when the index is missing", async () => {
@@ -92,6 +119,7 @@ describe("native installer redirect", () => {
     expect(response.status).toBe(503);
     expect(response.headers.get("retry-after")).toBe("60");
     expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+    await expectBodylessHead503();
   });
 
   it("returns 503 when the index is malformed", async () => {
@@ -99,6 +127,7 @@ describe("native installer redirect", () => {
 
     const response = await exports.default.fetch(STABLE_URL);
     expect(response.status).toBe(503);
+    await expectBodylessHead503();
   });
 
   it("returns 503 when the index is oversized", async () => {
@@ -106,6 +135,7 @@ describe("native installer redirect", () => {
 
     const response = await exports.default.fetch(STABLE_URL);
     expect(response.status).toBe(503);
+    await expectBodylessHead503();
   });
 
   it("returns 503 rather than redirecting to a missing object", async () => {
@@ -113,5 +143,6 @@ describe("native installer redirect", () => {
 
     const response = await exports.default.fetch(STABLE_URL);
     expect(response.status).toBe(503);
+    await expectBodylessHead503();
   });
 });
