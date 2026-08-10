@@ -109,14 +109,14 @@ jobs:
         run: |
           set -euo pipefail
           available_kb() {
-            df -Pk / | awk 'NR == 2 { print $4 }'
+            df -Pk /var | awk 'NR == 2 { print $4 }'
           }
 
-          echo "=== Disk space before cleanup ==="
-          df -h /
+          echo "=== /var disk space before cleanup ==="
+          df -h /var
           before_kb=$(available_kb)
           [[ $before_kb =~ ^[0-9]+$ ]] || {
-            echo "::error::Could not determine available disk space on the runner." >&2
+            echo "::error::Could not determine available disk space on /var." >&2
             exit 1
           }
 
@@ -132,11 +132,11 @@ jobs:
           fi
           podman system prune --all --force
 
-          echo "=== Disk space after cleanup ==="
-          df -h /
+          echo "=== /var disk space after cleanup ==="
+          df -h /var
           after_kb=$(available_kb)
           [[ $after_kb =~ ^[0-9]+$ ]] || {
-            echo "::error::Could not determine available disk space after cleanup." >&2
+            echo "::error::Could not determine available disk space on /var after cleanup." >&2
             exit 1
           }
 
