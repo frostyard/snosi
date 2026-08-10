@@ -502,7 +502,23 @@ jobs:
             echo "All image dependencies up to date"
           fi
 
+      - name: Check workflow update authorization
+        id: workflow_auth
+        if: steps.check.outputs.syft_update == 'true' || steps.check.outputs.cosign_update == 'true'
+        env:
+          WORKFLOW_PAT: ${{ secrets.WORKFLOW_PAT }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${WORKFLOW_PAT:-}" ]]; then
+            echo "::warning::WORKFLOW_PAT is not configured; skipping Syft and Cosign workflow pin updates"
+            echo "can_update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_update=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Update image dependencies
+        id: update
         if: steps.check.outputs.has_updates == 'true'
         env:
           BREW_UPDATE: ${{ steps.check.outputs.brew_update }}
@@ -521,6 +537,7 @@ jobs:
           COSIGN_VERSION: ${{ steps.check.outputs.cosign_version }}
           CHUNKAH_UPDATE: ${{ steps.check.outputs.chunkah_update }}
           CHUNKAH_DIGEST: ${{ steps.check.outputs.chunkah_digest }}
+          WORKFLOW_UPDATES_ENABLED: ${{ steps.workflow_auth.outputs.can_update }}
         run: |
           CHECKSUMS="shared/download/image-checksums.json"
 
@@ -602,14 +619,14 @@ jobs:
             rm -f "$TMP"
           fi
 
-          if [[ "$SYFT_UPDATE" == "true" ]]; then
+          if [[ "$SYFT_UPDATE" == "true" && "$WORKFLOW_UPDATES_ENABLED" == "true" ]]; then
             validate_update_value "syft-version" "$SYFT_VERSION" '^v[0-9]+\.[0-9]+\.[0-9]+$'
             replace_exactly_once .github/workflows/build-images.yml \
               'syft-version: v[0-9]+\.[0-9]+\.[0-9]+$' \
               "syft-version: ${SYFT_VERSION}"
           fi
 
-          if [[ "$COSIGN_UPDATE" == "true" ]]; then
+          if [[ "$COSIGN_UPDATE" == "true" && "$WORKFLOW_UPDATES_ENABLED" == "true" ]]; then
             validate_update_value "cosign-release" "$COSIGN_VERSION" '^v2\.[0-9]+\.[0-9]+$'
             replace_exactly_once .github/workflows/build-images.yml \
               'cosign-release: "v2\.[0-9]+\.[0-9]+"$' \
@@ -623,8 +640,14 @@ jobs:
               "quay.io/coreos/chunkah@${CHUNKAH_DIGEST}"
           fi
 
+          if git diff --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create image dependency PR
-        if: steps.check.outputs.has_updates == 'true'
+        if: steps.update.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
         with:
           token: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
