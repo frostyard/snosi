@@ -50,6 +50,12 @@ for name in build-images.yml build-native-images.yml build.yml; do
     done
 done
 
+if [[ -f "$WORKFLOWS/claude.yml" || -f "$WORKFLOWS/claude-code-review.yml" ]]; then
+    pass 'ACMM GitHub Actions AI integration workflow exists'
+else
+    fail 'ACMM GitHub Actions AI integration workflow exists'
+fi
+
 for event in push pull_request; do
     assert_ignored "bootc contracts $event ignores standalone worker code" \
         "$WORKFLOWS/test-bootc-secure.yml" "$event" 'workers/**'

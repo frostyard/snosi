@@ -437,6 +437,15 @@ Actions, Contents, Issues, and Pull requests. Do not replace it with
 assignment. Default workflow permissions remain empty, no checkout occurs,
 and issue title/body text never enters the shell.
 
+### claude.yml — ACMM AI Integration Marker
+
+**Trigger:** Manual dispatch only.
+
+This workflow exists to satisfy the ACMM `acmm:github-actions-ai` file-presence
+criterion while keeping the repository's real AI handoffs in the existing
+Copilot issue and review workflows. It has empty default permissions, performs
+no checkout, uses no secrets, and introduces no third-party action dependency.
+
 ### copilot-review-apply.yml — Automated Review Application
 
 **Trigger:** A pull request review is submitted, or a maintainer manually
