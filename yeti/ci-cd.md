@@ -380,6 +380,16 @@ Updates open `auto-update-image-checksums` PRs. Those PRs should trigger
    before editing Syft, Cosign, or chunkah in place
 5. Creates a target-specific PR
 
+Syft and Cosign are the only detected image dependencies whose pins live under
+`.github/workflows/`. GitHub refuses a `GITHUB_TOKEN` push that modifies those
+files, so the repository must provide `WORKFLOW_PAT` with contents,
+pull-requests, and workflows write access to publish those pin updates. The
+workflow checks that capability before editing: if the secret is absent it
+emits a warning and skips Syft/Cosign, then still applies checksum or chunkah
+updates and creates a PR with `GITHUB_TOKEN`. If no non-workflow update remains,
+the PR step is skipped instead of attempting an unauthorized push. The fixture
+`test/check-dependencies-workflow-token-test.sh` enforces all three paths.
+
 ### check-packages.yml — Sysext APT Package Version Updates
 
 **Trigger:** Daily (8am UTC)
