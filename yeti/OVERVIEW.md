@@ -29,6 +29,16 @@ still belong in `CLAUDE.md` or the topic files here — the correction entry
 records how the rule was learned and points at it via `promoted_to`. It carries
 no secrets or personal data.
 
+## Policy as code
+
+`policies/agent-governance.json` is the machine-readable baseline for agent
+autonomy, change controls, protected boundaries, and exceptions. It defaults
+to deny autonomous merge, release, deployment, protected-environment changes,
+and self-approved exceptions. `test/policy-as-code-test.py`, wired into
+`.github/workflows/validate.yml`, fails if those denials or required human
+review, risk, validation, rejection-test, and exception controls are weakened.
+The normative prose remains in `docs/SECURITY-AI.md` and `docs/risk-tiers.md`.
+
 ## Bootc Secure Operations
 
 The normative operator entry point for the secure bootc fresh-install path is

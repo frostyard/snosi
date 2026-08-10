@@ -71,6 +71,9 @@ quality signals. Repository-specific implementation constraints live in
 [`AGENTS.md`](../AGENTS.md) and `yeti/`.
 
 The workflows in `.github/workflows/` are structural gates; policy text does
-not replace them. Exceptions must be proposed transparently in a pull request,
-with rationale and compensating controls, and approved by a maintainer. An
-agent cannot authorize its own exception.
+not replace them. [`policies/agent-governance.json`](../policies/agent-governance.json)
+is the machine-readable, fail-closed form of the baseline agent controls, and
+`test/policy-as-code-test.py` enforces it in the validation workflow. Exceptions
+must be proposed transparently in a pull request, with rationale and
+compensating controls, and approved by a maintainer. An agent cannot authorize
+its own exception.
