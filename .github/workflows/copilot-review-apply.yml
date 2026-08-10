@@ -49,12 +49,12 @@ jobs:
           pr_path="repos/${TARGET_REPOSITORY}/pulls/${PULL_NUMBER}"
           pr_json=$(gh api "$pr_path")
           if [[ $(jq -r '.state' <<<"$pr_json") != "open" ]]; then
-            echo "::error::Pull request #${PULL_NUMBER} is not open"
-            exit 1
+            echo "::notice::Pull request #${PULL_NUMBER} is no longer open; nothing to apply"
+            exit 0
           fi
           if [[ $(jq -r '.draft' <<<"$pr_json") != "false" ]]; then
-            echo "::error::Pull request #${PULL_NUMBER} is a draft"
-            exit 1
+            echo "::notice::Pull request #${PULL_NUMBER} is a draft; nothing to apply"
+            exit 0
           fi
           if [[ $(jq -r '.head.repo.full_name // ""' <<<"$pr_json") != "$TARGET_REPOSITORY" ]]; then
             echo "::error::Review application is restricted to same-repository branches"
