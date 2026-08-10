@@ -10,6 +10,8 @@ permissions: {}
 jobs:
   check-packages:
     runs-on: ubuntu-latest
+    # Bound repository-write token exposure if an external APT request stalls.
+    timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write

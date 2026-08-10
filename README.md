@@ -1078,7 +1078,9 @@ The `.github/workflows/check-packages.yml` workflow runs daily for external APT
 packages consumed by sysexts (`code`, `docker-ce`, `1password-cli`,
 `claude-desktop`). It updates
 `package-versions.json`, which is only a change-detection sentinel; mkosi still
-resolves the package from APT during the sysext build.
+resolves the package from APT during the sysext build. The job has a 15-minute
+timeout so a stalled external APT request cannot retain repository write
+permissions for GitHub Actions' six-hour default.
 
 To check manually or trigger an update PR, use the "Run workflow" button in GitHub Actions.
 
