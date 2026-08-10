@@ -76,7 +76,7 @@ the cayo, snow, and snowfield package access needed by secure publication.
    sudo. Do not replace this with implicit preservation or pass secret bytes in
    arguments.
    Local validation requires host Podman, not host bootc: the validator runs the
-   candidate image's pinned bootc 1.16.3 to recompute its storage composefs digest.
+   candidate image's pinned bootc 1.16.7 to recompute its storage composefs digest.
    The same boundary applies to the policy-copied validation after registry pull.
 2. Chunk, smoke test, and generate the SBOM, then use root Buildah's stdin login with the job-scoped `GITHUB_TOKEN` to push only the immutable timestamp tag and capture its digest.
 3. Use the Docker credential context to sign `IMAGE@DIGEST`, verify its remote digest/secure labels and Cosign signature, and copy it through the restrictive repository policy before validating the copied UKI/composefs artifact.

@@ -23,7 +23,7 @@ remains blocked until authorized signed secure N/N+1/N+2 and transition OCI
 artifacts, prepared Dakota/bootc-installer/Fisherman runners, and representative
 Snowfield hardware results exist. Do not use an image unless inspection confirms
 `io.snosi.bootc.secureboot-capable=true` and
-`io.snosi.bootc.secureboot-assembly=bootc-1.16.3-storage-digest-v1`.
+`io.snosi.bootc.secureboot-assembly=bootc-1.16.7-storage-digest-v1`.
 
 ## Trust Boundaries
 

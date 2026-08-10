@@ -15,7 +15,7 @@ authoritative. The `installer` object defines the requirements below.
 
 ## Prerequisites
 
-- The installer medium must provide bootc `1.16.3` exactly, and at minimum
+- The installer medium must provide bootc `1.16.7` exactly, and at minimum
   Cosign `2.6.1` and the coherent Forky systemd `261.1-3` family. The two
   policies are deliberately different:
 

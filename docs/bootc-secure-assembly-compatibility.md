@@ -1,7 +1,7 @@
 # Bootc Secure Assembly Compatibility Contract
 
 `shared/bootc-secure/assemble-uki.sh` is a maintained compatibility adapter
-for the Frostyard `bootc` package at upstream version `1.16.3`. It is not an
+for the Frostyard `bootc` package at upstream version `1.16.7`. It is not an
 upstream-stable bootc interface.
 
 ## Pinned behavior

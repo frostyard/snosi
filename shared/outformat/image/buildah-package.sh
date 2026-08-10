@@ -59,15 +59,15 @@ probe_rootfs_bootc_version() ( # rootfs
         printf 'Error: rootfs bootc execution failed:\n%s\n' "$output" >&2
         exit 1
     fi
-    [[ $output == 'bootc 1.16.3' ]] || {
-        printf 'Error: expected bootc 1.16.3, observed %s\n' "$output" >&2
+    [[ $output == 'bootc 1.16.7' ]] || {
+        printf 'Error: expected bootc 1.16.7, observed %s\n' "$output" >&2
         exit 1
     }
 )
 
 readonly SECURE_CAPABLE_LABEL="io.snosi.bootc.secureboot-capable=true"
 readonly SECURE_INCAPABLE_LABEL="io.snosi.bootc.secureboot-capable=false"
-readonly SECURE_ASSEMBLY_LABEL="io.snosi.bootc.secureboot-assembly=bootc-1.16.3-storage-digest-v1"
+readonly SECURE_ASSEMBLY_LABEL="io.snosi.bootc.secureboot-assembly=bootc-1.16.7-storage-digest-v1"
 first_image=""
 final_container=""
 final_mount=""
@@ -127,7 +127,7 @@ if [[ ${SNOSI_BOOTC_SECURE:-0} == 1 ]]; then
         --security-opt label=type:unconfined_t "$first_image" \
         bootc container compute-composefs-digest-from-storage "$first_image" | tr -d '\n')
     [[ $digest =~ ^[[:xdigit:]]{128}$ ]] || { echo "Error: unsupported bootc storage-digest interface" >&2; exit 1; }
-    SNOSI_BOOTC_SECURE_COMPOSEFS_DIGEST="$digest" SNOSI_BOOTC_SECURE_BOOTC_VERSION=1.16.3 \
+    SNOSI_BOOTC_SECURE_COMPOSEFS_DIGEST="$digest" SNOSI_BOOTC_SECURE_BOOTC_VERSION=1.16.7 \
         SNOSI_BOOTC_SECURE_UKIFY_IMAGE="$first_image" \
         SNOSI_BOOTC_PREVIOUS_PCR_KEY="${SNOSI_BOOTC_PREVIOUS_PCR_KEY:-}" \
         "$ASSEMBLER" "$ROOTFS_DIR" \
