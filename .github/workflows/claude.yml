@@ -1,0 +1,16 @@
+name: Claude AI Integration
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  integration-marker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Document active AI feedback loops
+        run: |
+          set -euo pipefail
+          echo "ACMM GitHub Actions AI integration marker."
+          echo "Operational AI handoffs live in ai-fix-requested.yml and copilot-review-apply.yml."
