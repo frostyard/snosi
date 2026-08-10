@@ -38,8 +38,12 @@ jobs:
           set -euo pipefail
 
           if [[ -z "${GH_TOKEN:-}" ]]; then
-            echo "::error::COPILOT_ASSIGNMENT_TOKEN is not configured"
-            exit 1
+            if [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" ]]; then
+              echo "::error::COPILOT_ASSIGNMENT_TOKEN is not configured"
+              exit 1
+            fi
+            echo "::warning::COPILOT_ASSIGNMENT_TOKEN is not configured; review feedback was not handed to Copilot"
+            exit 0
           fi
           if [[ ! "$PULL_NUMBER" =~ ^[0-9]+$ || ! "$REVIEW_ID" =~ ^[0-9]+$ ]]; then
             echo "::error::Pull number and review ID must be numeric"

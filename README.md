@@ -639,7 +639,7 @@ installation or the root update service.
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `ai-fix-requested.yml` | `ai-fix-requested` issue label / manual | Validates the request and assigns the issue to the Copilot coding agent |
-| `copilot-review-apply.yml` | Submitted PR review / manual | Validates actionable feedback on an internal PR and asks Copilot to apply it once |
+| `copilot-review-apply.yml` | Submitted PR review / manual | Validates actionable feedback on an internal PR and asks Copilot to apply it once; missing-token automatic runs warn and no-op |
 | `triage.yml` | Issue open/edit/reopen | Adds a missing classification label from explicit title signals without replacing human labels |
 | `check-dependencies.yml` | Weekly | Checks pinned direct downloads and inline image-tool pins, opens target-specific PRs |
 | `check-packages.yml` | Daily | Checks external APT package versions for sysexts, updates `package-versions.json`, opens PRs |

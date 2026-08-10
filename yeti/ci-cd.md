@@ -436,9 +436,15 @@ review-ID marker makes reruns idempotent.
 The comment uses the user-scoped `COPILOT_ASSIGNMENT_TOKEN` secret because
 comments created by the workflow's installation `GITHUB_TOKEN` cannot invoke
 the coding agent. The token owner must have write access and Copilot coding
-agent access. Default workflow permissions are empty, fork pull requests never
-receive the secret, no code is checked out, and untrusted review text is neither
-executed nor copied into the agent instruction.
+agent access. If that secret is unavailable, an automatic review event emits a
+warning and stops successfully without calling GitHub, preventing an optional
+handoff from failing every reviewed pull request. A manual dispatch still
+fails because it represents an explicit operator request that was not
+fulfilled. Default workflow permissions are empty, fork pull requests never
+receive the secret, no code is checked out, and untrusted review text is
+neither executed nor copied into the agent instruction. The fixture test in
+`test/copilot-review-apply-test.sh` executes both missing-token paths and
+asserts that neither reaches `gh`.
 
 ### triage.yml — Automated Issue Classification
 
