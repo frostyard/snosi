@@ -190,9 +190,14 @@ validate_pcrsig() { # json primary-public [previous-public]
 }
 
 validate_uki() ( # uki kernel initrd MOK-cert primary-pub digest [previous-pub]
-    local uki=$1 kernel=$2 initrd=$3 mok=$4 primary=$5 digest=$6 previous=${7:-} work cmdline
+    local uki=$1 kernel=$2 initrd=$3 mok=$4 primary=$5 digest=$6 previous=${7:-} work cmdline section count sections
     work=$(mktemp -d)
     trap 'rm -rf -- "$work"' RETURN
+    sections=$(objdump -h "$uki") || die "UKI section table is unreadable"
+    for section in .cmdline .linux .initrd .pcrpkey .pcrsig; do
+        count=$(awk -v wanted="$section" '$2 == wanted { count++ } END { print count + 0 }' <<<"$sections")
+        [[ $count -eq 1 ]] || die "UKI must contain exactly one $section section"
+    done
     objcopy --dump-section ".cmdline=$work/cmdline" --dump-section ".linux=$work/linux" \
         --dump-section ".initrd=$work/initrd" --dump-section ".pcrpkey=$work/pcrpkey" \
         --dump-section ".pcrsig=$work/pcrsig" "$uki" "$work/copy.efi" >/dev/null 2>&1 || die "UKI lacks required trusted sections"
@@ -865,11 +870,25 @@ while [[ $# -gt 0 ]]; do
     shift 2
 done
 EOF
+    cat >"$work/bin/objdump" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+input=${@: -1}
+index=0
+for section in cmdline linux initrd pcrpkey pcrsig; do
+    printf ' %d .%s 00000000\n' "$index" "$section"
+    (( index += 1 ))
+    if [[ -e "$input.duplicate-$section" ]]; then
+        printf ' %d .%s 00000000\n' "$index" "$section"
+        (( index += 1 ))
+    fi
+done
+EOF
     cat >"$work/bin/sbverify" <<'EOF'
 #!/bin/bash
 [[ ! -e "${@: -1}.bad-signature" ]]
 EOF
-    chmod +x "$work/bin/objcopy" "$work/bin/sbverify"
+    chmod +x "$work/bin/objcopy" "$work/bin/objdump" "$work/bin/sbverify"
     PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)"
     for section in cmdline linux initrd pcrpkey pcrsig; do
         cp "$work/uki.$section" "$work/uki.$section.saved"
@@ -879,6 +898,11 @@ EOF
         fi
         mv "$work/uki.$section.saved" "$work/uki.$section"
     done
+    touch "$work/uki.duplicate-pcrsig"
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+        die "mutation fixture accepted duplicate UKI .pcrsig sections"
+    fi
+    rm "$work/uki.duplicate-pcrsig"
     touch "$work/uki.bad-signature"
     if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
         die "mutation fixture accepted UKI Authenticode mutation"
