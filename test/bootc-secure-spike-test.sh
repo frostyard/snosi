@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# Feasibility gate for bootc 1.16.3 UKIs sealed to a composefs rootfs.
+# Feasibility gate for bootc 1.16.7 UKIs sealed to a composefs rootfs.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -85,7 +85,7 @@ dracut or the Forky systemd family changes.
 
 **Bootc UKI assembly (Task 5, 2026-07-28):**
 `shared/bootc-secure/assemble-uki.sh` and the secure branch of
-`shared/outformat/image/buildah-package.sh` formalize the observed bootc 1.16.3
+`shared/outformat/image/buildah-package.sh` formalize the observed bootc 1.16.7
 hidden storage-digest plus direct two-pass ukify behavior as a maintained,
 fail-closed compatibility contract. This is NOT upstream-stable. Secure builds
 must set `SNOSI_BOOTC_SECURE=1` and caller-owned MOK/PCR credentials; Buildah

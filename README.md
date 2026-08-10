@@ -442,7 +442,7 @@ already-mounted read-only ESP. The real cayo proof validates immutable-source
 assembly only; FAT-ESP reconciler execution is deferred to Task 9 secure-install
 runtime coverage. Secure and insecure images carry explicit
 `io.snosi.bootc.secureboot-capable=true|false` labels. This is a maintained,
-fail-closed compatibility contract for Frostyard bootc 1.16.3, including its
+fail-closed compatibility contract for Frostyard bootc 1.16.7, including its
 hidden storage-digest command and direct two-pass ukify behavior, not an
 upstream-stable API. See `docs/bootc-secure-assembly-compatibility.md`.
 The protected packager checks its pinned bootc through the built rootfs with a
