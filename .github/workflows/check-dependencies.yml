@@ -361,9 +361,9 @@ jobs:
         with:
           # GITHUB_TOKEN-created PRs do not trigger workflows (validate/build
           # never run on them). Set the WORKFLOW_PAT repo secret (fine-grained
-          # PAT or GitHub App token with contents+pull-requests write) to give
-          # auto-update PRs real CI; until then this falls back to
-          # GITHUB_TOKEN and PRs must be checked manually.
+          # PAT or GitHub App token with contents+pull-requests+workflows
+          # write) to give auto-update PRs real CI; until then this falls back
+          # to GITHUB_TOKEN and PRs must be checked manually.
           token: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
           commit-message: "chore: update sysext dependency checksums"
           title: "chore: update sysext dependency checksums"
@@ -627,6 +627,15 @@ jobs:
         if: steps.check.outputs.has_updates == 'true'
         uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
         with:
+          # This job edits .github/workflows/build-images.yml (syft/cosign
+          # pins), and GITHUB_TOKEN can NEVER push workflow-file changes: the
+          # push is rejected with "refusing to allow a GitHub App to create or
+          # update workflow ... without `workflows` permission", and
+          # `workflows: write` is not a valid scope in the Actions
+          # `permissions:` key (adding it makes the whole file invalid —
+          # startup_failure, run 31381342652 / reverted PR #652). The ONLY fix
+          # is the WORKFLOW_PAT secret: a fine-grained PAT with
+          # contents+pull-requests+workflows read/write on this repo.
           token: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
           commit-message: "chore: update image dependencies"
           title: "chore: update image dependencies"
