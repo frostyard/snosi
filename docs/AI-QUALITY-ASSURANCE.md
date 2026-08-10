@@ -17,7 +17,7 @@ This repository uses existing build, test, and validation workflows as its quali
 ## Auto-QA Self-Tuning
 
 `.github/auto-qa-tuning.json` defines the machine-readable feedback policy for
-the live outcome signals in `docs/metrics.md`. A meaningful regression routes
+the live outcome signals in `docs/metrics/README.md`. A meaningful regression routes
 to the relevant guidance or local-check improvement; small samples hold the
 current policy. Required and security checks are never relaxed, and any
 adjustment must be proposed through a pull request.
