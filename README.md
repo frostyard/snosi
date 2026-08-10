@@ -651,7 +651,7 @@ installation or the root update service.
 Delivery metrics for the change process itself — PR acceptance rate, review
 iterations, time to merge, and CI first-pass rate, with the exact `gh`/`jq`
 queries that collect each one — are defined in
-[`docs/metrics.md`](docs/metrics.md).
+[`docs/metrics/README.md`](docs/metrics/README.md).
 
 ## Frostyard Custom Packages
 
