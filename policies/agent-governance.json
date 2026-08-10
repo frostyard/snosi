@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "defaultDecision": "deny",
+  "agentActions": {
+    "mergePullRequest": "deny",
+    "publishRelease": "deny",
+    "deployProduction": "deny",
+    "modifyProtectedEnvironment": "deny",
+    "approveOwnException": "deny"
+  },
+  "changeControls": {
+    "pullRequestRequired": true,
+    "humanReviewRequired": true,
+    "riskClassificationRequired": true,
+    "validationEvidenceRequired": true,
+    "securityRejectionTestsRequiredForProtectedBoundaries": true
+  },
+  "protectedBoundaries": [
+    "authentication",
+    "credentials",
+    "destructive-disk-operations",
+    "encryption",
+    "installer",
+    "publication",
+    "release",
+    "secure-boot",
+    "signing",
+    "tpm",
+    "update-verification",
+    "workflow-permissions"
+  ],
+  "exceptions": {
+    "pullRequestRationaleRequired": true,
+    "compensatingControlsRequired": true,
+    "maintainerApprovalRequired": true
+  }
+}
