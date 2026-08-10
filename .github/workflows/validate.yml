@@ -221,6 +221,29 @@ jobs:
         # PATH-stubbed capability assertion fixture. No root, network, or build.
         run: ./test/sunshine-capabilities-test.sh
 
+  publication-guard-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up BATS
+        uses: bats-core/bats-action@77d6fb60505b4d0d1d73e48bd035b55074bbfb43 # v4.0.0
+        with:
+          bats-version: 1.14.0
+          support-install: false
+          assert-install: false
+          detik-install: false
+          file-install: false
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test publication guards
+        run: bats --print-output-on-failure test/publication-guards.bats
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:

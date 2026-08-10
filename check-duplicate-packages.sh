@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-cd "$(dirname "$0")"
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+guard_root=${SNOSI_DUPLICATE_PACKAGES_GUARD_ROOT:-$script_dir}
+cd "$guard_root"
 
 python3 - <<'PY'
 from collections import defaultdict

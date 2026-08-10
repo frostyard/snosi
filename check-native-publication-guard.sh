@@ -56,7 +56,9 @@
 # prevent.
 set -euo pipefail
 
-cd "$(dirname "$0")"
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+guard_root=${SNOSI_NATIVE_GUARD_ROOT:-$script_dir}
+cd "$guard_root"
 
 production_names=(cayo-ab snow-ab snowfield-ab)
 pubring="shared/native-ab/keys/import-pubring.gpg"

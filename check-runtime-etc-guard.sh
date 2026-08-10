@@ -26,7 +26,9 @@
 # never shipped in the image /etc).
 set -euo pipefail
 
-cd "$(dirname "$0")"
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+guard_root=${SNOSI_RUNTIME_ETC_GUARD_ROOT:-$script_dir}
+cd "$guard_root"
 
 fail=0
 
@@ -58,17 +60,22 @@ while IFS= read -r -d '' f; do
     allow_next=0
     while IFS= read -r line; do
         n=$((n + 1))
+        stripped="${line#"${line%%[![:space:]]*}"}"
         # Skip comments (shell scripts and unit files) and explicit opt-outs.
         # A marker on a comment line also exempts the NEXT line, because unit
         # files do not support trailing comments on directive lines.
         case "$line" in
-            *etc-guard-allow*) allow_next=1; continue ;;
+            *etc-guard-allow*)
+                case "$stripped" in
+                    '#'*|';'*) allow_next=1 ;;
+                esac
+                continue
+                ;;
         esac
         if [ "$allow_next" -eq 1 ]; then
             allow_next=0
             continue
         fi
-        stripped="${line#"${line%%[![:space:]]*}"}"
         case "$stripped" in
             '#'*|';'*) continue ;;
         esac
