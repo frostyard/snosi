@@ -649,6 +649,11 @@ installation or the root update service.
 | `test-install.yml` | Manual | Signature-verified bootc installation test in QEMU/KVM |
 | `scorecard.yml` | Weekly | OpenSSF supply-chain security analysis |
 
+Both Copilot handoff workflows use the fleet-wide
+`COPILOT_ASSIGNMENT_TOKEN` organization secret. The [operator
+runbook](docs/copilot-automation-secret.md) defines its minimum scope, selected
+repositories, migration order, validation, failure behavior, and rotation.
+
 Delivery metrics for the change process itself — PR acceptance rate, review
 iterations, time to merge, and CI first-pass rate, with the exact `gh`/`jq`
 queries that collect each one — are defined in

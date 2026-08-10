@@ -442,6 +442,17 @@ Actions, Contents, Issues, and Pull requests. Do not replace it with
 assignment. Default workflow permissions remain empty, no checkout occurs,
 and issue title/body text never enters the shell.
 
+`COPILOT_ASSIGNMENT_TOKEN` is the fleet-wide canonical secret name for this
+workflow and `copilot-review-apply.yml`. The organization-level credential must
+be granted to each participating repository before that repository renames a
+consumer; aliases such as `COPILOT_AGENT_TOKEN` and `COPILOT_ASSIGN_PAT` are not
+fallbacks. `docs/copilot-automation-secret.md` is the operator runbook for the
+ordered rollout, validation, failure, and rotation procedure, while
+`test/copilot-automation-secret-test.py` is the local executable contract and
+runs in `validate.yml`. Repository changes cannot create or reveal the
+organization secret, so administrator confirmation is a merge precondition for
+consumer renames elsewhere in the fleet.
+
 ### claude.yml — ACMM AI Integration Marker
 
 **Trigger:** Manual dispatch only.

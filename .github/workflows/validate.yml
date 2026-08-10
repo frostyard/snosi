@@ -77,6 +77,11 @@ jobs:
         # build job must never regain package, OIDC, or attestation write scope.
         run: python3 ./test/build-workflow-permissions-test.py
 
+      - name: Validate canonical Copilot automation secret
+        # Keep both automation consumers on the fleet-wide name and retain a
+        # visible failure when the organization secret is unavailable.
+        run: python3 ./test/copilot-automation-secret-test.py
+
       - name: Validate native A/B invariants
         run: ./test/native-ab-static-test.sh
 
