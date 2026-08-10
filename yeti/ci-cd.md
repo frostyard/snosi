@@ -335,6 +335,11 @@ Checks for updates to resources managed by the verified download system. The
 workflow has two independent jobs so update PRs touch only the dependency state
 and inline pins for the build artifact that must be rebuilt.
 
+Every curl invocation has `--max-time 120`, including metadata probes and
+artifact downloads. The 1Password `Packages.gz` stream is capped with
+`head -c 52428800` both before and after decompression, bounding the fetched
+archive as well as expansion from a small gzip bomb.
+
 **Sysext dependency job (`shared/download/sysext-checksums.json`):**
 - 1Password desktop .deb (stable apt channel metadata, installed as a pinned
   .deb because the deb postinst needs network the buildroot lacks)

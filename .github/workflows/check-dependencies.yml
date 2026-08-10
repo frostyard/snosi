@@ -31,11 +31,11 @@ jobs:
           # Authenticated, retried GitHub API fetch. On persistent failure it
           # yields an empty string (|| true — explicit, so the graceful-skip
           # behavior doesn't depend on the shell's -e/pipefail settings, and
-          # curl's error stays visible in the log). Every branch below guards
+          # the transfer error stays visible in the log). Every branch below guards
           # against the empty value: a failed check skips that dependency
           # instead of proposing a bogus "null" update or aborting the run.
           gh_api() {
-            curl -fsSL --retry 3 --retry-delay 2 \
+            curl -fsSL --max-time 120 --retry 3 --retry-delay 2 \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${GH_TOKEN}" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -104,7 +104,7 @@ jobs:
           # the release tag; normalize the tag ("v1.36.2+k3s1", '+' sometimes
           # arriving percent-encoded) to the pinned version form.
           CURRENT_K3S=$(jq -r '.k3s.version' "$CHECKSUMS")
-          LATEST_K3S=$(curl -fsSL --retry 3 --retry-delay 2 -o /dev/null -w '%{url_effective}' https://update.k3s.io/v1-release/channels/stable | sed -e 's|.*/tag/||' -e 's/%2B/+/' -e 's/^v//' || true)
+          LATEST_K3S=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 -o /dev/null -w '%{url_effective}' https://update.k3s.io/v1-release/channels/stable | sed -e 's|.*/tag/||' -e 's/%2B/+/' -e 's/^v//' || true)
           if [[ -n "$LATEST_K3S" ]] && ver_gt "$LATEST_K3S" "$CURRENT_K3S"; then
             UPDATES="${UPDATES}k3s: $CURRENT_K3S -> $LATEST_K3S\n"
             echo "k3s_update=true" >> "$GITHUB_OUTPUT"
@@ -140,7 +140,7 @@ jobs:
 
           # Check Microsoft Azure VPN Client
           CURRENT_AZ=$(jq -r '.["microsoft-azurevpnclient"].version' "$CHECKSUMS")
-          LATEST_AZ=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
+          LATEST_AZ=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/ | grep -oP 'microsoft-azurevpnclient_\K[0-9]+\.[0-9]+\.[0-9]+' | sort -V | tail -1)
           if [[ -n "$LATEST_AZ" ]] && ver_gt "$LATEST_AZ" "$CURRENT_AZ"; then
             UPDATES="${UPDATES}microsoft-azurevpnclient: $CURRENT_AZ -> $LATEST_AZ\n"
             echo "azurevpn_update=true" >> $GITHUB_OUTPUT
@@ -149,7 +149,7 @@ jobs:
 
           # Check Microsoft Edge Stable
           CURRENT_EDGE=$(jq -r '.["microsoft-edge-stable"].version' "$CHECKSUMS")
-          LATEST_EDGE=$(curl -fsSL --retry 3 --retry-delay 2 https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
+          LATEST_EDGE=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
           if [[ -n "$LATEST_EDGE" ]] && ver_gt "$LATEST_EDGE" "$CURRENT_EDGE"; then
             UPDATES="${UPDATES}microsoft-edge-stable: $CURRENT_EDGE -> $LATEST_EDGE\n"
             echo "edge_update=true" >> $GITHUB_OUTPUT
@@ -159,7 +159,7 @@ jobs:
           # Check 1Password desktop (stable apt channel; installed as a pinned
           # .deb because the deb postinst needs network the buildroot lacks)
           CURRENT_OP=$(jq -r '.["1password"].version' "$CHECKSUMS")
-          LATEST_OP=$(curl -fsSL --retry 3 --retry-delay 2 https://downloads.1password.com/linux/debian/amd64/dists/stable/main/binary-amd64/Packages.gz | zcat | awk '/^Package: 1password$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
+          LATEST_OP=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 https://downloads.1password.com/linux/debian/amd64/dists/stable/main/binary-amd64/Packages.gz | head -c 52428800 | zcat | head -c 52428800 | awk '/^Package: 1password$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
           if [[ -n "$LATEST_OP" ]] && ver_gt "$LATEST_OP" "$CURRENT_OP"; then
             UPDATES="${UPDATES}1password: $CURRENT_OP -> $LATEST_OP\n"
             echo "onepassword_update=true" >> $GITHUB_OUTPUT
@@ -211,7 +211,7 @@ jobs:
             VER="$BITWARDEN_VERSION"
             URL="https://github.com/bitwarden/clients/releases/download/desktop-v${VER}/Bitwarden-${VER}-amd64.deb"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.bitwarden.url=$u | .bitwarden.sha256=$s | .bitwarden.version=$v' \
@@ -223,7 +223,7 @@ jobs:
             VER="$GITHUB_COPILOT_VERSION"
             URL="https://github.com/github/app/releases/download/v${VER}/GitHub-Copilot-linux-x64.deb"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '."github-copilot".url=$u | ."github-copilot".sha256=$s | ."github-copilot".version=$v' \
@@ -235,7 +235,7 @@ jobs:
             VER="$SUNSHINE_VERSION"
             URL="https://github.com/LizardByte/Sunshine/releases/download/v${VER}/sunshine-debian-trixie-amd64.deb"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.sunshine.url=$u | .sunshine.sha256=$s | .sunshine.version=$v' \
@@ -247,7 +247,7 @@ jobs:
             VER="$CODESERVER_VERSION"
             URL="https://github.com/coder/code-server/releases/download/v${VER}/code-server_${VER}_amd64.deb"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.["code-server"].url=$u | .["code-server"].sha256=$s | .["code-server"].version=$v' \
@@ -259,7 +259,7 @@ jobs:
             VER="$CODER_VERSION"
             URL="https://github.com/coder/coder/releases/download/v${VER}/coder_${VER}_linux_amd64.deb"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.coder.url=$u | .coder.sha256=$s | .coder.version=$v' \
@@ -275,7 +275,7 @@ jobs:
             # k3s publishes official per-release checksums; pin from those
             # instead of hashing our own download so a tampered transfer at
             # update time cannot become the pinned truth.
-            SHA=$(curl -fsSL "https://github.com/k3s-io/k3s/releases/download/${TAG}/sha256sum-amd64.txt" | awk '$2 == "k3s" {print $1}')
+            SHA=$(curl -fsSL --max-time 120 "https://github.com/k3s-io/k3s/releases/download/${TAG}/sha256sum-amd64.txt" | awk '$2 == "k3s" {print $1}')
             # the official checksum file must list the bare k3s binary
             [[ -n "$SHA" ]]
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
@@ -287,7 +287,7 @@ jobs:
             VER="$LEMONADE_VERSION"
             URL="https://github.com/lemonade-sdk/lemonade/releases/download/v${VER}/lemonade-server_${VER}-debian13_amd64.deb"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.lemonade.url=$u | .lemonade.sha256=$s | .lemonade.version=$v' \
@@ -299,7 +299,7 @@ jobs:
             VER="$PASEO_VERSION"
             URL="https://github.com/getpaseo/paseo/releases/download/v${VER}/Paseo-${VER}-amd64.deb"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.paseo.url=$u | .paseo.sha256=$s | .paseo.version=$v' \
@@ -311,7 +311,7 @@ jobs:
             VER="$PILOTHOUSE_VERSION"
             URL="https://github.com/frostyard/pilothouse/releases/download/v${VER}/frostyard-pilothouse_${VER}_amd64.deb"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.pilothouse.url=$u | .pilothouse.sha256=$s | .pilothouse.version=$v' \
@@ -323,7 +323,7 @@ jobs:
             VER="$AZUREVPN_VERSION"
             URL="https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_${VER}_amd64.deb"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.["microsoft-azurevpnclient"].url=$u | .["microsoft-azurevpnclient"].sha256=$s | .["microsoft-azurevpnclient"].version=$v' \
@@ -335,7 +335,7 @@ jobs:
             VER="$EDGE_VERSION"
             URL="https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_${VER}_amd64.deb"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.["microsoft-edge-stable"].url=$u | .["microsoft-edge-stable"].sha256=$s | .["microsoft-edge-stable"].version=$v' \
@@ -347,7 +347,7 @@ jobs:
             VER="$ONEPASSWORD_VERSION"
             URL="https://downloads.1password.com/linux/debian/amd64/pool/main/1/1password/1password-${VER}.amd64.deb"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.["1password"].url=$u | .["1password"].sha256=$s | .["1password"].version=$v' \
@@ -397,7 +397,7 @@ jobs:
           UPDATES=""
 
           gh_api() {
-            curl -fsSL --retry 3 --retry-delay 2 \
+            curl -fsSL --max-time 120 --retry 3 --retry-delay 2 \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: Bearer ${GH_TOKEN}" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -484,7 +484,7 @@ jobs:
 
           # Check the immutable digest currently published by chunkah:latest.
           CURRENT_CHUNKAH=$(sed -n -E 's|^CHUNKAH_IMAGE=.*@(sha256:[a-f0-9]{64}).*$|\1|p' shared/outformat/image/chunkah-package.sh)
-          LATEST_CHUNKAH=$(curl -fsSL --retry 3 --retry-delay 2 \
+          LATEST_CHUNKAH=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 \
             'https://quay.io/api/v1/repository/coreos/chunkah/tag/?onlyActiveTags=true' |
             jq -r '[.tags[] | select(.name == "latest") | .manifest_digest][0] // empty' || true)
           if [[ "$LATEST_CHUNKAH" =~ ^sha256:[a-f0-9]{64}$ &&
@@ -563,7 +563,7 @@ jobs:
             COMMIT="$BREW_COMMIT"
             URL="https://raw.githubusercontent.com/Homebrew/install/${COMMIT}/install.sh"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
               '.["brew-install"].url=$u | .["brew-install"].sha256=$s | .["brew-install"].version=$v' \
@@ -575,7 +575,7 @@ jobs:
             COMMIT="$SURFACE_COMMIT"
             URL="https://github.com/linux-surface/linux-surface/raw/${COMMIT}/pkg/keys/surface.cer"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
               '.["surface-cert"].url=$u | .["surface-cert"].sha256=$s | .["surface-cert"].version=$v' \
@@ -587,7 +587,7 @@ jobs:
             COMMIT="$HOTEDGE_COMMIT"
             URL="https://codeload.github.com/frostyard/hotedge/tar.gz/${COMMIT}"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
               '.hotedge.url=$u | .hotedge.sha256=$s | .hotedge.version=$v' \
@@ -599,7 +599,7 @@ jobs:
             COMMIT="$LOGOMENU_COMMIT"
             URL="https://codeload.github.com/frostyard/logomenu/tar.gz/${COMMIT}"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
               '.logomenu.url=$u | .logomenu.sha256=$s | .logomenu.version=$v' \
@@ -611,7 +611,7 @@ jobs:
             COMMIT="$BAZAAR_COMMIT"
             URL="https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/${COMMIT}"
             TMP=$(mktemp)
-            curl -fsSL -o "$TMP" "$URL"
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
               '.bazaar.url=$u | .bazaar.sha256=$s | .bazaar.version=$v' \
