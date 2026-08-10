@@ -1071,11 +1071,19 @@ independent jobs:
 All of this workflow's curl transfers have a 120-second maximum. Compressed
 APT metadata is additionally capped at 50 MiB before and after decompression.
 
+Syft and Cosign updates modify `.github/workflows/build-images.yml`, so GitHub
+requires the `WORKFLOW_PAT` repository secret to have workflow-write access
+before those edits can be pushed. Without that secret, the job warns and skips
+only those workflow-file pins; checksum and chunkah updates still produce PRs
+using `GITHUB_TOKEN`.
+
 The `.github/workflows/check-packages.yml` workflow runs daily for external APT
 packages consumed by sysexts (`code`, `docker-ce`, `1password-cli`,
 `claude-desktop`). It updates
 `package-versions.json`, which is only a change-detection sentinel; mkosi still
-resolves the package from APT during the sysext build.
+resolves the package from APT during the sysext build. The job has a 15-minute
+timeout so a stalled external APT request cannot retain repository write
+permissions for GitHub Actions' six-hour default.
 
 To check manually or trigger an update PR, use the "Run workflow" button in GitHub Actions.
 
