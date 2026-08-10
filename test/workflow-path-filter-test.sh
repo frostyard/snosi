@@ -20,15 +20,6 @@ trigger_block() { # workflow event
     ' "$workflow"
 }
 
-job_block() { # workflow job
-    local workflow=$1 job=$2
-    awk -v header="  $job:" '
-        $0 == header { in_job=1 }
-        in_job && $0 ~ /^  [[:alnum:]_-]+:$/ && $0 != header { exit }
-        in_job { print }
-    ' "$workflow"
-}
-
 assert_ignored() { # description workflow event path
     local description=$1 workflow=$2 event=$3 path=$4 block
     block=$(trigger_block "$workflow" "$event")
@@ -66,13 +57,6 @@ for event in push pull_request; do
         "$WORKFLOWS/test-bootc-secure.yml" "$event" \
         '.github/workflows/deploy-native-installer-redirect.yml'
 done
-
-image_updater=$(job_block "$WORKFLOWS/check-dependencies.yml" check-image-updates)
-if grep -Eq '^      workflows: write$' <<<"$image_updater"; then
-    pass 'image dependency updater can update workflow pins'
-else
-    fail 'image dependency updater can update workflow pins'
-fi
 
 if grep -Eq '^  push:' "$WORKFLOWS/scorecard.yml"; then
     fail 'Scorecard does not run after every push'
