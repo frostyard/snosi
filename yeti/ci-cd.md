@@ -8,7 +8,12 @@
 `shared/download/image-checksums.json` when that is the only changed path;
 image-only direct-download updates should rebuild OCI profiles instead.
 
-Builds the base image and all 22 sysexts, publishes to the Frostyard repository on Cloudflare R2.
+Builds the base image and all 22 sysexts, and publishes to the Frostyard
+repository on Cloudflare R2 only for non-pull-request events. The build job
+runs PR-controlled mkosi configuration under `sudo`, but its `GITHUB_TOKEN`
+has exactly `contents: read`; it has no package, OIDC, or attestation write
+scope. `test/build-workflow-permissions-test.py` enforces that boundary in the
+validation workflow.
 
 **Steps:**
 1. Aggressive cleanup of runner (removes JDK, .NET, Android SDK, etc. to free disk space)
@@ -16,8 +21,8 @@ Builds the base image and all 22 sysexts, publishes to the Frostyard repository 
 3. Run `check-duplicate-packages.sh` to validate no duplicate packages across configs
 4. Build base + all sysext images via mkosi
 5. Run `sysextmv.sh` and `manifestmv.sh` to organize output into `output/sysexts/` and `output/manifests/`
-6. Upload sysext artifacts and GPG-signed `SHA256SUMS` metadata to Frostyard R2 via the `frostyard/repogen` action
-7. Upload manifest files to R2
+6. On non-PR events, upload sysext artifacts and GPG-signed `SHA256SUMS` metadata to Frostyard R2 via the `frostyard/repogen` action
+7. On non-PR events, upload manifest files to R2
 8. Uses concurrent workflow cancellation (newer pushes cancel in-progress builds)
 
 Repogen uses `REPOGEN_GPG_KEY` to emit a detached `SHA256SUMS.gpg` per

@@ -585,9 +585,9 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all 22 sysexts (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode)
-2. Publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
-3. Uploads package manifests for version tracking
+1. Builds the base image and all 22 sysexts (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode). The PR-facing root mkosi build holds only `contents: read` and no package, OIDC, or attestation write scope.
+2. Outside pull requests, publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
+3. Outside pull requests, uploads package manifests for version tracking
 
 ### build-images.yml - OCI Images
 
