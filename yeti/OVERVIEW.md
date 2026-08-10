@@ -29,6 +29,13 @@ still belong in `CLAUDE.md` or the topic files here — the correction entry
 records how the rule was learned and points at it via `promoted_to`. It carries
 no secrets or personal data.
 
+## Governance policy surface
+
+`policies/` is the repository-level policy-as-code entry point. The fast
+validation workflow runs `test/acmm-policy-as-code-test.sh` so ACMM-recognized
+governance policy paths do not disappear while concrete OPA, Conftest, Kyverno,
+or repository-specific policy checks are added over time.
+
 ## Bootc Secure Operations
 
 The normative operator entry point for the secure bootc fresh-install path is

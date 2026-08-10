@@ -64,6 +64,12 @@ image inherits those chunked layers and overlays only `/boot`; its bootc must
 return the same digest in the second of exactly two digest probes. Protected
 assembly never runs a post-assembly chunk pass.
 
+## Governance
+
+The repository's policy-as-code entry point is [`policies/`](policies/). The
+fast validation workflow runs `test/acmm-policy-as-code-test.sh` to keep an
+ACMM-recognized governance policy path present.
+
 ## Architecture
 
 Naming, path, and policy contracts for the production native A/B products

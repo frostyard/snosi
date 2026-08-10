@@ -8,6 +8,13 @@ snosi is a bootable container image build system using [mkosi](https://github.co
 
 **Outputs:** 2 OCI desktop images (snow, snowfield), 1 OCI server image (cayo), and 22 sysext overlay images (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode).
 
+## Governance policy surface
+
+`policies/` is the repository-level policy-as-code entry point. The fast
+validation workflow runs `test/acmm-policy-as-code-test.sh` so ACMM-recognized
+governance policy paths remain present while concrete OPA, Conftest, Kyverno,
+or repository-specific policy checks are promoted into that surface.
+
 ## Build Commands
 
 Requires: just, git, python3, root/sudo access. mkosi itself is auto-bootstrapped: the Justfile fetches systemd/mkosi into a repo-local, gitignored `.mkosi/` checkout at the exact commit pinned by the `systemd/mkosi@<sha>` action in `.github/workflows/build.yml` (read at runtime — no drift between local and CI), and runs `.mkosi/bin/mkosi` from there. Delete `.mkosi/` to discard it; override with `just mkosi=/usr/bin/mkosi <target>` to use a system install.
