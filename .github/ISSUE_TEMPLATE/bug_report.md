@@ -32,5 +32,6 @@ Include relevant, sanitized logs. Do not include credentials or other secrets.
 
 ## Security vulnerabilities
 
-Do not report security vulnerabilities here. Instead, create a draft security
-advisory: https://github.com/frostyard/snosi/security/advisories/new
+Do not report security vulnerabilities here. Follow the private reporting
+instructions in the
+[security policy](https://github.com/frostyard/snosi/security/policy).

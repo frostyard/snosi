@@ -1,24 +1,28 @@
 # Security
 
-If you believe you have found a new security vulnerability in this repository, please report it to us as follows.
+If you believe you have found a security vulnerability in this repository,
+please report it privately.
 
 ## Reporting Security Issues
 
-* Please do **not** report security vulnerabilities through public GitHub issues.
+- Do **not** report security vulnerabilities through public GitHub issues.
+- Email the project maintainer at
+  [bketelsen@gmail.com](mailto:bketelsen@gmail.com). Use a subject such as
+  `[snosi security] Brief description`.
+- If this repository's **Security** tab displays a **Report a vulnerability**
+  button, you may use that private form instead.
 
-* Please create a draft security advisory on the Github page: the reporting form is under `> Security > Advisories`. The URL is https://github.com/frostyard/snosi/security/advisories/new.
+The **New draft security advisory** page is a maintainer workflow and is not a
+fallback reporting channel for people without repository write access.
 
-## Guidelines 
+## Guidelines
 
-* When reporting a vulnerability, please include as much information as possible, including the complete steps to reproduce the issue. 
-
-* Avoid sending us executables.
-
-* Feel free to include any script you wrote and used but avoid sending us scripts that download and run binaries. 
-
-* We will prioritise reports that show how the exploits work in realistic environments. 
-
-* We prefer all communications to be in English. 
-
-* We do not offer financial rewards. We are happy to acknowledge your research publicly when possible. 
-
+- Include the affected version or commit, impact, and complete reproduction
+  steps when possible.
+- Do not send credentials, private signing material, or executables.
+- You may include scripts you wrote, but do not send scripts that download and
+  run binaries.
+- We prioritize reports that demonstrate realistic impact.
+- We prefer communications in English.
+- We do not offer financial rewards. We are happy to acknowledge your research
+  publicly when possible.
