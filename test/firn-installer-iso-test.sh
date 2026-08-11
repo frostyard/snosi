@@ -52,6 +52,16 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 : "${VM_CPUS:=2}"
 : "${SKIP_BUILD:=0}"
 : "${KEEP_VM:=0}"
+# Default flow installs cayo-ab (server, fast, no flatpaks) and proves
+# the encrypted-boot + TPM story. FIRN_ISO_FLATPAK=1 instead installs a
+# DESKTOP image with core_flatpaks and proves the OFFLINE medium-copy
+# path: firn provisions the ISO-seeded flatpaks with the guest network
+# cut after the image download, and they appear on the booted system.
+: "${FIRN_ISO_FLATPAK:=0}"
+: "${FIRN_ISO_PRODUCT:=}"
+if [[ -n $FIRN_ISO_PRODUCT ]]; then product=$FIRN_ISO_PRODUCT
+elif [[ $FIRN_ISO_FLATPAK == 1 ]]; then product=snow-ab
+else product=cayo-ab; fi
 
 [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
 for cmd in qemu-system-x86_64 swtpm xorriso ssh-keygen; do
@@ -84,7 +94,17 @@ install -m 0600 "$WORK_DIR/id_e2e.pub" "$ROOTFS/root/.ssh/authorized_keys"
 
 version="$(date -u +%Y%m%d%H%M%S)"
 echo "== assembling test ISO (version $version, injected SSH key)"
-"$ROOT_DIR/shared/firn-installer/tools/build-iso.sh" "$ROOTFS" "$WORK_DIR" "$version"
+# The flatpak variant embeds the seed (built by `just firn-flatpak-seed`)
+# so the offline medium-copy path has something to copy; build-iso.sh
+# reads FIRN_FLATPAK_SEED_DIR.
+seed_env=()
+if [[ $FIRN_ISO_FLATPAK == 1 ]]; then
+  seed="${FIRN_FLATPAK_SEED_DIR:-$ROOT_DIR/output/firn-flatpak-seed}"
+  [[ -d $seed/repo ]] || fail "FIRN_ISO_FLATPAK=1 but no seed at $seed (run: just firn-flatpak-seed)"
+  seed_env=(FIRN_FLATPAK_SEED_DIR="$seed")
+  echo "   embedding flatpak seed: $seed ($(du -sh "$seed" | cut -f1))"
+fi
+env "${seed_env[@]}" "$ROOT_DIR/shared/firn-installer/tools/build-iso.sh" "$ROOTFS" "$WORK_DIR" "$version"
 ISO="$(ls "$WORK_DIR"/*.iso | head -1)"
 [[ -f $ISO ]] || fail "ISO assembly produced nothing in $WORK_DIR"
 
@@ -170,12 +190,35 @@ pass "firn kiosk active on ttyS0 (binary present, unit running)"
 # --- 3. Headless encrypted install from the medium -------------------------
 # The TUI path is E2E'd in firn (test/e2e-tui.sh); here the medium +
 # encrypted+TPM path is the subject, driven headless for determinism.
+flatpak_lines=""
+if [[ $FIRN_ISO_FLATPAK == 1 ]]; then
+  flatpak_lines=$'flatpaks = []\ncore_flatpaks = true'
+  # Prove the ISO seed is actually mounted where firn reads it.
+  seeded="$(sshq 'flatpak list --system --columns=application 2>/dev/null | wc -l' || echo 0)"
+  if [[ ${seeded:-0} -le 0 ]]; then
+    echo "-- firn-flatpak-seed diagnostics --" >&2
+    sshq 'systemctl status firn-flatpak-seed.service --no-pager -l 2>&1 | head -20
+          echo ...journal...; journalctl -u firn-flatpak-seed.service --no-pager 2>&1 | tail -20
+          echo ...devices...; ls -l /dev/disk/by-label/ 2>&1; ls -l /dev/sr0 /dev/vd* 2>&1
+          echo ...mounts...; findmnt /var/lib/flatpak 2>&1; mountpoint /var/lib/flatpak 2>&1' >&2 || true
+    fail "ISO flatpak seed not present at /var/lib/flatpak (got $seeded refs)"
+  fi
+  pass "ISO flatpak seed mounted at /var/lib/flatpak ($seeded refs)"
+  # Deterministic offline proof: black-hole flathub in the installer
+  # environment so the signed image download (repository.frostyard.org)
+  # still works, but flatpaks can ONLY come from the ISO seed's copy
+  # path — never a flathub download. Cleaner than racing a network-cut
+  # timer against the image stream.
+  sshq 'printf "127.0.0.1 dl.flathub.org\n127.0.0.1 flathub.org\n" >> /etc/hosts'
+  pass "flathub black-holed — flatpaks must come from the seed"
+fi
+
 sshq "systemctl stop 'firn-kiosk*' 2>/dev/null; cat > /root/recipe.toml" <<EOF
 version = 1
 
 [image]
 family = "ab"
-product = "cayo-ab"
+product = "$product"
 
 [target]
 disk = "/dev/vda"
@@ -187,6 +230,7 @@ encryption = "tpm2-luks"
 hostname = "frn-iso-e2e"
 timezone = "America/Chicago"
 root_ssh_authorized_key_file = "/root/.ssh/authorized_keys"
+$flatpak_lines
 
 [system.user]
 name = "e2e"
@@ -194,14 +238,23 @@ password_hash = "\$6\$firn.e2e\$XjSAJP9d3TXbJ4wIcZarBOUpAo6yLh4uYUniEcpKPGqAe7Ef
 groups = ["sudo"]
 EOF
 
-echo "== installing cayo-ab (tpm2-luks) from the medium"
+echo "== installing $product (tpm2-luks${flatpak_lines:+, core flatpaks offline}) from the medium"
 sshq "firn install --confirm /dev/vda --json-progress /root/recipe.toml" \
   >"$WORK_DIR/progress.ndjson" 2>"$WORK_DIR/firn.err" \
-  || { tail -5 "$WORK_DIR/firn.err" >&2; fail "firn install failed in the ISO environment"; }
+  || { tail -8 "$WORK_DIR/firn.err" >&2; fail "firn install failed in the ISO environment"; }
 grep -q '"event":"done","ok":true' "$WORK_DIR/progress.ndjson" \
   || fail "no done event in the install progress stream"
 grep -q '"event":"recovery_key"' "$WORK_DIR/progress.ndjson" \
   || fail "tpm2-luks install did not disclose a recovery key"
+if [[ $FIRN_ISO_FLATPAK == 1 ]]; then
+  # No flatpak may be reported unreachable — the seed must satisfy them
+  # all with the network down.
+  if grep -q '"code":"flatpak_unreachable"' "$WORK_DIR/progress.ndjson"; then
+    grep '"code":"flatpak_unreachable"' "$WORK_DIR/progress.ndjson" >&2
+    fail "flatpaks were unreachable — the ISO seed did not cover the core set offline"
+  fi
+  pass "core flatpaks provisioned offline from the ISO seed"
+fi
 pass "encrypted install completed from the medium"
 
 sshq poweroff 2>/dev/null || true
@@ -220,6 +273,13 @@ check var-mounted /var "$(sshq findmnt -n -o TARGET /var)"
 check tpm-unlocked-boot "0" "$(sshq 'systemctl show systemd-cryptsetup@* --property=Result 2>/dev/null | grep -c timeout || echo 0')"
 check user "uid=1000(e2e)" "$(sshq id e2e)"
 check installer firn "$(sshq cat /var/lib/snosi/install-info.json)"
+if [[ $FIRN_ISO_FLATPAK == 1 ]]; then
+  # The seeded core apps must be present on the INSTALLED system's
+  # flatpak installation — provisioned offline from the ISO.
+  installed_apps="$(sshq 'flatpak list --system --app --columns=application 2>/dev/null | wc -l' || echo 0)"
+  check flatpaks-installed-offline yes "$([[ ${installed_apps:-0} -ge 20 ]] && echo yes || echo "only $installed_apps")"
+  check flatpak-calculator org.gnome.Calculator "$(sshq flatpak list --system --app --columns=application 2>/dev/null | tr '\n' ' ')"
+fi
 
 sshq poweroff 2>/dev/null || true
 wait "$qemu_pid" 2>/dev/null || true; qemu_pid=""
