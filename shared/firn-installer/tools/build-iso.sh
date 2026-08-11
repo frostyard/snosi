@@ -250,6 +250,47 @@ echo "=== Assembling ISO ==="
 # actually has them, regardless of which device GRUB itself started from.
 mkdir -p "$WORK/iso-root/EFI/debian"
 cp "$WORK/grub.cfg" "$WORK/iso-root/EFI/debian/grub.cfg"
+
+# ---------------------------------------------------------------------------
+# 5b. OPTIONAL offline flatpak seed (firn ADR-0006 media obligation). The seed
+#     is a pre-built flatpak system installation tree (the core desktop apps +
+#     their runtimes, produced by `just firn-flatpak-seed`); FIRN_FLATPAK_SEED_DIR
+#     points at it. It is added as a squashfs FILE in the ISO9660 tree
+#     (firn-flatpak-seed.squashfs) -- a DATA AREA, NOT part of the initramfs:
+#     the initramfs (step 2) is unpacked entirely into tmpfs at boot and the
+#     RAM budget cannot absorb a multi-GiB flatpak repo. The squashfs stays on
+#     the physical medium; firn-flatpak-seed.service loop-mounts it read-only at
+#     /var/lib/flatpak at runtime, where firn's flatpak step copies it into the
+#     target (internal/flatpak/flatpak.go, hostFlatpakDir=/var/lib/flatpak).
+#
+#     -all-root makes every file in the squashfs uid/gid 0 regardless of the
+#     (unprivileged) user that ran `just firn-flatpak-seed`, so the mounted
+#     /var/lib/flatpak presents as root-owned exactly like a real system
+#     installation and firn's tar-copy carries root ownership into the target.
+#
+#     OPTIONAL by design: an unset/absent seed dir builds a seedless ISO and
+#     firn falls back to network at install time (ADR-0006 report-don't-fail).
+#     A missing seed is NEVER a build failure.
+# ---------------------------------------------------------------------------
+if [[ -n "${FIRN_FLATPAK_SEED_DIR:-}" ]]; then
+    if [[ -d "$FIRN_FLATPAK_SEED_DIR/repo" ]]; then
+        command -v mksquashfs >/dev/null || {
+            echo "Error: FIRN_FLATPAK_SEED_DIR set but mksquashfs not found (install squashfs-tools)" >&2; exit 1; }
+        echo "=== Adding flatpak seed (squashfs data area, outside initramfs) ==="
+        echo "  seed src: $FIRN_FLATPAK_SEED_DIR ($(du -sh "$FIRN_FLATPAK_SEED_DIR" | cut -f1))"
+        mksquashfs "$FIRN_FLATPAK_SEED_DIR" "$WORK/iso-root/firn-flatpak-seed.squashfs" \
+            -all-root -comp zstd -noappend >"$WORK/mksquashfs.log" 2>&1 \
+            || { cat "$WORK/mksquashfs.log" >&2; exit 1; }
+        echo "  seed squashfs: $(du -h "$WORK/iso-root/firn-flatpak-seed.squashfs" | cut -f1)"
+    else
+        # A path was given but has no ostree repo/ -- treat as a build mistake
+        # (empty/half-built seed), not the "no seed at all" fast path.
+        echo "Error: FIRN_FLATPAK_SEED_DIR=$FIRN_FLATPAK_SEED_DIR has no repo/ subdir -- not a flatpak seed tree" >&2
+        exit 1
+    fi
+else
+    echo "=== No flatpak seed (FIRN_FLATPAK_SEED_DIR unset); ISO relies on network at install time (ADR-0006) ==="
+fi
 # "SNOSI_INSTALLER_<14-digit version>" is 30 d-characters (uppercase/digit/
 # underscore), within ISO9660's 32-character primary volume-identifier limit.
 # The prefix is the installer-medium refusal contract: both firn and

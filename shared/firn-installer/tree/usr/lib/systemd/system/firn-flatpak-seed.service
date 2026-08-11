@@ -1,0 +1,32 @@
+# Mount the installer medium's offline flatpak seed at /var/lib/flatpak before
+# firn provisions flatpaks into the target (firn ADR-0006 media obligation).
+# REPO BOUNDARY (ADR-0010): this unit is the snosi ISO's own -- it is NOT a
+# firn dist/ unit like firn-kiosk*.service. It reads the squashfs seed area
+# that shared/firn-installer/tools/build-iso.sh puts on the ISO and mounts it
+# where firn's flatpak step looks (internal/flatpak/flatpak.go,
+# hostFlatpakDir=/var/lib/flatpak).
+#
+# Best-effort (ADR-0006 report-don't-fail): the helper exits 0 when there is no
+# medium or no seed (a fast/offline ISO build), and nothing Requires= this
+# unit, so a seedless -- or even a failed -- mount never blocks the installer
+# from booting; firn simply downloads flatpaks over the network instead.
+[Unit]
+Description=Mount installer medium offline flatpak seed at /var/lib/flatpak
+Documentation=https://github.com/frostyard/firn/blob/main/docs/adr/0006-install-time-offline-first-flatpaks.md
+# The seed lives on the boot medium's ISO9660 filesystem; wait for basic
+# device/filesystem setup so the by-label symlink can exist (the helper also
+# polls for it).
+After=local-fs.target
+# Must be mounted BEFORE firn runs its flatpak provisioning step, which the TUI
+# kiosk drives -- order before every kiosk entry point (tty1 + the enabled
+# serial instance). Ordering only (no Requires=): a missing/failed seed must
+# not stop the kiosk from starting.
+Before=firn-kiosk.service firn-kiosk-serial@ttyS0.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/firn/firn-flatpak-seed-mount
+
+[Install]
+WantedBy=multi-user.target

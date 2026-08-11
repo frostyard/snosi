@@ -1,0 +1,74 @@
+#!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Mount the installer medium's offline flatpak seed at /var/lib/flatpak, so
+# firn's install-time flatpak step (firn internal/flatpak/flatpak.go,
+# hostFlatpakDir=/var/lib/flatpak) finds a populated system installation to
+# copy into the target -- the ADR-0006 media obligation, "offline path is the
+# common path, not the degraded one".
+#
+# The seed is a squashfs DATA AREA on the ISO9660 medium
+# (firn-flatpak-seed.squashfs, added by shared/firn-installer/tools/build-iso.sh),
+# NOT part of the all-in-RAM initramfs -- so a multi-GiB core-apps+runtime seed
+# never enters the tmpfs RAM budget. This script finds the physical medium,
+# mounts it read-only, and loop-mounts the squashfs at /var/lib/flatpak.
+#
+# Best-effort by design (ADR-0006 report-don't-fail): if there is no medium or
+# no seed on it (a fast/offline ISO build), this exits 0 and firn falls back to
+# downloading flatpaks at install time. It never blocks the installer from
+# booting.
+set -eu
+
+SEED_MNT=/var/lib/flatpak
+MEDIUM_MNT=/run/firn-installer-medium
+SEED_FILE=firn-flatpak-seed.squashfs
+
+log() { echo "firn-flatpak-seed: $*"; }
+
+# Idempotent: RemainAfterExit means this normally runs once, but tolerate a
+# re-run (e.g. manual restart) without stacking mounts.
+if mountpoint -q "$SEED_MNT" 2>/dev/null; then
+    log "$SEED_MNT already a mount point; nothing to do"
+    exit 0
+fi
+
+# Locate the installer medium by its ISO9660 volume-label prefix -- the same
+# label firn and snosi-install match for medium detection (SNOSI_INSTALLER_* /
+# FIRN_INSTALLER_*, firn internal/disk/disk.go). Poll briefly: this unit can be
+# ordered before udev has finished creating the by-label symlink for the boot
+# medium.
+dev=""
+i=0
+while [ "$i" -lt 30 ]; do
+    for l in /dev/disk/by-label/SNOSI_INSTALLER_* /dev/disk/by-label/FIRN_INSTALLER_*; do
+        [ -e "$l" ] || continue
+        dev=$(readlink -f "$l")
+        break
+    done
+    [ -n "$dev" ] && break
+    i=$((i + 1))
+    sleep 0.5
+done
+if [ -z "$dev" ]; then
+    log "no installer medium (SNOSI_INSTALLER_*/FIRN_INSTALLER_*) found; skipping seed -- firn will use network at install time (ADR-0006)"
+    exit 0
+fi
+log "installer medium: $dev"
+
+mkdir -p "$MEDIUM_MNT"
+mountpoint -q "$MEDIUM_MNT" || mount -o ro "$dev" "$MEDIUM_MNT"
+
+seed="$MEDIUM_MNT/$SEED_FILE"
+if [ ! -f "$seed" ]; then
+    log "no $SEED_FILE on medium -- seedless ISO; firn will use network at install time (ADR-0006)"
+    # Nothing is loop-backed by the medium yet, so releasing it is clean.
+    umount "$MEDIUM_MNT" 2>/dev/null || true
+    exit 0
+fi
+
+# Loop-mount the seed squashfs read-only over /var/lib/flatpak. The medium
+# stays mounted at $MEDIUM_MNT because the loop device is backed by the seed
+# file living on it -- unmounting the medium would pull the backing out.
+mkdir -p "$SEED_MNT"
+mount -t squashfs -o ro,loop "$seed" "$SEED_MNT"
+log "mounted offline flatpak seed ($seed) read-only at $SEED_MNT"
