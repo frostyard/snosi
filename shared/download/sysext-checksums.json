@@ -15,14 +15,14 @@
     "version": "3.1.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_151.0.4129.72-1_amd64.deb",
-    "sha256": "babd5ea470a86c84615e23a7d5aaf4e1be6811b3af1229bc234d78bdc6b4f55a",
-    "version": "151.0.4129.72-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_151.0.4129.78-1_amd64.deb",
+    "sha256": "38161c8c49dc88f1dc1c9797d78a63064611e1490b8c2ca290afa0677027ef8b",
+    "version": "151.0.4129.78-1"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.131.0/code-server_4.131.0_amd64.deb",
-    "sha256": "f406ed417f179c82d75a34043d055b8b51cbe944e5624f2fdf39207fe425d29e",
-    "version": "4.131.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.132.0/code-server_4.132.0_amd64.deb",
+    "sha256": "18e0e69920ab23b725cb219fb42bc045a908421448cf496a3124314e1a02bcf1",
+    "version": "4.132.0"
   },
   "coder": {
     "url": "https://github.com/coder/coder/releases/download/v2.35.3/coder_2.35.3_linux_amd64.deb",
