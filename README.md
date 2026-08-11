@@ -13,6 +13,13 @@ See the [supported installation guide](docs/installing.md) to choose an image,
 verify the native installer, create boot media, install safely, and recover or
 update the installed system.
 
+## Community
+
+Contributions are welcome. Read the [contributing guide](CONTRIBUTING.md) and
+follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report vulnerabilities only
+through the private channels in the [security policy](SECURITY.md), never in a
+public issue.
+
 ## What This Project Does
 
 snosi builds immutable, bootable OCI container images based on Debian Trixie. These images are designed for use with [bootc](https://bootc-dev.github.io/bootc/) / systemd-boot and can be deployed as atomic, updateable operating system images.
