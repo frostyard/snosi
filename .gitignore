@@ -29,5 +29,9 @@ shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.git
 shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io/extension.js
 shared/snow/tree/usr/share/glib-2.0/schemas/org.gnome.shell.extensions.logo-menu.gschema.xml
 
+# firn binary provisioned at build time by `just _firn-binary`
+# (shared/firn-installer/README.md); never committed.
+shared/firn-installer/tree/usr/bin/firn
+
 # Scratch investigation notes; never part of the tree.
 ISSUE-*-EVIDENCE.md

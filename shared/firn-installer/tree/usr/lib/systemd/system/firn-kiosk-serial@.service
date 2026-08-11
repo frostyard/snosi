@@ -1,0 +1,36 @@
+# firn TUI kiosk on a serial console — ADR-0007 makes serial consoles
+# first-class: the same wizard code serves them, so servers installed
+# over ttyS0 get the identical flow. Instantiate per console
+# (firn-kiosk-serial@ttyS0.service); which instances to enable is the
+# snosi ISO's decision (ADR-0010), typically derived from the kernel's
+# console= set the way serial-getty@ is.
+#
+# Same getty-replacement and crash-loop-escape rationale as
+# firn-kiosk.service (see its comments for the Conflicts-vs-Conditions
+# lesson), aimed at serial-getty@%i instead of getty@tty1.
+[Unit]
+Description=firn installer (TUI kiosk on /dev/%I)
+Conflicts=serial-getty@%i.service
+After=serial-getty@%i.service systemd-user-sessions.service
+OnFailure=serial-getty@%i.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/firn
+Restart=on-failure
+RestartSec=2
+TTYPath=/dev/%i
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+# Serial consoles get vt220 (matching serial-getty@); the TUI must
+# render within that and 80x24 (ADR-0007 usability bar).
+Environment=TERM=vt220
+
+[Install]
+WantedBy=multi-user.target
+DefaultInstance=ttyS0

@@ -40,6 +40,20 @@ snowfield-ab: ensure-mkosi
 native-installer-iso: ensure-mkosi
     sudo PATH="$PATH" {{just}} _native-installer-iso
 
+# Single-installer ISO for all image families (firn ADR-0010, successor to
+# native-installer; see shared/firn-installer/README.md). The firn binary is
+# built from a sibling firn checkout by _firn-binary, which runs as the
+# invoking user BEFORE sudo (same reasoning as ensure-mkosi: the artifact
+# must not be root-owned, and root has no Go toolchain/module cache).
+# FIRN_SRC defaults to ../firn relative to this repo's root -- worktree
+# users must set it to a real checkout, e.g.:
+#   FIRN_SRC=~/projects/frostyard/firn just firn-installer
+firn-installer: ensure-mkosi _firn-binary
+    sudo PATH="$PATH" {{just}} _firn-installer
+
+firn-installer-iso: ensure-mkosi _firn-binary
+    sudo PATH="$PATH" {{just}} _firn-installer-iso
+
 test-install image="output/snow":
     sudo PATH="$PATH" {{just}} _test-install {{image}}
 
@@ -101,6 +115,38 @@ _snowfield-ab: _clean
 _native-installer-iso: _clean
     {{mkosi}} --profile native-installer build
     ./shared/native-installer/tools/build-iso.sh output/native-installer output "$(date -u +%Y%m%d%H%M%S)"
+
+# Build the firn TUI binary into shared/firn-installer/tree/usr/bin/firn
+# (gitignored; the image postinst refuses to build without it -- see
+# shared/firn-installer/README.md. TODO: replace with a frostyard-firn
+# Packages= entry once firn cuts a release). CGO_ENABLED=0: the binary runs
+# inside the ISO rootfs and must not depend on the build host's libc.
+# Version stamping mirrors firn's own Makefile LDFLAGS
+# (main.version/commit/date/builtBy), so the medium's firn reports the
+# source checkout's `git describe` version.
+[private]
+_firn-binary:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src="${FIRN_SRC:-{{justfile_directory()}}/../firn}"
+    [[ -d "$src" ]] || { echo "Error: firn checkout not found at $src -- set FIRN_SRC (see shared/firn-installer/README.md)" >&2; exit 1; }
+    version=$(git -C "$src" describe --tags --always --dirty 2>/dev/null || echo dev)
+    commit=$(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo none)
+    build_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    out="{{justfile_directory()}}/shared/firn-installer/tree/usr/bin/firn"
+    (cd "$src" && CGO_ENABLED=0 go build \
+        -ldflags "-X main.version=$version -X main.commit=$commit -X main.date=$build_time -X main.builtBy=snosi-justfile" \
+        -o "$out" ./cmd/firn-cli)
+    echo "built $out ($version, $commit)"
+
+[private]
+_firn-installer: _clean
+    {{mkosi}} --profile firn-installer build
+
+[private]
+_firn-installer-iso: _clean
+    {{mkosi}} --profile firn-installer build
+    ./shared/firn-installer/tools/build-iso.sh output/firn-installer output "$(date -u +%Y%m%d%H%M%S)"
 
 [private]
 _test-install image="output/snow":
