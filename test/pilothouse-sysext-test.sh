@@ -17,6 +17,7 @@ pilothouse_arguments=(
     '--podman-socket /run/podman/podman.sock'
     '--docker unix:///var/run/docker.sock'
     '--incus'
+    '--k3s /usr/bin/k3s'
 )
 
 assert_count() {
@@ -55,8 +56,8 @@ assert_pilothouse_arguments() {
 }
 
 pilothouse_version=$(jq -er '.pilothouse.version' "$checksums")
-if ! dpkg --compare-versions "$pilothouse_version" ge 0.7.0; then
-    printf 'expected pinned Pilothouse version >= 0.7.0, found %s in %s\n' \
+if ! dpkg --compare-versions "$pilothouse_version" ge 0.8.0; then
+    printf 'expected pinned Pilothouse version >= 0.8.0, found %s in %s\n' \
         "$pilothouse_version" "$checksums" >&2
     exit 1
 fi
