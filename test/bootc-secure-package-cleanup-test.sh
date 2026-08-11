@@ -133,7 +133,7 @@ case $1 in
         :
         ;;
     run)
-        if [[ " $* " == *' quay.io/coreos/chunkah@sha256:fdff3175bfb41e111089392ef8a41b46a10766c7b2ec454ba1272a0c39ce3bf3 '* ]]; then
+        if [[ " $* " == *' quay.io/coreos/chunkah@sha256:'* ]]; then
             printf '%s\n' "$@" >"$BUILD_FIXTURE_STATE/chunk-args"
             for ((i = 1; i <= $#; i++)); do
                 if [[ ${!i} == SOURCE_DATE_EPOCH=* ]]; then
