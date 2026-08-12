@@ -20,7 +20,7 @@ command -v curl >/dev/null || { echo "Error: curl is required" >&2; exit 1; }
 WORK="$(mktemp -d /var/tmp/verify-installer-redirect.XXXXXX)"
 trap 'rm -rf "$WORK"' EXIT
 
-expected_name="snosi-native-installer_${EXPECTED_VERSION}_x86-64.iso"
+expected_name="snosi-installer_${EXPECTED_VERSION}_x86-64.iso"
 base_url="${STABLE_URL%/*}"
 expected_location="$base_url/$expected_name"
 

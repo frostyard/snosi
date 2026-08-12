@@ -1257,15 +1257,15 @@ jobs:
             dracut-core binutils file python3-cryptography xorriso mtools dosfstools zstd
 
       - name: Build installer rootfs
-        run: sudo TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile native-installer build
+        run: sudo TMPDIR="$TMPDIR" .mkosi/bin/mkosi --profile firn-installer build
 
       - name: Assemble ISO
-        run: sudo PATH="$PATH" ./shared/native-installer/tools/build-iso.sh output/native-installer output "$VERSION"
+        run: sudo PATH="$PATH" ./shared/firn-installer/tools/build-iso.sh output/firn-installer output "$VERSION"
 
       - name: Prepare ISO publication
         run: |
           ./shared/native-ab/publish/prepare-iso-publication.sh \
-            "output/snosi-native-installer_${VERSION}_x86-64.iso" "$VERSION" \
+            "output/snosi-installer_${VERSION}_x86-64.iso" "$VERSION" \
             /var/tmp/native-publish/iso
 
       - name: Publish candidate objects to R2
@@ -1487,7 +1487,7 @@ jobs:
           set -euo pipefail
           ver="$(jq -r .version /var/tmp/native-publish/iso/publication-info.json)"
           ./shared/native-ab/publish/verify-installer-redirect.sh \
-            https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso \
+            https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso \
             "$ver"
 
       - name: Remove OpenPGP update-signing key

@@ -6,8 +6,8 @@ A bootable container image build system using [mkosi](https://github.com/systemd
 ## Downloads
 
 - [Bootc live installation media](https://repository.frostyard.org/isos/snow-live-latest.iso)
-- [Native A/B network installer (latest x86-64)](https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso)
-- [Native installer checksums](https://repository.frostyard.org/isos/native/v1/SHA256SUMS) and [OpenPGP signature](https://repository.frostyard.org/isos/native/v1/SHA256SUMS.gpg)
+- [Firn installer — all image families, bootc and A/B (latest x86-64)](https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso)
+- [Installer checksums](https://repository.frostyard.org/isos/native/v1/SHA256SUMS) and [OpenPGP signature](https://repository.frostyard.org/isos/native/v1/SHA256SUMS.gpg)
 
 See the [supported installation guide](docs/installing.md) to choose an image,
 verify the native installer, create boot media, install safely, and recover or

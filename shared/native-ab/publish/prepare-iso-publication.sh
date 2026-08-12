@@ -52,7 +52,7 @@ done
 [[ -f "$ISO_PATH" ]] || { echo "Error: ISO not found: $ISO_PATH" >&2; exit 1; }
 [[ "$VERSION" =~ ^[0-9]{14}$ ]] || { echo "Error: version must be exactly 14 digits: $VERSION" >&2; exit 1; }
 
-expected_name="snosi-native-installer_${VERSION}_x86-64.iso"
+expected_name="snosi-installer_${VERSION}_x86-64.iso"
 actual_name="$(basename "$ISO_PATH")"
 [[ "$actual_name" == "$expected_name" ]] || {
     echo "Error: ISO filename '$actual_name' does not match the frozen public name '$expected_name' for version $VERSION (docs/native-ab-contracts.md \"Installer ISO\")" >&2
@@ -98,12 +98,13 @@ sums_tmp="$NEW_TMPFILE"
 commit_tmpfile "$sums_tmp" "$sums_file"
 echo "Writing $sums_file (unsigned; signing is the Phase 7 promotion step)"
 
-# product == channel == "snosi-native-installer" here (unlike the OS
-# artifact pipeline, where product/channel differ, e.g. "cayo"/"cayo-ab"):
-# there is exactly one installer, not one per product, and this value must
-# equal the literal prefix of the frozen object name itself
-# (snosi-native-installer_<version>_x86-64.iso) so promote.sh's outgoing-
-# index archival step (which greps SHA256SUMS for "<channel>_<14-digit
+# product == channel == "snosi-installer" here (unlike the OS artifact
+# pipeline, where product/channel differ, e.g. "cayo"/"cayo-ab"): there is
+# exactly one installer (firn, the successor to native-installer; core
+# ADR-0027/0028), not one per product, and this value must equal the
+# literal prefix of the frozen object name itself
+# (snosi-installer_<version>_x86-64.iso) so promote.sh's outgoing-index
+# archival step (which greps SHA256SUMS for "<channel>_<14-digit
 # version>") can find this publication type's own entries.
 source_commit="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse HEAD 2>/dev/null || echo unknown)"
 generated_at="$(date -u +%FT%TZ)"
@@ -114,8 +115,8 @@ new_tmpfile "$info_file"
 info_tmp="$NEW_TMPFILE"
 cat >"$info_tmp" <<EOF
 {
-  "product": "snosi-native-installer",
-  "channel": "snosi-native-installer",
+  "product": "snosi-installer",
+  "channel": "snosi-installer",
   "version": "$VERSION",
   "dest_path": "isos/native/v1",
   "artifacts": {
