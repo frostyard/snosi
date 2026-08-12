@@ -17,11 +17,12 @@ The ones that bind snosi:
 - [ADR-0014 — One GPG repository key, baked into images](https://github.com/frostyard/core/blob/main/docs/adr/0014-single-gpg-trust-root.md) — shared/sysext/keys, import-pubring.gpg
 - [ADR-0015 — os-release is the image identity surface](https://github.com/frostyard/core/blob/main/docs/adr/0015-os-release-image-identity.md) — IMAGE_ID written into ID=; ImageId stays the product name in -ab profiles
 - [ADR-0017 — io.snosi.* OCI capability labels and the mechanics QA tier](https://github.com/frostyard/core/blob/main/docs/adr/0017-io-snosi-capability-labels-and-mechanics-tier.md) — buildah-package.sh trusted labels; build-mechanics.yml
-- [ADR-0018 — Org-wide agent instruction and knowledge surfaces](https://github.com/frostyard/core/blob/main/docs/adr/0018-org-wide-agent-instruction-and-knowledge-surfaces.md) — AGENTS.md symlinks, yeti/, .memory/, .knowledge/
+- [ADR-0018 — Org-wide agent instruction and knowledge surfaces](https://github.com/frostyard/core/blob/main/docs/adr/0018-org-wide-agent-instruction-and-knowledge-surfaces.md) — AGENTS.md symlinks, .memory/, .knowledge/ (its yeti/ AI-docs surface is superseded on that point by ADR-0025; snosi's former yeti/ now lives in docs/design/)
 - [ADR-0019 — Repository governance as machine-readable policy with risk tiers](https://github.com/frostyard/core/blob/main/docs/adr/0019-governance-as-code-and-risk-tiers.md) — policies/agent-governance.json, risk tiers
 - [ADR-0020 — Trust boundaries for AI automation in CI](https://github.com/frostyard/core/blob/main/docs/adr/0020-ai-automation-trust-boundaries.md) — COPILOT_ASSIGNMENT_TOKEN canonical-secret rule originates here
 - [ADR-0021 — SHA-pinned actions and least-privilege CI workflows](https://github.com/frostyard/core/blob/main/docs/adr/0021-sha-pinned-actions-and-least-privilege-ci.md) — workflow pinning policy
 - [ADR-0023 — External downloads are version-pinned and checksum-verified](https://github.com/frostyard/core/blob/main/docs/adr/0023-verified-pinned-downloads.md) — shared/download/verified-download.sh and its split registries
+- [ADR-0025 — One docs/ tree per repository, in core's four-category shape](https://github.com/frostyard/core/blob/main/docs/adr/0025-consolidate-repository-docs-into-docs.md) — docs/{adr,design,specs,plans} + indexed docs/README.md; the former yeti/ tree was folded into docs/design/
 
 When changing behavior covered by one of these, update or supersede the ADR
 in frostyard/core first, then change this repo in the same effort.

@@ -8,14 +8,15 @@ Related learning artifacts:
 
 - `.memory/corrections.jsonl` — append-only log of corrections learned during
   past sessions (see `.memory/README.md` for conventions).
-- `yeti/` — AI-oriented architecture and decision-rationale documentation.
+- `docs/design/` (formerly `yeti/`) — AI-oriented architecture and
+  decision-rationale documentation; start at `docs/design/overview.md`.
 - `CLAUDE.md` — top-level guidance for Claude Code (and other agents) working
   in this repository.
 
 ## Conventions
 
 - Keep entries short: date, scope, what changed, and any follow-up.
-- Prefer promoting durable facts to `CLAUDE.md` or `yeti/` and note that here
+- Prefer promoting durable facts to `CLAUDE.md` or `docs/` and note that here
   rather than duplicating long-form detail in this file.
 - This file complements, but does not replace, `.memory/corrections.jsonl`.
 

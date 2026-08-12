@@ -15,11 +15,12 @@ on:
       # Documentation, agent context, and the standalone redirect worker do
       # not change image inputs or the image validation scripts.
       - "**/*.md"
+      - ".agents/**"
       - ".claude/**"
       - ".knowledge/**"
       - ".memory/**"
+      - "docs/**"
       - "skills/**"
-      - "yeti/**"
       - "workers/**"
       - ".github/workflows/deploy-native-installer-redirect.yml"
   pull_request:
@@ -31,11 +32,12 @@ on:
       # Documentation, agent context, and the standalone redirect worker do
       # not change image inputs or the image validation scripts.
       - "**/*.md"
+      - ".agents/**"
       - ".claude/**"
       - ".knowledge/**"
       - ".memory/**"
+      - "docs/**"
       - "skills/**"
-      - "yeti/**"
       - "workers/**"
       - ".github/workflows/deploy-native-installer-redirect.yml"
   workflow_dispatch:

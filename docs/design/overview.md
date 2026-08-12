@@ -42,7 +42,7 @@ The normative prose remains in `docs/SECURITY-AI.md` and `docs/risk-tiers.md`.
 ## Bootc Secure Operations
 
 The normative operator entry point for the secure bootc fresh-install path is
-[`docs/bootc-secure-operations.md`](../docs/bootc-secure-operations.md). This
+[`docs/bootc-secure-operations.md`](../bootc-secure-operations.md). This
 overview describes architecture only; the runbook retains support status,
 recovery, rotation, incident, and evidence rules. Its live-install and
 Snowfield hardware gates remain blocked.
@@ -287,7 +287,7 @@ half (signed index vs. shipped ring) but could not, and did not, catch
 shipping the ring under only the 257 name; the 261 `.pgp` vendor path is
 covered by `test/native-ab-secure-boot-test.sh`, which bakes an ephemeral
 ring over both `/usr` names at build time and runs with no `/etc` override
-(see `yeti/testing.md`). The QEMU leg: boot N, `/etc/
+(see `testing.md`). The QEMU leg: boot N, `/etc/
 sysupdate.d` origin override (same documented whole-file-replacement
 mechanism as `native-ab-updateux-test.sh`) pointed at the local rehearsal
 origin, stage promoted N+1 via `snosi-sysupdate-stage`, reboot, assert N+1.
@@ -730,7 +730,7 @@ exit-criterion QEMU test: it boots a publication-disabled N, stages a
 publication-enabled N+1 (built with `SNOSI_NATIVE_AUTOSTAGE=1`), reboots, and
 asserts `snosi-sysupdate-stage.timer` is ACTIVE post-reboot -- proving the
 static link travels with the image itself, not with any first-boot or
-preset-reconcile machinery. See `yeti/testing.md` for the full assertion
+preset-reconcile machinery. See `testing.md` for the full assertion
 sequence including the ack-gated notification and tampered-signature
 fail-closed cases.
 
@@ -855,7 +855,7 @@ assert SB enforced, kernel lockdown, unattended TPM `/var` unlock, the `/etc`
 overlay, `IMAGE_ID`/`IMAGE_VERSION`, `install-info.json`, clean
 `snosi-update-status`, and no failed units. It also de-risks commit 99f4921's
 own-boot-medium refusal in the real initramfs (cayo-ab step 3). First green run
-75/75 (2026-07-15); see yeti/testing.md "Phase 8 (ISO install end-to-end)" for the
+75/75 (2026-07-15); see testing.md "Phase 8 (ISO install end-to-end)" for the
 full step breakdown and the real product bugs it surfaced.
 
 ### snosi-install CLI (Task 8.2)

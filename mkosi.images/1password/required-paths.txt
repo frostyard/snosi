@@ -4,7 +4,7 @@
 /usr/lib/1Password/1Password-BrowserSupport
 /usr/bin/1password
 /usr/bin/op-ssh-sign
-# Desktop integration: launcher entry and hicolor icons (see yeti/sysexts.md
+# Desktop integration: launcher entry and hicolor icons (see docs/design/sysexts.md
 # "Desktop Applications in Sysexts")
 /usr/share/applications/1password.desktop
 /usr/share/icons/hicolor/512x512/apps/1password.png

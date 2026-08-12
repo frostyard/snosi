@@ -167,7 +167,7 @@ Snowfield hardware evidence remain BLOCKED pending authorized signed secure
 N/N+1/N+2/transition fixtures and external runners.
 Build-specific secure composition and publication mechanics stay in this
 document; the normative operational recovery and evidence rules are in
-[`docs/bootc-secure-operations.md`](../docs/bootc-secure-operations.md).
+[`docs/bootc-secure-operations.md`](../bootc-secure-operations.md).
 
 **OCI signature policy (Task 6):** the secure bootc tree supplies
 `/etc/containers/policy.json`, which defaults to `reject` and has one

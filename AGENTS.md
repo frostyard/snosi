@@ -1225,7 +1225,7 @@ top-level `/init -> usr/lib/systemd/systemd` symlink means systemd just
 boots directly as PID 1 with the packed tree as final root).
 
 Three boot-chain gotchas, all root-caused live by bisection (full detail:
-`yeti/OVERVIEW.md` "Installer ISO"): (1) `grub-efi-amd64-signed`'s prefix is
+`docs/design/overview.md` "Installer ISO"): (1) `grub-efi-amd64-signed`'s prefix is
 baked in at `/EFI/debian` — `grub.cfg` must live there, AND ALSO be
 duplicated into the plain ISO9660 tree (not just the appended FAT ESP
 partition), since GRUB's prefix search resolves against the ISO9660 volume
@@ -1353,7 +1353,7 @@ limitation: the installer-medium self-refusal (`disk_is_installer_medium()`)
 detects the ISO's ISO9660 volume ID, so label-rewriting USB writers (Ventoy,
 Rufus in ISO/DD mode) that strip or replace that volume ID when staging the
 image defeat the check, while a raw `dd`/`cp` of the ISO preserves it and is
-correctly detected. Full design notes: `yeti/OVERVIEW.md` "snosi-install CLI
+correctly detected. Full design notes: `docs/design/overview.md` "snosi-install CLI
 (Task 8.2)".
 
 **Graphical setup wizard (`shared/native-installer/setup-gui/`, 2026-07-17):**
@@ -1428,7 +1428,7 @@ The Phase 7 candidate/verify/promote/withdraw publication pipeline
 of always deriving `os/native/v1/<product>/x86-64`; `withdraw.sh` grew an
 optional `--dest-path` override). See `docs/native-ab-publication.md`
 "Installer ISO publication" for the operational runbook and
-`yeti/OVERVIEW.md`'s "Publication pipeline generalization for the ISO" for
+`docs/design/overview.md`'s "Publication pipeline generalization for the ISO" for
 a latent `promote.sh` bug this generalization surfaced and fixed (an
 outgoing-index archival regex that only matched `*.manifest.json` entries,
 silently killing `promote.sh` via `set -e`+`pipefail` on the second
@@ -1501,7 +1501,7 @@ and `openssl`; and `snosi-install` wrote several tool-diagnostic streams to
 stdout instead of stderr (corrupting values captured by command substitution),
 dumped a UKI section to `/dev/null` (objcopy always exits 1 doing that — now a
 real scratch file), and did not retry the LUKS mapper close. Full step breakdown
-and bug list: `yeti/testing.md` "Phase 8 (ISO install end-to-end)".
+and bug list: `docs/design/testing.md` "Phase 8 (ISO install end-to-end)".
 
 ### Native `/var` Factory State
 
@@ -1649,7 +1649,7 @@ Every sysext must have matching `<name>.transfer` and `<name>.feature` files in 
 
 **Service activation in sysexts:** Do NOT rely on `WantedBy=multi-user.target` + preset alone. At boot, the sysext is not yet merged when PID 1 scans units — the `.wants/` symlink is dangling and silently dropped. Always ship a `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` drop-in inside the sysext with `[Unit]\nUpholds=<name>.service`. This drop-in is new to systemd after the post-merge daemon-reload, so activation fires correctly. The preset is still required for enabled state; the drop-in handles timing.
 
-**Desktop applications in sysexts (icon visibility):** GTK, GNOME Shell (St), and Qt treat a present `/usr/share/icons/hicolor/icon-theme.cache` as an authoritative index whenever its mtime is >= the theme directory's mtime. Sysexts merge icons with upstream file timestamps (older than the image build), so an image-shipped cache stays "valid" and every sysext icon is invisible — the app shows GNOME's generic gear icon (root-caused 2026-07-07 on the emdash sysext). Fix, both halves mandatory: (1) the profile-image finalize (`shared/outformat/image/finalize/mkosi.finalize.chroot`) deletes the hicolor cache so GTK falls back to scanning the theme directories; (2) every sysext includes `shared/sysext/finalize/sysext-strip-icon-cache.sh` in `FinalizeScripts=` so a gtk-update-icon-cache dpkg trigger firing during the sysext build cannot smuggle a cache into the delta — a sysext-shipped cache shadows the (absent) base cache for the whole merged `/usr` and re-masks other sysexts' and newer base icons. Externally-built sysexts (other repos) must strip the cache too. Icons in `/usr/share/pixmaps` (e.g. VS Code's) are unaffected either way — unthemed fallback dirs are always scanned, never cached. Icons appear at the next session start; an already-running GNOME Shell may not notice a merge until re-login. Full pattern: `yeti/sysexts.md` "Desktop Applications in Sysexts".
+**Desktop applications in sysexts (icon visibility):** GTK, GNOME Shell (St), and Qt treat a present `/usr/share/icons/hicolor/icon-theme.cache` as an authoritative index whenever its mtime is >= the theme directory's mtime. Sysexts merge icons with upstream file timestamps (older than the image build), so an image-shipped cache stays "valid" and every sysext icon is invisible — the app shows GNOME's generic gear icon (root-caused 2026-07-07 on the emdash sysext). Fix, both halves mandatory: (1) the profile-image finalize (`shared/outformat/image/finalize/mkosi.finalize.chroot`) deletes the hicolor cache so GTK falls back to scanning the theme directories; (2) every sysext includes `shared/sysext/finalize/sysext-strip-icon-cache.sh` in `FinalizeScripts=` so a gtk-update-icon-cache dpkg trigger firing during the sysext build cannot smuggle a cache into the delta — a sysext-shipped cache shadows the (absent) base cache for the whole merged `/usr` and re-masks other sysexts' and newer base icons. Externally-built sysexts (other repos) must strip the cache too. Icons in `/usr/share/pixmaps` (e.g. VS Code's) are unaffected either way — unthemed fallback dirs are always scanned, never cached. Icons appear at the next session start; an already-running GNOME Shell may not notice a merge until re-login. Full pattern: `docs/design/sysexts.md` "Desktop Applications in Sysexts".
 
 The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput.sh`) handles versioned naming and manifest processing. It requires the `KEYPACKAGE` env var set in each sysext's `mkosi.conf`. If `SYSEXT_REVISION` is also set, the version gets a `+rN` suffix — bump this to force a republish of tree/content fixes when the KEYPACKAGE version hasn't changed (publishing skips existing filenames via `skip-duplicates`, so tree fixes otherwise never reach users; remove the setting when the package version bumps). Every sysext must also ship `mkosi.images/<name>/required-paths.txt` (one absolute path per line); the shared finalize check (`shared/sysext/finalize/sysext-required-paths.sh`) fails the build if any listed path is missing from the buildroot — guard against publishing structurally broken sysexts (the 2026-07-01 incus publish shipped with no incusd/CLI/units and nothing noticed). For `Overlay=yes` images the finalize `$BUILDROOT` is the sysext DELTA (upper layer), so list only paths the sysext itself ships — packages also present in the base image never appear in the delta and will always fail the check.
 
@@ -1670,7 +1670,7 @@ The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput
 - Pin external URLs to specific versions/commits, never `latest` or branch names
 - When adding a new verified download, also add a corresponding update check to `.github/workflows/check-dependencies.yml`; sysext APT package sentinels go in `.github/workflows/check-packages.yml`
 - Inline OCI build-tool pins that cannot live in checksum metadata are also tracked by `check-image-updates`; validate upstream values and require exactly one source match before editing them in place
-- Both halves of the split checksum metadata (`sysext-checksums.json`, `image-checksums.json`) are covered by fixture tests: `test/verified-download-split-checksums-test.sh` for the read side (`verified_download`) and `test/update-checksums-split-test.sh` for the write side (`update-checksums.sh`'s ordered file selection, `CHECKSUMS_FILE` override, missing-file/absent-key hard-fails, and the no-partial-write guarantee). See `yeti/build-pipeline.md` "Verified Download System" for the exact rules those tests pin.
+- Both halves of the split checksum metadata (`sysext-checksums.json`, `image-checksums.json`) are covered by fixture tests: `test/verified-download-split-checksums-test.sh` for the read side (`verified_download`) and `test/update-checksums-split-test.sh` for the write side (`update-checksums.sh`'s ordered file selection, `CHECKSUMS_FILE` override, missing-file/absent-key hard-fails, and the no-partial-write guarantee). See `docs/design/build-pipeline.md` "Verified Download System" for the exact rules those tests pin.
 
 ## User Service Enablement in Chroot
 
@@ -1705,13 +1705,13 @@ The target (e.g. `gnome-session.target`) comes from the service's `WantedBy=` in
 - `scorecard.yml` - Weekly OpenSSF supply-chain security analysis
 ## Documentation
 
-**update documentation** After any change to source code, update relevant documentation in CLAUDE.md, README.md and the yeti/ folder. A task is not complete without reviewing and updating relevant documentation.
+**update documentation** After any change to source code, update relevant documentation in CLAUDE.md, README.md and `docs/`. A task is not complete without reviewing and updating relevant documentation.
 
-**yeti/ directory** The `yeti/` directory contains documentation written for AI consumption and context enhancement, not primarily for humans. Jobs like `doc-maintainer` and `issue-worker` instruct the AI to read `yeti/OVERVIEW.md` and related files for codebase context before performing tasks. Write content in this directory to be maximally useful to an AI agent understanding the codebase — detailed architecture, patterns, and decision rationale rather than user-facing guides.
+**docs/ directory** All repository documentation lives in `docs/`, in frostyard/core's four-category shape (frostyard/core ADR-0025; table, index, and conventions in [docs/README.md](docs/README.md)): `docs/adr/` answers *why* (repo-local decisions, immutable once accepted), `docs/design/` answers *how it fits together* (living architecture docs; the entry point is `docs/design/overview.md`, formerly `yeti/OVERVIEW.md`), `docs/specs/` answers *what exactly the contract is* (changed only alongside implementing code), and `docs/plans/` answers *in what order* (phased plans). Read `docs/design/overview.md` and the files it links to for codebase context before performing tasks, and write all of `docs/` to be maximally useful to an AI agent understanding the codebase — detailed architecture, patterns, and decision rationale, naming exact paths and the test that enforces each fact. New docs start from their category's `TEMPLATE.md` and get indexed in `docs/README.md`. Repo-local decisions get an ADR in `docs/adr/` with the next number; decisions binding more than this repo go to frostyard/core, plus a line in [docs/org-adrs.md](docs/org-adrs.md). The `.memory/` inbox (below) drains into these docs. (The former `yeti/` AI-docs directory was folded into `docs/design/`.)
 
-**.memory/ directory** `.memory/` is the repository's committed agent-learning store: `.memory/README.md` documents the conventions and `.memory/corrections.jsonl` is an append-only JSON Lines log of corrections (fields: `date`, `scope`, `correction`, `evidence`, `promoted_to`). Append an entry whenever a session establishes that a previously-held belief about this codebase was wrong, with the evidence that settled it; when a correction hardens into a general rule, promote it into `CLAUDE.md` or `yeti/` and set `promoted_to`. Never record secrets or personal data there — the directory is committed.
+**.memory/ directory** `.memory/` is the repository's committed agent-learning store: `.memory/README.md` documents the conventions and `.memory/corrections.jsonl` is an append-only JSON Lines log of corrections (fields: `date`, `scope`, `correction`, `evidence`, `promoted_to`). Append an entry whenever a session establishes that a previously-held belief about this codebase was wrong, with the evidence that settled it; when a correction hardens into a general rule, promote it into `CLAUDE.md` or the relevant `docs/` page and set `promoted_to`. Never record secrets or personal data there — the directory is committed.
 
-**Delivery metrics** `docs/metrics/README.md` defines the metrics snosi tracks about its own change-delivery process — PR acceptance rate (split by author, to detect drift between agent-authored and human-authored PRs), review iterations to merge, time to merge, and `validate.yml` first-pass rate — each with the exact on-demand `gh`/`jq` query that collects it. There is deliberately no scheduled collector, stored time series, or committed snapshot: the queries are the definition. Its "Acting on the numbers" table routes each adverse signal to a documentation or tooling fix (agent-PR acceptance drop → `AGENTS.md`/`CLAUDE.md`/`yeti/`; recurring corrections → `.memory/corrections.jsonl`, then promotion), never to a process reminder.
+**Delivery metrics** `docs/metrics/README.md` defines the metrics snosi tracks about its own change-delivery process — PR acceptance rate (split by author, to detect drift between agent-authored and human-authored PRs), review iterations to merge, time to merge, and `validate.yml` first-pass rate — each with the exact on-demand `gh`/`jq` query that collects it. There is deliberately no scheduled collector, stored time series, or committed snapshot: the queries are the definition. Its "Acting on the numbers" table routes each adverse signal to a documentation or tooling fix (agent-PR acceptance drop → `AGENTS.md`/`CLAUDE.md`/`docs/`; recurring corrections → `.memory/corrections.jsonl`, then promotion), never to a process reminder.
 
 ## Org-wide decisions
 

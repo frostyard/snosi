@@ -34,7 +34,7 @@ The publish step uses `skip-duplicates: true`: a sysext raw whose versioned
 filename already exists in R2 is not re-uploaded. Since the filename version
 comes from the KEYPACKAGE deb version, sysext tree fixes do NOT republish on
 their own — set `SYSEXT_REVISION` in the sysext's mkosi.conf to append `+rN`
-and force a new filename (see yeti/sysexts.md). Each sysext build also runs
+and force a new filename (see sysexts.md). Each sysext build also runs
 `shared/sysext/finalize/sysext-required-paths.sh`, failing the build if any
 path in the image's `required-paths.txt` is missing from the buildroot.
 
@@ -260,7 +260,7 @@ only for that check), and the Task 3 console-pump socket fixture; no live
 Task 1-3 QEMU gate is duplicated there.
 This section defines CI tiers and their limits; the normative operator recovery
 and evidence-retention rules are in
-[`docs/bootc-secure-operations.md`](../docs/bootc-secure-operations.md).
+[`docs/bootc-secure-operations.md`](../bootc-secure-operations.md).
 
 ### native-nightly.yml — Nightly Deep Secure-Boot Validation (Tier 2, 2026-07-17)
 

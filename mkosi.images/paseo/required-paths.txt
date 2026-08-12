@@ -4,7 +4,7 @@
 /usr/lib/Paseo/resources/bin/paseo
 /usr/bin/Paseo
 /usr/bin/paseo
-# Desktop integration: launcher entry and hicolor icon (see yeti/sysexts.md
+# Desktop integration: launcher entry and hicolor icon (see docs/design/sysexts.md
 # "Desktop Applications in Sysexts")
 /usr/share/applications/Paseo.desktop
 /usr/share/icons/hicolor/128x128/apps/Paseo.png
