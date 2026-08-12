@@ -167,22 +167,26 @@ echo "  initrd: $(du -h "$initrd" | cut -f1)"
 #    compiled-in module set, e.g. whether `serial`/`terminal_output` are
 #    present, was not independently verified).
 #
-# console=ttyS0 ONLY -- deliberately no second `console=tty0`. Root-caused
-# live, isolated down to a single kernel argument: with Secure Boot enforced
-# against a POPULATED varstore (real Microsoft PK/KEK/db, i.e. the exact
-# ms.fd fixture this profile's own boot-chain proof requires) and no GPU
-# device, adding `console=tty0` alongside `console=ttyS0` hangs PID 1
-# completely silently -- reproduced even with `rdinit=/bin/bash` (bash
-# itself, not systemd, dead before printing anything), and independently
-# ruled out systemd-pstore, systemd-udev-trigger, systemd-journal-flush,
-# the efi_pstore module, and the audit subsystem as the cause (masking each
-# individually made no difference). Single-console boots -- and dual-console
-# boots against a NON-Secure-Boot or empty/setup-mode varstore -- are
-# unaffected; this reads as an OVMF GOP/console-negotiation interaction
-# specific to enforced Secure Boot with a populated varstore, not a defect
-# in this image's own root/init handling. (The firn TUI kiosk on tty1 is
-# unaffected by console= either way: firn-kiosk.service opens /dev/tty1
-# itself via TTYPath=, independent of the kernel console set.)
+# DUAL console: `console=tty0 console=ttyS0,115200n8`. firn is THE snosi
+# installer, including on desktop/laptop hardware with a GPU and no serial
+# port -- there the VGA console must render (a serial-only cmdline boots such
+# a machine blind: blank screen, blinking cursor, the firn TUI drawing to a
+# tty1 the kernel never lit up). So tty0 comes first (VGA gets kernel output
+# and a live VT for firn-kiosk.service), ttyS0 second for headless/serial.
+#
+# KNOWN HANG, preserved from the native-installer lineage and re-scoped:
+# adding `console=tty0` was root-caused to hang PID 1 SILENTLY in ONE narrow
+# config -- Secure Boot enforced against a POPULATED Microsoft varstore (the
+# ms.fd QEMU fixture the boot-chain PROOF test uses) with NO GPU device.
+# Isolated to a single kernel arg, reproduced even with rdinit=/bin/bash, and
+# read as an OVMF GOP/console-negotiation quirk of that fixture, not a defect
+# here. It does NOT affect: single-console boots, dual-console against a
+# non-SB or empty/setup-mode varstore, or real hardware with a GPU. firn's
+# own installer-ISO E2E (test/firn-installer-iso-test.sh) boots SB-off, and
+# the demo path is SB-off -- both unaffected. If a future SB-ENFORCED firn-ISO
+# boot test is added against ms.fd, it must account for this (test serial-only
+# there, or supply a GPU device) rather than dropping tty0 and re-blinding
+# every desktop install.
 # ---------------------------------------------------------------------------
 cat >"$WORK/grub.cfg" <<'EOF'
 set timeout=0
@@ -190,7 +194,7 @@ set default=0
 
 menuentry "Snosi Installer" {
     search --no-floppy --set=root --file /firn-installer/vmlinuz
-    linux /firn-installer/vmlinuz console=ttyS0,115200n8 ro
+    linux /firn-installer/vmlinuz console=tty0 console=ttyS0,115200n8 ro
     initrd /firn-installer/initrd.img
 }
 EOF
