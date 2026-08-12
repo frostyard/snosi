@@ -44,6 +44,7 @@ If the repo lacks the shape, or still has a `yeti/`/`cairn/` tree:
      `docs/specs/<name>.md`; other subsystem docs → `docs/design/<name>.md`
    - `learnings/*` → fold each into the right doc now and delete it; a
      learning not yet foldable moves to the `.memory/` inbox.
+
    The old directory must end up gone.
 4. Update **every** reference to the old paths — they are load-bearing.
    Search broadly (`grep -rIn 'yeti\|cairn' . --exclude-dir=.git`) and
@@ -72,6 +73,7 @@ If the repo lacks the shape, or still has a `yeti/`/`cairn/` tree:
    - **Architecture** — key directories, modules, how they fit together
    - **Key Patterns** — important conventions, data flow, design decisions
    - **Configuration** — key config values and environment variables
+
    Keep it 200–500 lines; link out rather than inline detail.
 3. Complex subsystems get dedicated docs — `docs/design/` for how-it-works,
    `docs/specs/` for exact contracts — one subject each, linked from
