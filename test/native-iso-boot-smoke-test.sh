@@ -1,9 +1,10 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# Boot smoke test for the published network-installer ISO: proves the exact
-# candidate bytes boot (kernel + packed initramfs + systemd userspace) to a
-# getty login prompt on the serial console. SSH assertions are impossible on
+# Boot smoke test for the published installer ISO: proves the exact candidate
+# bytes boot (kernel + packed initramfs + systemd userspace) to the firn
+# installer TUI on the serial console (the kiosk replaces getty, so there is
+# no login prompt). SSH assertions are impossible on
 # published bytes -- the local ISO harness injects its key into the rootfs
 # BEFORE assembly (test/native-installer-iso-test.sh Step 1), which would
 # defeat "boot what users download". Plain (non-Secure-Boot) OVMF; SB
@@ -18,7 +19,7 @@
 #
 # Environment:
 #   SMOKE_CONSOLE_COPY  copy the serial log here (pass and fail alike)
-#   ISO_BOOT_TIMEOUT    seconds to wait for the login prompt (default 420)
+#   ISO_BOOT_TIMEOUT    seconds to wait for the firn installer (default 420)
 set -euo pipefail
 
 usage() {
@@ -101,7 +102,7 @@ ovmf_code="${ovmf_pair%% *}"
 ovmf_vars_src="${ovmf_pair##* }"
 cp "$ovmf_vars_src" "$WORK_DIR/OVMF_VARS.fd"
 
-echo "Booting installer ISO $VERSION (waiting up to ${ISO_BOOT_TIMEOUT}s for a serial login prompt)"
+echo "Booting installer ISO $VERSION (waiting up to ${ISO_BOOT_TIMEOUT}s for the firn installer on serial)"
 qemu-system-x86_64 \
     -machine q35 \
     -enable-kvm -cpu host \
@@ -118,13 +119,21 @@ QEMU_PID="$(cat "$WORK_DIR/qemu.pid")"
 
 deadline=$((SECONDS + ISO_BOOT_TIMEOUT))
 while (( SECONDS < deadline )); do
-    if grep -aq "login:" "$CONSOLE_LOG" 2>/dev/null; then
-        echo "PASS: serial login prompt reached"
+    # The firn installer ISO boots straight into the firn TUI kiosk on the
+    # serial console (firn-kiosk-serial@ttyS0.service replaces getty), so it
+    # never shows a `login:` prompt. Its structured-journal service-start
+    # notification, echoed to the console, is the robust "the installer came
+    # up" signal -- the TUI's own text is ANSI/alt-screen and does not survive
+    # as a greppable string on serial. `comm=(firn)` is the firn process
+    # itself starting under the kiosk unit (its dmesg ExecStartPre would show
+    # comm=(dmesg) even if firn later failed), so it proves firn is running.
+    if grep -aqF "comm=(firn)" "$CONSOLE_LOG" 2>/dev/null; then
+        echo "PASS: firn installer reached the serial console"
         echo ""
         echo "OK: installer ISO $VERSION boot smoke test passed"
         exit 0
     fi
-    kill -0 "$QEMU_PID" 2>/dev/null || die "QEMU exited before a login prompt appeared"
+    kill -0 "$QEMU_PID" 2>/dev/null || die "QEMU exited before the firn installer started"
     sleep 5
 done
-die "no login prompt on serial console within ${ISO_BOOT_TIMEOUT}s"
+die "the firn installer did not start on the serial console within ${ISO_BOOT_TIMEOUT}s"
