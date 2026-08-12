@@ -1,5 +1,16 @@
 # CI/CD Pipeline
 
+Decision records shaping this document:
+[ADR-0003](../adr/0003-runtime-etc-mutation-ban.md) (runtime `/etc` guard),
+[ADR-0006](../adr/0006-name-triggered-publication-guards.md) (publication
+guards), [ADR-0008](../adr/0008-digest-first-release-latest-is-promotion.md)
+(digest-first publish, SBOM-gated predecessors),
+[ADR-0010](../adr/0010-credential-handoff-paths-not-bytes.md) (credential
+handoff), [ADR-0011](../adr/0011-mkosi-bootstrapped-and-pin-shared.md)
+(mkosi pin governance),
+[ADR-0012](../adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md)
+(chunk-before-seal).
+
 ## Workflows
 
 ### build.yml — Sysext Build and Publish

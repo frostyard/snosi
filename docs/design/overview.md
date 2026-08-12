@@ -1,5 +1,11 @@
 # snosi Overview
 
+Decision records shaping this document: [ADR-0001](../adr/0001-var-factory-state-outcome-maps.md)
+(`/var` outcome maps), [ADR-0005](../adr/0005-profiles-as-transport-kernel-selectors.md)
+(profile composition), [ADR-0009](../adr/0009-snosi-env-var-classes.md)
+(`SNOSI_*` variable classes), [ADR-0011](../adr/0011-mkosi-bootstrapped-and-pin-shared.md)
+(mkosi pin governance).
+
 ## Purpose
 
 snosi is a bootable container image build system that uses [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). It outputs OCI desktop/server images deployed via bootc/systemd-boot with atomic updates, plus EROFS sysext overlays distributed through systemd-sysupdate.

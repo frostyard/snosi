@@ -14,6 +14,11 @@ Known deviations between the current prototype and this contract are tracked,
 not silently tolerated, via `test/native-ab-contracts-allow.txt`. Every
 allowlist entry names the phase that removes it.
 
+The doc+test+allowlist governance mechanism itself is decided in
+[ADR-0007](adr/0007-frozen-contract-executable-allowlist.md); the
+name-triggered publication-guard rule (§1, §15) is decided in
+[ADR-0006](adr/0006-name-triggered-publication-guards.md).
+
 ## 1. Products, profiles, channels
 
 | Kind | Names |

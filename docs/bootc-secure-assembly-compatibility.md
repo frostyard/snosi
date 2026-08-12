@@ -4,6 +4,9 @@
 for the Frostyard `bootc` package at upstream version `1.16.7`. It is not an
 upstream-stable bootc interface.
 
+The chunk-before-seal ordering this contract pins is decided in
+[ADR-0012](adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md).
+
 ## Pinned behavior
 
 The adapter relies on all of the following observed behavior:
