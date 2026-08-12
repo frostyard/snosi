@@ -6,6 +6,9 @@
 native A/B variants of Cayo, Snow, and Snowfield, an R2 publication pipeline,
 and a network installer ISO.
 
+The mkosi pin governance this plan introduced is recorded as
+[ADR-0011](../adr/0011-mkosi-bootstrapped-and-pin-shared.md).
+
 ## Summary
 
 Snosi will support two deployment formats in parallel:

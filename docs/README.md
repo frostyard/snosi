@@ -14,9 +14,18 @@ Docs are split by the question they answer (the shape defined by
 
 ### Decisions (ADRs)
 
-*(none yet — repo-local decisions get the next number from
-[adr/TEMPLATE.md](adr/TEMPLATE.md))*
-
+- [adr/0001-var-factory-state-outcome-maps.md](adr/0001-var-factory-state-outcome-maps.md) — every build-time `/var` path is classified in per-product outcome maps, audited fail-closed in both directions (unclassified paths and stale globs)
+- [adr/0002-ship-no-enablement-symlinks-in-etc.md](adr/0002-ship-no-enablement-symlinks-in-etc.md) — images ship zero unit-enablement symlinks in `/etc`; first-boot presets recreate them, with parity proven against a shipped manifest
+- [adr/0003-runtime-etc-mutation-ban.md](adr/0003-runtime-etc-mutation-ban.md) — shipped payload files may not mutate `/etc` at runtime; enforced by payload-directory scanning with a per-line `etc-guard-allow` escape hatch
+- [adr/0004-sysext-authoring-rules.md](adr/0004-sysext-authoring-rules.md) — sysexts are `/usr`-only overlays: `/opt` relocation, scoped factory-`/etc` capture, `Upholds=` activation, fail-closed `required-paths.txt` manifests
+- [adr/0005-profiles-as-transport-kernel-selectors.md](adr/0005-profiles-as-transport-kernel-selectors.md) — profiles reduce to transport+kernel selectors via the `Dependencies=` reset idiom and ordered `Include=` fragment layering
+- [adr/0006-name-triggered-publication-guards.md](adr/0006-name-triggered-publication-guards.md) — a profile is production purely by name; static textual guards pin secure posture on production profiles and forbid it on dev fixtures
+- [adr/0007-frozen-contract-executable-allowlist.md](adr/0007-frozen-contract-executable-allowlist.md) — frozen contract docs get an executable form and an allowlist that fails closed in both directions, so it shrinks to empty
+- [adr/0008-digest-first-release-latest-is-promotion.md](adr/0008-digest-first-release-latest-is-promotion.md) — publish by digest, sign and verify before `latest` is promoted; predecessors require the SBOM referrer or are skipped
+- [adr/0009-snosi-env-var-classes.md](adr/0009-snosi-env-var-classes.md) — `SNOSI_*` variables come in three classes; security-relevant test hooks are paired/mutually gated so one stray variable is inert
+- [adr/0010-credential-handoff-paths-not-bytes.md](adr/0010-credential-handoff-paths-not-bytes.md) — credentials cross the sudo boundary as mode-0600 file paths, never bytes; durable keys live in `.snosi-private/`, year-stamped
+- [adr/0011-mkosi-bootstrapped-and-pin-shared.md](adr/0011-mkosi-bootstrapped-and-pin-shared.md) — mkosi runs from a repo-local checkout pinned to the workflow's action commit, bootstrapped pre-sudo
+- [adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md](adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md) — OCI layers are chunked by changelog-derived update cadence; secure images chunk before digest sealing, never after
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design

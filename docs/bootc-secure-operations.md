@@ -14,6 +14,10 @@ installer contract is [docs/bootc-secure-install-contract.md](bootc-secure-insta
 the assembly compatibility contract is [docs/bootc-secure-assembly-compatibility.md](bootc-secure-assembly-compatibility.md),
 and the image schema source is
 [shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json](../shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json).
+Decision records: [ADR-0008](adr/0008-digest-first-release-latest-is-promotion.md)
+(digest-first publication) and
+[ADR-0010](adr/0010-credential-handoff-paths-not-bytes.md) (credential
+handoff).
 
 ## Support Status
 

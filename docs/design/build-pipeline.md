@@ -1,5 +1,18 @@
 # Build Pipeline
 
+Decision records shaping this document:
+[ADR-0002](../adr/0002-ship-no-enablement-symlinks-in-etc.md) (enablement
+symlinks stripped from `/etc`),
+[ADR-0003](../adr/0003-runtime-etc-mutation-ban.md) (runtime `/etc` guard),
+[ADR-0004](../adr/0004-sysext-authoring-rules.md) (package relocation,
+factory-`/etc` capture),
+[ADR-0005](../adr/0005-profiles-as-transport-kernel-selectors.md)
+(`Dependencies=` reset, profile checks),
+[ADR-0006](../adr/0006-name-triggered-publication-guards.md) (publication
+guards), [ADR-0009](../adr/0009-snosi-env-var-classes.md) (test-hook
+gating), [ADR-0012](../adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md)
+(chunkah xattrs).
+
 ## Script Execution Order
 
 Each image build runs four phases of scripts sequentially:

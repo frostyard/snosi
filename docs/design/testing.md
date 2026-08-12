@@ -1,5 +1,15 @@
 # Testing Framework
 
+Decision records shaping this document:
+[ADR-0001](../adr/0001-var-factory-state-outcome-maps.md) (`/var` inventory
+assertions), [ADR-0002](../adr/0002-ship-no-enablement-symlinks-in-etc.md)
+(first-boot preset parity),
+[ADR-0006](../adr/0006-name-triggered-publication-guards.md) (guard mutation
+fixtures), [ADR-0007](../adr/0007-frozen-contract-executable-allowlist.md)
+(executable contract),
+[ADR-0009](../adr/0009-snosi-env-var-classes.md) (test hooks and guard-root
+overrides).
+
 ## Overview
 
 The `test/` directory contains bootc lifecycle tests and the experimental native

@@ -1,5 +1,10 @@
 # System Extensions (Sysexts)
 
+Decision record shaping this document:
+[ADR-0004](../adr/0004-sysext-authoring-rules.md) (authoring rules:
+`/usr`-only payloads, `/opt` relocation, scoped factory-`/etc` capture,
+`Upholds=` activation, `required-paths.txt` manifests).
+
 ## Overview
 
 Sysexts are overlay images that extend the immutable base OS by adding files under `/usr`. They are distributed as EROFS images and managed by systemd-sysext at runtime and systemd-sysupdate for downloads.
