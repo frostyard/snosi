@@ -52,8 +52,8 @@ curl -fL https://repository.frostyard.org/isos/snow-live-latest.iso \
 
 # Native A/B installer
 curl -fL \
-  https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso \
-  -o snosi-native-installer.iso
+  https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso \
+  -o snosi-installer.iso
 ```
 
 The native installer's `latest` URL redirects without caching to the immutable,
@@ -78,13 +78,13 @@ test "$fingerprint" = F37282A35CB6BDFEBFC8FE775A2EAC5C8216FD68
 gpgv --keyring ./snosi-native-update-pubring.gpg \
   SHA256SUMS.gpg SHA256SUMS
 expected="$(
-  awk '$2 ~ /^snosi-native-installer_[0-9]{14}_x86-64\.iso$/ {
+  awk '$2 ~ /^snosi-installer_[0-9]{14}_x86-64\.iso$/ {
     print $1
     exit
   }' SHA256SUMS
 )"
 test -n "$expected"
-printf '%s  %s\n' "$expected" snosi-native-installer.iso |
+printf '%s  %s\n' "$expected" snosi-installer.iso |
   sha256sum -c -
 ```
 
@@ -112,7 +112,7 @@ device, such as `/dev/sdb`, not a partition such as `/dev/sdb1`.
 3. Set `ISO` and `DISK`, inspect them again, and write the image:
 
    ```bash
-   ISO=snosi-native-installer.iso  # or snow-live.iso
+   ISO=snosi-installer.iso  # or snow-live.iso
    DISK=/dev/sdX                   # replace with the whole USB device
 
    test -f "$ISO"

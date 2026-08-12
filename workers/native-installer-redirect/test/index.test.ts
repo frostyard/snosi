@@ -3,10 +3,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { installerNameFromIndex } from "../src/index";
 
 const STABLE_URL =
-  "https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso";
+  "https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso";
 const INDEX_KEY = "isos/native/v1/SHA256SUMS";
 const VERSION = "20260717123456";
-const ISO_NAME = `snosi-native-installer_${VERSION}_x86-64.iso`;
+const ISO_NAME = `snosi-installer_${VERSION}_x86-64.iso`;
 const ISO_KEY = `isos/native/v1/${ISO_NAME}`;
 const HASH = "a".repeat(64);
 
@@ -48,7 +48,7 @@ describe("installerNameFromIndex", () => {
     ["non-canonical spacing", `${HASH} ${ISO_NAME}\n`],
     ["a carriage return", `${HASH}  ${ISO_NAME}\r\n`],
     ["no installer", `${HASH}  release-notes.txt\n`],
-    ["multiple installers", `${HASH}  ${ISO_NAME}\n${"b".repeat(64)}  snosi-native-installer_20260718123456_x86-64.iso\n`],
+    ["multiple installers", `${HASH}  ${ISO_NAME}\n${"b".repeat(64)}  snosi-installer_20260718123456_x86-64.iso\n`],
   ])("rejects %s", (_description, index) => {
     expect(() => installerNameFromIndex(index)).toThrow();
   });

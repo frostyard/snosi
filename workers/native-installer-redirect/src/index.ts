@@ -1,4 +1,4 @@
-const STABLE_PATH = "/isos/native/v1/snosi-native-installer-latest-x86-64.iso";
+const STABLE_PATH = "/isos/native/v1/snosi-installer-latest-x86-64.iso";
 const INDEX_KEY = "isos/native/v1/SHA256SUMS";
 const ISO_KEY_PREFIX = "isos/native/v1/";
 const PUBLIC_BASE = "https://repository.frostyard.org/isos/native/v1/";
@@ -10,7 +10,7 @@ const NO_STORE_HEADERS = {
 };
 
 const INDEX_LINE = /^([0-9a-f]{64})  (\S+)$/;
-const INSTALLER_NAME = /^snosi-native-installer_[0-9]{14}_x86-64\.iso$/;
+const INSTALLER_NAME = /^snosi-installer_[0-9]{14}_x86-64\.iso$/;
 
 class ResolutionError extends Error {
   constructor(readonly code: string) {

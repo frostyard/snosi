@@ -67,11 +67,11 @@ jobs:
       - name: Confirm route is active
         run: |
           set -euo pipefail
-          url=https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso
+          url=https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso
           base=https://repository.frostyard.org/isos/native/v1
           version=""
           if sums="$(curl -fsS --max-time 15 "$base/SHA256SUMS")"; then
-            version="$(awk '$2 ~ /^snosi-native-installer_[0-9]{14}_x86-64\.iso$/ {name=$2} END {sub(/^snosi-native-installer_/, "", name); sub(/_x86-64\.iso$/, "", name); print name}' <<<"$sums")"
+            version="$(awk '$2 ~ /^snosi-installer_[0-9]{14}_x86-64\.iso$/ {name=$2} END {sub(/^snosi-installer_/, "", name); sub(/_x86-64\.iso$/, "", name); print name}' <<<"$sums")"
           fi
           for attempt in 1 2 3 4 5 6; do
             if [[ -n "$version" ]]; then

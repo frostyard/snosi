@@ -16,15 +16,15 @@ set -euo pipefail
 # install, not a dracut initrd), so systemd boots straight to normal targets.
 ln -sf usr/lib/systemd/systemd /init
 
-# The firn installer binary ships via this profile's own ExtraTrees=
-# (shared/firn-installer/tree/usr/bin/firn), but it is NOT committed: `just
-# _firn-binary` builds it from a sibling firn checkout right before the
-# mkosi build (see shared/firn-installer/README.md). Fail the image build
-# loudly if that step was skipped -- an installer ISO without its installer
-# would otherwise only be discovered at first boot. The chmod fixes up the
-# mode defensively (ExtraTrees= preserves the source tree's file mode).
+# The firn installer binary comes from the frostyard-firn apt package
+# (Packages=frostyard-firn in this profile's mkosi.conf, published by
+# firn's release to repository.frostyard.org). A local `just _firn-binary`
+# build still overrides it via the tree ExtraTrees= for dev. Either way,
+# fail the image build loudly if firn is missing -- an installer ISO
+# without its installer would otherwise only be discovered at first boot.
+# The chmod fixes up the mode defensively.
 [[ -f /usr/bin/firn ]] || {
-    echo "ERROR: /usr/bin/firn missing -- run \`just firn-installer\` (which builds it via _firn-binary), not bare mkosi (see shared/firn-installer/README.md)" >&2
+    echo "ERROR: /usr/bin/firn missing -- Packages=frostyard-firn should have installed it (see shared/firn-installer/mkosi.conf)" >&2
     exit 1
 }
 chmod 0755 /usr/bin/firn
