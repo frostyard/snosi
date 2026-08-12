@@ -39,6 +39,7 @@ The project produces:
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
 | **azurevpn**        | Microsoft Azure VPN client                                      | sysext        |
 | **bitwarden**       | Bitwarden password manager desktop application                  | sysext        |
+| **chatgpt**         | ChatGPT desktop application with Codex                          | sysext        |
 | **claude-desktop**  | Claude desktop application                                      | sysext        |
 | **code-server**     | code-server (VS Code in the browser)                            | sysext        |
 | **coder**           | Coder self-hosted development workspaces server                 | sysext        |
@@ -208,7 +209,7 @@ sudo test/native-ab-update-test.sh \
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1password 1password-cli azurevpn bitwarden claude-desktop code-server coder debdev dev docker edge github-copilot incus k3s lemonade nix paseo pilothouse podman sunshine tailscale vscode
+  1password 1password-cli azurevpn bitwarden chatgpt claude-desktop code-server coder debdev dev docker edge github-copilot incus k3s lemonade nix paseo pilothouse podman sunshine tailscale vscode
                                      snow            cayo
                                       │
                                   snowfield
@@ -235,6 +236,7 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | **1password-cli** | 1Password CLI tool                            | [mkosi.images/1password-cli/mkosi.conf](mkosi.images/1password-cli/mkosi.conf) |
 | **azurevpn**      | Microsoft Azure VPN client                    | [mkosi.images/azurevpn/mkosi.conf](mkosi.images/azurevpn/mkosi.conf)           |
 | **bitwarden**     | Bitwarden password manager desktop app        | [mkosi.images/bitwarden/mkosi.conf](mkosi.images/bitwarden/mkosi.conf)         |
+| **chatgpt**       | ChatGPT desktop application with Codex        | [mkosi.images/chatgpt/mkosi.conf](mkosi.images/chatgpt/mkosi.conf)             |
 | **claude-desktop**| Claude desktop application                    | [mkosi.images/claude-desktop/mkosi.conf](mkosi.images/claude-desktop/mkosi.conf) |
 | **code-server**   | code-server (VS Code in the browser)          | [mkosi.images/code-server/mkosi.conf](mkosi.images/code-server/mkosi.conf)     |
 | **coder**         | Coder workspaces server + workspace proxy     | [mkosi.images/coder/mkosi.conf](mkosi.images/coder/mkosi.conf)                 |
@@ -604,7 +606,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all 22 sysexts (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode). The PR-facing root mkosi build holds only `contents: read` and no package, OIDC, or attestation write scope.
+1. Builds the base image and all 23 sysexts (1password, 1password-cli, azurevpn, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode). The PR-facing root mkosi build holds only `contents: read` and no package, OIDC, or attestation write scope.
 2. Outside pull requests, publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Outside pull requests, uploads package manifests for version tracking
 
@@ -1101,7 +1103,7 @@ using `GITHUB_TOKEN`.
 
 The `.github/workflows/check-packages.yml` workflow runs daily for external APT
 packages consumed by sysexts (`code`, `docker-ce`, `1password-cli`,
-`claude-desktop`). It updates
+`claude-desktop`, `chatgpt`). It updates
 `package-versions.json`, which is only a change-detection sentinel; mkosi still
 resolves the package from APT during the sysext build. The job has a 15-minute
 timeout so a stalled external APT request cannot retain repository write
