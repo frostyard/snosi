@@ -135,12 +135,10 @@ cache/ldconfig/aux-cache	discard
 cache/realmd	discard
 cache/swcatalog/cache/C-local-metainfo.xb	discard
 lib/apt/extended_states	discard
-# man-db cat-page cache (~150 files across every installed locale);
-# man-db.timer / on-demand `man` invocation regenerate it, and man-db's own
-# index/cache dir (lib/man-db) below is equally disposable. (Recent man-db
-# replaced the lib/man-db/auto-update marker with the lib/man-db dir.)
-cache/man/**	discard
-lib/man-db	discard
+# No man-db state under cayo's /var at build time: recent man-db no longer
+# pre-generates the cat-page cache (cache/man) at build, and this server
+# image builds no man-db index (lib/man-db) either — both are regenerated
+# at runtime by man-db.timer / on-demand `man`. (Snow keeps lib/man-db.)
 lib/cni/networks	discard
 lib/containers/storage/tmp	discard
 lib/dahdi/digium-firm/Makefile	discard

@@ -143,9 +143,9 @@ cache/debconf/**	discard
 # (also discard, below) or fall back to a built-in default.
 cache/dictionaries-common/**	discard
 cache/fontconfig/**	discard
-# man-db cat-page cache across every installed locale; man-db.timer /
-# on-demand `man` invocation regenerate it (see the cayo map for detail).
-cache/man/**	discard
+# No cat-page cache under /var at build time: recent man-db no longer
+# pre-generates cache/man at build (regenerated at runtime by man-db.timer
+# / on-demand `man`). The man-db index (lib/man-db, below) is still built.
 cache/ldconfig/aux-cache	discard
 cache/PackageKit/downloads	discard
 cache/realmd	discard
