@@ -1,6 +1,6 @@
 {
-  "code": "1.132.0-1785860022",
+  "code": "1.132.1-1786128105",
   "docker-ce": "5:29.7.2-1~debian.13~trixie",
   "1password-cli": "2.38.1-1",
-  "claude-desktop": "1.26832.0"
+  "claude-desktop": "1.28929.0"
 }
