@@ -26,6 +26,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **1password-cli** | 1password-cli | 1Password CLI tool |
 | **azurevpn** | microsoft-azurevpnclient | Microsoft Azure VPN client (pinned .deb via verified_download, relocated from /opt) |
 | **bitwarden** | bitwarden | Bitwarden desktop app (pinned .deb via verified_download, relocated from /opt) |
+| **chatgpt** | chatgpt | ChatGPT desktop application with Codex (from persistent.oaistatic.com apt repo) |
 | **claude-desktop** | claude-desktop | Claude desktop application (from downloads.claude.ai apt repo) |
 | **code-server** | code-server | code-server (VS Code in the browser) — downloaded via `verified_download()` from coder/code-server GitHub releases |
 | **coder** | coder | Coder workspaces server — downloaded via `verified_download()` from coder/coder GitHub releases |
@@ -163,6 +164,13 @@ Some sysexts include extra files via `mkosi.extra/`:
 - After first enabling and merging the sysext, the `uhid` modules-load entry and virtual-input udev rules take effect on the next boot unless manually applied
 - The upstream `app-dev.lizardbyte.app.Sunshine.service` user unit is available for manual user startup only: no user preset and no `Upholds=` drop-in provide automatic activation
 - Ships a hicolor icon, so `sysext-strip-icon-cache.sh` is required
+
+### chatgpt
+- No `mkosi.extra/` and no postinst — OpenAI's `chatgpt` deb (official apt repo at `persistent.oaistatic.com/codex-app-prod/linux/deb`, registered in `mkosi.sandbox` with the repo's own signing key from the deb's postinst) installs natively under `/usr` (`/usr/lib/chatgpt` + `/usr/bin/chatgpt -> ../lib/chatgpt/codex-launcher` symlink), so no relocation is needed
+- Electron app that ships NO SUID `chrome-sandbox` (unlike bitwarden/claude-desktop) — it relies on unprivileged user namespaces, which Debian's kernel permits (no `kernel.apparmor_restrict_unprivileged_userns`); the deb's `/etc/apparmor.d/chatgpt` userns-unconfined conffile is stripped from the sysext (only `/usr` ships) and is not needed on Trixie
+- The deb's postinst also embeds/installs its apt-repo signing key at `/usr/share/keyrings/chatgpt-archive-keyring.gpg` — that lone keyring ships in the delta but is inert (the `/etc/apt` sources file it pairs with is stripped; updates come via sysupdate, not apt)
+- Icon lives in `/usr/share/pixmaps` (unthemed fallback dir, never cache-masked); `sysext-strip-icon-cache.sh` is still included per the mandatory sysext pattern
+- Desktop app with no systemd service: no preset, no `Upholds=` drop-in
 
 ### claude-desktop
 - No `mkosi.extra/` and no postinst — the Anthropic `claude-desktop` deb (apt repo at `downloads.claude.ai/claude-desktop/apt/stable`, registered in `mkosi.sandbox`) installs natively under `/usr` (`/usr/lib/claude-desktop` + `/usr/bin/claude-desktop` symlink), so no relocation is needed

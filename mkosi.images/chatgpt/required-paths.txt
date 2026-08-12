@@ -1,0 +1,9 @@
+# chatgpt sysext: ChatGPT desktop application with Codex (Electron)
+/usr/lib/chatgpt/ChatGPT
+/usr/lib/chatgpt/codex-launcher
+/usr/bin/chatgpt
+# Desktop integration: launcher entry and pixmaps icon (Icon=chatgpt resolves
+# via /usr/share/pixmaps, the unthemed fallback dir — never affected by the
+# hicolor icon-theme.cache issue, see docs/design/sysexts.md)
+/usr/share/applications/chatgpt.desktop
+/usr/share/pixmaps/chatgpt.png

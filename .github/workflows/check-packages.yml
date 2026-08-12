@@ -53,6 +53,11 @@ jobs:
               'https://downloads.claude.ai/claude-desktop/apt/stable/dists/stable/main/binary-amd64/Packages.gz' \
               'claude-desktop')"
             printf 'claude-desktop=%s\n' "$version"
+
+            version="$(get_latest_version \
+              'https://persistent.oaistatic.com/codex-app-prod/linux/deb/dists/stable/main/binary-amd64/Packages.gz' \
+              'chatgpt')"
+            printf 'chatgpt=%s\n' "$version"
           } > latest-versions.txt
           cat latest-versions.txt
 

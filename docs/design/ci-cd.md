@@ -19,7 +19,7 @@ handoff), [ADR-0011](../adr/0011-mkosi-bootstrapped-and-pin-shared.md)
 `shared/download/image-checksums.json` when that is the only changed path;
 image-only direct-download updates should rebuild OCI profiles instead.
 
-Builds the base image and all 22 sysexts, and publishes to the Frostyard
+Builds the base image and all 23 sysexts, and publishes to the Frostyard
 repository on Cloudflare R2 only for non-pull-request events. The build job
 runs PR-controlled mkosi configuration under `sudo`, but its `GITHUB_TOKEN`
 has exactly `contents: read`; it has no package, OIDC, or attestation write

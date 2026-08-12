@@ -1,0 +1,7 @@
+Enabled: yes
+Types: deb
+URIs: https://persistent.oaistatic.com/codex-app-prod/linux/deb
+Suites: stable
+Components: main
+Architectures: amd64,arm64
+Signed-By: /etc/apt/keyrings/chatgpt.gpg

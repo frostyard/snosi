@@ -15,7 +15,7 @@
 # in QEMU, and validates in order:
 #
 #   1. No failed legacy updaters; bootc/nbc/sysupdate auto-update units masked.
-#   2. The OS default sysupdate.d target and the 22 shipped sysext components
+#   2. The OS default sysupdate.d target and the 23 shipped sysext components
 #      are structurally separate (component discovery via `systemd-sysupdate
 #      components`).
 #   3. Two ad hoc test sysext components (testa, testb; independently
@@ -524,9 +524,9 @@ expected_default_listing=$'10-root-verity.transfer\n20-root.transfer\n90-uki.tra
 assert_eq "/usr/lib/sysupdate.d/ contains exactly the OS transfers, no features" \
     "$default_target_listing" "$expected_default_listing"
 
-expected_sysext_components=(1password 1password-cli azurevpn bitwarden claude-desktop
-    code-server coder debdev dev docker edge github-copilot incus k3s lemonade nix
-    paseo pilothouse podman sunshine tailscale vscode)
+expected_sysext_components=(1password 1password-cli azurevpn bitwarden chatgpt
+    claude-desktop code-server coder debdev dev docker edge github-copilot incus
+    k3s lemonade nix paseo pilothouse podman sunshine tailscale vscode)
 
 components_raw="$(vm_ssh '/usr/lib/systemd/systemd-sysupdate components --no-legend')"
 echo "systemd-sysupdate components --no-legend:"

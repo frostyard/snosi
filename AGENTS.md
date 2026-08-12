@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 snosi is a bootable container image build system using [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). Images are deployed via bootc/systemd-boot with atomic updates.
 
-**Outputs:** 2 OCI desktop images (snow, snowfield), 1 OCI server image (cayo), and 22 sysext overlay images (1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode).
+**Outputs:** 2 OCI desktop images (snow, snowfield), 1 OCI server image (cayo), and 23 sysext overlay images (1password, 1password-cli, azurevpn, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode).
 
 ## Build Commands
 
@@ -14,7 +14,7 @@ Requires: just, git, python3, root/sudo access. mkosi itself is auto-bootstrappe
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 22 sysexts
+just sysexts            # Build base + all 23 sysexts
 just snow               # Build snow desktop image
 just snowfield          # Build snowfield (Surface kernel)
 just cayo               # Build cayo server image
@@ -1406,7 +1406,7 @@ reads `$BUILDROOT/usr/lib/sysupdate.*.d/*.feature`) written in-image at
 `/usr/share/snosi/features.json` AND published as the frozen
 `<channel>_<version>.features.json` (contract §4, listed in the signed
 SHA256SUMS). Curation via `X-Snosi-Products=` in a `.feature` file
-(comma-separated bare products; absent = all — six desktop-only features
+(comma-separated bare products; absent = all — ten desktop-only features
 carry `snow,snowfield`); verified live that systemd-sysupdate 261 (zero
 warnings at debug) and updex ≥1.3.0 both ignore the key cleanly.
 `snosi-install --print-features --product X` fetches it hash-verified via

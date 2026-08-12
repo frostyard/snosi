@@ -1,0 +1,20 @@
+[Transfer]
+Features=chatgpt
+Verify=true
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/chatgpt/
+MatchPattern=chatgpt_@v_%w_%a.raw.zst \
+             chatgpt_@v_%w_%a.raw.xz \
+             chatgpt_@v_%w_%a.raw.gz \
+             chatgpt_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=chatgpt_@v_%w_%a.raw.zst \
+             chatgpt_@v_%w_%a.raw.xz \
+             chatgpt_@v_%w_%a.raw.gz \
+             chatgpt_@v_%w_%a.raw
+CurrentSymlink=chatgpt.raw
