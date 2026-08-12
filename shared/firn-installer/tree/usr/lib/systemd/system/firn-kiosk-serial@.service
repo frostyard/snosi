@@ -18,6 +18,10 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
+# Silence the kernel console so kernel/install churn does not clobber
+# the TUI on the serial console (kernel logs to console=ttyS0 too).
+# See firn-kiosk.service for the rationale; `-` tolerates no dmesg.
+ExecStartPre=-/usr/bin/dmesg --console-level 1
 ExecStart=/usr/bin/firn
 Restart=on-failure
 RestartSec=2

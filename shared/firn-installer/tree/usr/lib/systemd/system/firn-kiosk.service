@@ -29,6 +29,20 @@ StartLimitBurst=3
 
 [Service]
 Type=simple
+# Bring tty1 to the foreground so the TUI is actually on the visible VT.
+# firn renders to /dev/tty1, but systemd does not switch the active VT to
+# it; with a VGA console the displayed VT is wherever the kernel console
+# lands, NOT tty1 — so without this the screen shows kernel/boot output
+# (or, once quieted, nothing) while firn draws to an unshown VT. `chvt 1`
+# activates it. (Serial has no VT; the serial unit omits this.)
+ExecStartPre=-/usr/bin/chvt 1
+# Silence the kernel console before the TUI draws: with a VGA console
+# (console=tty0) the kernel logs to the same VT firn renders on, and
+# stray messages — audit, and the block-device/mkfs/cryptsetup churn a
+# live install generates — clobber the TUI. `-n 1` prints only
+# emergencies; boot-time quieting (quiet/loglevel/audit=0) covers the
+# rest. Leading `-` so a missing dmesg never blocks the kiosk.
+ExecStartPre=-/usr/bin/dmesg --console-level 1
 ExecStart=/usr/bin/firn
 Restart=on-failure
 RestartSec=2

@@ -194,7 +194,7 @@ set default=0
 
 menuentry "Snosi Installer" {
     search --no-floppy --set=root --file /firn-installer/vmlinuz
-    linux /firn-installer/vmlinuz console=tty0 console=ttyS0,115200n8 ro
+    linux /firn-installer/vmlinuz console=tty0 console=ttyS0,115200n8 ro quiet loglevel=3 audit=0 systemd.show_status=false vt.global_cursor_default=0
     initrd /firn-installer/initrd.img
 }
 EOF
