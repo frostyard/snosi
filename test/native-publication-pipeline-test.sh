@@ -360,8 +360,8 @@ echo "=== ISO-shaped fixture leg (isos/native/v1) ==="
 
 ISO_VERSION1=20260301000000
 ISO_VERSION2=20260302000000
-ISO_FIXTURE1="$WORK_DIR/snosi-native-installer_${ISO_VERSION1}_x86-64.iso"
-ISO_FIXTURE2="$WORK_DIR/snosi-native-installer_${ISO_VERSION2}_x86-64.iso"
+ISO_FIXTURE1="$WORK_DIR/snosi-installer_${ISO_VERSION1}_x86-64.iso"
+ISO_FIXTURE2="$WORK_DIR/snosi-installer_${ISO_VERSION2}_x86-64.iso"
 printf 'fixture ISO bytes v1\n' >"$ISO_FIXTURE1"
 printf 'fixture ISO bytes v2, slightly different length\n' >"$ISO_FIXTURE2"
 
@@ -379,7 +379,7 @@ ISO_BASE_URL="http://127.0.0.1:${PORT}/isos/native/v1"
 
 "$PUBLISH_DIR/publish-candidate.sh" "$ISO_PREPARED1" "$DEST"
 assert_true "ISO candidate object landed under isos/native/v1/.candidate/$ISO_VERSION1/" \
-    test -f "$DEST/isos/native/v1/.candidate/$ISO_VERSION1/snosi-native-installer_${ISO_VERSION1}_x86-64.iso"
+    test -f "$DEST/isos/native/v1/.candidate/$ISO_VERSION1/snosi-installer_${ISO_VERSION1}_x86-64.iso"
 
 assert_true "verify-remote.sh clean pass for the ISO candidate" \
     "$PUBLISH_DIR/verify-remote.sh" "$ISO_PREPARED1" "$ISO_BASE_URL"
@@ -390,7 +390,7 @@ assert_true "ISO final SHA256SUMS.gpg exists (no product/x86-64 subpath)" test -
 assert_true "gpgv accepts the promoted ISO index" \
     gpgv --keyring "$PUBRING" "$iso_product_dir/SHA256SUMS.gpg" "$iso_product_dir/SHA256SUMS"
 assert_contains "promoted ISO index lists the version-stamped name" \
-    "$(cat "$iso_product_dir/SHA256SUMS")" "snosi-native-installer_${ISO_VERSION1}_x86-64.iso"
+    "$(cat "$iso_product_dir/SHA256SUMS")" "snosi-installer_${ISO_VERSION1}_x86-64.iso"
 
 "$PUBLISH_DIR/publish-candidate.sh" "$ISO_PREPARED2" "$DEST" >/dev/null
 "$PUBLISH_DIR/verify-remote.sh" "$ISO_PREPARED2" "$ISO_BASE_URL" >/dev/null
@@ -398,9 +398,9 @@ assert_contains "promoted ISO index lists the version-stamped name" \
 assert_true "ISO v1's signed index was archived to .history/$ISO_VERSION1/" \
     test -f "$iso_product_dir/.history/$ISO_VERSION1/SHA256SUMS.gpg"
 
-"$PUBLISH_DIR/withdraw.sh" --pubring "$PUBRING" --dest-path isos/native/v1 snosi-native-installer "$ISO_VERSION1" "$DEST"
+"$PUBLISH_DIR/withdraw.sh" --pubring "$PUBRING" --dest-path isos/native/v1 snosi-installer "$ISO_VERSION1" "$DEST"
 assert_contains "ISO index advertises v1 again after withdrawal via --dest-path" \
-    "$(cat "$iso_product_dir/SHA256SUMS")" "snosi-native-installer_${ISO_VERSION1}_x86-64.iso"
+    "$(cat "$iso_product_dir/SHA256SUMS")" "snosi-installer_${ISO_VERSION1}_x86-64.iso"
 assert_true "gpgv accepts the withdrawn (restored) ISO index" \
     gpgv --keyring "$PUBRING" "$iso_product_dir/SHA256SUMS.gpg" "$iso_product_dir/SHA256SUMS"
 
