@@ -1,0 +1,625 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Persist custom kernel arguments in a signed global UKI addon.
+set -euo pipefail
+umask 077
+
+readonly STATE_DIR="${SNOSI_KARGS_STATE_DIR:-/var/lib/snosi/kargs}"
+readonly ARGS_FILE="$STATE_DIR/args"
+readonly APPLIED_ARGS_FILE="$STATE_DIR/applied.args"
+readonly APPLIED_CERT_FILE="$STATE_DIR/applied.crt"
+readonly APPLIED_UNSIGNED_FILE="$STATE_DIR/applied.unsigned"
+readonly APPLIED_HASH_FILE="$STATE_DIR/applied.sha256"
+readonly LOCAL_KEY="$STATE_DIR/signing.key"
+readonly LOCAL_CERT="$STATE_DIR/signing.crt"
+readonly LOCK_FILE="$STATE_DIR/lock"
+readonly RUN_DIR="${SNOSI_KARGS_RUN_DIR:-/run/snosi-kargs}"
+readonly ESP_LIBRARY="${SNOSI_ESP_LIBRARY:-/usr/lib/snosi/esp.sh}"
+readonly ADDON_RELATIVE="loader/addons/50-snosi-cmdline-local.addon.efi"
+readonly FORCE_CONFIRMATION="I understand this may make the system unbootable"
+
+WORK_DIR=""
+ESP_TEMP=""
+ESP_BACKUP=""
+
+die() { printf 'snosi-kargs: %s\n' "$*" >&2; exit 1; }
+
+usage() {
+    cat >&2 <<'EOF'
+Usage:
+  snosi-kargs [status]
+  snosi-kargs list | show
+  snosi-kargs add [--force] [--no-apply] ARG...
+  snosi-kargs remove [--no-apply] ARG...
+  snosi-kargs set [--force] [--no-apply] ARG...
+  snosi-kargs clear [--no-apply]
+  snosi-kargs apply [--key KEY --cert CERT] [--unsigned] [--dry-run]
+  snosi-kargs revert
+  snosi-kargs key status | generate | enroll
+
+Managed arguments are appended to the UKI's embedded command line. They cannot
+remove an embedded argument; options that accept repeated values usually use
+the last value.
+EOF
+    exit 2
+}
+
+cleanup() {
+    set +e
+    [[ -z $ESP_TEMP ]] || rm -f -- "$ESP_TEMP"
+    [[ -z $ESP_BACKUP ]] || rm -f -- "$ESP_BACKUP"
+    [[ -z $WORK_DIR ]] || rm -rf -- "$WORK_DIR"
+    if declare -F snosi_esp_cleanup >/dev/null; then
+        snosi_esp_cleanup
+    fi
+}
+trap cleanup EXIT
+
+[[ $EUID -eq 0 || ${SNOSI_KARGS_TEST_NON_ROOT:-0} == 1 ]] ||
+    die "must run as root"
+[[ -r $ESP_LIBRARY ]] || die "ESP support library is missing: $ESP_LIBRARY"
+# shellcheck source=/dev/null
+source "$ESP_LIBRARY"
+
+mkdir -p "$STATE_DIR"
+chmod 700 "$STATE_DIR"
+touch "$LOCK_FILE"
+chmod 600 "$LOCK_FILE"
+exec 9>"$LOCK_FILE"
+flock 9
+
+read_args() { # file array-name
+    local file=$1 line
+    local -n output=$2
+    output=()
+    [[ -f $file ]] || return 0
+    while IFS= read -r line; do
+        [[ -n $line ]] && output+=("$line")
+    done <"$file"
+}
+
+write_lines_atomic() { # destination mode line...
+    local destination=$1 mode=$2 temp
+    shift 2
+    temp=$(mktemp "$STATE_DIR/.state.XXXXXX")
+    chmod "$mode" "$temp"
+    : >"$temp"
+    [[ $# -eq 0 ]] || printf '%s\n' "$@" >"$temp"
+    sync -f "$temp"
+    mv -f -- "$temp" "$destination"
+    sync -f "$destination"
+    sync -f "$STATE_DIR"
+}
+
+write_args() {
+    write_lines_atomic "$ARGS_FILE" 600 "$@"
+}
+
+dangerous_reason() { # argument
+    local arg=$1
+    if [[ -z $arg ]]; then
+        printf 'empty arguments are not allowed'
+    elif [[ $arg == *[[:space:]]* || $arg == *\"* || $arg == *\'* ]]; then
+        printf 'arguments containing whitespace or quotes are ambiguous'
+    elif [[ $arg == root=* || $arg == rootfstype=* || $arg == rootflags=* ||
+        $arg == roothash=* || $arg == usrhash=* || $arg == composefs=* ||
+        $arg == systemd.gpt_auto=* || $arg == rd.systemd.gpt_auto ||
+        $arg == rd.systemd.gpt_auto=* || $arg == init=* ||
+        $arg == rdinit || $arg == rdinit=* ||
+        $arg == systemd.verity* || $arg == rd.luks ||
+        $arg == rd.luks=* || $arg == rd.luks.* ||
+        $arg == rd.break || $arg == rd.shell ||
+        $arg == systemd.break || $arg == systemd.break=* ||
+        $arg == systemd.debug_shell || $arg == systemd.debug_shell=* ||
+        $arg == emergency || $arg == rescue ||
+        $arg == rd.emergency || $arg == rd.emergency=* ||
+        $arg == rd.systemd.unit=emergency.target ||
+        $arg == rd.systemd.unit=rescue.target ||
+        $arg == systemd.unit=emergency.target ||
+        $arg == systemd.unit=rescue.target ]]; then
+        printf 'argument can bypass recovery policy or break the verified root'
+    else
+        return 1
+    fi
+}
+
+confirm_forced_arguments() {
+    local answer
+    [[ -t 0 ]] || die "--force requires an interactive terminal"
+    printf 'Dangerous kernel arguments can make this machine unbootable or weaken its boot policy.\n' >&2
+    printf 'Type exactly "%s" to continue: ' "$FORCE_CONFIRMATION" >&2
+    IFS= read -r answer
+    [[ $answer == "$FORCE_CONFIRMATION" ]] || die "confirmation did not match"
+}
+
+validate_new_arguments() { # force arg...
+    local force=$1 arg reason forced=0
+    shift
+    for arg in "$@"; do
+        if reason=$(dangerous_reason "$arg"); then
+            [[ $force -eq 1 ]] ||
+                die "refusing '$arg': $reason (use --force for an interactive override)"
+            forced=1
+        fi
+    done
+    [[ $forced -eq 0 ]] || confirm_forced_arguments
+}
+
+resolve_addon() {
+    snosi_esp_resolve "$RUN_DIR" root ||
+        die "unable to resolve a writable EFI System Partition"
+    ADDON_PATH="$SNOSI_ESP_MOUNTPOINT/$ADDON_RELATIVE"
+}
+
+secure_boot_state() {
+    local output
+    output=$(mokutil --sb-state 2>&1) || {
+        printf 'unknown'
+        return
+    }
+    case "$output" in
+        *"SecureBoot enabled"*) printf 'enabled' ;;
+        *"SecureBoot disabled"*) printf 'disabled' ;;
+        *) printf 'unknown' ;;
+    esac
+}
+
+certificate_der() { # certificate output
+    openssl x509 -in "$1" -outform DER -out "$2"
+}
+
+certificate_enrolled() { # certificate
+    local der=$WORK_DIR/certificate.der
+    certificate_der "$1" "$der"
+    mokutil --test-key "$der" >/dev/null 2>&1
+}
+
+check_key_pair() { # key certificate
+    openssl pkey -in "$1" -pubout -out "$WORK_DIR/key.pub" >/dev/null
+    openssl x509 -in "$2" -pubkey -noout >"$WORK_DIR/cert.pub"
+    cmp -s "$WORK_DIR/key.pub" "$WORK_DIR/cert.pub" ||
+        die "private key and certificate do not match"
+}
+
+check_private_key_permissions() {
+    local mode
+    mode=$(stat -c '%a' "$1")
+    (( (8#$mode & 077) == 0 )) ||
+        die "private key must not be accessible by group or other: $1"
+}
+
+record_applied_state() { # unsigned certificate-or-empty
+    local unsigned=$1 cert=$2 addon_hash
+    local -a args=()
+    addon_hash=$(sha256sum "$ADDON_PATH" | awk '{print $1}')
+    read_args "$ARGS_FILE" args
+    write_lines_atomic "$APPLIED_ARGS_FILE" 600 "${args[@]}"
+    write_lines_atomic "$APPLIED_HASH_FILE" 600 "$addon_hash"
+    rm -f -- "$APPLIED_CERT_FILE" "$APPLIED_UNSIGNED_FILE"
+    if [[ $unsigned -eq 1 ]]; then
+        : >"$APPLIED_UNSIGNED_FILE"
+        chmod 600 "$APPLIED_UNSIGNED_FILE"
+    else
+        install -m 0644 "$cert" "$APPLIED_CERT_FILE.tmp"
+        mv -f -- "$APPLIED_CERT_FILE.tmp" "$APPLIED_CERT_FILE"
+    fi
+    sync -f "$STATE_DIR"
+}
+
+install_addon() { # candidate certificate-or-empty unsigned
+    local candidate=$1 cert=$2 unsigned=$3 destination_dir
+    destination_dir=$(dirname "$ADDON_PATH")
+    mkdir -p "$destination_dir"
+
+    ESP_TEMP=$(mktemp "$destination_dir/.50-snosi-cmdline-local.addon.efi.XXXXXX")
+    cp -- "$candidate" "$ESP_TEMP"
+    if [[ $unsigned -eq 0 ]]; then
+        sbverify --cert "$cert" "$ESP_TEMP" >/dev/null ||
+            die "temporary addon is not signed by the selected certificate"
+    fi
+    sync -f "$ESP_TEMP"
+
+    if [[ -e $ADDON_PATH ]]; then
+        ESP_BACKUP=$(mktemp "$destination_dir/.50-snosi-cmdline-local.previous.XXXXXX")
+        cp -- "$ADDON_PATH" "$ESP_BACKUP"
+        sync -f "$ESP_BACKUP"
+    fi
+
+    mv -f -- "$ESP_TEMP" "$ADDON_PATH"
+    ESP_TEMP=""
+    if ! sync -f "$ADDON_PATH" || ! sync -f "$destination_dir"; then
+        if [[ -n $ESP_BACKUP ]]; then
+            mv -f -- "$ESP_BACKUP" "$ADDON_PATH" ||
+                die "addon sync failed and the prior addon could not be restored"
+            ESP_BACKUP=""
+            sync -f "$ADDON_PATH" || die "restored addon could not be synced"
+            sync -f "$destination_dir" || die "restored addon directory could not be synced"
+        else
+            rm -f -- "$ADDON_PATH"
+            sync -f "$destination_dir" || true
+        fi
+        die "addon sync failed; prior state restored"
+    fi
+    rm -f -- "$ESP_BACKUP"
+    ESP_BACKUP=""
+}
+
+revert_addon() {
+    local destination_dir hidden
+    resolve_addon
+    destination_dir=$(dirname "$ADDON_PATH")
+    if [[ -e $ADDON_PATH ]]; then
+        hidden=$(mktemp "$destination_dir/.50-snosi-cmdline-local.disabled.XXXXXX")
+        rm -f -- "$hidden"
+        mv -- "$ADDON_PATH" "$hidden"
+        if ! sync -f "$destination_dir"; then
+            mv -- "$hidden" "$ADDON_PATH" ||
+                die "revert sync failed and the addon could not be restored"
+            sync -f "$destination_dir" || true
+            die "revert sync failed; addon restored"
+        fi
+        rm -f -- "$hidden"
+        sync -f "$destination_dir" ||
+            die "addon was disabled but removal durability could not be confirmed"
+    fi
+    rm -f -- "$APPLIED_ARGS_FILE" "$APPLIED_CERT_FILE" \
+        "$APPLIED_UNSIGNED_FILE" "$APPLIED_HASH_FILE"
+    sync -f "$STATE_DIR"
+    printf 'Removed %s\n' "$ADDON_RELATIVE"
+}
+
+apply_addon() { # remaining apply options
+    local key="" cert="" unsigned=0 dry_run=0 sb_state cmdline candidate
+    local -a args=() ukify_args=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --key) [[ $# -ge 2 ]] || usage; key=$2; shift 2 ;;
+            --cert) [[ $# -ge 2 ]] || usage; cert=$2; shift 2 ;;
+            --unsigned) unsigned=1; shift ;;
+            --dry-run) dry_run=1; shift ;;
+            *) usage ;;
+        esac
+    done
+    [[ ( -z $key && -z $cert ) || ( -n $key && -n $cert ) ]] ||
+        die "--key and --cert must be supplied together"
+    [[ $unsigned -eq 0 || ( -z $key && -z $cert ) ]] ||
+        die "--unsigned cannot be combined with --key or --cert"
+
+    read_args "$ARGS_FILE" args
+    if [[ ${#args[@]} -eq 0 ]]; then
+        if [[ $dry_run -eq 1 ]]; then
+            printf 'Would remove %s (no persisted arguments)\n' "$ADDON_RELATIVE"
+            return
+        fi
+        revert_addon
+        return
+    fi
+    cmdline="${args[*]}"
+
+    WORK_DIR=$(mktemp -d "${TMPDIR:-/var/tmp}/snosi-kargs.XXXXXX")
+    candidate="$WORK_DIR/addon.efi"
+    command -v mokutil >/dev/null || die "mokutil is required"
+    command -v ukify >/dev/null || die "systemd-ukify is required"
+    sb_state=$(secure_boot_state)
+    [[ $sb_state != unknown ]] || die "unable to determine Secure Boot state"
+
+    ukify_args=(build --cmdline "$cmdline" --output "$candidate")
+    if [[ $unsigned -eq 1 ]]; then
+        [[ $sb_state == disabled ]] ||
+            die "--unsigned is refused while Secure Boot is enabled"
+    else
+        command -v openssl >/dev/null || die "openssl is required for signed addons"
+        command -v sbverify >/dev/null || die "sbverify is required for signed addons"
+        [[ -n $key ]] || key=$LOCAL_KEY
+        [[ -n $cert ]] || cert=$LOCAL_CERT
+        [[ -f $key ]] || die "signing key not found: $key (run 'snosi-kargs key generate' or use --key)"
+        [[ -f $cert ]] || die "signing certificate not found: $cert"
+        check_private_key_permissions "$key"
+        check_key_pair "$key" "$cert"
+        if [[ $sb_state == enabled ]] && ! certificate_enrolled "$cert"; then
+            die "signing certificate is not enrolled in MOK; run 'snosi-kargs key enroll' and complete MokManager first"
+        fi
+        ukify_args+=(--secureboot-private-key "$key" --secureboot-certificate "$cert")
+    fi
+
+    resolve_addon
+    if [[ $dry_run -eq 1 ]]; then
+        printf 'Would run:'
+        printf ' %q' ukify "${ukify_args[@]}"
+        printf '\nWould install: %s\n' "$ADDON_PATH"
+        return
+    fi
+
+    ukify "${ukify_args[@]}"
+    [[ -s $candidate ]] || die "ukify did not produce an addon"
+    if [[ $unsigned -eq 0 ]]; then
+        sbverify --cert "$cert" "$candidate" >/dev/null ||
+            die "generated addon is not signed by the selected certificate"
+    fi
+    install_addon "$candidate" "$cert" "$unsigned"
+    record_applied_state "$unsigned" "$cert"
+    printf 'Installed %s\n' "$ADDON_PATH"
+    printf 'The arguments take effect on the next boot and append to the embedded command line.\n'
+}
+
+show_list() {
+    local -a args=()
+    read_args "$ARGS_FILE" args
+    [[ ${#args[@]} -eq 0 ]] || printf '%s\n' "${args[@]}"
+}
+
+show_split() {
+    local cmdline_file="${SNOSI_KARGS_PROC_CMDLINE:-/proc/cmdline}"
+    local effective_text="" managed index
+    local -a effective=() applied=() active=() base=()
+
+    [[ -r $cmdline_file ]] && effective_text=$(<"$cmdline_file")
+    read -r -a effective <<<"$effective_text"
+    read_args "$APPLIED_ARGS_FILE" applied
+    base=("${effective[@]}")
+    for managed in "${applied[@]}"; do
+        for ((index=${#base[@]} - 1; index >= 0; index--)); do
+            if [[ ${base[index]} == "$managed" ]]; then
+                active+=("$managed")
+                unset 'base[index]'
+                base=("${base[@]}")
+                break
+            fi
+        done
+    done
+
+    printf 'Effective now:       %s\n' "${effective_text:-unknown}"
+    printf 'Base/other addons:   %s\n' "${base[*]:-(none)}"
+    printf 'Managed this boot:   %s\n' "${active[*]:-(none)}"
+    local -a persisted=()
+    read_args "$ARGS_FILE" persisted
+    printf 'Managed next boot:   %s\n' "${persisted[*]:-(none)}"
+    printf 'Mode:                 append-only (embedded arguments cannot be removed)\n'
+}
+
+key_status() {
+    local state
+    if [[ ! -f $LOCAL_KEY || ! -f $LOCAL_CERT ]]; then
+        printf 'Local key: absent\n'
+        return
+    fi
+    WORK_DIR=$(mktemp -d "${TMPDIR:-/var/tmp}/snosi-kargs.XXXXXX")
+    state=$(secure_boot_state)
+    printf 'Local key: %s\n' "$LOCAL_KEY"
+    printf 'Certificate: %s\n' "$LOCAL_CERT"
+    printf 'Secure Boot: %s\n' "$state"
+    if certificate_enrolled "$LOCAL_CERT"; then
+        printf 'MOK enrollment: enrolled\n'
+    else
+        printf 'MOK enrollment: not enrolled\n'
+    fi
+}
+
+key_generate() {
+    [[ ! -e $LOCAL_KEY && ! -e $LOCAL_CERT ]] ||
+        die "local signing material already exists"
+    command -v openssl >/dev/null || die "openssl is required"
+    WORK_DIR=$(mktemp -d "${TMPDIR:-/var/tmp}/snosi-kargs.XXXXXX")
+    openssl req -new -x509 -newkey rsa:4096 -sha256 -nodes \
+        -days 3650 -subj "/CN=Snosi local UKI addon/" \
+        -keyout "$WORK_DIR/signing.key" -out "$WORK_DIR/signing.crt"
+    install -m 0600 "$WORK_DIR/signing.key" "$LOCAL_KEY"
+    install -m 0644 "$WORK_DIR/signing.crt" "$LOCAL_CERT"
+    sync -f "$LOCAL_KEY"
+    sync -f "$LOCAL_CERT"
+    sync -f "$STATE_DIR"
+    cat <<EOF
+Generated $LOCAL_KEY and $LOCAL_CERT
+WARNING: enrolling this disk-resident key widens machine boot trust. Anyone
+with root access to the key can sign EFI binaries accepted by shim and may also
+widen kernel module trust depending on the running kernel's MOK policy.
+Use offline signing with 'apply --key KEY --cert CERT' when that risk is not acceptable.
+EOF
+}
+
+key_enroll() {
+    local password confirm hashfile der
+    [[ -f $LOCAL_KEY && -f $LOCAL_CERT ]] ||
+        die "local signing material is absent; run 'snosi-kargs key generate'"
+    command -v mokutil >/dev/null || die "mokutil is required"
+    command -v openssl >/dev/null || die "openssl is required"
+    WORK_DIR=$(mktemp -d "${TMPDIR:-/var/tmp}/snosi-kargs.XXXXXX")
+    if certificate_enrolled "$LOCAL_CERT"; then
+        printf 'Local certificate is already enrolled.\n'
+        return
+    fi
+    [[ -t 0 ]] || die "key enrollment requires an interactive terminal"
+    printf 'One-time MokManager password: ' >&2
+    IFS= read -rs password
+    printf '\nRepeat password: ' >&2
+    IFS= read -rs confirm
+    printf '\n' >&2
+    [[ -n $password && $password == "$confirm" ]] ||
+        die "passwords are empty or do not match"
+
+    hashfile="$WORK_DIR/mok.hash"
+    der="$WORK_DIR/mok.der"
+    chmod 700 "$WORK_DIR"
+    # mokutil exposes the plaintext in /proc/<pid>/cmdline for this call.
+    mokutil --generate-hash="$password" >"$hashfile"
+    chmod 600 "$hashfile"
+    certificate_der "$LOCAL_CERT" "$der"
+    mokutil --import "$der" --hash-file "$hashfile"
+    unset password confirm
+    printf 'MOK enrollment staged. Complete enrollment in MokManager on the next boot.\n'
+}
+
+status() {
+    local transport sb artifact="missing" pending key_state
+    local expected_hash="" actual_hash=""
+    local -a persisted=() applied=()
+
+    if [[ -e ${SNOSI_KARGS_NATIVE_MARKER:-/usr/lib/snosi/native-ab} ]]; then
+        transport="native A/B"
+    else
+        transport="bootc"
+    fi
+    sb=$(secure_boot_state)
+    read_args "$ARGS_FILE" persisted
+    read_args "$APPLIED_ARGS_FILE" applied
+    resolve_addon
+    if [[ -e $ADDON_PATH ]]; then
+        artifact="present"
+        actual_hash=$(sha256sum "$ADDON_PATH" | awk '{print $1}')
+        [[ -f $APPLIED_HASH_FILE ]] && expected_hash=$(<"$APPLIED_HASH_FILE")
+        if [[ -n $expected_hash && $actual_hash != "$expected_hash" ]]; then
+            artifact="present, differs from last applied artifact"
+        fi
+    fi
+
+    if [[ -f $LOCAL_KEY && -f $LOCAL_CERT ]]; then
+        WORK_DIR=$(mktemp -d "${TMPDIR:-/var/tmp}/snosi-kargs.XXXXXX")
+        if certificate_enrolled "$LOCAL_CERT"; then
+            key_state="local, enrolled"
+        else
+            key_state="local, not enrolled"
+        fi
+    else
+        key_state="not generated (offline keys remain supported)"
+    fi
+
+    if [[ ${persisted[*]} == "${applied[*]}" && $artifact == present &&
+        -n $expected_hash && $actual_hash == "$expected_hash" ]]; then
+        pending="no"
+    elif [[ ${#persisted[@]} -eq 0 && $artifact == missing ]]; then
+        pending="no"
+    else
+        pending="yes"
+    fi
+
+    printf 'Transport:   %s\n' "$transport"
+    printf 'ESP:         %s\n' "$SNOSI_ESP_MOUNTPOINT"
+    printf 'Secure Boot: %s\n' "$sb"
+    printf 'Key:         %s\n' "$key_state"
+    printf 'Addon:       %s (%s)\n' "$artifact" "$ADDON_RELATIVE"
+    printf 'Arguments:   %s\n' "${persisted[*]:-(none)}"
+    printf 'Pending:     %s\n' "$pending"
+    printf 'Semantics:   append-only; embedded arguments cannot be removed\n'
+}
+
+mutate_add() { # force args...
+    local force=$1 arg existing
+    local -a current=()
+    shift
+    [[ $# -gt 0 ]] || usage
+    validate_new_arguments "$force" "$@"
+    read_args "$ARGS_FILE" current
+    for arg in "$@"; do
+        existing=0
+        for value in "${current[@]}"; do
+            [[ $value == "$arg" ]] && existing=1
+        done
+        [[ $existing -eq 1 ]] || current+=("$arg")
+    done
+    write_args "${current[@]}"
+}
+
+mutate_remove() {
+    local arg value remove
+    local -a current=() next=()
+    [[ $# -gt 0 ]] || usage
+    read_args "$ARGS_FILE" current
+    for value in "${current[@]}"; do
+        remove=0
+        for arg in "$@"; do
+            [[ $value == "$arg" ]] && remove=1
+        done
+        [[ $remove -eq 1 ]] || next+=("$value")
+    done
+    write_args "${next[@]}"
+}
+
+command=${1:-status}
+[[ $# -eq 0 ]] || shift
+case "$command" in
+    status)
+        [[ $# -eq 0 ]] || usage
+        status
+        ;;
+    list)
+        [[ $# -eq 0 ]] || usage
+        show_list
+        ;;
+    show)
+        [[ $# -eq 0 ]] || usage
+        show_split
+        ;;
+    add|set)
+        no_apply=0
+        force=0
+        values=()
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --no-apply) no_apply=1 ;;
+                --force) force=1 ;;
+                --) shift; values+=("$@"); break ;;
+                --*) usage ;;
+                *) values+=("$1") ;;
+            esac
+            shift
+        done
+        [[ ${#values[@]} -gt 0 ]] || usage
+        if [[ $command == add ]]; then
+            mutate_add "$force" "${values[@]}"
+        else
+            validate_new_arguments "$force" "${values[@]}"
+            write_args "${values[@]}"
+        fi
+        [[ $no_apply -eq 1 ]] || apply_addon
+        ;;
+    remove)
+        no_apply=0
+        values=()
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --no-apply) no_apply=1 ;;
+                --) shift; values+=("$@"); break ;;
+                --*) usage ;;
+                *) values+=("$1") ;;
+            esac
+            shift
+        done
+        mutate_remove "${values[@]}"
+        [[ $no_apply -eq 1 ]] || apply_addon
+        ;;
+    clear)
+        no_apply=0
+        case $# in
+            0) ;;
+            1) [[ $1 == --no-apply ]] || usage; no_apply=1 ;;
+            *) usage ;;
+        esac
+        write_args
+        [[ $no_apply -eq 1 ]] || apply_addon
+        ;;
+    apply)
+        apply_addon "$@"
+        ;;
+    revert)
+        [[ $# -eq 0 ]] || usage
+        revert_addon
+        ;;
+    key)
+        subcommand=${1:-status}
+        [[ $# -eq 0 ]] || shift
+        [[ $# -eq 0 ]] || usage
+        case "$subcommand" in
+            status) key_status ;;
+            generate) key_generate ;;
+            enroll) key_enroll ;;
+            *) usage ;;
+        esac
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+    *)
+        usage
+        ;;
+esac

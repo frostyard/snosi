@@ -39,6 +39,12 @@ The recovery credential is separate from signing authority and never belongs in
 an OCI image, recipe, log, provenance record, firmware variable, or retained
 test state.
 
+That statement covers Frostyard release-signing identities. The optional
+machine-local key created by `snosi-kargs key generate` is a separate operator
+choice stored under `/var/lib/snosi/kargs/`; it never becomes release authority
+and carries the wider local trust warning documented in
+[`docs/snosi-kargs.md`](snosi-kargs.md).
+
 ## Build Modes And Publication
 
 PR mechanics builds are secretless and may only create images labelled insecure.
@@ -188,7 +194,15 @@ record.
 ## ESP Repair
 
 **External privileged action:** Dakota/bootc-installer/Fisherman owns ESP
-repair. Snosi provides no CLI for it.
+repair. Snosi provides no general ESP reconstruction CLI.
+
+The narrow exception is [`snosi-kargs`](snosi-kargs.md), which owns only
+`loader/addons/50-snosi-cmdline-local.addon.efi`. It may mount the one ESP beside the
+encrypted root when `bootctl` cannot identify an existing writable mount, and
+uses verified same-filesystem replacement with restoration on sync failure. It
+does not repair or modify shim, MokManager, systemd-boot, UKIs, or BLS metadata.
+Bootc persistence of this addon across a deployment update remains `BLOCKED:`
+pending the external live runner and authorized secure OCI artifacts.
 
 Preconditions: recovery-authenticate the existing encrypted root; retain the
 immutable deployment reference, composefs ID, expected UKI hash, MOK public

@@ -69,6 +69,11 @@
 #      comes back inside the normal timeout with ZERO serial input fed --
 #      if the initrd needed a passphrase, the boot would hang at the prompt
 #      and wait_for_ssh would time out.
+#   4c. Apply a UKI cmdline addon signed by the already-enrolled test MOK,
+#      reboot with zero serial input, and prove the managed argument appears,
+#      Secure Boot stays enforced, /var still TPM-unlocks, PCR 11 is unchanged,
+#      and PCR 12 changes. Then corrupt one addon byte and reboot again: the
+#      machine must still boot, with the argument absent.
 #   5. Desktop assertions on the TPM-unlocked boot, ONLY when HAS_DESKTOP=1
 #      (IMAGE_ID in snow, snowfield -- see the derivation below; skipped
 #      entirely for cayo, which has no desktop payload):
@@ -812,7 +817,7 @@ host_corrupt_root_partition() { # version
 # whichever UKI is now booted). Requires $var_device (set once in Step 4)
 # and the Step 6 persistence markers to already be in place.
 assert_post_update_common() { # expected_version description_prefix
-    local expected="$1" prefix="$2" booted sb bstatus vs dump tcount mv em health prompt_count
+    local expected="$1" prefix="$2" booted sb bstatus vs dump tcount mv em health prompt_count cmdline
     booted="$(guest_version)"
     assert_eq "$prefix: booted version is $expected" "$booted" "$expected"
     sb="$(vm_ssh 'mokutil --sb-state' || true)"
@@ -833,6 +838,9 @@ assert_post_update_common() { # expected_version description_prefix
         bash -c "[[ '$health' == running || '$health' == degraded ]]"
     prompt_count="$(grep -c 'typed recovery passphrase' "$WORK_DIR/console.log" || true)"
     assert_eq "$prefix: still no passphrase prompt (signed PCR 11 policy held)" "$prompt_count" "1"
+    cmdline="$(vm_ssh 'cat /proc/cmdline')"
+    assert_contains "$prefix: global UKI addon survived the update" \
+        "$cmdline" "snosi.kargs.test=addon"
     assert_nvpcr_journal_clean "$prefix: no NvPCR-related journal errors"
 }
 
@@ -1307,6 +1315,77 @@ assert_eq "/var is still mounted from the LUKS mapper after unattended TPM unloc
 assert_nvpcr_journal_clean "no NvPCR-related journal errors after the TPM-enrolled reboot"
 
 # ===========================================================================
+# Step 4c: signed UKI cmdline addon. The addon must affect PCR 12 only, leave
+# the signed-PCR-11 TPM policy usable, and fail open when its signature is
+# corrupted.
+# ===========================================================================
+echo ""
+echo "=== Step 4c: signed UKI cmdline addon (PCR 11 stable, PCR 12 changes) ==="
+
+pcr_before="$(vm_ssh 'tpm2_pcrread sha256:11+sha256:12')"
+pcr11_before="$(awk '$1 == 11 {print $3}' <<<"$pcr_before")"
+pcr12_before="$(awk '$1 == 12 {print $3}' <<<"$pcr_before")"
+assert_true "PCR 11 baseline was captured" bash -c "[[ '$pcr11_before' == 0x* ]]"
+assert_true "PCR 12 baseline was captured" bash -c "[[ '$pcr12_before' == 0x* ]]"
+
+scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" \
+    "$ROOT_DIR/mkosi.key" "$ROOT_DIR/mkosi.crt" root@localhost:/run/
+vm_ssh 'chmod 0600 /run/mkosi.key'
+vm_ssh "snosi-kargs set --no-apply snosi.kargs.test=addon"
+apply_out="$(vm_ssh 'snosi-kargs apply --key /run/mkosi.key --cert /run/mkosi.crt' 2>&1)"
+echo "$apply_out"
+assert_contains "snosi-kargs installed the global signed addon" \
+    "$apply_out" "/loader/addons/50-snosi-cmdline-local.addon.efi"
+vm_ssh 'shred -u /run/mkosi.key; rm -f /run/mkosi.crt'
+
+reboot_guest
+cmdline="$(vm_ssh 'cat /proc/cmdline')"
+assert_contains "signed addon argument appears in /proc/cmdline" \
+    "$cmdline" "snosi.kargs.test=addon"
+sb_state="$(vm_ssh 'mokutil --sb-state' || true)"
+assert_contains "addon boot keeps Secure Boot enabled" "$sb_state" "SecureBoot enabled"
+var_source="$(vm_ssh 'findmnt -no SOURCE /var' || true)"
+assert_eq "addon boot keeps unattended TPM unlock working" "$var_source" "/dev/mapper/var"
+prompt_count_after_addon="$(grep -c 'typed recovery passphrase' "$WORK_DIR/console.log" || true)"
+assert_eq "addon boot required zero additional serial input" "$prompt_count_after_addon" "1"
+
+pcr_after="$(vm_ssh 'tpm2_pcrread sha256:11+sha256:12')"
+pcr11_after="$(awk '$1 == 11 {print $3}' <<<"$pcr_after")"
+pcr12_after="$(awk '$1 == 12 {print $3}' <<<"$pcr_after")"
+assert_eq "UKI addon leaves PCR 11 unchanged" "$pcr11_after" "$pcr11_before"
+assert_true "UKI addon changes PCR 12" \
+    bash -c "[[ '$pcr12_after' != '$pcr12_before' ]]"
+assert_nvpcr_journal_clean "no NvPCR-related journal errors after the addon boot"
+
+echo ""
+echo "=== Step 4d: corrupt addon signature fails open ==="
+addon_hash_before="$(vm_ssh 'sha256sum /boot/loader/addons/50-snosi-cmdline-local.addon.efi | cut -d" " -f1')"
+vm_ssh "printf '\\377' | dd of=/boot/loader/addons/50-snosi-cmdline-local.addon.efi bs=1 seek=4096 count=1 conv=notrunc status=none"
+addon_hash_after="$(vm_ssh 'sha256sum /boot/loader/addons/50-snosi-cmdline-local.addon.efi | cut -d" " -f1')"
+assert_true "addon corruption changed the signed artifact bytes" \
+    bash -c "[[ '$addon_hash_before' != '$addon_hash_after' ]]"
+reboot_guest
+cmdline="$(vm_ssh 'cat /proc/cmdline')"
+assert_false "corrupted addon is rejected and its argument is absent" \
+    grep -q 'snosi.kargs.test=addon' <<<"$cmdline"
+sb_state="$(vm_ssh 'mokutil --sb-state' || true)"
+assert_contains "corrupted-addon boot keeps Secure Boot enabled" "$sb_state" "SecureBoot enabled"
+var_source="$(vm_ssh 'findmnt -no SOURCE /var' || true)"
+assert_eq "corrupted-addon boot still TPM-unlocks /var" "$var_source" "/dev/mapper/var"
+prompt_count_after_corrupt_addon="$(grep -c 'typed recovery passphrase' "$WORK_DIR/console.log" || true)"
+assert_eq "corrupted-addon boot required zero additional serial input" \
+    "$prompt_count_after_corrupt_addon" "1"
+assert_nvpcr_journal_clean "no NvPCR-related journal errors after the corrupted-addon boot"
+
+# Restore a valid signed addon without rebooting. Step 6's real sysupdate hop
+# must leave /loader/addons untouched and boot N+1 with this argument.
+scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" \
+    "$ROOT_DIR/mkosi.key" "$ROOT_DIR/mkosi.crt" root@localhost:/run/
+vm_ssh 'chmod 0600 /run/mkosi.key'
+vm_ssh 'snosi-kargs apply --key /run/mkosi.key --cert /run/mkosi.crt'
+vm_ssh 'shred -u /run/mkosi.key; rm -f /run/mkosi.crt'
+
+# ===========================================================================
 # Step 5: post-TPM-unlock assertions. tmpfiles ownership and dpkg-query are
 # profile-neutral (fresh-/var tmpfiles rules and the /var/lib/dpkg
 # relocation symlink apply to every profile, cayo included) and always run;
@@ -1573,6 +1652,9 @@ bootctl_status="$(vm_ssh 'bootctl --no-pager status' || true)"
 assert_contains "N+1: Measured UKI: yes (new MOK-signed UKI actually loaded)" "$bootctl_status" "Measured UKI: yes"
 var_source="$(vm_ssh 'findmnt -no SOURCE /var' || true)"
 assert_eq "N+1: /var still auto-unlocked via the TPM mapper" "$var_source" "/dev/mapper/var"
+cmdline="$(vm_ssh 'cat /proc/cmdline')"
+assert_contains "N+1: global UKI addon survived systemd-sysupdate" \
+    "$cmdline" "snosi.kargs.test=addon"
 assert_nvpcr_journal_clean "no NvPCR-related journal errors after the N+1 update reboot"
 
 luks_dump="$(vm_ssh "cryptsetup luksDump --dump-json-metadata '$var_device'")"

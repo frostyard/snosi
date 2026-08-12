@@ -164,6 +164,11 @@ jobs:
         # hooks. No root, no bind mount, no image build.
         run: ./test/snosi-etc-diff-test.sh
 
+      - name: Validate persistent kernel argument tooling
+        # PATH-stubbed UKI addon, Secure Boot, MOK, ESP, and durability
+        # fixtures. No root, firmware access, image build, or real ESP.
+        run: ./test/snosi-kargs-test.sh
+
       - name: Validate verified-download split checksum lookup
         # Fixture test ensures verified_download() resolves keys from both split
         # metadata files and honors CHECKSUMS_FILE overrides. No root, network,

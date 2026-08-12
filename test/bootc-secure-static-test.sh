@@ -133,7 +133,7 @@ fi
 # TPM recovery and Task 5's UKI assembly dependencies are explicit rather than
 # relying on incidental dependencies.
 for package in mokutil cryptsetup cryptsetup-bin tpm2-tools \
-    sbsigntool; do
+    sbsigntool openssl; do
     grep -qE "^(Packages=|[[:space:]]*)$package$" "$secure"
 done
 
@@ -193,7 +193,8 @@ if grep -q '^\[Install\]' "$unit"; then
 fi
 [[ "$(readlink "$wants")" == ../snosi-bootc-bootloader-reconcile.service ]]
 grep -Fq '/usr/lib/snosi/bootc/systemd-bootx64.efi' "$root/shared/bootc-secure/assemble-uki.sh"
-grep -Fqx '    backing=$(cryptsetup status root | awk '\''/^[[:space:]]*device:/{print $2; exit}'\'')' "$reconciler"
+grep -Fq 'snosi_esp_resolve "$RUN_DIR" root' "$reconciler"
+grep -Fq '/usr/lib/snosi/esp.sh' "$reconciler"
 
 # Only OCI bootc profiles consume the fragment. Native A/B, including the raw
 # fixture, must remain entirely independent of its packages and trust files.

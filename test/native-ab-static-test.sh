@@ -130,13 +130,16 @@ for package in libnss-myhostname libnss-mymachines libnss-systemd \
     libpam-systemd libsystemd-shared libsystemd0 libudev1 systemd \
     systemd-boot systemd-boot-efi systemd-boot-tools systemd-container \
     systemd-cryptsetup systemd-repart systemd-resolved systemd-sysv \
-    systemd-timesyncd systemd-tpm udev; do
+    systemd-timesyncd systemd-tpm systemd-ukify udev; do
     grep -q "^[[:space:]]*$package/forky$" "$secure"
 done
 if grep -q 'grub-efi-amd64-signed' "$secure"; then
     exit 1
 fi
 grep -q '^[[:space:]]*shim-signed$' "$secure"
+for package in openssl sbsigntool; do
+    grep -q "^[[:space:]]*$package$" "$secure"
+done
 
 # Forky isolation: the fragment itself legitimately pins forky, but nothing
 # outside its own tree, the three production profiles' OWN mkosi.conf (they
