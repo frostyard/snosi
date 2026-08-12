@@ -24,5 +24,7 @@ install() {
 }
 
 installkernel() {
-    instmods overlay ext4
+    # btrfs alongside ext4: firn supports a btrfs /var (ADR-0008), and the
+    # initrd must carry the driver to mount it before switch-root.
+    instmods overlay ext4 btrfs
 }
