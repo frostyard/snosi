@@ -200,6 +200,12 @@ _firn-binary:
     commit=$(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo none)
     build_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
     out="{{justfile_directory()}}/shared/firn-installer/tree/usr/bin/firn"
+    # Keep the go build + module caches off $HOME so this works as any
+    # user, including root on an image-based build host whose /root is a
+    # read-only erofs ($HOME/.cache and $HOME/go would both EROFS).
+    export GOCACHE="${GOCACHE:-{{justfile_directory()}}/output/.go-build-cache}"
+    export GOPATH="${GOPATH:-{{justfile_directory()}}/output/.go-path}"
+    mkdir -p "$GOCACHE" "$GOPATH"
     (cd "$src" && CGO_ENABLED=0 go build \
         -ldflags "-X main.version=$version -X main.commit=$commit -X main.date=$build_time -X main.builtBy=snosi-justfile" \
         -o "$out" ./cmd/firn-cli)

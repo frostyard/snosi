@@ -2,11 +2,13 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # Fixture test for shared/outformat/ab-root/tree/usr/libexec/snosi-firstboot:
-# PATH-stubbed updex/flatpak record their invocations; seed/done/core.json
-# paths come from the script's test-only env overrides. Covers: the no-seed
-# and already-done no-ops, feature enablement fan-out, flathub remote + core
-# set (deduplicated), retry semantics (any failure -> exit 1, NO done
-# marker), and the success marker. No root, no network, no image build.
+# a PATH-stubbed updex records its invocations; seed/done paths come from the
+# script's test-only env overrides. Covers: the no-seed and already-done
+# no-ops, feature enablement fan-out, stale-catalog resilience, retry
+# semantics (any failure -> exit 1, NO done marker), and the success marker.
+# System Flatpaks are NOT this script's job anymore (firn provisions them at
+# install time, ADR-0006); a regression guard checks core_flatpaks is ignored.
+# No root, no network, no image build.
 #
 # Usage: ./test/snosi-firstboot-test.sh
 set -euo pipefail
@@ -22,6 +24,7 @@ assert_eq() { [[ "$2" == "$3" ]] && pass "$1" || fail "$1" "expected '$3', got '
 assert_file() { [[ -f "$2" ]] && pass "$1" || fail "$1" "missing $2"; }
 assert_no_file() { [[ ! -f "$2" ]] && pass "$1" || fail "$1" "unexpected $2"; }
 assert_contains() { [[ "$2" == *"$3"* ]] && pass "$1" || fail "$1" "expected to find: $3"; }
+assert_not_contains() { [[ "$2" != *"$3"* ]] && pass "$1" || fail "$1" "unexpected: $3"; }
 
 WORK_DIR="$(mktemp -d /var/tmp/snosi-firstboot-test.XXXXXX)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -44,22 +47,10 @@ if [[ "\$*" == *"features list"* ]]; then
     fi
 fi
 EOF
-cat >"$WORK_DIR/bin/flatpak" <<EOF
-#!/bin/bash
-echo "flatpak \$*" >>"$WORK_DIR/calls.log"
-[[ ! -f "$WORK_DIR/flatpak-fail" ]] || exit 1
-EOF
-chmod +x "$WORK_DIR/bin/updex" "$WORK_DIR/bin/flatpak"
-
-# core.json fixture with a deliberate duplicate (the real list has carried
-# them) -- the script must dedup.
-cat >"$WORK_DIR/core.json" <<'EOF'
-{"core": [
-  {"name": "A", "id": "org.example.A"},
-  {"name": "B", "id": "org.example.B"},
-  {"name": "A again", "id": "org.example.A"}
-]}
-EOF
+# flatpak is deliberately NOT stubbed: the script must never invoke it. A
+# stub on PATH would mask an accidental call; instead a bare `flatpak` would
+# fail loudly if the removed code came back.
+chmod +x "$WORK_DIR/bin/updex"
 
 run_fb() { # seed-file
     : >"$WORK_DIR/calls.log"
@@ -68,7 +59,6 @@ run_fb() { # seed-file
     RUN_OUT="$(PATH="$WORK_DIR/bin:$PATH" \
         SNOSI_FIRSTBOOT_SEED="$1" \
         SNOSI_FIRSTBOOT_DONE="$WORK_DIR/done" \
-        SNOSI_FIRSTBOOT_CORE_JSON="$WORK_DIR/core.json" \
         bash "$SCRIPT" 2>&1)"
     RUN_RC=$?
     set -e
@@ -80,6 +70,7 @@ assert_eq "no seed: exit 0" "$RUN_RC" "0"
 assert_no_file "no seed: no done marker" "$WORK_DIR/done"
 
 echo "=== full success path ==="
+# core_flatpaks:true is present but must be IGNORED (firn owns flatpaks now).
 cat >"$WORK_DIR/seed.json" <<'EOF'
 {"features": ["docker", "tailscale"], "core_flatpaks": true}
 EOF
@@ -90,10 +81,12 @@ assert_eq "success: both features enabled" \
     "$(grep -c '^updex --silent features enable' "$WORK_DIR/calls.log")" "2"
 assert_eq "success: docker enabled with --now" \
     "$(grep -c '^updex --silent features enable docker --now$' "$WORK_DIR/calls.log")" "1"
-assert_eq "success: flathub remote added" \
-    "$(grep -c '^flatpak remote-add --system --if-not-exists flathub' "$WORK_DIR/calls.log")" "1"
-assert_eq "success: core set installed DEDUPLICATED (2 unique ids)" \
-    "$(grep -c '^flatpak install --system --noninteractive --or-update -y flathub' "$WORK_DIR/calls.log")" "2"
+assert_eq "regression: core_flatpaks ignored, no flatpak invoked" \
+    "$(grep -c 'flatpak' "$WORK_DIR/calls.log" || true)" "0"
+assert_not_contains "regression: done marker drops core_flatpaks field" \
+    "$(cat "$WORK_DIR/done")" "core_flatpaks"
+assert_contains "success: done marker records features" \
+    "$(cat "$WORK_DIR/done")" 'features='
 
 run_fb "$WORK_DIR/seed.json"
 assert_eq "already done: exit 0" "$RUN_RC" "0"
@@ -105,20 +98,12 @@ touch "$WORK_DIR/updex-fail"
 run_fb "$WORK_DIR/seed.json"
 assert_eq "updex failure: exit 1" "$RUN_RC" "1"
 assert_no_file "updex failure: done marker NOT written" "$WORK_DIR/done"
-assert_eq "updex failure: flatpaks still attempted (no early abort)" \
-    "$(grep -c '^flatpak install' "$WORK_DIR/calls.log")" "2"
 rm -f "$WORK_DIR/updex-fail"
-
-touch "$WORK_DIR/flatpak-fail"
-run_fb "$WORK_DIR/seed.json"
-assert_eq "flatpak failure: exit 1" "$RUN_RC" "1"
-assert_no_file "flatpak failure: done marker NOT written" "$WORK_DIR/done"
-rm -f "$WORK_DIR/flatpak-fail"
 
 echo "=== unknown-feature skip (stale catalog resilience) ==="
 rm -f "$WORK_DIR/done"
 cat >"$WORK_DIR/seed3.json" <<'EOF3'
-{"features": ["docker", "ghost-feature"], "core_flatpaks": false}
+{"features": ["docker", "ghost-feature"]}
 EOF3
 run_fb "$WORK_DIR/seed3.json"
 assert_eq "unknown feature: exit 0 (skipped, not failed)" "$RUN_RC" "0"
@@ -134,7 +119,7 @@ echo "=== empty catalog fail-open (updex lists []) ==="
 rm -f "$WORK_DIR/done"
 touch "$WORK_DIR/updex-empty"
 cat >"$WORK_DIR/seed4.json" <<'EOF4'
-{"features": ["docker"], "core_flatpaks": false}
+{"features": ["docker"]}
 EOF4
 run_fb "$WORK_DIR/seed4.json"
 # known="" (empty []) disables the stale-feature pre-check: the seeded feature
@@ -146,11 +131,10 @@ rm -f "$WORK_DIR/updex-empty" "$WORK_DIR/done"
 
 echo "=== features-only seed (cayo shape) ==="
 cat >"$WORK_DIR/seed2.json" <<'EOF'
-{"features": ["incus"], "core_flatpaks": false}
+{"features": ["incus"]}
 EOF
 run_fb "$WORK_DIR/seed2.json"
 assert_eq "features-only: exit 0" "$RUN_RC" "0"
-assert_eq "features-only: no flatpak calls" "$(grep -c '^flatpak' "$WORK_DIR/calls.log" || true)" "0"
 assert_file "features-only: done marker written" "$WORK_DIR/done"
 
 echo ""
