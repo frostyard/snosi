@@ -149,12 +149,12 @@ tooling change, not a process reminder:
 
 | Signal | Likely cause | Where to fix |
 |---|---|---|
-| Acceptance rate falls for agent PRs | Agent guidance is stale or incomplete | `AGENTS.md`, `CLAUDE.md`, `yeti/` |
+| Acceptance rate falls for agent PRs | Agent guidance is stale or incomplete | `AGENTS.md`, `CLAUDE.md`, `docs/design/` |
 | Review iterations rise | Expectations are implicit, not written down | `.github/pull_request_template.md`, `docs/` |
 | CI first-pass rate falls | A CI check has no documented local equivalent | `README.md` build/test sections, `test/` |
 | The same correction recurs across PRs | A belief keeps being re-learned from scratch | Append to `.memory/corrections.jsonl`, then promote |
 
 The last row is the one that closes the loop: `.memory/corrections.jsonl` is
 the append-only record of beliefs that turned out to be wrong, and promoting a
-recurring correction into `CLAUDE.md` or `yeti/` is what stops it from costing
+recurring correction into `CLAUDE.md` or `docs/` is what stops it from costing
 a review cycle again.

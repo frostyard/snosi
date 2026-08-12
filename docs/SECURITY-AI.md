@@ -68,7 +68,7 @@ performed, and any validation that could not be run. Reviewers apply
 [the PR review rubric](review-rubric.md), while
 [AI Quality Assurance](AI-QUALITY-ASSURANCE.md) describes the repository's
 quality signals. Repository-specific implementation constraints live in
-[`AGENTS.md`](../AGENTS.md) and `yeti/`.
+[`AGENTS.md`](../AGENTS.md) and [`docs/design/`](design/overview.md).
 
 The workflows in `.github/workflows/` are structural gates; policy text does
 not replace them. [`policies/agent-governance.json`](../policies/agent-governance.json)

@@ -8,13 +8,13 @@ cold.
 It complements, and does not replace, the existing documentation:
 
 - `CLAUDE.md` — normative build/architecture guidance for agents.
-- `yeti/` — detailed architecture and decision-rationale docs written for AI
-  consumption.
-- `docs/` — human- and agent-facing contracts and runbooks.
+- `docs/` — the four-category documentation tree (`docs/README.md`); its
+  `docs/design/` docs (formerly `yeti/`) carry the detailed architecture and
+  decision rationale written for AI consumption.
 
 Use `.memory/` for the *deltas* between what an agent believed and what turned
 out to be true. When a correction hardens into a general rule, promote it into
-`CLAUDE.md` or the relevant `yeti/` file and keep the correction entry as the
+`CLAUDE.md` or the relevant `docs/` page and keep the correction entry as the
 record of how it was learned.
 
 ## Files
@@ -26,7 +26,7 @@ record of how it was learned.
 ## `corrections.jsonl` entry shape
 
 ```json
-{"date": "2026-08-07", "scope": "shared/native-ab", "correction": "what was believed and what is actually true", "evidence": "file:line, command output, or issue/PR reference", "promoted_to": "CLAUDE.md section, yeti/<file>.md, or null"}
+{"date": "2026-08-07", "scope": "shared/native-ab", "correction": "what was believed and what is actually true", "evidence": "file:line, command output, or issue/PR reference", "promoted_to": "CLAUDE.md section, docs/<file>.md, or null"}
 ```
 
 Field notes:

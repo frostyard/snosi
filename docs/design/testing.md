@@ -240,7 +240,7 @@ line and the validator's rule assertion.
 ## Task 9 Secure Install Harness
 
 The normative operations status and recovery/evidence rules are in
-[`docs/bootc-secure-operations.md`](../docs/bootc-secure-operations.md); this
+[`docs/bootc-secure-operations.md`](../bootc-secure-operations.md); this
 section describes the harness interface and its fixture/live boundary only.
 
 `test/bootc-secure-install-test.sh --fixtures` covers the pure acceptance
@@ -733,7 +733,7 @@ shape. The re-run's first attempt (124/125) also caught a REAL race in
 after `systemd-sysupdate update` can read a mixed stale udev view (new
 PARTLABEL, old pre-vacuum PARTUUID) on the reused slot even though the
 on-disk GPT is correct — fixed with `udevadm settle` + a bounded re-read
-retry in the stager (see yeti/OVERVIEW.md "Native A/B Update UX (phase 4)").
+retry in the stager (see overview.md "Native A/B Update UX (phase 4)").
 
 **Phase 6 (Secure Snowfield):** the same harness runs unmodified with
 `PROFILE=snowfield-ab` (`IMAGE_ID` derives to `snowfield`, already routed

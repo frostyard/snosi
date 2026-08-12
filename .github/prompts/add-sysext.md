@@ -2,7 +2,7 @@
 
 Goal: `<what the sysext must provide>`
 
-Read first: `yeti/sysexts.md`, plus the "Sysext Constraints" section of
+Read first: `docs/design/sysexts.md`, plus the "Sysext Constraints" section of
 `CLAUDE.md`.
 
 Work to do:
@@ -36,5 +36,5 @@ Work to do:
 Validate: `just sysexts` (or a targeted build of the one image), then the
 relevant scripts under `test/` and the checks in `.github/workflows/validate.yml`.
 
-Finish by updating `CLAUDE.md` and `yeti/sysexts.md` if any constraint or
+Finish by updating `CLAUDE.md` and `docs/design/sysexts.md` if any constraint or
 contract changed.

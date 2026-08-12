@@ -595,5 +595,5 @@ pipeline to a `range-http-server.py` origin, then boots the shipped
 network-installer ISO in QEMU and runs a real non-interactive encrypted install
 that fetches and `gpgv`-verifies the promoted index with the stock shipped DEV
 pubring — the publication path exercised end to end from an actual installer,
-not just a verify-only guest. See `yeti/testing.md` "Phase 8 (ISO install
+not just a verify-only guest. See [`design/testing.md`](design/testing.md) "Phase 8 (ISO install
 end-to-end)".

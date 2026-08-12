@@ -8,12 +8,13 @@ and updated. Work through these, in order:
 1. `CLAUDE.md` — the operational contract summary an agent reads before any
    change. Update the section that covers the area you touched. Record *why* a
    constraint exists and what breaks without it, not just what the code does.
-2. `yeti/` — written for AI consumption: architecture, patterns, and decision
-   rationale rather than user-facing guides. Update `yeti/OVERVIEW.md` plus the
-   focused file for the area (`build-pipeline.md`, `ci-cd.md`, `sysexts.md`,
-   `testing.md`).
-3. `docs/` — normative contracts and runbooks. Change these only when the
-   contract itself changed, and say so explicitly in the pull request.
+2. `docs/design/` (formerly `yeti/`) — written for AI consumption:
+   architecture, patterns, and decision rationale rather than user-facing
+   guides. Update `docs/design/overview.md` plus the focused file for the area
+   (`build-pipeline.md`, `ci-cd.md`, `sysexts.md`, `testing.md`).
+3. The rest of `docs/` — normative contracts and runbooks (see the index in
+   `docs/README.md`). Change these only when the contract itself changed, and
+   say so explicitly in the pull request.
 4. `README.md` — only when a user-visible output, build target, or supported
    flow changed.
 

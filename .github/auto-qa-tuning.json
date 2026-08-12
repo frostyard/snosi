@@ -13,7 +13,7 @@
   },
   "actions": {
     "pr_acceptance_rate": [
-      "tighten affected change guidance in AGENTS.md, CLAUDE.md, or yeti/"
+      "tighten affected change guidance in AGENTS.md, CLAUDE.md, or docs/"
     ],
     "review_iterations": [
       "make the recurring expectation explicit in the pull request template or docs"

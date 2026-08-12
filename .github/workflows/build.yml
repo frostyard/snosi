@@ -9,11 +9,12 @@ on:
       - "shared/download/image-checksums.json"
       # These paths cannot affect base/sysext composition or publication.
       - "**/*.md"
+      - ".agents/**"
       - ".claude/**"
       - ".knowledge/**"
       - ".memory/**"
+      - "docs/**"
       - "skills/**"
-      - "yeti/**"
       - "workers/**"
       - ".github/workflows/deploy-native-installer-redirect.yml"
   pull_request:
@@ -22,11 +23,12 @@ on:
       - "shared/download/image-checksums.json"
       # These paths cannot affect base/sysext composition or publication.
       - "**/*.md"
+      - ".agents/**"
       - ".claude/**"
       - ".knowledge/**"
       - ".memory/**"
+      - "docs/**"
       - "skills/**"
-      - "yeti/**"
       - "workers/**"
       - ".github/workflows/deploy-native-installer-redirect.yml"
   workflow_dispatch:

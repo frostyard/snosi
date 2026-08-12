@@ -32,11 +32,12 @@ assert_ignored() { # description workflow event path
 
 common_ignored_paths=(
     '**/*.md'
+    '.agents/**'
     '.claude/**'
     '.knowledge/**'
     '.memory/**'
+    'docs/**'
     'skills/**'
-    'yeti/**'
     'workers/**'
     '.github/workflows/deploy-native-installer-redirect.yml'
 )
