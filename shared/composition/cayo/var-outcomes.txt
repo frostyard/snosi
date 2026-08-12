@@ -137,9 +137,10 @@ cache/swcatalog/cache/C-local-metainfo.xb	discard
 lib/apt/extended_states	discard
 # man-db cat-page cache (~150 files across every installed locale);
 # man-db.timer / on-demand `man` invocation regenerate it, and man-db's own
-# auto-update marker (lib/man-db/auto-update) below is equally disposable.
+# index/cache dir (lib/man-db) below is equally disposable. (Recent man-db
+# replaced the lib/man-db/auto-update marker with the lib/man-db dir.)
 cache/man/**	discard
-lib/man-db/auto-update	discard
+lib/man-db	discard
 lib/cni/networks	discard
 lib/containers/storage/tmp	discard
 lib/dahdi/digium-firm/Makefile	discard

@@ -180,7 +180,7 @@ lib/git	discard
 lib/gnome-remote-desktop	discard
 lib/grub/ucf/grub.previous	discard
 lib/machines	discard
-lib/man-db/auto-update	discard
+lib/man-db	discard
 lib/os-prober	discard
 # pam-auth-update's own bookkeeping (see the cayo map for detail).
 lib/pam/**	discard
