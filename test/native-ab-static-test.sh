@@ -324,6 +324,15 @@ done
 # ExtraTrees land), and a SkeletonTrees copy of the plymouthd.conf conffile
 # hard-fails the build (dpkg conffile prompt + non-interactive stdin = EOF).
 comp_snow="$root/shared/composition/snow/mkosi.conf"
+snow_packages="$root/shared/packages/snow/mkosi.conf"
+
+# frostyard-igloo is not an OS package. Its exclusion belongs in the shared
+# Snow package fragment so it covers both bootc and native A/B profiles.
+if grep -qE '^(Packages=|[[:space:]]+)frostyard-igloo([[:space:]]|$)' "$snow_packages"; then
+    echo "frostyard-igloo must not be selected by the Snow package fragment" >&2
+    exit 1
+fi
+grep -qx 'RemovePackages=frostyard-igloo' "$snow_packages"
 grep -q '^KernelCommandLine=splash plymouth\.ignore-serial-consoles quiet$' "$comp_snow"
 # The splash runs from the real root only: native initrds must omit the
 # plymouth dracut module (details-forcing/DRM-race with console=ttyS0 --
