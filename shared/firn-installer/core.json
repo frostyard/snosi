@@ -1,0 +1,100 @@
+{
+    "core": [
+        {
+            "name": "Bazaar App Store",
+            "id": "io.github.kolunmi.Bazaar"
+        },
+        {
+            "name": "MissionCenter System Monitor",
+            "id": "io.missioncenter.MissionCenter"
+        },
+        {
+            "name": "Extension Manager",
+            "id": "com.mattjakeman.ExtensionManager"
+        },
+        {
+            "name": "DistroShelf",
+            "id": "com.ranfdev.DistroShelf"
+        },
+        {
+            "name": "Audio Player",
+            "id": "org.gnome.Decibels"
+        },
+        {
+            "name": "Calculator",
+            "id": "org.gnome.Calculator"
+        },
+        {
+            "name": "Calendar",
+            "id": "org.gnome.Calendar"
+        },
+        {
+            "name": "Characters",
+            "id": "org.gnome.Characters"
+        },
+        {
+            "name": "Clocks",
+            "id": "org.gnome.clocks"
+        },
+        {
+            "name": "Connections",
+            "id": "org.gnome.Connections"
+        },
+        {
+            "name": "Contacts",
+            "id": "org.gnome.Contacts"
+        },
+        {
+            "name": "Disk Usage Analyzer",
+            "id": "org.gnome.baobab"
+        },
+        {
+            "name": "Document Scanner",
+            "id": "org.gnome.SimpleScan"
+        },
+        {
+            "name": "Document Viewer",
+            "id": "org.gnome.Evince"
+        },
+        {
+            "name": "File Roller",
+            "id": "org.gnome.FileRoller"
+        },
+        {
+            "name": "Fonts",
+            "id": "org.gnome.font-viewer"
+        },
+        {
+            "name": "Image Viewer",
+            "id": "org.gnome.Loupe"
+        },
+        {
+            "name": "Logs",
+            "id": "org.gnome.Logs"
+        },
+        {
+            "name": "Maps",
+            "id": "org.gnome.Maps"
+        },
+        {
+            "name": "Loupe",
+            "id": "org.gnome.Loupe"
+        },
+        {
+            "name": "Snapshot",
+            "id": "org.gnome.Snapshot"
+        },
+        {
+            "name": "Text Editor",
+            "id": "org.gnome.TextEditor"
+        },
+        {
+            "name": "Videos",
+            "id": "org.gnome.Showtime"
+        },
+        {
+            "name": "Weather",
+            "id": "org.gnome.Weather"
+        }
+    ]
+}

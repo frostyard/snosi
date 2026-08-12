@@ -40,6 +40,86 @@ snowfield-ab: ensure-mkosi
 native-installer-iso: ensure-mkosi
     sudo PATH="$PATH" {{just}} _native-installer-iso
 
+# Single-installer ISO for all image families (firn ADR-0010, successor to
+# native-installer; see shared/firn-installer/README.md). The firn binary is
+# built from a sibling firn checkout by _firn-binary, which runs as the
+# invoking user BEFORE sudo (same reasoning as ensure-mkosi: the artifact
+# must not be root-owned, and root has no Go toolchain/module cache).
+# FIRN_SRC defaults to ../firn relative to this repo's root -- worktree
+# users must set it to a real checkout, e.g.:
+#   FIRN_SRC=~/projects/frostyard/firn just firn-installer
+firn-installer: ensure-mkosi _firn-binary
+    sudo PATH="$PATH" {{just}} _firn-installer
+
+firn-installer-iso: ensure-mkosi _firn-binary
+    sudo PATH="$PATH" {{just}} _firn-installer-iso
+
+# Build the offline flatpak seed tree consumed by the installer ISO (firn
+# ADR-0006 media obligation: seed the core desktop apps + runtime so the
+# install-time offline path is the common path, not the degraded one). This
+# is SLOW and needs network + several GiB of disk: it downloads every app in
+# shared/firn-installer/core.json plus their GNOME/freedesktop runtimes from
+# Flathub. Run it BEFORE `just firn-installer-iso` -- that recipe picks the
+# tree up automatically if it exists (output/firn-flatpak-seed) and builds a
+# seeded ISO; skip it and the ISO is built without a seed and firn falls back
+# to network at install time (ADR-0006 report-don't-fail).
+#
+# Runs as the INVOKING user (never sudo): `flatpak --user` writes the tree
+# directly with no polkit/system-helper round-trip, and a root-owned tree
+# would need chown fixups anyway. build-iso.sh squashes the tree with
+# -all-root so the medium presents a root-owned /var/lib/flatpak, matching a
+# real system installation and what firn's tar-copy expects.
+firn-flatpak-seed:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    core="{{justfile_directory()}}/shared/firn-installer/core.json"
+    seed="{{justfile_directory()}}/output/firn-flatpak-seed"
+    [[ -f "$core" ]] || { echo "Error: missing $core" >&2; exit 1; }
+    command -v flatpak >/dev/null || { echo "Error: flatpak not found on build host" >&2; exit 1; }
+    # x86-64 is the only installer arch today (build-iso.sh emits
+    # snosi-installer_<version>_x86-64.iso); pin it so a non-x86 build host
+    # still seeds the medium's arch, not its own.
+    arch=x86_64
+    # The medium seeds SYSTEM flatpaks, but we build the tree via a --user
+    # installation pointed at $seed (FLATPAK_USER_DIR): the on-disk layout is
+    # identical (repo/ + app/ + runtime/ + exports/, bare-user-only repo) and
+    # `flatpak list --system` reads it verbatim once it is mounted at
+    # /var/lib/flatpak. Building --user avoids needing root or a running
+    # flatpak-system-helper/polkit on the build host.
+    #
+    # CRITICAL isolation: point FLATPAK_SYSTEM_DIR and FLATPAK_CONFIG_DIR at
+    # throwaway EMPTY dirs so the build host's OWN flatpak installations are
+    # invisible during resolution. Without this, if the host already has e.g.
+    # org.gnome.Platform installed, flatpak treats the app's runtime
+    # dependency as already satisfied and does NOT copy it into $seed -- the
+    # seed then ships apps with no runtime and the offline install is broken.
+    seedtmp="{{justfile_directory()}}/output/.firn-flatpak-seed-hidden"
+    rm -rf "$seed" "$seedtmp"
+    mkdir -p "$seed" "$seedtmp/system" "$seedtmp/config"
+    export FLATPAK_USER_DIR="$seed"
+    export FLATPAK_SYSTEM_DIR="$seedtmp/system"
+    export FLATPAK_CONFIG_DIR="$seedtmp/config"
+    # Pin Flathub as the seed remote (same remote firn adds at install time
+    # for the network-download leg, internal/flatpak/flatpak.go).
+    flatpak remote-add --user --if-not-exists \
+        flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+    # Read the app IDs from the vendored core.json. This copy MUST track
+    # frostyard/first-setup's snow_first_setup/core.json (the single source of
+    # truth firn ALSO reads at install time for core_flatpaks, see
+    # internal/flatpak/flatpak.go coreJSONPath) -- re-vendor it when
+    # first-setup's list changes. sort -u dedups the human-maintained list
+    # (it has carried duplicates, e.g. Loupe).
+    mapfile -t ids < <(python3 -c 'import json,sys; print("\n".join(e["id"] for e in json.load(open(sys.argv[1]))["core"] if e.get("id")))' "$core" | sort -u)
+    echo "Seeding ${#ids[@]} core flatpaks (+ runtimes) for $arch into $seed"
+    for id in "${ids[@]}"; do
+        echo "--- $id"
+        flatpak install --user -y --noninteractive --arch="$arch" flathub "$id"
+    done
+    rm -rf "$seedtmp"
+    echo "=== seeded refs ==="
+    FLATPAK_SYSTEM_DIR="$seed" flatpak list --system --columns=ref
+    echo "seed tree ready: $seed ($(du -sh "$seed" | cut -f1))"
+
 test-install image="output/snow":
     sudo PATH="$PATH" {{just}} _test-install {{image}}
 
@@ -101,6 +181,70 @@ _snowfield-ab: _clean
 _native-installer-iso: _clean
     {{mkosi}} --profile native-installer build
     ./shared/native-installer/tools/build-iso.sh output/native-installer output "$(date -u +%Y%m%d%H%M%S)"
+
+# Build the firn TUI binary into shared/firn-installer/tree/usr/bin/firn
+# (gitignored; the image postinst refuses to build without it -- see
+# shared/firn-installer/README.md. TODO: replace with a frostyard-firn
+# Packages= entry once firn cuts a release). CGO_ENABLED=0: the binary runs
+# inside the ISO rootfs and must not depend on the build host's libc.
+# Version stamping mirrors firn's own Makefile LDFLAGS
+# (main.version/commit/date/builtBy), so the medium's firn reports the
+# source checkout's `git describe` version.
+[private]
+_firn-binary:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src="${FIRN_SRC:-{{justfile_directory()}}/../firn}"
+    [[ -d "$src" ]] || { echo "Error: firn checkout not found at $src -- set FIRN_SRC (see shared/firn-installer/README.md)" >&2; exit 1; }
+    version=$(git -C "$src" describe --tags --always --dirty 2>/dev/null || echo dev)
+    commit=$(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo none)
+    build_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    out="{{justfile_directory()}}/shared/firn-installer/tree/usr/bin/firn"
+    # Keep the go build + module caches off $HOME so this works as any
+    # user, including root on an image-based build host whose /root is a
+    # read-only erofs ($HOME/.cache and $HOME/go would both EROFS).
+    export GOCACHE="${GOCACHE:-{{justfile_directory()}}/output/.go-build-cache}"
+    export GOPATH="${GOPATH:-{{justfile_directory()}}/output/.go-path}"
+    mkdir -p "$GOCACHE" "$GOPATH"
+    (cd "$src" && CGO_ENABLED=0 go build \
+        -ldflags "-X main.version=$version -X main.commit=$commit -X main.date=$build_time -X main.builtBy=snosi-justfile" \
+        -o "$out" ./cmd/firn-cli)
+    echo "built $out ($version, $commit)"
+    # Embed the core flatpak list so firn's core_flatpaks works on
+    # composefs bootc images, whose /usr is not readable as plain files at
+    # install time (firn reads InstallerCoreJSONPath =
+    # /usr/share/firn/core-flatpaks.json as the fallback; see firn
+    # internal/flatpak/flatpak.go). Same vendored core.json the flatpak
+    # seed uses -- re-vendor it from first-setup when the list changes.
+    core="{{justfile_directory()}}/shared/firn-installer/core.json"
+    [[ -f "$core" ]] || { echo "Error: missing $core (vendored from first-setup)" >&2; exit 1; }
+    corelist="{{justfile_directory()}}/shared/firn-installer/tree/usr/share/firn/core-flatpaks.json"
+    mkdir -p "$(dirname "$corelist")"
+    cp "$core" "$corelist"
+    echo "embedded core flatpak list -> $corelist"
+
+[private]
+_firn-installer: _clean
+    {{mkosi}} --profile firn-installer build
+
+[private]
+_firn-installer-iso: _clean
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{mkosi}} --profile firn-installer build
+    # Pick up the offline flatpak seed if `just firn-flatpak-seed` built one.
+    # Absent -> a seedless ISO and firn falls back to network at install time
+    # (ADR-0006 report-don't-fail); NEVER a hard failure here. mkosi clean (the
+    # _clean dep) only removes its own firn-installer output, not this sibling
+    # dir, so a seed built before the ISO recipe survives.
+    seed="{{justfile_directory()}}/output/firn-flatpak-seed"
+    if [[ -d "$seed/repo" ]]; then
+        echo "Using offline flatpak seed: $seed"
+        export FIRN_FLATPAK_SEED_DIR="$seed"
+    else
+        echo "No flatpak seed at $seed; building seedless ISO (network fallback, ADR-0006). Run 'just firn-flatpak-seed' first to seed."
+    fi
+    ./shared/firn-installer/tools/build-iso.sh output/firn-installer output "$(date -u +%Y%m%d%H%M%S)"
 
 [private]
 _test-install image="output/snow":

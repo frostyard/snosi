@@ -1,0 +1,61 @@
+# firn TUI kiosk for installer media (ADR-0007: the kiosk role is a
+# systemd unit running the firn TUI on the console — no compositor, no
+# graphics stack). REPO BOUNDARY (ADR-0010): firn ships this unit; the
+# snosi installer ISO installs and enables it and provides the payload
+# (tools, pubring, catalog) around it.
+#
+# Getty-replacement pattern. Unlike snosi-setup.service this unit has
+# NO Condition* lines — a TUI serves every console, so there is no
+# no-display fallback boot — which is exactly why Conflicts= is safe
+# here. snosi's root-caused lesson (2026-07-17, recorded in
+# snosi-setup.service): Conflicts= stops getty at TRANSACTION build
+# time, BEFORE Conditions are evaluated, so a *conditional* kiosk unit
+# with Conflicts= kills getty even on the boot where its Condition then
+# fails. Harmless for an unconditional unit. If a Condition* is ever
+# added here, switch to the imperative `ExecStartPre=-systemctl stop
+# getty@tty1.service` pattern instead.
+#
+# Crash-loop escape (snosi's 3-crashes fallback): Restart=on-failure
+# retries a crashed TUI; three crashes inside 60 s trip the start
+# limit, the unit enters failed state, and OnFailure hands tty1 to a
+# login getty — the machine never ends up a dead black screen.
+[Unit]
+Description=firn installer (TUI kiosk on tty1)
+Conflicts=getty@tty1.service
+After=getty@tty1.service systemd-user-sessions.service
+OnFailure=getty@tty1.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+# Bring tty1 to the foreground so the TUI is actually on the visible VT.
+# firn renders to /dev/tty1, but systemd does not switch the active VT to
+# it; with a VGA console the displayed VT is wherever the kernel console
+# lands, NOT tty1 — so without this the screen shows kernel/boot output
+# (or, once quieted, nothing) while firn draws to an unshown VT. `chvt 1`
+# activates it. (Serial has no VT; the serial unit omits this.)
+ExecStartPre=-/usr/bin/chvt 1
+# Silence the kernel console before the TUI draws: with a VGA console
+# (console=tty0) the kernel logs to the same VT firn renders on, and
+# stray messages — audit, and the block-device/mkfs/cryptsetup churn a
+# live install generates — clobber the TUI. `-n 1` prints only
+# emergencies; boot-time quieting (quiet/loglevel/audit=0) covers the
+# rest. Leading `-` so a missing dmesg never blocks the kiosk.
+ExecStartPre=-/usr/bin/dmesg --console-level 1
+ExecStart=/usr/bin/firn
+Restart=on-failure
+RestartSec=2
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty
+StandardOutput=tty
+StandardError=journal
+# systemd infers TERM=linux from TTYPath, but the TUI's terminal
+# capability probe should not depend on that inference.
+Environment=TERM=linux
+
+[Install]
+WantedBy=multi-user.target

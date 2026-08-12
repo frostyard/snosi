@@ -1,0 +1,30 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Post-package customizations for the firn-installer image (runs inside the
+# image chroot, after package installation -- see
+# shared/firn-installer/mkosi.conf).
+set -euo pipefail
+
+# The ISO's initramfs IS the final root (shared/firn-installer/tools/build-
+# iso.sh packs this whole tree as the kernel's initramfs, no switch_root):
+# the kernel only tries "/init" in the unpacked initramfs, never "/sbin/init"
+# unless the initramfs has no /init at all -- and if it doesn't find one, it
+# falls back to mounting a "real" root device, which does not exist here.
+# systemd only enters "initrd mode" (expecting a later switch_root) when
+# /etc/initrd-release exists; this tree has none (it's a normal package
+# install, not a dracut initrd), so systemd boots straight to normal targets.
+ln -sf usr/lib/systemd/systemd /init
+
+# The firn installer binary ships via this profile's own ExtraTrees=
+# (shared/firn-installer/tree/usr/bin/firn), but it is NOT committed: `just
+# _firn-binary` builds it from a sibling firn checkout right before the
+# mkosi build (see shared/firn-installer/README.md). Fail the image build
+# loudly if that step was skipped -- an installer ISO without its installer
+# would otherwise only be discovered at first boot. The chmod fixes up the
+# mode defensively (ExtraTrees= preserves the source tree's file mode).
+[[ -f /usr/bin/firn ]] || {
+    echo "ERROR: /usr/bin/firn missing -- run \`just firn-installer\` (which builds it via _firn-binary), not bare mkosi (see shared/firn-installer/README.md)" >&2
+    exit 1
+}
+chmod 0755 /usr/bin/firn

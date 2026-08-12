@@ -29,5 +29,17 @@ shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.git
 shared/snow/tree/usr/share/gnome-shell/extensions/bazaar-integration@kolunmi.github.io/extension.js
 shared/snow/tree/usr/share/glib-2.0/schemas/org.gnome.shell.extensions.logo-menu.gschema.xml
 
+# firn binary + embedded core flatpak list provisioned at build time by
+# `just _firn-binary` (shared/firn-installer/README.md); never committed
+# (the list is a build-time copy of shared/firn-installer/core.json).
+shared/firn-installer/tree/usr/bin/firn
+shared/firn-installer/tree/usr/share/firn/core-flatpaks.json
+
+# Offline flatpak seed tree + scratch built by `just firn-flatpak-seed`
+# (multi-GiB; shared/firn-installer/README.md). Under output/ (already ignored
+# above) -- listed explicitly so it is not mistaken for committable content.
+output/firn-flatpak-seed/
+output/.firn-flatpak-seed-hidden/
+
 # Scratch investigation notes; never part of the tree.
 ISSUE-*-EVIDENCE.md
