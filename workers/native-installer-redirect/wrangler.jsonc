@@ -5,7 +5,7 @@
   "compatibility_date": "2026-07-17",
   "routes": [
     {
-      "pattern": "https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso*",
+      "pattern": "https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso*",
       "zone_name": "frostyard.org"
     }
   ],
