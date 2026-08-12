@@ -4,4 +4,9 @@
 # The ESP carries versioned UKIs and must be available to systemd-sysupdate.
 PARTLABEL=esp /boot vfat umask=0077 0 2
 # /var is persistent state and must be mounted explicitly after switch-root.
-PARTLABEL=var /var ext4 defaults 0 2
+# `auto` (not ext4): firn honours recipe var_filesystem = ext4 | btrfs
+# (ADR-0008); the initrd already mounts /var by autodetection before
+# switch-root, so this is a reconciliation entry. fsck pass 0 because the
+# image ships e2fsprogs but not btrfs-progs -- a pass-2 line would fail
+# "fsck.btrfs not found" on a btrfs /var.
+PARTLABEL=var /var auto defaults 0 0

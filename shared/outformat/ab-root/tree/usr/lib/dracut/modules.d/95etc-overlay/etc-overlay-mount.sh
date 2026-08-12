@@ -27,7 +27,12 @@ fi
 
 mkdir -p "$sysroot/var"
 if ! mountpoint -q "$sysroot/var"; then
-    mount -t ext4 "$var_device" "$sysroot/var" || \
+    # Autodetect the /var filesystem (libblkid) rather than pinning ext4:
+    # firn honours recipe var_filesystem = ext4 | btrfs (ADR-0008), so a
+    # hardcoded `mount -t ext4` fails to mount a btrfs /var and drops the
+    # system to emergency mode. The btrfs kernel module is bundled in
+    # installkernel() so autodetection can complete in the initrd.
+    mount "$var_device" "$sysroot/var" || \
         die "snosi-etc-overlay: failed to mount persistent /var"
 fi
 
