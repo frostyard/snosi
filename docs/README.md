@@ -26,6 +26,7 @@ Docs are split by the question they answer (the shape defined by
 - [adr/0010-credential-handoff-paths-not-bytes.md](adr/0010-credential-handoff-paths-not-bytes.md) — credentials cross the sudo boundary as mode-0600 file paths, never bytes; durable keys live in `.snosi-private/`, year-stamped
 - [adr/0011-mkosi-bootstrapped-and-pin-shared.md](adr/0011-mkosi-bootstrapped-and-pin-shared.md) — mkosi runs from a repo-local checkout pinned to the workflow's action commit, bootstrapped pre-sudo
 - [adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md](adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md) — OCI layers are chunked by changelog-derived update cadence; secure images chunk before digest sealing, never after
+- [adr/0013-no-requiredby-enablement-prune-stale-requires.md](adr/0013-no-requiredby-enablement-prune-stale-requires.md) — shipped units never use RequiredBy= enablement (CI guard), and the native A/B initrd prunes stale .requires links that would brick boot at "Failed to isolate default target"
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design

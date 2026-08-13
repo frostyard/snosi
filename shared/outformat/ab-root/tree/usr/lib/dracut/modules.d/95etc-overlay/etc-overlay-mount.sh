@@ -38,6 +38,16 @@ fi
 
 base="$sysroot/var/lib/snosi/etc-overlay"
 mkdir -p "$base/upper" "$base/work" "$sysroot/etc"
+
+# Prune stale hard-dependency enablement links from the upper BEFORE the
+# overlay is assembled: a `.requires` link naming a unit this image no
+# longer ships bricks the boot at "Failed to isolate default target"
+# (root-caused 2026-08-12 on snow-linux-live-setup.service). Full
+# rationale and the deliberate .requires-only scope: etc-overlay-prune.sh.
+# shellcheck source=/dev/null
+. /usr/lib/snosi/etc-overlay-prune.sh
+snosi_prune_stale_requires "$base/upper" "$sysroot"
+
 mount -t overlay overlay \
     -o "lowerdir=$sysroot/.etc.lower,upperdir=$base/upper,workdir=$base/work" \
     "$sysroot/etc" || die "snosi-etc-overlay: failed to mount persistent /etc"

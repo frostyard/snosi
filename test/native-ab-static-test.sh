@@ -93,6 +93,15 @@ if grep -q '^ConditionKernelCommandLine=' \
 fi
 grep -q 'getargbool 0 rd\.etc\.overlay' \
     "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/etc-overlay-mount.sh"
+# Stale hard-dependency pruning must stay wired: sourced + called by the
+# mount script before the overlay is assembled, installed by module-setup,
+# and scoped to .requires only (docs/adr/0013).
+grep -q 'snosi_prune_stale_requires "\$base/upper" "\$sysroot"' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/etc-overlay-mount.sh"
+grep -q 'etc-overlay-prune\.sh.*/usr/lib/snosi/etc-overlay-prune\.sh' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/module-setup.sh"
+grep -q 'systemd/system/\*\.requires/\*' \
+    "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/etc-overlay-prune.sh"
 grep -q 'var_device=/dev/mapper/var' \
     "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/etc-overlay-mount.sh"
 grep -q 'systemd-cryptsetup attach var' \

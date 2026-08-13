@@ -23,6 +23,7 @@ The ones that bind snosi:
 - [ADR-0021 — SHA-pinned actions and least-privilege CI workflows](https://github.com/frostyard/core/blob/main/docs/adr/0021-sha-pinned-actions-and-least-privilege-ci.md) — workflow pinning policy
 - [ADR-0023 — External downloads are version-pinned and checksum-verified](https://github.com/frostyard/core/blob/main/docs/adr/0023-verified-pinned-downloads.md) — shared/download/verified-download.sh and its split registries
 - [ADR-0025 — One docs/ tree per repository, in core's four-category shape](https://github.com/frostyard/core/blob/main/docs/adr/0025-consolidate-repository-docs-into-docs.md) — docs/{adr,design,specs,plans} + indexed docs/README.md; the former yeti/ tree was folded into docs/design/
+- [ADR-0030 — Shipped systemd units never use RequiredBy= enablement](https://github.com/frostyard/core/blob/main/docs/adr/0030-no-requiredby-enablement-in-shipped-units.md) — preset-persisted .requires links brick boot when the unit is retired; enforced here by check-required-by-guard.sh and the initrd prune (repo ADR-0013)
 
 When changing behavior covered by one of these, update or supersede the ADR
 in frostyard/core first, then change this repo in the same effort.

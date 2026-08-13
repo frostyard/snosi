@@ -254,6 +254,11 @@ jobs:
           ./test/runtime-etc-guard-test.sh
           ./test/duplicate-packages-test.sh
 
+      - name: Test RequiredBy guard and initrd requires-pruning fixtures
+        run: |
+          ./test/required-by-guard-test.sh
+          ./test/etc-overlay-prune-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:
@@ -271,6 +276,13 @@ jobs:
         # discarded. See CLAUDE.md "Runtime service enablement changes are
         # forbidden".
         run: ./check-runtime-etc-guard.sh
+
+      - name: Forbid RequiredBy= enablement in shipped units
+        # Preset-created .requires links persist in /etc; retiring the unit
+        # from a later image bricks boot at "Failed to isolate default
+        # target" (2026-08-12, snow-linux-live-setup.service). See
+        # docs/adr/0013 and frostyard/core ADR-0030.
+        run: ./check-required-by-guard.sh
 
   bootc-secure-contracts:
     runs-on: ubuntu-latest
