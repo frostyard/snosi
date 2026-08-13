@@ -476,4 +476,14 @@ succeeds the moment the cache is stale or absent.
 9. Add the sysext name to root `mkosi.conf` Dependencies list
 10. Add a corresponding update check to `.github/workflows/check-dependencies.yml` if it has external downloads
 
+`test/sysext-authoring-contract-test.sh`, run by `validate.yml`, derives the
+repository inventory from tracked `mkosi.images/*/mkosi.conf` files containing
+`Overlay=yes`; do not add a separate component list. It fails closed unless
+every discovered sysext has a nonempty tracked `required-paths.txt`, exactly one
+nonempty `KEYPACKAGE`, both shared finalizers, and one same-named
+component-scoped `.transfer`/`.feature` pair whose transfer selects the
+component and sets `Verify=true`. It also rejects component-scoped sysupdate
+metadata that has no matching tracked sysext config. The test uses synthetic
+git fixtures and does not build images.
+
 For runtime setup scripts and units shipped inside `mkosi.extra/`, do not call `systemctl enable`, `systemctl disable`, `systemctl preset`, or remove shipped paths under `/etc` from the running guest. These mutate the live `/etc` overlay and can break bootc's `/etc` merge when a staged deployment finalizes. Express service state through presets/drop-ins at build time, and use `/var` marker files for run-once behavior.
