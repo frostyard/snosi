@@ -65,7 +65,7 @@ Format=sysext
 Bootable=no
 BaseTrees=%O/base
 PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh
-FinalizeScripts=%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh
+FinalizeScripts=%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh
 
 Packages=<package-list>
 
@@ -123,6 +123,25 @@ in the base image (e.g. `wget`, `gcc`, `make`, `automake`) is "already
 installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
+
+**`/usr`-only payload guard:** every sysext also runs
+`shared/sysext/finalize/sysext-usr-only.sh` (the second `FinalizeScripts=`
+entry), a fail-closed check that inspects the same delta `$BUILDROOT` and
+fails the build if the sysext ships any file or symlink under `/var` or
+`/opt` (a non-empty directory is caught through the entries it holds; a
+symlink shipped AT `/var` or `/opt` is rejected too). Sysexts are `/usr`-only
+overlays (ADR-0004): `/opt` payloads are relocated to `/usr/lib/<pkg>` in the
+postinst chroot, and `/var` is per-machine runtime state a read-only `/usr`
+overlay cannot own — content left outside `/usr` is silently dropped or
+shadowed (`opt.mount` binds `/opt` to `/var/opt`) at merge time, so the
+sysext would ship looking correct while those files never take effect. Empty
+directory structure is permitted (many packages create an empty
+`/var/lib/<pkg>` state directory that tmpfiles.d recreates at runtime), as are
+the empty `/var` and `/opt` mountpoint directories; the guard never follows a
+symlink out of the delta. It exists because `/usr`-only was previously only
+convention plus mkosi's sysext format, with no diagnostic when a new package
+or a botched relocation smuggled content elsewhere. Fixtures:
+`test/sysext-usr-only-test.sh` (wired into `validate.yml`).
 
 `code-server`, `coder`, `edge`, `bitwarden`, `github-copilot`, `paseo`, `sunshine`, and `azurevpn` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb`; its Tauri payload already has a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
 
