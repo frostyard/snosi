@@ -79,7 +79,8 @@ and greps for any forbidden `IMAGE: <sysext>` line.
 ## References
 
 - Shapes: [design/overview.md](../design/overview.md) (Configuration
-  Composition), [design/build-pipeline.md](../design/build-pipeline.md)
+  Composition), current enforcement in
+  [design/build-pipeline.md](../design/build-pipeline.md#check-profile-dependenciessh)
 - Implemented by: `mkosi.conf`, `mkosi.profiles/*/mkosi.conf`,
   `shared/composition/*/mkosi.conf`
 - Guarded by: `check-profile-dependencies.sh`
