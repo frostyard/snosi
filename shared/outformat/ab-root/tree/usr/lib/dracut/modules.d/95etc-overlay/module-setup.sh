@@ -18,6 +18,7 @@ install() {
     inst_multiple mount mountpoint mkdir udevadm
     inst_simple "$moddir/etc-overlay-mount.sh" /usr/libexec/snosi-etc-overlay-initrd
     chmod 0755 "$initdir/usr/libexec/snosi-etc-overlay-initrd"
+    inst_simple "$moddir/etc-overlay-prune.sh" /usr/lib/snosi/etc-overlay-prune.sh
     inst_simple "$moddir/$service" "$systemdsystemunitdir/$service"
     inst_simple "$moddir/$dropin" \
         "$systemdsystemunitdir/initrd-root-fs.target.d/$dropin"
