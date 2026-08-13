@@ -49,7 +49,19 @@ this fixture-covered behavior is not live secure-publication evidence.
 
 `buildah-package.sh` makes a first, unsigned-label OCI image, chunks it with
 the pinned chunkah operation, and obtains the authoritative storage digest
-through that chunked candidate's own bootc binary. It invokes the assembler,
+through that chunked candidate's own bootc binary. Every digest probe runs
+through the single shared helper `shared/bootc-secure/storage-digest-probe.sh`
+(`snosi_storage_composefs_digest`, sourced by `buildah-package.sh`,
+`assemble-uki.sh`, and `test/bootc-secure-spike-test.sh` — never re-inline the
+`podman run` shape). The helper binds a host-filesystem scratch directory over
+the container's `/var/tmp`: bootc 1.16.7 hardcodes its temporary composefs
+repository at `/var/tmp` inside the container (`TMPDIR` is ignored) and
+composefs object writes use `O_TMPFILE`, which fuse-overlayfs does not support
+— GitHub runner image ubuntu24/20260810.271 (podman 5.8.4) forces
+`mount_program = fuse-overlayfs`, and without the bind every probe fails with
+`os error 95`. The mount changes only the execution environment; the digest is
+computed from containers-storage content and is unaffected (proven on runner
+image 20260810.271, 2026-08-13). It invokes the assembler,
 then derives the final image from the chunked candidate and overlays only the
 assembled `/boot` tree. The final candidate's own bootc performs the second and
 only other digest probe, which must return the authoritative digest exactly.

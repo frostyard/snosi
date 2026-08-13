@@ -17,6 +17,9 @@ readonly CANDIDATE_UKIFY_INITRD="$CANDIDATE_UKIFY_WORK/initrd"
 die() { echo "Error: $*" >&2; exit 1; }
 valid_digest() { [[ ${1:-} =~ ^[[:xdigit:]]{128}$ ]]; }
 
+# shellcheck source=shared/bootc-secure/storage-digest-probe.sh
+source "$(dirname "${BASH_SOURCE[0]}")/storage-digest-probe.sh"
+
 discover_kernel() { # rootfs
     local root=$1 path version
     local -a kernels=()
@@ -921,7 +924,7 @@ validate() { # rootfs image mok-cert pcr-cert [previous-pcr-cert]
     sbverify --cert "$mok" "$loader" >/dev/null || die "systemd-boot MOK Authenticode signature failed"
     sbverify --cert "$mok" "$source" >/dev/null || die "immutable systemd-boot source MOK Authenticode signature failed"
     cmp -s "$source" "$loader" || die "ESP second stage differs from immutable signed systemd-boot source"
-    digest=$(podman run --rm --privileged --pid=host -v /var/lib/containers:/var/lib/containers --security-opt label=type:unconfined_t "$image" bootc container compute-composefs-digest-from-storage "$image" | tr -d '\n')
+    digest=$(snosi_storage_composefs_digest "$image")
     valid_digest "$digest" || die "storage digest interface did not return SHA-512"
     work=$(mktemp -d); trap 'rm -rf -- "$work"' RETURN
     openssl pkey -pubin -in "$pcr" -pubout -out "$work/pcr.pub"

@@ -20,6 +20,8 @@ source "$ROOT_DIR/test/lib/vm.sh"
 source "$ROOT_DIR/test/lib/secure-vm.sh"
 # shellcheck disable=SC1091
 source "$ROOT_DIR/test/lib/ssh.sh"
+# shellcheck source=shared/bootc-secure/storage-digest-probe.sh
+source "$ROOT_DIR/shared/bootc-secure/storage-digest-probe.sh"
 
 PASS=0
 FAIL=0
@@ -576,12 +578,7 @@ composefs_digest() { # rootfs
 }
 
 storage_composefs_digest() { # local-image-reference
-    local image=$1
-    podman run --rm --privileged --pid=host \
-        -v /var/lib/containers:/var/lib/containers \
-        --security-opt label=type:unconfined_t \
-        "$image" \
-        bootc container compute-composefs-digest-from-storage "$image" | tr -d '\n'
+    snosi_storage_composefs_digest "$1"
 }
 
 validate_uki() { # rootfs uki kernel initrd pcr-public-key expected-digest

@@ -118,6 +118,19 @@ accepted. The disposable container and mounts never enter a layer. Host
 byte-identical `cp -a` snapshot.
 Candidate execution drops all Linux capabilities and runs as the common numeric
 owner of its mode-0600 credential files; it never adds read-bypass capabilities.
+Every storage-digest probe runs through the ONE shared helper
+`shared/bootc-secure/storage-digest-probe.sh` (`snosi_storage_composefs_digest`,
+sourced by `buildah-package.sh`, `assemble-uki.sh`, and
+`test/bootc-secure-spike-test.sh`); never re-inline the `podman run` shape. The
+helper binds a host scratch dir over the container's `/var/tmp` because bootc
+1.16.7 hardcodes its temp composefs repo there (`TMPDIR` ignored) and composefs
+object writes use `O_TMPFILE`, which fuse-overlayfs lacks — GitHub runner image
+ubuntu24/20260810.271 (podman 5.8.4) forces `mount_program = fuse-overlayfs`,
+which broke every secure "Package image" step with `os error 95` (root-caused
+2026-08-13; jobs landing on the older 20260720.247 image passed, making the
+failure look profile-dependent when it was a runner-image lottery). The bind
+cannot affect the digest: it is computed from containers-storage content, not
+the probe container's rootfs.
 The active and optional
 previous PCR public identities remain in the unmounted assembler gate directory;
 only copies enter the writable work mount and must compare byte-for-byte with

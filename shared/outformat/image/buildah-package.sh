@@ -110,6 +110,10 @@ if [[ ${SNOSI_BOOTC_SECURE:-0} == 1 ]]; then
     [[ -r $CHUNKER ]] || { echo "Error: chunkah packager is unavailable" >&2; exit 1; }
     # shellcheck source=shared/outformat/image/chunkah-package.sh
     source "$CHUNKER"
+    DIGEST_PROBE="$(dirname "${BASH_SOURCE[0]}")/../../bootc-secure/storage-digest-probe.sh"
+    [[ -r $DIGEST_PROBE ]] || { echo "Error: storage digest probe is unavailable" >&2; exit 1; }
+    # shellcheck source=shared/bootc-secure/storage-digest-probe.sh
+    source "$DIGEST_PROBE"
     : "${SOURCE_DATE_EPOCH:?SOURCE_DATE_EPOCH is required for secure chunking}"
     probe_rootfs_bootc_version "$ROOTFS_DIR"
     trap cleanup_secure EXIT
@@ -123,9 +127,7 @@ if [[ ${SNOSI_BOOTC_SECURE:-0} == 1 ]]; then
         echo "Error: secure chunkah packaging failed" >&2
         exit 1
     }
-    digest=$(podman run --rm --privileged --pid=host -v /var/lib/containers:/var/lib/containers \
-        --security-opt label=type:unconfined_t "$first_image" \
-        bootc container compute-composefs-digest-from-storage "$first_image" | tr -d '\n')
+    digest=$(snosi_storage_composefs_digest "$first_image")
     [[ $digest =~ ^[[:xdigit:]]{128}$ ]] || { echo "Error: unsupported bootc storage-digest interface" >&2; exit 1; }
     SNOSI_BOOTC_SECURE_COMPOSEFS_DIGEST="$digest" SNOSI_BOOTC_SECURE_BOOTC_VERSION=1.16.7 \
         SNOSI_BOOTC_SECURE_UKIFY_IMAGE="$first_image" \
@@ -145,9 +147,7 @@ if [[ ${SNOSI_BOOTC_SECURE:-0} == 1 ]]; then
     buildah rm "$final_container"
     final_container=""
     final_image_committed=1
-    published_digest=$(podman run --rm --privileged --pid=host -v /var/lib/containers:/var/lib/containers \
-        --security-opt label=type:unconfined_t "$IMAGE_REF" \
-        bootc container compute-composefs-digest-from-storage "$IMAGE_REF" | tr -d '\n')
+    published_digest=$(snosi_storage_composefs_digest "$IMAGE_REF")
     [[ $published_digest =~ ^[[:xdigit:]]{128}$ ]] || { echo "Error: unsupported bootc storage-digest interface" >&2; exit 1; }
     [[ "$digest" == "$published_digest" ]] || { echo "Error: /boot overlay changed OCI composefs digest" >&2; exit 1; }
     "$ASSEMBLER" --scan-image "$IMAGE_REF" "$SNOSI_BOOTC_MOK_KEY" "$SNOSI_BOOTC_PCR_KEY" \
