@@ -1,8 +1,8 @@
 {
   "1password": {
-    "url": "https://downloads.1password.com/linux/debian/amd64/pool/main/1/1password/1password-8.12.30.amd64.deb",
-    "sha256": "735cce651746099ec63e2213a3138dfd1f907721e2841cc45e8689cc341b06b8",
-    "version": "8.12.30"
+    "url": "https://downloads.1password.com/linux/debian/amd64/pool/main/1/1password/1password-8.12.32.amd64.deb",
+    "sha256": "9105a3052730eb327791e69ebe916575d2f5113c3d1df9f6c71f307d2c90994e",
+    "version": "8.12.32"
   },
   "bitwarden": {
     "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.7.0/Bitwarden-2026.7.0-amd64.deb",
@@ -30,9 +30,9 @@
     "version": "2.35.3"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.6/GitHub-Copilot-linux-x64.deb",
-    "sha256": "720f7eed7fd7a411c80a070eb38681b1158cc8589889ba20da06d4c66fa3dd90",
-    "version": "1.1.6"
+    "url": "https://github.com/github/app/releases/download/v1.1.8/GitHub-Copilot-linux-x64.deb",
+    "sha256": "34e468826b60c8775536db3aa15a7de532fa8f20d6a0e7be8d0fce84569bdd3a",
+    "version": "1.1.8"
   },
   "k3s": {
     "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.3%2Bk3s1/k3s",
