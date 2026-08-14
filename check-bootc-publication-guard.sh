@@ -369,7 +369,7 @@ if [[ ! -f $verifier ]]; then
 else
     verifier_text=$(<"$verifier")
     require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-capable"] == "true" and'
-    require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.7-storage-digest-v1"'
+    require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.8-storage-digest-v1"'
     # shellcheck disable=SC1003,SC2016 # Match the literal verifier shell source.
     require_text "$verifier" "$verifier_text" \
         'inspection=$(skopeo inspect --authfile "$AUTH_FILE" \'

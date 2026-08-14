@@ -1,11 +1,11 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Assemble the pinned bootc-1.16.7 compatibility UKI. This is deliberately not
+# Assemble the pinned bootc-1.16.8 compatibility UKI. This is deliberately not
 # an upstream-stable interface: buildah-package.sh supplies the OCI digest.
 set -euo pipefail
 umask 077
 
-readonly EXPECTED_BOOTC_VERSION="1.16.7"
+readonly EXPECTED_BOOTC_VERSION="1.16.8"
 readonly CANDIDATE_UKIFY_MOK_KEY=/run/snosi-ukify-mok.key
 readonly CANDIDATE_UKIFY_MOK_CERT=/run/snosi-ukify-mok.crt
 readonly CANDIDATE_UKIFY_PCR_KEY=/run/snosi-ukify-pcr.key
@@ -66,7 +66,7 @@ validate_root_contract() { # rootfs
     local root=$1 contract
     contract="$root/usr/lib/snosi/bootc-secure.json"
     [[ -f "$contract" ]] || die "missing bootc secure rootfs contract"
-    jq -e '.schema == 1 and .mok_certificate == "/usr/lib/snosi/mok.crt" and .pcr_public_key == "/usr/lib/snosi/pcr-signing.pub" and .encrypted_root_mapper == "root" and .systemd_suite == "forky" and ((has("assembly") | not) or .assembly == {compatibility: "bootc-1.16.7-storage-digest-v1", bootc_version: "1.16.7", storage_digest_command: "bootc container compute-composefs-digest-from-storage", ukify: "direct-two-pass"})' "$contract" >/dev/null || die "unexpected bootc secure rootfs contract"
+    jq -e '.schema == 1 and .mok_certificate == "/usr/lib/snosi/mok.crt" and .pcr_public_key == "/usr/lib/snosi/pcr-signing.pub" and .encrypted_root_mapper == "root" and .systemd_suite == "forky" and ((has("assembly") | not) or .assembly == {compatibility: "bootc-1.16.8-storage-digest-v1", bootc_version: "1.16.8", storage_digest_command: "bootc container compute-composefs-digest-from-storage", ukify: "direct-two-pass"})' "$contract" >/dev/null || die "unexpected bootc secure rootfs contract"
 }
 
 # The gate tracks only caller-owned private keys. Generic PEM scans reject

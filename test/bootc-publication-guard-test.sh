@@ -57,7 +57,7 @@ sudo skopeo copy --src-authfile "$AUTH_FILE" \
 jq -e --arg digest "$EXPECTED_DIGEST" '
     .Digest == $digest and
     .Labels["io.snosi.bootc.secureboot-capable"] == "true" and
-    .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.7-storage-digest-v1"
+    .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.8-storage-digest-v1"
 ' <<<"$inspection" >/dev/null
 EOF
 

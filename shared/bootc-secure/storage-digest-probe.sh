@@ -6,7 +6,7 @@
 # ONE place (sibling copies of this shape have drifted before; see CLAUDE.md
 # "move the behaviour rather than copying the fix").
 #
-# The /var/tmp bind mount is load-bearing: bootc 1.16.7 hardcodes its
+# The /var/tmp bind mount is load-bearing: bootc 1.16.8 hardcodes its
 # temporary composefs repository at /var/tmp INSIDE the container
 # (tempfile::tempdir_in("/var/tmp") in bootc_composefs/digest.rs; TMPDIR is
 # ignored), and composefs object writes open temp files with O_TMPFILE, which

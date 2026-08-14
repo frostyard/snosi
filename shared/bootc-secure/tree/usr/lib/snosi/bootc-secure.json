@@ -5,14 +5,14 @@
   "encrypted_root_mapper": "root",
   "systemd_suite": "forky",
   "assembly": {
-    "compatibility": "bootc-1.16.7-storage-digest-v1",
-    "bootc_version": "1.16.7",
+    "compatibility": "bootc-1.16.8-storage-digest-v1",
+    "bootc_version": "1.16.8",
     "storage_digest_command": "bootc container compute-composefs-digest-from-storage",
     "ukify": "direct-two-pass"
   },
   "installer": {
     "minimum_versions": {
-      "bootc": "1.16.7",
+      "bootc": "1.16.8",
       "cosign": "2.6.1",
       "systemd": "261.1-3"
     },

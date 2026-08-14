@@ -85,7 +85,7 @@ dracut or the Forky systemd family changes.
 
 **Bootc UKI assembly (Task 5, 2026-07-28):**
 `shared/bootc-secure/assemble-uki.sh` and the secure branch of
-`shared/outformat/image/buildah-package.sh` formalize the observed bootc 1.16.7
+`shared/outformat/image/buildah-package.sh` formalize the observed bootc 1.16.8
 hidden storage-digest plus direct two-pass ukify behavior as a maintained,
 fail-closed compatibility contract. This is NOT upstream-stable. Secure builds
 must set `SNOSI_BOOTC_SECURE=1` and caller-owned MOK/PCR credentials; Buildah
@@ -123,7 +123,7 @@ Every storage-digest probe runs through the ONE shared helper
 sourced by `buildah-package.sh`, `assemble-uki.sh`, and
 `test/bootc-secure-spike-test.sh`); never re-inline the `podman run` shape. The
 helper binds a host scratch dir over the container's `/var/tmp` because bootc
-1.16.7 hardcodes its temp composefs repo there (`TMPDIR` ignored) and composefs
+1.16.8 hardcodes its temp composefs repo there (`TMPDIR` ignored) and composefs
 object writes use `O_TMPFILE`, which fuse-overlayfs lacks — GitHub runner image
 ubuntu24/20260810.271 (podman 5.8.4) forces `mount_program = fuse-overlayfs`,
 which broke every secure "Package image" step with `os error 95` (root-caused

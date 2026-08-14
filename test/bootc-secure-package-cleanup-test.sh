@@ -47,7 +47,7 @@ if [[ ${BUILD_FIXTURE_CHROOT_FAIL:-0} == 1 ]]; then
     echo 'fixture rootfs loader failure' >&2
     exit 86
 fi
-printf '%s\n' "${BUILD_FIXTURE_BOOTC_VERSION:-bootc 1.16.7}"
+printf '%s\n' "${BUILD_FIXTURE_BOOTC_VERSION:-bootc 1.16.8}"
 EOF
     cat >"$state/bin/umount" <<'EOF'
 #!/bin/bash
@@ -309,7 +309,7 @@ remove_proc_dir() { rmdir "$2/proc"; }
 run_probe_failure_case proc-missing 'rootfs proc directory is missing' remove_proc_dir UNUSED 0
 run_probe_failure_case proc-pre-mounted 'rootfs proc is already mounted' mark_proc_mounted UNUSED 0
 run_probe_failure_case chroot-fails 'fixture rootfs loader failure' none BUILD_FIXTURE_CHROOT_FAIL 1
-run_probe_failure_case wrong-version 'expected bootc 1.16.7, observed bootc 1.16.2' none BUILD_FIXTURE_BOOTC_VERSION 'bootc 1.16.2'
+run_probe_failure_case wrong-version 'expected bootc 1.16.8, observed bootc 1.16.2' none BUILD_FIXTURE_BOOTC_VERSION 'bootc 1.16.2'
 run_probe_failure_case umount-fails 'failed to unmount rootfs proc' none BUILD_FIXTURE_UMOUNT_FAIL 1
 
 run_case assembler-fails
@@ -356,7 +356,7 @@ run_success_case() {
     ! grep -Fxq 'io.snosi.bootc.secureboot-capable=true' "$state/container-1-labels" || fail "first candidate gained the secure capability label"
     ! grep -Fq 'io.snosi.bootc.secureboot-assembly=' "$state/container-1-labels" || fail "first candidate gained the assembly label"
     grep -Fxq 'io.snosi.bootc.secureboot-capable=true' "$state/container-2-labels" || fail "final container lost the secure label"
-    grep -Fxq 'io.snosi.bootc.secureboot-assembly=bootc-1.16.7-storage-digest-v1' "$state/container-2-labels" || fail "final container lost the assembly label"
+    grep -Fxq 'io.snosi.bootc.secureboot-assembly=bootc-1.16.8-storage-digest-v1' "$state/container-2-labels" || fail "final container lost the assembly label"
     "$state/assembler" --remove-injected "$root"
 }
 

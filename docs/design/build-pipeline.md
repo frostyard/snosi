@@ -61,7 +61,7 @@ mixes in systemd-boot, cryptsetup, and TPM tooling. It adds
 `lockdown=integrity` through
 `/usr/lib/bootc/kargs.d/10-lockdown.toml`, not mkosi `KernelCommandLine=`:
 these directory-format profiles do not have an mkosi-built UKI for that setting
-to affect. Pinned bootc 1.16.7 loads sorted `*.toml` files from that directory;
+to affect. Pinned bootc 1.16.8 loads sorted `*.toml` files from that directory;
 the strict schema is `kargs = ["..."]` with optional
 `match-architectures = ["x86_64"]`. The fragment also carries explicit
 MOK/recovery/TPM/UKI tools and the public-only native MOK certificate plus
@@ -69,7 +69,7 @@ RSA-2048 PCR signing public key. The image contract is
 `/usr/lib/snosi/bootc-secure.json` (schema 1). Task 5 adds
 `shared/bootc-secure/assemble-uki.sh`, called only through
 `buildah-package.sh` when `SNOSI_BOOTC_SECURE=1`: the pristine first OCI package
-is chunked before its candidate bootc obtains bootc 1.16.7's hidden storage
+is chunked before its candidate bootc obtains bootc 1.16.8's hidden storage
 digest. That chunked candidate is digest authority; the adapter injects a
 MOK-signed UKI plus the ESP copy of systemd-boot under `/boot`. Before that first package, it
 places the same signed systemd-boot source at

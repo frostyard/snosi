@@ -1,7 +1,7 @@
 # Bootc Secure Assembly Compatibility Contract
 
 `shared/bootc-secure/assemble-uki.sh` is a maintained compatibility adapter
-for the Frostyard `bootc` package at upstream version `1.16.7`. It is not an
+for the Frostyard `bootc` package at upstream version `1.16.8`. It is not an
 upstream-stable bootc interface.
 
 The chunk-before-seal ordering this contract pins is decided in
@@ -54,7 +54,7 @@ through the single shared helper `shared/bootc-secure/storage-digest-probe.sh`
 (`snosi_storage_composefs_digest`, sourced by `buildah-package.sh`,
 `assemble-uki.sh`, and `test/bootc-secure-spike-test.sh` — never re-inline the
 `podman run` shape). The helper binds a host-filesystem scratch directory over
-the container's `/var/tmp`: bootc 1.16.7 hardcodes its temporary composefs
+the container's `/var/tmp`: bootc 1.16.8 hardcodes its temporary composefs
 repository at `/var/tmp` inside the container (`TMPDIR` is ignored) and
 composefs object writes use `O_TMPFILE`, which fuse-overlayfs does not support
 — GitHub runner image ubuntu24/20260810.271 (podman 5.8.4) forces

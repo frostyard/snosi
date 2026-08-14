@@ -138,7 +138,7 @@ for package in mokutil cryptsetup cryptsetup-bin tpm2-tools \
 done
 
 # Directory-format bootc profiles do not build a UKI through mkosi, so
-# KernelCommandLine= is inert. Pinned bootc 1.16.7 reads sorted *.toml files
+# KernelCommandLine= is inert. Pinned bootc 1.16.8 reads sorted *.toml files
 # from /usr/lib/bootc/kargs.d; its strict schema requires a kargs array.
 if grep -q '^KernelCommandLine=' "$secure"; then
     echo "bootc secure fragment must use bootc kargs.d, not mkosi KernelCommandLine=" >&2
@@ -172,8 +172,8 @@ assert {key: contract[key] for key in (
     "encrypted_root_mapper": "root",
     "systemd_suite": "forky",
     "assembly": {
-        "compatibility": "bootc-1.16.7-storage-digest-v1",
-        "bootc_version": "1.16.7",
+        "compatibility": "bootc-1.16.8-storage-digest-v1",
+        "bootc_version": "1.16.8",
         "storage_digest_command": "bootc container compute-composefs-digest-from-storage",
         "ukify": "direct-two-pass",
     },
