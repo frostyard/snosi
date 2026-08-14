@@ -85,6 +85,9 @@ jobs:
       - name: Validate native A/B invariants
         run: ./test/native-ab-static-test.sh
 
+      - name: Validate TSS user initrd integration
+        run: ./test/tss-user-initrd-static-test.sh
+
       - name: Validate frozen native A/B contracts
         # docs/native-ab-contracts.md is the source of truth for native A/B
         # naming, paths, and policy; this is its executable form. No root,
