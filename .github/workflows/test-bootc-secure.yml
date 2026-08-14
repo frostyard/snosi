@@ -8,11 +8,95 @@ on:
       # it cannot affect bootc secure contracts or runner harnesses.
       - "workers/**"
       - ".github/workflows/deploy-native-installer-redirect.yml"
+      # Workflows that never run on push/PR (scheduled, dispatch-only, or
+      # issue/review-event) and repository metadata cannot affect the
+      # contracts. build-images.yml is deliberately NOT ignored:
+      # check-bootc-publication-guard.sh validates it on every contracts run.
+      - ".github/workflows/ai-fix-requested.yml"
+      - ".github/workflows/bootc-secure-nightly.yml"
+      - ".github/workflows/build-mechanics.yml"
+      - ".github/workflows/check-dependencies.yml"
+      - ".github/workflows/check-packages.yml"
+      - ".github/workflows/claude.yml"
+      - ".github/workflows/copilot-review-apply.yml"
+      - ".github/workflows/native-nightly.yml"
+      - ".github/workflows/nightly-compliance.yml"
+      - ".github/workflows/scorecard.yml"
+      - ".github/workflows/test-install.yml"
+      - ".github/workflows/triage.yml"
+      - ".github/workflows/build.yml"
+      - ".github/workflows/build-native-images.yml"
+      - ".github/workflows/validate.yml"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/prompts/**"
+      - ".github/actionlint.yaml"
+      - ".github/auto-qa-tuning.json"
+      - ".github/dependabot.yml"
+      - ".github/renovate.json5"
+      - ".github/copilot-instructions.md"
+      - ".github/pull_request_template.md"
+      # Agent context, top-level docs, and sysext dependency metadata feed no
+      # bootc secure contract. docs/** stays a trigger: bootc-secure-docs-test
+      # and the installer-contract test validate docs/bootc-secure-*.md.
+      - ".agents/**"
+      - ".claude/**"
+      - ".knowledge/**"
+      - ".memory/**"
+      - "skills/**"
+      - "README.md"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "shared/download/package-versions.json"
+      - "latest-versions.txt"
+      - "shared/download/sysext-checksums.json"
+      - "shared/download/image-checksums.json"
   push:
     branches: [main]
     paths-ignore:
       - "workers/**"
       - ".github/workflows/deploy-native-installer-redirect.yml"
+      # Workflows that never run on push/PR (scheduled, dispatch-only, or
+      # issue/review-event) and repository metadata cannot affect the
+      # contracts. build-images.yml is deliberately NOT ignored:
+      # check-bootc-publication-guard.sh validates it on every contracts run.
+      - ".github/workflows/ai-fix-requested.yml"
+      - ".github/workflows/bootc-secure-nightly.yml"
+      - ".github/workflows/build-mechanics.yml"
+      - ".github/workflows/check-dependencies.yml"
+      - ".github/workflows/check-packages.yml"
+      - ".github/workflows/claude.yml"
+      - ".github/workflows/copilot-review-apply.yml"
+      - ".github/workflows/native-nightly.yml"
+      - ".github/workflows/nightly-compliance.yml"
+      - ".github/workflows/scorecard.yml"
+      - ".github/workflows/test-install.yml"
+      - ".github/workflows/triage.yml"
+      - ".github/workflows/build.yml"
+      - ".github/workflows/build-native-images.yml"
+      - ".github/workflows/validate.yml"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/prompts/**"
+      - ".github/actionlint.yaml"
+      - ".github/auto-qa-tuning.json"
+      - ".github/dependabot.yml"
+      - ".github/renovate.json5"
+      - ".github/copilot-instructions.md"
+      - ".github/pull_request_template.md"
+      # Agent context, top-level docs, and sysext dependency metadata feed no
+      # bootc secure contract. docs/** stays a trigger: bootc-secure-docs-test
+      # and the installer-contract test validate docs/bootc-secure-*.md.
+      - ".agents/**"
+      - ".claude/**"
+      - ".knowledge/**"
+      - ".memory/**"
+      - "skills/**"
+      - "README.md"
+      - "AGENTS.md"
+      - "CLAUDE.md"
+      - "shared/download/package-versions.json"
+      - "latest-versions.txt"
+      - "shared/download/sysext-checksums.json"
+      - "shared/download/image-checksums.json"
   workflow_dispatch:
     inputs:
       run_live:

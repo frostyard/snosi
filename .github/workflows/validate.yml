@@ -9,6 +9,12 @@ on:
 
 permissions: {}
 
+concurrency:
+  # Superseded validate runs of the same ref carry no information; a rapid
+  # sequence of pushes to a PR branch otherwise stacks full runs.
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+
 jobs:
   installer-redirect-worker:
     runs-on: ubuntu-latest

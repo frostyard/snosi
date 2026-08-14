@@ -23,6 +23,33 @@ on:
       - "skills/**"
       - "workers/**"
       - ".github/workflows/deploy-native-installer-redirect.yml"
+      # Workflows that never run on push/PR (scheduled, dispatch-only, or
+      # issue/review-event) and repository metadata cannot affect this
+      # workflow's inputs.
+      - ".github/workflows/ai-fix-requested.yml"
+      - ".github/workflows/bootc-secure-nightly.yml"
+      - ".github/workflows/build-mechanics.yml"
+      - ".github/workflows/check-dependencies.yml"
+      - ".github/workflows/check-packages.yml"
+      - ".github/workflows/claude.yml"
+      - ".github/workflows/copilot-review-apply.yml"
+      - ".github/workflows/native-nightly.yml"
+      - ".github/workflows/nightly-compliance.yml"
+      - ".github/workflows/scorecard.yml"
+      - ".github/workflows/test-install.yml"
+      - ".github/workflows/triage.yml"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/prompts/**"
+      - ".github/actionlint.yaml"
+      - ".github/auto-qa-tuning.json"
+      - ".github/dependabot.yml"
+      - ".github/renovate.json5"
+      # Sibling push/PR workflows validate their own files; nothing in this
+      # workflow reads them. build.yml is deliberately NOT ignored anywhere:
+      # it is the canonical mkosi pin source.
+      - ".github/workflows/build-native-images.yml"
+      - ".github/workflows/test-bootc-secure.yml"
+      - ".github/workflows/validate.yml"
   pull_request:
     branches: [main]
     paths-ignore:
@@ -40,6 +67,33 @@ on:
       - "skills/**"
       - "workers/**"
       - ".github/workflows/deploy-native-installer-redirect.yml"
+      # Workflows that never run on push/PR (scheduled, dispatch-only, or
+      # issue/review-event) and repository metadata cannot affect this
+      # workflow's inputs.
+      - ".github/workflows/ai-fix-requested.yml"
+      - ".github/workflows/bootc-secure-nightly.yml"
+      - ".github/workflows/build-mechanics.yml"
+      - ".github/workflows/check-dependencies.yml"
+      - ".github/workflows/check-packages.yml"
+      - ".github/workflows/claude.yml"
+      - ".github/workflows/copilot-review-apply.yml"
+      - ".github/workflows/native-nightly.yml"
+      - ".github/workflows/nightly-compliance.yml"
+      - ".github/workflows/scorecard.yml"
+      - ".github/workflows/test-install.yml"
+      - ".github/workflows/triage.yml"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/prompts/**"
+      - ".github/actionlint.yaml"
+      - ".github/auto-qa-tuning.json"
+      - ".github/dependabot.yml"
+      - ".github/renovate.json5"
+      # Sibling push/PR workflows validate their own files; nothing in this
+      # workflow reads them. build.yml is deliberately NOT ignored anywhere:
+      # it is the canonical mkosi pin source.
+      - ".github/workflows/build-native-images.yml"
+      - ".github/workflows/test-bootc-secure.yml"
+      - ".github/workflows/validate.yml"
   workflow_dispatch:
 
 permissions: {}
@@ -49,7 +103,11 @@ env:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  # Superseded runs of the same ref carry no information: cancel them for
+  # ordinary pushes AND for PR synchronize events (a new push to a PR branch
+  # otherwise leaves the previous three-profile mechanics matrix running to
+  # completion).
+  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
 jobs:
   secure-build:
