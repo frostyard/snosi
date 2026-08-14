@@ -55,7 +55,18 @@ path in the image's `required-paths.txt` is missing from the buildroot.
 Push/PR events ignore sysext-only dependency metadata
 (`shared/download/sysext-checksums.json`,
 `shared/download/package-versions.json`, `latest-versions.txt`) when those are
-the only changed paths.
+the only changed paths. They also ignore Markdown/docs, agent-context stores,
+the standalone redirect worker, repository metadata (issue templates,
+dependabot/renovate config), workflow files that never run on push/PR
+(scheduled, dispatch-only, or issue/review-event workflows), and sibling
+push/PR workflow files this workflow never reads (`build-native-images.yml`,
+`test-bootc-secure.yml`, `validate.yml`) — `build.yml` is deliberately never
+ignored anywhere because it is the canonical mkosi pin source.
+`test/workflow-path-filter-test.sh` (wired into `validate.yml`) pins every
+expensive workflow's ignore list, including negative assertions for the
+load-bearing triggers (`build.yml` for `build-native-images.yml` via
+`bootstrap-mkosi.sh`; `build-images.yml` and `docs/**` for
+`test-bootc-secure.yml` via the publication guard and docs contracts).
 
 Both the PR `mechanics-build` path and protected `secure-build` path iterate the
 three profiles (snow, snowfield, cayo); only the latter can publish.
