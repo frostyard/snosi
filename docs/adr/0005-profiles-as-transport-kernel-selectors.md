@@ -57,9 +57,18 @@ and greps for any forbidden `IMAGE: <sysext>` line.
 - Known enforcement gaps, accepted for now: the guard covers only the three
   bootc profiles, not the six native/installer profiles carrying the same
   idiom; its sysext list is a hand-maintained duplicate of the root
-  `mkosi.conf`; and no test asserts the secure-before-composition `Include=`
-  order — that ordering is held by the in-profile comments and by
-  "verified via `mkosi summary`" review discipline.
+  `mkosi.conf`.
+- The secure-before-composition `Include=` order for the three production
+  native profiles (`cayo-ab`, `snow-ab`, `snowfield-ab`) is enforced by
+  `test/native-ab-include-order-test.sh`. It resolves the FinalizeScripts=
+  accumulation order — from `mkosi cat-config` when a mkosi binary is
+  available, otherwise from the `Include=` encounter order — and asserts the
+  secure fragment's `disable-nvpcr` finalize precedes the composition
+  fragment's image finalize; a reversed-order fixture proves the check rejects
+  drift. The test is intended to run in `validate.yml` alongside the other
+  static profile checks (the workflow step is added by a maintainer, since App
+  tokens cannot modify `.github/workflows/`). The load-bearing in-profile
+  comments remain as documentation of intent.
 - Profile behavior can only be judged from resolved output (`summary` /
   `cat-config`), never from reading fragment files in isolation.
 
@@ -85,7 +94,9 @@ and greps for any forbidden `IMAGE: <sysext>` line.
 - Guarded by: `check-profile-dependencies.sh`
   (`.github/workflows/validate.yml`),
   `test/check-profile-dependencies-local-mkosi-test.sh`,
-  `test/native-ab-static-test.sh` (Include= presence)
+  `test/native-ab-static-test.sh` (Include= presence),
+  `test/native-ab-include-order-test.sh` (secure-before-composition
+  Include= order)
 - Builds on: [core ADR-0015 — os-release image identity](https://github.com/frostyard/core/blob/main/docs/adr/0015-os-release-image-identity.md)
   (`ImageId` stays the product name across transports, which is what lets
   composition fragments key off `IMAGE_ID`)
