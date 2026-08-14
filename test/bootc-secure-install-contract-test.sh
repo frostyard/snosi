@@ -19,7 +19,7 @@ assert contract["schema"] == 1
 assert contract["encrypted_root_mapper"] == "root"
 assert contract["installer"] == {
     "minimum_versions": {
-        "bootc": "1.16.7",
+        "bootc": "1.16.8",
         "cosign": "2.6.1",
         "systemd": "261.1-3",
     },
