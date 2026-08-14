@@ -1093,7 +1093,16 @@ Justfile                    # Build targets (just sysexts, just snow, etc.)
 
 mkosi configs compose via `Include=` directives. Each profile pulls in reusable fragments:
 
-Root `mkosi.conf` lists `base` plus all in-repo sysexts for the sysext publishing build. It also sets `ToolsTree=default` and `ToolsTreeSandboxTrees=mkosi.tools.sandbox`; files needed by the tools-tree package manager must go in `mkosi.tools.sandbox/`, while `mkosi.sandbox/` applies to the target image package manager. Both sandbox trees currently carry the same APT retry/timeout hardening. Each `mkosi.profiles/*/mkosi.conf` starts with `Dependencies=` and then `Dependencies=base` to reset mkosi's append-only collection semantics; profile image builds must not inherit the sysext list.
+Root `mkosi.conf` lists `base` plus all in-repo sysexts for the sysext
+publishing build. It also sets `ToolsTree=default` and
+`ToolsTreeSandboxTrees=mkosi.tools.sandbox`; files needed by the tools-tree
+package manager must go in `mkosi.tools.sandbox/`, while `mkosi.sandbox/`
+applies to the target image package manager. Both sandbox trees currently
+carry the same APT retry/timeout hardening. Product profile configs start with
+`Dependencies=` and then `Dependencies=base` to reset mkosi's append-only
+collection semantics. The dedicated `native-installer` and `firn-installer`
+profiles reset both `Dependencies=` and `BaseTrees=` to empty. No profile may
+inherit the root sysext list.
 
 ```
 Profile (e.g., snow/mkosi.conf)                     # transport+kernel selector only

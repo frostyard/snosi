@@ -368,7 +368,15 @@ Run after the image directory/file is created. Handle manifest processing and pa
 
 After `mkosi build` completes, the output directory contains all images, sysexts, and manifests flat in `output/`. Two root scripts organize them for publishing:
 
-Root `mkosi.conf` intentionally lists `base` plus all sysexts in `Dependencies=` so plain `mkosi build` and `just sysexts` produce the sysext publishing set. Profile configs clear that inherited collection with an empty `Dependencies=` assignment and then add `Dependencies=base`; without the reset, mkosi appends list settings and profile builds would rebuild every sysext. CI enforces this with `check-profile-dependencies.sh`.
+Root `mkosi.conf` intentionally lists `base` plus all sysexts in
+`Dependencies=` so plain `mkosi build` and `just sysexts` produce the sysext
+publishing set. Product profile configs clear that inherited collection with
+an empty `Dependencies=` assignment and then add `Dependencies=base`; without
+the reset, mkosi appends list settings and profile builds would rebuild every
+sysext. The dedicated `native-installer` and `firn-installer` profiles instead
+leave `Dependencies=` empty and also reset `BaseTrees=` because their rootfs
+must inherit neither the product base nor the sysext build set. CI enforces
+both outcomes with `check-profile-dependencies.sh`.
 
 Root `mkosi.conf` also configures mkosi's build tooling bootstrap with `ToolsTree=default` and `ToolsTreeSandboxTrees=mkosi.tools.sandbox`. Keep package-manager settings for that tools tree in `mkosi.tools.sandbox/`; the regular `mkosi.sandbox/` tree only affects target-image APT operations. Network hardening that should protect both surfaces, such as APT retries/timeouts, needs matching files in both trees.
 
@@ -386,7 +394,16 @@ Pre-build validation script (run in CI before `mkosi build`). Checks for duplica
 
 ### check-profile-dependencies.sh
 
-Config sanity check used by `validate.yml`. It runs `mkosi -f --profile <profile> summary` for every profile and fails if any profile summary includes one of the sysext image dependencies from root `mkosi.conf`. This protects the required `Dependencies=` reset pattern in profile configs.
+Config sanity check used by `validate.yml`. It discovers every tracked
+`mkosi.profiles/*/mkosi.conf` and derives the forbidden sysext inventory from
+the root `mkosi.conf` `Dependencies=` collection. It runs
+`mkosi -f --profile <profile> summary` for each profile: product profiles must
+resolve to exactly the `base` image dependency, while the dedicated
+`native-installer` and `firn-installer` profiles must resolve to no image
+dependencies. Every profile is also checked for accidental inheritance of any
+root sysext. `test/check-profile-dependencies-local-mkosi-test.sh` covers
+dynamic profile/sysext discovery, both contracts, and repository-local mkosi
+precedence without building an image.
 
 ### check-runtime-etc-guard.sh
 
