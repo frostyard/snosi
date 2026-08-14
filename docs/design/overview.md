@@ -1155,7 +1155,19 @@ See [build-pipeline.md](build-pipeline.md) for details.
 
 ### bootc Update Staging
 
-The base image disables upstream `bootc-fetch-apply-updates.timer` and enables `bootc-update-stage.timer` instead. The custom `/usr/libexec/bootc-update-stage` script pulls the followed image with `podman`, stages it with `bootc switch --transport containers-storage`, and leaves the deployment to apply on the next normal reboot. This preserves download-only update semantics and avoids the current registry-transport composefs pull failure documented in the update validation plan.
+The base image disables upstream `bootc-fetch-apply-updates.timer` and enables
+`bootc-update-stage.timer` instead. The custom
+`/usr/libexec/bootc-update-stage` script pulls the followed image with
+`podman`, stages it through `containers-storage`, and leaves the deployment to
+apply on the next normal reboot. This preserves download-only update semantics
+and avoids the current registry-transport composefs pull failure documented in
+the update validation plan. For registry-pulled images, bootc 1.16.8 records
+Podman's registry manifest digest (`podman image inspect .Digest`), not its
+local config/image ID (`.Id`); the stager uses the manifest digest for
+current/staged/rollback comparisons and post-stage verification.
+`spec.bootOrder=rollback` and `status.rollbackQueued=true` are separate
+bootloader-ordering state: they may coexist with a valid `.status.staged`
+deployment and are not staging-failure signals.
 
 ### Sysext Architecture
 

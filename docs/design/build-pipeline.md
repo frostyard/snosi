@@ -231,6 +231,10 @@ The base overlay ships `bootc-update-stage.service` and `bootc-update-stage.time
 - exits cleanly when the system is not bootc-managed,
 - prunes stale transfer images before pulling to avoid `/var` exhaustion,
 - pulls the followed image with `podman` so containers policy is enforced,
+- resolves the pulled identity from Podman's registry manifest digest
+  (`podman image inspect .Digest`), not the normally different local
+  config/image ID (`.Id`); bootc 1.16.8 records the manifest digest in
+  `imageDigest` even when it consumes the pull through `containers-storage`,
 - stages it with `bootc upgrade` when the spec already follows
   `containers-storage` (the steady state after the first staged update) or
   `bootc switch --transport containers-storage` otherwise — switch to an
@@ -252,6 +256,15 @@ The base overlay ships `bootc-update-stage.service` and `bootc-update-stage.time
   distinguishable from an up-to-date machine (the visibility gap that hid
   the bootc second-update bug), and
 - prunes dangling transfer images after the switch.
+
+Do not use `spec.bootOrder` or `status.rollbackQueued` as the update-success
+test. They describe bootloader ordering, not whether the image import and
+deployment stage succeeded, and bootc 1.16.8 can correctly report
+`bootOrder=rollback`, `rollbackQueued=true`, and a non-null `.status.staged`
+at the same time. Do not clear or "repair" that state merely because an
+update was staged. The stager's current/staged success contract is manifest
+digest continuity: the pulled `.Digest` equals bootc's booted or staged
+`imageDigest`; reboot selection remains separate operator/bootloader state.
 
 Consumers of the update state:
 - `/etc/update-motd.d/86-bootc-update-staged` — SSH/console logins (all
