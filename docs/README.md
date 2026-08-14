@@ -91,6 +91,7 @@ when next rewritten.
 
 - [fable-audit.md](fable-audit.md) — 2026-07-01 repository + running-system audit; historical narrative, path references reflect the tree at audit time (including the former `yeti/`)
 - [2026-07-03-bootc-migration-record.md](2026-07-03-bootc-migration-record.md) — record of the day the bootc path was first fully validated
+- [native-ab-prototype-history.md](native-ab-prototype-history.md) — phase-by-phase build journal for the native A/B products, installer ISO (Phase 8), and native `/var` factory state, extracted from `AGENTS.md` (snosi#727); the live contracts are in [native-ab-contracts.md](native-ab-contracts.md)
 - [OCIFIX.md](OCIFIX.md) — record of the PAX-header/OCI-layer problem and its fix
 - [superpowers/](superpowers/) — archived mill-run specs (`superpowers/specs/`) and plans (`superpowers/plans/`); historical, reference paths as they were at the time (including the former `yeti/`)
 
