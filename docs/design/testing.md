@@ -29,6 +29,7 @@ test/
 ├── native-iso-boot-smoke-test.sh # boot-validation smoke gate: installer ISO reaches a serial login prompt (same promotion gate)
 ├── native-ab-components-test.sh # Phase 1 exit-criterion QEMU test (masks, components, etc drift)
 ├── native-ab-static-test.sh   # Cheap A/B configuration invariants
+├── native-ab-include-order-test.sh # Secure-before-composition Include= order (ADR-0005)
 ├── native-publish-test.sh     # Publisher naming/derivation self-test (fixture GPT, no root)
 ├── native-ab-secure-artifact-test.sh # Secure package/initrd/PCR metadata
 ├── native-ab-secure-artifact-negative-test.sh # Rejection mutations
