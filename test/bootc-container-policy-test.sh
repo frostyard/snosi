@@ -200,6 +200,96 @@ EOF
 run_updater_fixture sha256:already-staged
 run_updater_fixture ''
 
+run_updater_digest_fixture() { # description booted staged-before staged-after expected-outcome expected-operation
+    local description=$1 booted=$2 staged_before=$3 staged_after=$4
+    local expected_outcome=$5 expected_operation=$6 work before after rc operation
+    local manifest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    work=$(mktemp -d)
+    trap 'rm -rf "$work"' RETURN
+    mkdir "$work/bin" "$work/run" "$work/state"
+
+    if [[ -n "$staged_before" ]]; then
+        before=$(jq -nc --arg booted "$booted" --arg staged "$staged_before" '{spec:{image:{image:"ghcr.io/frostyard/snow:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:$booted}},staged:{image:{imageDigest:$staged}},rollback:{image:{}}}}')
+    else
+        before=$(jq -nc --arg booted "$booted" '{spec:{image:{image:"ghcr.io/frostyard/snow:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:$booted}},staged:{},rollback:{image:{}}}}')
+    fi
+    if [[ -n "$staged_after" ]]; then
+        after=$(jq -nc --arg booted "$booted" --arg staged "$staged_after" '{spec:{image:{image:"ghcr.io/frostyard/snow:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:$booted}},staged:{image:{imageDigest:$staged}},rollback:{image:{}}}}')
+    else
+        after=$before
+    fi
+
+    cat >"$work/bin/bootc" <<'EOF'
+#!/bin/bash
+case $1 in
+status)
+    if [[ -e $FIXTURE_STATE/status-read ]]; then
+        printf '%s\n' "$BOOTC_STATUS_AFTER"
+    else
+        : >"$FIXTURE_STATE/status-read"
+        printf '%s\n' "$BOOTC_STATUS_BEFORE"
+    fi
+    ;;
+upgrade|switch)
+    printf '%s\n' "$1" >"$FIXTURE_STATE/operation"
+    ;;
+*) exit 1 ;;
+esac
+EOF
+    cat >"$work/bin/podman" <<'EOF'
+#!/bin/bash
+case "$1 $2" in
+"image prune"|"pull --quiet") exit 0 ;;
+"image inspect")
+    case "$*" in
+    *'{{.Digest}}'*) printf '%s\n' "$PULLED_MANIFEST" ;;
+    *'{{.Id}}'*) printf '%s\n' "$PULLED_CONFIG_ID" ;;
+    *'org.opencontainers.image.version'*) printf '%s\n' 20260814141627 ;;
+    *) exit 1 ;;
+    esac
+    ;;
+*) exit 1 ;;
+esac
+EOF
+    chmod +x "$work/bin/bootc" "$work/bin/podman"
+
+    set +e
+    PATH="$work/bin:$PATH" \
+        BOOTC_STATUS_BEFORE="$before" BOOTC_STATUS_AFTER="$after" \
+        FIXTURE_STATE="$work/state" PULLED_MANIFEST="$manifest" \
+        PULLED_CONFIG_ID=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+        SNOSI_RUN_DIR="$work/run" "$UPDATER" >"$work/output" 2>&1
+    rc=$?
+    set -e
+
+    operation=$(cat "$work/state/operation" 2>/dev/null || true)
+    if [[ $rc -eq 0 ]] && grep -Fqx "outcome=$expected_outcome" "$work/run/update-check" && \
+            [[ "$operation" == "$expected_operation" ]]; then
+        if [[ $expected_outcome == staged ]]; then
+            if grep -Fqx "digest=$manifest" "$work/run/update-staged"; then
+                pass "$description"
+            else
+                fail "$description (staged semaphore does not carry the manifest digest)"
+            fi
+        elif [[ ! -e $work/run/update-staged ]]; then
+            pass "$description"
+        else
+            fail "$description (unexpected staged semaphore)"
+        fi
+    else
+        fail "$description (rc=$rc outcome=$(sed -n 's/^outcome=//p' "$work/run/update-check" 2>/dev/null) operation=${operation:-none}; output: $(<"$work/output"))"
+    fi
+}
+
+manifest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+old=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+run_updater_digest_fixture "updater recognizes the pulled manifest as current" \
+    "$manifest" '' '' current ''
+run_updater_digest_fixture "updater recognizes the pulled manifest as already staged" \
+    "$old" "$manifest" "$manifest" staged ''
+run_updater_digest_fixture "updater verifies a newly staged manifest and reports success" \
+    "$old" '' "$manifest" staged upgrade
+
 run_live_policy_proof() {
     local live_home host_policy wrong_key_policy wrong_identity_policy unsigned_policy wrong_key log
     local image

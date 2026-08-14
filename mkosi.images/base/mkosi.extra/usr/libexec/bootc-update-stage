@@ -74,8 +74,11 @@ if ! podman pull --quiet "$image" >/dev/null; then
     fi
     exit 1
 fi
-pulled=$(podman image inspect --format '{{.Id}}' "$image")
-pulled="sha256:${pulled#sha256:}"
+pulled=$(podman image inspect --format '{{.Digest}}' "$image")
+if [[ ! $pulled =~ ^sha256:[[:xdigit:]]{64}$ ]]; then
+    echo "ERROR: pulled image has no valid registry manifest digest: '${pulled:-none}'" >&2
+    exit 1
+fi
 
 # The version label CI stamps on published images; matches IMAGE_VERSION in
 # os-release, and is the only cross-transport identity (digests differ
@@ -84,8 +87,12 @@ remote_version=$(podman image inspect \
     --format '{{index .Config.Labels "org.opencontainers.image.version"}}' \
     "$image" 2>/dev/null) || remote_version=""
 
-# For containers-storage deployments, bootc's imageDigest is the storage
-# image ID (config digest), which is exactly what podman reports as .Id.
+# A registry pull retains both a local storage/config ID (`podman .Id`) and
+# the registry manifest digest (`podman .Digest`). bootc 1.16.8 records the
+# latter as imageDigest even when consuming the image through
+# containers-storage. The two values are normally different; comparing .Id
+# made successful upgrades look like silent failures and made an already
+# current image look perpetually out of date.
 if [[ "$pulled" == "$booted" ]]; then
     echo "Already running $image ($pulled); nothing to stage."
     write_check current
