@@ -13,4 +13,4 @@ jobs:
         run: |
           set -euo pipefail
           echo "ACMM GitHub Actions AI integration marker."
-          echo "Operational AI handoffs live in ai-fix-requested.yml and copilot-review-apply.yml."
+          echo "The operational AI issue handoff lives in ai-fix-requested.yml."

@@ -9,7 +9,6 @@ ROOT = Path(__file__).resolve().parents[1]
 CANONICAL = "COPILOT_ASSIGNMENT_TOKEN"
 WORKFLOWS = (
     ROOT / ".github/workflows/ai-fix-requested.yml",
-    ROOT / ".github/workflows/copilot-review-apply.yml",
 )
 RUNBOOK = ROOT / "docs/copilot-automation-secret.md"
 VALIDATE = ROOT / ".github/workflows/validate.yml"
