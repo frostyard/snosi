@@ -1,11 +1,10 @@
 # Copilot automation secret
 
 Frostyard's canonical GitHub Actions secret for assigning work to Copilot is
-`COPILOT_ASSIGNMENT_TOKEN`. Both automation workflows in this repository use
+`COPILOT_ASSIGNMENT_TOKEN`. The automation workflow in this repository uses
 that name:
 
 - `.github/workflows/ai-fix-requested.yml`
-- `.github/workflows/copilot-review-apply.yml`
 
 The secret is a user-scoped token because comments and assignments made with an
 installation `GITHUB_TOKEN` cannot invoke the Copilot coding agent. The token
@@ -25,13 +24,12 @@ secret:
 2. Grant it to `frostyard/snosi`, `frostyard/pilothouse`, `frostyard/lab`,
    `frostyard/testsuite`, and `frostyard/updex` using selected-repository
    access. Confirm each repository reports access without printing the value.
-3. In each participating repository, change both Copilot automation workflows
-   to reference the canonical name. Do not retain aliases for the historical
+3. In each participating repository, change the Copilot automation workflow to
+   reference the canonical name. Do not retain aliases for the historical
    `COPILOT_AGENT_TOKEN` or `COPILOT_ASSIGN_PAT` spellings; aliases hide drift
    and make failures repository-dependent.
-4. Manually dispatch each workflow with a valid open issue or eligible open
-   same-repository pull request/review. Verify that the run passes the missing
-   secret guard and reaches the fixed GitHub API operation.
+4. Manually dispatch the workflow with a valid open issue. Verify that the run
+   passes the missing secret guard and reaches the fixed GitHub API operation.
 5. Review the Actions run and resulting assignment/comment, then remove any
    obsolete repository-level aliases after all consumers are migrated.
 

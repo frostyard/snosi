@@ -465,11 +465,11 @@ assignment. Default workflow permissions remain empty, no checkout occurs,
 and issue title/body text never enters the shell.
 
 `COPILOT_ASSIGNMENT_TOKEN` is the fleet-wide canonical secret name for this
-workflow and `copilot-review-apply.yml`. The organization-level credential must
-be granted to each participating repository before that repository renames a
-consumer; aliases such as `COPILOT_AGENT_TOKEN` and `COPILOT_ASSIGN_PAT` are not
-fallbacks. `docs/copilot-automation-secret.md` is the operator runbook for the
-ordered rollout, validation, failure, and rotation procedure, while
+workflow. The organization-level credential must be granted to each
+participating repository before that repository renames a consumer; aliases
+such as `COPILOT_AGENT_TOKEN` and `COPILOT_ASSIGN_PAT` are not fallbacks.
+`docs/copilot-automation-secret.md` is the operator runbook for the ordered
+rollout, validation, failure, and rotation procedure, while
 `test/copilot-automation-secret-test.py` is the local executable contract and
 runs in `validate.yml`. Repository changes cannot create or reveal the
 organization secret, so administrator confirmation is a merge precondition for
@@ -480,30 +480,9 @@ consumer renames elsewhere in the fleet.
 **Trigger:** Manual dispatch only.
 
 This workflow exists to satisfy the ACMM `acmm:github-actions-ai` file-presence
-criterion while keeping the repository's real AI handoffs in the existing
-Copilot issue and review workflows. It has empty default permissions, performs
-no checkout, uses no secrets, and introduces no third-party action dependency.
-
-### copilot-review-apply.yml — Automated Review Application
-
-**Trigger:** A pull request review is submitted, or a maintainer manually
-dispatches the workflow with a pull request number and review ID.
-
-Automatic runs are admitted only for non-draft pull requests whose head branch
-belongs to this repository; the script re-fetches and enforces those conditions
-again so manual dispatch cannot bypass them. `APPROVED`, dismissed, and empty
-reviews are no-ops, as is a `COMMENTED` review with no inline feedback. For an
-actionable `COMMENTED` or `CHANGES_REQUESTED` review, the workflow posts a fixed
-`@copilot` instruction referencing the review URL. The Copilot coding agent
-reads the unresolved threads and updates the existing pull request. A hidden
-review-ID marker makes reruns idempotent.
-
-The comment uses the user-scoped `COPILOT_ASSIGNMENT_TOKEN` secret because
-comments created by the workflow's installation `GITHUB_TOKEN` cannot invoke
-the coding agent. The token owner must have write access and Copilot coding
-agent access. Default workflow permissions are empty, fork pull requests never
-receive the secret, no code is checked out, and untrusted review text is neither
-executed nor copied into the agent instruction.
+criterion while keeping the repository's real AI issue handoff in the existing
+Copilot workflow. It has empty default permissions, performs no checkout, uses
+no secrets, and introduces no third-party action dependency.
 
 ### triage.yml — Automated Issue Classification
 

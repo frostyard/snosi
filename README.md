@@ -659,8 +659,7 @@ installation or the root update service.
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `ai-fix-requested.yml` | `ai-fix-requested` issue label / manual | Validates the request and assigns the issue to the Copilot coding agent |
-| `claude.yml` | Manual | ACMM-recognized GitHub Actions AI integration marker that documents the active AI feedback loops |
-| `copilot-review-apply.yml` | Submitted PR review / manual | Validates actionable feedback on an internal PR and asks Copilot to apply it once |
+| `claude.yml` | Manual | ACMM-recognized GitHub Actions AI integration marker that documents the active AI issue handoff |
 | `triage.yml` | Issue open/edit/reopen | Adds a missing classification label from explicit title signals without replacing human labels |
 | `check-dependencies.yml` | Weekly | Checks pinned direct downloads and inline image-tool pins, opens target-specific PRs |
 | `check-packages.yml` | Daily | Checks external APT package versions for sysexts, updates `package-versions.json`, opens PRs |
@@ -669,7 +668,7 @@ installation or the root update service.
 | `test-install.yml` | Manual | Signature-verified bootc installation test in QEMU/KVM |
 | `scorecard.yml` | Weekly | OpenSSF supply-chain security analysis |
 
-Both Copilot handoff workflows use the fleet-wide
+The Copilot issue handoff workflow uses the fleet-wide
 `COPILOT_ASSIGNMENT_TOKEN` organization secret. The [operator
 runbook](docs/copilot-automation-secret.md) defines its minimum scope, selected
 repositories, migration order, validation, failure behavior, and rotation.
