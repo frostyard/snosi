@@ -9,7 +9,7 @@ The Hive ACMM evaluation grades repositories by checking that fixed paths
 exist. Each generated issue lists acceptable paths and states "the content
 can follow your project's conventions" — satisfying **any one** listed path
 satisfies the criterion, and only existence is checked. The frostyard
-answer ([core ADR-0029](../../../docs/adr/0029-acmm-conformance-via-canonical-aliases.md))
+answer ([core ADR-0029](https://github.com/frostyard/core/blob/main/docs/adr/0029-acmm-conformance-via-canonical-aliases.md))
 is: never create a second copy of anything. Done looks like: every `acmm`
 issue closable by one PR, `scripts/check-docs.mjs` green, zero duplicated
 content, and the alias table registered in a repo-local ADR.
@@ -69,7 +69,7 @@ repogen#37–#55).
    | Session summary | `.claude/session-summary.md` (current state / last landed / next) |
 
 5. **Wire the gate.** Copy core's
-   [`scripts/check-docs.mjs`](../../../scripts/check-docs.mjs) and adapt
+   [`scripts/check-docs.mjs`](https://github.com/frostyard/core/blob/main/scripts/check-docs.mjs) and adapt
    only: the `SKIP_DIRS` set (add the repo's build-output dirs) and the
    link-checked file list. It fails CI on any broken or repo-escaping
    symlink, unindexed doc, or dead relative link. Add a `docs-gate` job
