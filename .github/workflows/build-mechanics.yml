@@ -104,7 +104,7 @@ jobs:
         run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
 
       - name: setup-mkosi
-        uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf
+        uses: systemd/mkosi@9b7d87a1707e39a42cfb54dce5cf745ef7b99a7e
 
       - name: Build image
         # No SNOSI_BOOTC_SECURE and no MOK/PCR credentials, so this is a
