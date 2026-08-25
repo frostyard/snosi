@@ -11,7 +11,7 @@ IMAGE=$1
 EXPECTED_DIGEST=$2
 AUTH_FILE=$3
 
-if [[ ! $IMAGE =~ ^ghcr\.io/frostyard/(cayo|snow|snowfield)$ ]] ||
+if [[ ! $IMAGE =~ ^ghcr\.io/frostyard/(cayo|snow|snowfield|flurry)$ ]] ||
         [[ ! $EXPECTED_DIGEST =~ ^sha256:[a-f0-9]{64}$ ]]; then
     printf 'invalid secure image reference\n' >&2
     exit 2

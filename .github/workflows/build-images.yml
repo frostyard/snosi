@@ -133,6 +133,8 @@ jobs:
             description: "Snow Linux OS Image"
           - profile: snowfield
             description: "Snowfield Linux OS Image"
+          - profile: flurry
+            description: "Flurry Linux OS Image"
 
     steps:
       - name: Show disk space (before)
@@ -496,6 +498,8 @@ jobs:
             description: "Snow Linux OS Image"
           - profile: snowfield
             description: "Snowfield Linux OS Image"
+          - profile: flurry
+            description: "Flurry Linux OS Image"
     steps:
       - name: Show disk space (before)
         run: sudo df -h
