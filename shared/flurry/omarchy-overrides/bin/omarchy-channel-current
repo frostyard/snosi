@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# omarchy:summary=Print the current Omarchy package channel
+
+# snosi override: Flurry follows a single snosi image channel.
+echo "stable"

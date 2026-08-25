@@ -1,0 +1,4 @@
+disable systemd-boot-update.service
+disable apt-daily-upgrade.timer
+disable apt-daily.timer
+disable dpkg-db-backup.timer

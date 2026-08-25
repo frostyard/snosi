@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# omarchy:summary=Factory reset finisher (snosi: not applicable)
+
+# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
+source /usr/share/omarchy/bin/omarchy-snosi-lib
+snosi_immutable "Factory reset is not supported on Flurry."
+exit 1

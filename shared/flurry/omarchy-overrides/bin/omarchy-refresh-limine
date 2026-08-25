@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# omarchy:summary=Refresh the bootloader config (snosi: not applicable)
+
+# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
+source /usr/share/omarchy/bin/omarchy-snosi-lib
+snosi_immutable "The bootloader is managed by the immutable image (systemd-boot/bootc)."
+exit 0

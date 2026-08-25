@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# omarchy:summary=Install the Tailscale mesh VPN service and a web app for the Tailscale Admin Console.
+# omarchy:requires-sudo=true
+
+# snosi override: Tailscale ships as a snosi sysext; enable the feature via
+# updex instead of installing a package. The tailscaled unit is activated by
+# the sysext's own drop-in on merge.
+
+set -e
+
+echo -e "\nEnabling the Tailscale sysext..."
+sudo updex --silent features enable tailscale --now
+
+echo -e "\nStarting Tailscale..."
+sudo tailscale up --accept-routes
+
+echo -e "\nAllowing $USER to manage Tailscale..."
+sudo tailscale set --operator="$USER"
+
+echo -e "\nReceiving Taildrop files in $HOME/Downloads..."
+systemctl --user enable --now omarchy-tailscale-receive.service
+
+echo -e "\nAdding Tailscale to the bar..."
+omarchy-plugin-enable omarchy.tailscale
+
+omarchy-webapp-install "Tailscale" "https://login.tailscale.com/admin/machines" https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/png/tailscale-light.png

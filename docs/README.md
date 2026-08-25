@@ -59,6 +59,7 @@ categorization candidate for this directory)*
 - [plans/2026-07-17-graphical-installer-plan.md](plans/2026-07-17-graphical-installer-plan.md)
 - [plans/2026-07-17-native-boot-validation-design.md](plans/2026-07-17-native-boot-validation-design.md) / [plan](plans/2026-07-17-native-boot-validation-plan.md)
 - [plans/2026-07-20-update-api-daemon-design.md](plans/2026-07-20-update-api-daemon-design.md)
+- [plans/2026-08-25-flurry-omarchy-plan.md](plans/2026-08-25-flurry-omarchy-plan.md)
 - [plans/ab-deploy-checklist.md](plans/ab-deploy-checklist.md) — native A/B production-deploy checklist
 
 ### Contracts and runbooks (indexed in place)

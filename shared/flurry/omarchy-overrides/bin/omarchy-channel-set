@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# omarchy:summary=Set the Omarchy package channel.
+
+# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
+source /usr/share/omarchy/bin/omarchy-snosi-lib
+snosi_note "Flurry follows a single snosi image channel." \
+  "To follow a different image: sudo bootc switch <image-ref>"
+exit 1

@@ -1,0 +1,6 @@
+enable NetworkManager.service
+disable systemd-networkd-wait-online.service
+# Omarchy masks NetworkManager-wait-online; a preset disable is the snosi
+# mechanism for the same outcome (nothing in the image pulls
+# network-online.target on the boot path).
+disable NetworkManager-wait-online.service

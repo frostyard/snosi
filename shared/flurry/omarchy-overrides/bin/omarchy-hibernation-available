@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# omarchy:summary=Report whether hibernation is available (snosi: never)
+
+# snosi override: hibernation setup is not supported on Flurry yet; menus
+# use this predicate to hide hibernation entries.
+exit 1

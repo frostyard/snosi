@@ -23,5 +23,20 @@
     "url": "https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/3bb9134985343ffd1993520eb37c90e113bfb09b",
     "sha256": "b779610b06e1ac58af6193f515f637d3846eae67d3fb36f4af71b2e05fb05869",
     "version": "3bb9134985343ffd1993520eb37c90e113bfb09b"
+  },
+  "omarchy": {
+    "url": "https://codeload.github.com/basecamp/omarchy/tar.gz/93010924047d09f62f702bf8b5c07d0149c11943",
+    "sha256": "f18622a2dc563e756853d33ef171fa61ea28416b780df6382af22d9cc2c141fd",
+    "version": "93010924047d09f62f702bf8b5c07d0149c11943"
+  },
+  "jetbrains-mono-nerd": {
+    "url": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/JetBrainsMono.zip",
+    "sha256": "fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e",
+    "version": "3.5.1"
+  },
+  "mise": {
+    "url": "https://github.com/jdx/mise/releases/download/v2026.8.12/mise-v2026.8.12-linux-x64",
+    "sha256": "f2092b1e67f0abc8803d3be120dd2bc5b656dd99680ba3159f710e149da10d05",
+    "version": "2026.8.12"
   }
 }

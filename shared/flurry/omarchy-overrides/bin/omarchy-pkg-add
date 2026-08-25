@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# omarchy:summary=Install packages (snosi: guidance only)
+
+# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
+source /usr/share/omarchy/bin/omarchy-snosi-lib
+snosi_immutable "Packages cannot be installed into the immutable image."
+exit 1

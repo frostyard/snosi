@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# omarchy:summary=Update system packages (snosi: handled by the image update)
+
+# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
+source /usr/share/omarchy/bin/omarchy-snosi-lib
+snosi_immutable "System packages update atomically with the OS image."
+exit 0
