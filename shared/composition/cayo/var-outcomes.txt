@@ -58,7 +58,6 @@ lib/apt/lists	tmpfiles
 lib/apt/mirrors/partial	tmpfiles
 lib/apt/periodic	tmpfiles
 lib/bluetooth	tmpfiles
-lib/colord/icc	tmpfiles
 lib/dbus/machine-id	tmpfiles
 lib/dictionaries-common/aspell	tmpfiles
 lib/dictionaries-common/hunspell	tmpfiles
@@ -130,7 +129,6 @@ cache/apt/pkgcache.bin	discard
 cache/apt/srcpkgcache.bin	discard
 cache/cracklib/**	discard
 cache/debconf/**	discard
-cache/fontconfig/**	discard
 cache/ldconfig/aux-cache	discard
 cache/realmd	discard
 cache/swcatalog/cache/C-local-metainfo.xb	discard
@@ -181,16 +179,13 @@ lib/tuned	discard
 # ucf's conffile-management bookkeeping; irrelevant once the image's /etc
 # is baked, only meaningful if `ucf` itself is invoked again post-install.
 lib/ucf/**	discard
-lib/upower	discard
 lib/vim/addons	discard
 # Login history (wtmp/lastlog/btmp) and equivalent modern (wtmpdb) forms —
 # machine state/logs are the plan's canonical discard example.
 lib/wtmpdb/wtmp.db	discard
-lib/xkb	discard
 lib/xml-core/**	discard
 log/alternatives.log	discard
 log/btmp	discard
-log/fontconfig.log	discard
 log/lastlog	discard
 log/runit/**	discard
 log/tuned	discard
