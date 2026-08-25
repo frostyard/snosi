@@ -3,9 +3,11 @@
 # omarchy:summary=Print the installed Omarchy version
 
 # snosi override: the vendored omarchy tree ships its version file; append
-# the Flurry image build id for support triage.
+# the Flurry image identity for support triage. CI builds stamp BUILD_ID;
+# local mkosi builds only have IMAGE_VERSION.
 
 omarchy_path=${OMARCHY_PATH:-/usr/share/omarchy}
 version=$(cat "$omarchy_path/version" 2>/dev/null || echo unknown)
 build_id=$(sed -n 's/^BUILD_ID="\?\([^"]*\)"\?/\1/p' /usr/lib/os-release | head -1)
+[[ -n "$build_id" ]] || build_id=$(sed -n 's/^IMAGE_VERSION="\?\([^"]*\)"\?/\1/p' /usr/lib/os-release | head -1)
 echo "$version (flurry image ${build_id:-unknown})"

@@ -35,7 +35,6 @@ lib/bluetooth	tmpfiles
 lib/AccountsService/icons	tmpfiles
 lib/alsa	tmpfiles
 lib/apache2	tmpfiles
-lib/colord/icc	tmpfiles
 lib/dbus/machine-id	tmpfiles
 lib/emacsen-common/state/flavor/installed	tmpfiles
 lib/emacsen-common/state/flavor/pending	tmpfiles
