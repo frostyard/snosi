@@ -1,0 +1,34 @@
+#!/bin/bash
+set -euo pipefail
+
+# Vendored essentials that have no Debian package (see the flurry plan):
+# - JetBrainsMono Nerd Font: omarchy's default UI/monospace face
+#   (fontconfig aliases monospace -> "JetBrainsMono Nerd Font" via the
+#   vendored 50-omarchy.conf); Debian's fonts-jetbrains-mono has no Nerd
+#   glyphs, so the bar/terminal icons would all be tofu without this.
+# - mise: omarchy's dev-toolchain manager (user-scope installs under
+#   ~/.local/share/mise; the binary itself is the only system piece).
+# Writes to $DESTDIR only (frostyard/snosi#293).
+
+source "$SRCDIR/shared/download/verified-download.sh"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+# --- JetBrainsMono Nerd Font ------------------------------------------------
+verified_download "jetbrains-mono-nerd" "$TMP/jbm.zip"
+FONTDIR="$DESTDIR/usr/share/fonts/jetbrains-mono-nerd"
+mkdir -p "$FONTDIR"
+# The release zip is flat TTFs; ship only the standard variable-width set
+# (omarchy's Arch package ttf-jetbrains-mono-nerd-basic is the same trim:
+# no NL/Propo variants).
+unzip -q "$TMP/jbm.zip" -d "$TMP/jbm"
+find "$TMP/jbm" -maxdepth 1 -name 'JetBrainsMonoNerdFont-*.ttf' -exec cp {} "$FONTDIR"/ \;
+count=$(find "$FONTDIR" -name '*.ttf' | wc -l)
+[[ "$count" -gt 0 ]] || { echo "flurry-extras.chroot: no JetBrainsMono Nerd Font TTFs extracted" >&2; exit 1; }
+find "$FONTDIR" -type f -exec chmod 644 {} +
+
+# --- mise -------------------------------------------------------------------
+verified_download "mise" "$TMP/mise"
+install -D -m 0755 "$TMP/mise" "$DESTDIR/usr/bin/mise"
+
+echo "flurry extras installed: JetBrainsMono Nerd Font ($count faces), mise"

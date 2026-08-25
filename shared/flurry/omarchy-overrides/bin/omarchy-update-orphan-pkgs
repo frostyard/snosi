@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# omarchy:summary=Remove orphaned packages (snosi: not applicable)
+
+# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
+source /usr/share/omarchy/bin/omarchy-snosi-lib
+snosi_immutable "Orphan cleanup happens at image build time."
+exit 0

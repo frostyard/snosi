@@ -1,0 +1,160 @@
+# Per-product /var factory-state outcome map for IMAGE_ID=flurry.
+# Format: <glob><TAB><outcome>, one per line. `#` starts a comment.
+# outcome in {image-metadata, tmpfiles, discard, installer-seed}; see
+# shared/composition/var-audit.finalize and CLAUDE.md "Native /var Factory
+# State" for the audit mechanism and meanings. List more specific globs
+# before broader ones matching the same subtree (first match wins).
+#
+# Derived from shared/composition/snow/var-outcomes.txt (2026-08-25) minus
+# the entries for packages flurry does not install (gdm3, tuned, geoclue,
+# gnome-remote-desktop, speech-dispatcher, cracklib), then corrected
+# against the audit's own unclassified/stale listings from the first real
+# `mkosi --profile flurry build` (the designed population workflow):
+# AccountsService/PackageKit/realmd/saned/snmp/apache2 turned out to be
+# pulled transitively (sddm/printing stack) and keep snow's outcomes;
+# flurry-only additions are sddm, upower (Quickshell battery widget),
+# alsa-utils state, plocate, man-db's populated shapes, LibreOffice, and
+# cups-pdf.
+
+# --- image-metadata: belongs to the immutable root -------------------------
+# See the snow map for the dpkg/aspell relocation rationale; flurry is
+# bootc-only today, so these show the real populated directories.
+lib/dpkg*	image-metadata
+lib/aspell*	image-metadata
+
+# --- tmpfiles: directories a shipped tmpfiles.d rule recreates -------------
+backups	tmpfiles
+cache/debconf/tmp.ci	tmpfiles
+cache/homebrew	tmpfiles
+cache/private	tmpfiles
+home/linuxbrew	tmpfiles
+lib/apt/lists	tmpfiles
+lib/apt/mirrors/partial	tmpfiles
+lib/apt/periodic	tmpfiles
+lib/bluetooth	tmpfiles
+lib/AccountsService/icons	tmpfiles
+lib/alsa	tmpfiles
+lib/apache2	tmpfiles
+lib/colord/icc	tmpfiles
+lib/dbus/machine-id	tmpfiles
+lib/emacsen-common/state/flavor/installed	tmpfiles
+lib/emacsen-common/state/flavor/pending	tmpfiles
+# ghostscript ships ~250 individual CMap symlinks via a generated tmpfiles.d
+# rule (pulled by cups-filters); every one is an exact L-type target.
+lib/ghostscript/CMap/**	tmpfiles
+lib/homebrew	tmpfiles
+lib/misc	tmpfiles
+lib/NetworkManager	tmpfiles
+lib/PackageKit	tmpfiles
+lib/nix	tmpfiles
+lib/plymouth	tmpfiles
+lib/private	tmpfiles
+lib/realmd	tmpfiles
+lib/saned	tmpfiles
+lib/sddm	tmpfiles
+lib/snmp	tmpfiles
+lib/sudo/lectured	tmpfiles
+lib/systemd/coredump	tmpfiles
+lib/systemd/ephemeral-trees	tmpfiles
+lib/systemd/network	tmpfiles
+lib/systemd/pstore	tmpfiles
+lib/tpm	tmpfiles
+lib/tpm2-tss/system/keystore	tmpfiles
+lib/upower	tmpfiles
+lib/usb_modeswitch	tmpfiles
+lib/xfsprogs	tmpfiles
+local	tmpfiles
+lock	tmpfiles
+log/apt	tmpfiles
+log/journal	tmpfiles
+log/private	tmpfiles
+log/README	tmpfiles
+mail	tmpfiles
+mnt	tmpfiles
+opt	tmpfiles
+roothome	tmpfiles
+run	tmpfiles
+spool/cups/tmp	tmpfiles
+spool/libreoffice/**	tmpfiles
+spool/mail	tmpfiles
+srv	tmpfiles
+tmp	tmpfiles
+usrlocal/bin	tmpfiles
+usrlocal/etc	tmpfiles
+usrlocal/games	tmpfiles
+usrlocal/include	tmpfiles
+usrlocal/lib	tmpfiles
+usrlocal/libexec	tmpfiles
+usrlocal/man	tmpfiles
+usrlocal/sbin	tmpfiles
+usrlocal/share/man	tmpfiles
+usrlocal/src	tmpfiles
+
+# --- discard: build residue, deliberately lost ------------------------------
+cache/adduser	discard
+cache/app-info/xmls	discard
+cache/apparmor	discard
+cache/apt/archives/partial	discard
+cache/apt/pkgcache.bin	discard
+cache/apt/srcpkgcache.bin	discard
+cache/cups/rss	discard
+cache/debconf/**	discard
+cache/dictionaries-common/**	discard
+cache/fontconfig/**	discard
+# Unlike current snow builds, flurry man-db pre-generates its cat-page
+# cache tree at build (mandb trigger); regenerated at runtime by
+# man-db.timer / on-demand man.
+cache/man/**	discard
+cache/swcatalog/cache/C-local-metainfo.xb	discard
+cache/ldconfig/aux-cache	discard
+lib/apt/extended_states	discard
+lib/cni/networks	discard
+lib/confexts	discard
+lib/containers/storage/tmp	discard
+lib/dahdi/digium-firm/Makefile	discard
+lib/dictionaries-common/**	discard
+lib/dracut/console-setup-dir/**	discard
+lib/emacsen-common/state/package/installed/**	discard
+lib/extensions/.keep	discard
+# flatpak/ostree repo skeleton only (see the snow map).
+lib/flatpak/.changed	discard
+lib/flatpak/repo/**	discard
+lib/ghostscript/fonts/**	discard
+# Per-user AccountsService state files from build-time accounts; the
+# icons dir above is the tmpfiles-recreated half (same split as snow).
+lib/AccountsService/users*	discard
+lib/git	discard
+# LibreOffice bundled-extension preregistration; per-user state is
+# rebuilt by LO itself on first start.
+lib/libreoffice/**	discard
+lib/machines	discard
+lib/plocate*	discard
+lib/man-db*	discard
+lib/pam/**	discard
+lib/portables	discard
+lib/python/python3.13_installed	discard
+lib/sgml-base/**	discard
+lib/shells.state	discard
+lib/systemd/catalog/database	discard
+lib/systemd/deb-systemd-helper-enabled/**	discard
+lib/systemd/deb-systemd-user-helper-enabled/**	discard
+lib/ucf/**	discard
+lib/vim/addons	discard
+lib/wtmpdb/wtmp.db	discard
+log/runit/**	discard
+# SDDM writes a startup log during the build chroot preset pass.
+log/sddm.log	discard
+# cups-pdf recreates per-user output/spool dirs on demand at runtime.
+spool/cups-pdf/**	discard
+lib/ispell*	discard
+lib/xfonts*	discard
+lib/xkb*	discard
+lib/xml-core/**	discard
+log/alternatives.log	discard
+log/btmp	discard
+# cups-pdf writes its install-time log under log/cups; bare * covers the
+# empty-dir shape and the populated one (same rationale as lib/dpkg*).
+log/cups*	discard
+log/fontconfig.log	discard
+log/lastlog	discard
+log/wtmp	discard

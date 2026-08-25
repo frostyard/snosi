@@ -399,6 +399,9 @@ just snow
 # Build snowfield (Surface devices)
 just snowfield
 
+# Build flurry (Hyprland/Omarchy-replica desktop)
+just flurry
+
 # Build cayo server image
 just cayo
 

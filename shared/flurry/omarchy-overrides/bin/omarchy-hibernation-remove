@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# omarchy:summary=Remove hibernation (snosi: not supported yet)
+
+# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
+source /usr/share/omarchy/bin/omarchy-snosi-lib
+snosi_immutable "Hibernation setup is not supported on Flurry yet."
+exit 1

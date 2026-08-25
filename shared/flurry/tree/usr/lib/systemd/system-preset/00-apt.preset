@@ -1,0 +1,5 @@
+# disable automatic apt updates, they won't work
+disable apt-daily-upgrade.service
+disable apt-daily.service
+disable apt-daily-upgrade.timer
+disable apt-daily.timer

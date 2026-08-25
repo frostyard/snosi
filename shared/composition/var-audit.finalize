@@ -55,6 +55,9 @@ case "$IMAGE_ID" in
     snow | snowfield)
         map="$SRCDIR/shared/composition/snow/var-outcomes.txt"
         ;;
+    flurry)
+        map="$SRCDIR/shared/composition/flurry/var-outcomes.txt"
+        ;;
     *)
         echo "var-audit.finalize: no /var outcome map wired for IMAGE_ID='$IMAGE_ID'" >&2
         exit 1

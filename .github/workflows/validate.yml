@@ -367,6 +367,6 @@ jobs:
         run: |
           sudo mkosi summary > /dev/null
           ./check-profile-dependencies.sh
-          for profile in cayo snow snowfield; do
+          for profile in cayo snow snowfield flurry; do
             sudo mkosi --profile "$profile" summary > /dev/null
           done

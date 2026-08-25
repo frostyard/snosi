@@ -1,0 +1,21 @@
+#!/bin/bash
+# Shared helpers for the snosi (Flurry) override layer. Not an omarchy
+# upstream file; sourced by the override scripts in this directory.
+
+snosi_note() {
+  if command -v gum >/dev/null 2>&1; then
+    gum style --border rounded --padding "0 1" --border-foreground 6 "$@"
+  else
+    printf '%s\n' "$@"
+  fi
+}
+
+# For commands that manage the OS image itself: explain the snosi model.
+snosi_immutable() {
+  snosi_note "$@" \
+    "" \
+    "Flurry is an immutable snosi image: the OS in /usr is updated" \
+    "atomically as a whole (bootc) and rolled back the same way." \
+    "Apps: 'flatpak install <app>' -- CLI tools: 'brew install <tool>'" \
+    "or 'mise use -g <tool>' -- system services: snosi sysexts."
+}

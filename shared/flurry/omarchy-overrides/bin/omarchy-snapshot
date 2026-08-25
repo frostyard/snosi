@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# omarchy:summary=Create or restore system snapshots with snapper
+# omarchy:args=<create|restore>
+# omarchy:requires-sudo=true
+
+# snosi override: Flurry has no snapper/btrfs snapshots; the equivalent
+# safety net is bootc's A/B deployments -- every update keeps the previous
+# image as an instant rollback target.
+
+set -euo pipefail
+
+case "${1:-}" in
+create)
+  # Exit 127 mirrors upstream's snapper-missing behavior so omarchy-update
+  # (which snapshots before updating) treats this as "nothing to do".
+  echo "Flurry keeps the previous OS deployment automatically; no snapshot needed." >&2
+  exit 127
+  ;;
+restore)
+  source /usr/share/omarchy/bin/omarchy-snosi-lib
+  snosi_note "Roll back to the previous OS deployment with:" \
+    "  sudo bootc rollback && sudo reboot" \
+    "Inspect deployments with: sudo bootc status"
+  ;;
+*)
+  echo "Usage: omarchy-snapshot <create|restore>" >&2
+  exit 1
+  ;;
+esac

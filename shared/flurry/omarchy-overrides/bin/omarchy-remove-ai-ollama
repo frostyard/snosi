@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# omarchy:summary=Remove Ollama (snosi: guidance only)
+
+# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
+source /usr/share/omarchy/bin/omarchy-snosi-lib
+snosi_immutable "Ollama on Flurry would be a brew/flatpak install; remove it the same way."
+exit 0

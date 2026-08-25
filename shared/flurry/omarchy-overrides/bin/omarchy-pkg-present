@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# omarchy:summary=Returns true if all of the named packages are installed on the system (or false if any of them are missing).
+# omarchy:args=<packages...>
+
+# snosi override: Debian dpkg instead of pacman; callers often pass Arch
+# package names, so fall back to a same-named command on PATH.
+
+for pkg in "$@"; do
+  dpkg -s "$pkg" &>/dev/null || command -v "$pkg" &>/dev/null || exit 1
+done
+
+exit 0

@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# omarchy:summary=Print the active Omarchy mirror and package channel
+
+# snosi override: Flurry follows a single snosi image channel.
+echo "stable (snosi image: ghcr.io/frostyard/flurry)"

@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# omarchy:summary=Prompt for required reboot or service restarts after updates
+
+# snosi override: upstream checks pacman's kernel package for a kernel
+# update; on Flurry a staged image update is the reboot signal instead.
+# The state-file restart flow and shell restart are unchanged.
+
+echo
+
+confirm_reboot() {
+  gum confirm "$1" && { omarchy-system-reboot; exit 0; }
+}
+
+if [[ -f /run/snosi/update-staged ]]; then
+  confirm_reboot "A Flurry OS update is staged. Reboot to apply?"
+elif [[ -f $HOME/.local/state/omarchy/reboot-required ]]; then
+  confirm_reboot "Updates require reboot. Ready?"
+fi
+
+running_hyprland=$(readlink /proc/$(pgrep -x Hyprland)/exe 2>/dev/null)
+if [[ $running_hyprland == *"(deleted)"* ]]; then
+  confirm_reboot "Hyprland has been updated. Reboot?"
+fi
+
+for file in "$HOME"/.local/state/omarchy/restart-*-required; do
+  if [[ -f $file ]]; then
+    filename=$(basename "$file")
+    service=$(echo "$filename" | sed 's/restart-\(.*\)-required/\1/')
+    echo "Restarting $service"
+    omarchy-state clear "$filename"
+    omarchy-restart-"$service"
+  fi
+done
+
+echo -e "\e[32m\nRestarting shell\e[0m"
+omarchy-restart-shell || true
