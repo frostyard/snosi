@@ -116,9 +116,29 @@ grep-guarded so an omarchy re-pin that changes the target fails the build):
 Test-only scaffolding (not shipped): the QEMU flow installs via
 `test/lib/vm.sh` then seeds a `flurry`/`flurry` user + SDDM
 `/var/lib/sddm/state.conf` (`Last User/Session`) — omarchy's password-only
-greeter submits `userModel.lastUser`, which is empty on a virgin install
-(omarchy's ISO normally seeds it; the snosi installer should, too, when
-flurry gets an install path).
+greeter submits `userModel.lastUser`, which is empty on a virgin install.
+SHIPPED FIX (2026-08-25): `flurry-sddm-state-seed.service` (flurry tree,
+static wants, `Before=display-manager.service`,
+`ConditionPathExists=!/var/lib/sddm/state.conf`) seeds the state for the
+machine's sole uid>=1000 account on first boot, covering every install
+method; SDDM owns the file from the first real login.
+
+## Installer integration (firn, 2026-08-25)
+
+Firn is the installer (single TUI binary; ISO built by snosi's
+`firn-installer` profile). Flurry appears in the picker via
+`shared/firn-installer/catalog.json`, shipped to `/etc/firn/catalog.json`
+— firn's documented wholesale-override seam (firn ADR-0010 puts the
+catalog on the media side; firn's compiled-in list stays as fallback).
+The same change fixed a pre-existing ISO gap: the medium shipped neither
+the `cosign` CLI nor `/usr/lib/snosi/cosign.pub`, which firn's preflight
+requires for every bootc catalog entry (`scripts/build/cosign.chroot`,
+pinned in image-checksums and refreshed by the check-dependencies cosign
+check). Remaining firn-side item: on composefs installs firn defers the
+/etc/skel copy to a first-boot tmpfiles `C` rule, and a wizard-pasted SSH
+key pre-creates the home dir, silently skipping skel — fatal for flurry
+(all omarchy dotfiles are skel); fix belongs in firn's
+`internal/sysconfig` (tracked as a firn PR).
 
 ## Later / ideas
 

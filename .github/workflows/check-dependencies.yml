@@ -707,6 +707,24 @@ jobs:
               "syft-version: ${SYFT_VERSION}"
           fi
 
+          # The installer ISO ships the same pinned cosign as a verified
+          # download (shared/firn-installer/scripts/build/cosign.chroot);
+          # refresh its checksum entry alongside the workflow pin. Not
+          # gated on WORKFLOW_UPDATES_ENABLED: checksums are repo content,
+          # not workflow files.
+          if [[ "$COSIGN_UPDATE" == "true" ]]; then
+            VERSION="${COSIGN_VERSION#v}"
+            validate_update_value "cosign-installer" "$VERSION" '^[0-9]+\.[0-9]+\.[0-9]+$'
+            URL="https://github.com/sigstore/cosign/releases/download/v${VERSION}/cosign-linux-amd64"
+            TMP=$(mktemp)
+            curl -fsSL --max-time 300 -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VERSION" \
+              '.["cosign-installer"].url=$u | .["cosign-installer"].sha256=$s | .["cosign-installer"].version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
           if [[ "$COSIGN_UPDATE" == "true" && "$WORKFLOW_UPDATES_ENABLED" == "true" ]]; then
             validate_update_value "cosign-release" "$COSIGN_VERSION" '^v2\.[0-9]+\.[0-9]+$'
             replace_exactly_once .github/workflows/build-images.yml \

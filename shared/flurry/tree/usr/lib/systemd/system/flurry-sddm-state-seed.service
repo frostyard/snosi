@@ -1,0 +1,20 @@
+[Unit]
+Description=Seed SDDM last-user state for the Omarchy greeter
+# Omarchy's SDDM theme has no username field: it submits
+# userModel.lastUser, which SDDM populates from /var/lib/sddm/state.conf --
+# a file that does not exist on a virgin install, making the greeter
+# unusable (login submits user ""). Seed it once, for the machine's single
+# human account, before the greeter first paints; SDDM owns the file from
+# the first real login on. Runs (and no-ops) each boot until either this
+# unit or SDDM has written the file, so an install path that creates the
+# user without seeding state still converges on the next boot.
+# Static /usr wants activation, no [Install] -- snosi infra-unit pattern
+# (see AGENTS.md "Enablement lives in presets"): preset-based enablement of
+# a new unit cannot reach installs whose first boot predates it.
+Before=display-manager.service
+RequiresMountsFor=/var/lib/sddm
+ConditionPathExists=!/var/lib/sddm/state.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/flurry-sddm-state-seed

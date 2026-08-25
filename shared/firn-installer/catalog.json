@@ -1,0 +1,48 @@
+[
+  {
+    "family": "bootc",
+    "name": "snow",
+    "description": "GNOME desktop with backports kernel",
+    "ref": "ghcr.io/frostyard/snow:latest",
+    "cosign_pub_key": "/usr/lib/snosi/cosign.pub"
+  },
+  {
+    "family": "bootc",
+    "name": "snowfield",
+    "description": "GNOME desktop with linux-surface kernel for Surface devices",
+    "ref": "ghcr.io/frostyard/snowfield:latest",
+    "cosign_pub_key": "/usr/lib/snosi/cosign.pub"
+  },
+  {
+    "family": "bootc",
+    "name": "flurry",
+    "description": "Hyprland desktop (Omarchy replica) with backports kernel",
+    "ref": "ghcr.io/frostyard/flurry:latest",
+    "cosign_pub_key": "/usr/lib/snosi/cosign.pub"
+  },
+  {
+    "family": "bootc",
+    "name": "cayo",
+    "description": "Headless server with podman and backports kernel",
+    "ref": "ghcr.io/frostyard/cayo:latest",
+    "cosign_pub_key": "/usr/lib/snosi/cosign.pub"
+  },
+  {
+    "family": "ab",
+    "name": "snow-ab",
+    "description": "Native A/B GNOME desktop with backports kernel",
+    "product": "snow-ab"
+  },
+  {
+    "family": "ab",
+    "name": "snowfield-ab",
+    "description": "Native A/B GNOME desktop with linux-surface kernel",
+    "product": "snowfield-ab"
+  },
+  {
+    "family": "ab",
+    "name": "cayo-ab",
+    "description": "Native A/B headless server with podman",
+    "product": "cayo-ab"
+  }
+]
