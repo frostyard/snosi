@@ -113,13 +113,14 @@ grep -Fqx "DOCKER_CONFIG=$(dirname -- "$AUTH_FILE") cosign verify --key $ROOT_DI
 grep -Fq "skopeo copy --src-authfile $AUTH_FILE --policy " "$WORK/commands" && grep -Fq -- "--registries.d " "$WORK/commands" && grep -Fq "docker://$IMAGE@$DIGEST containers-storage:$LOCAL_REF" "$WORK/commands" && pass "policy copy uses immutable source and root containers storage" || fail "policy copy uses immutable source and root containers storage"
 if jq -e '.default == [{"type":"reject"}]' "$WORK/copied-policy.json" >/dev/null; then pass "copied policy retains global reject"; else fail "copied policy retains global reject"; fi
 if jq -e --arg key "$ROOT_DIR/cosign.pub" '
-    [.transports.docker | keys[]] == ["ghcr.io/frostyard/cayo", "ghcr.io/frostyard/snow", "ghcr.io/frostyard/snowfield"] and
+    [.transports.docker | keys[]] == ["ghcr.io/frostyard/cayo", "ghcr.io/frostyard/flurry", "ghcr.io/frostyard/snow", "ghcr.io/frostyard/snowfield"] and
     [.transports.docker[][]] == [
+        {"type":"sigstoreSigned", "keyPath":$key, "signedIdentity":{"type":"matchRepository"}},
         {"type":"sigstoreSigned", "keyPath":$key, "signedIdentity":{"type":"matchRepository"}},
         {"type":"sigstoreSigned", "keyPath":$key, "signedIdentity":{"type":"matchRepository"}},
         {"type":"sigstoreSigned", "keyPath":$key, "signedIdentity":{"type":"matchRepository"}}
     ]
-' "$WORK/copied-policy.json" >/dev/null; then pass "copied policy retains exactly the three scoped Cosign rules"; else fail "copied policy retains exactly the three scoped Cosign rules"; fi
+' "$WORK/copied-policy.json" >/dev/null; then pass "copied policy retains exactly the four scoped Cosign rules"; else fail "copied policy retains exactly the four scoped Cosign rules"; fi
 if jq -e '.transports["containers-storage"][""] == [{"type":"insecureAcceptAnything"}]' "$WORK/copied-policy.json" >/dev/null; then pass "copied policy retains the containers-storage exception"; else fail "copied policy retains the containers-storage exception"; fi
 if [[ $(sed -n '1p' "$WORK/commands") == "skopeo inspect --authfile $AUTH_FILE docker://$IMAGE@$DIGEST" ]] && [[ $(sed -n '2p' "$WORK/commands") == "skopeo inspect --authfile $AUTH_FILE --format {{.Digest}} docker://$IMAGE:$VERSION" ]] && [[ $(sed -n '3p' "$WORK/commands") == "DOCKER_CONFIG=$(dirname -- "$AUTH_FILE") cosign verify --key $ROOT_DIR/cosign.pub $IMAGE@$DIGEST" ]] && [[ $(sed -n '5p' "$WORK/commands") == "skopeo copy --src-authfile $AUTH_FILE "* ]]; then pass "verification orders explicit metadata reads before Cosign before policy copy"; else fail "verification orders explicit metadata reads before Cosign before policy copy"; fi
 grep -Fq "skopeo copy --src-authfile $AUTH_FILE --policy " "$WORK/commands" &&
