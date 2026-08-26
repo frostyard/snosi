@@ -145,6 +145,13 @@ jobs:
         # 8.3), intentionally out of scope for this fast per-PR check.
         run: ./test/snosi-install-test.sh
 
+      - name: Validate installer catalog shape
+        # shared/firn-installer/catalog.json replaces firn's builtin catalog
+        # wholesale on the ISO; firn fails soft on malformed optional fields,
+        # so the shape contract (family/ref/product split, default_groups
+        # per frostyard/snosi#789) is pinned here instead.
+        run: ./test/firn-catalog-test.sh
+
       - name: Validate snosi-setup GUI model
         # Pure-python test of setup_gui/model.py (validation, argv assembly,
         # proto-1 event parsing, disk-list/typed-confirm handling) against an
