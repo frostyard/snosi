@@ -251,7 +251,7 @@ creates a new signature, only replays an already-signed one, per the plan's
 "restore ... using the same signature-first, manifest-last sequence".
 
 **Stable native-installer download.** The one moving user-facing URL,
-`/isos/native/v1/snosi-native-installer-latest-x86-64.iso`, is implemented by
+`/isos/native/v1/snosi-installer-latest-x86-64.iso`, is implemented by
 the isolated `workers/native-installer-redirect/` Cloudflare Worker. It reads
 the strongly-consistent R2 `isos/native/v1/SHA256SUMS` through a binding,
 strictly selects the one frozen installer filename, `head()`s the target, and
@@ -347,16 +347,28 @@ origin` matrix leg and each `promote-*` job independently downloads its own
 product's upstream artifact with `continue-on-error: true` and no-ops
 (does not fail) when it is absent, so one product's build/verify failure
 never blocks another's promotion -- the same pattern `build-images.yml`'s
-own `release` job already uses for its `snow-tag` artifact. Trigger is
-`workflow_dispatch` + main-branch `push` ONLY (interim protected-builder
-rule, `docs/native-ab-publication.md` "Interim protected-builder
-constraints": until mkosi supports split final assembly from signing, the
-`build-*` jobs themselves ARE the protected builder). A single
-`concurrency` group with `cancel-in-progress: false` prevents two runs from
-interleaving `promote.sh` invocations. **Production R2 upload has not been
+own `release` job already uses for its `snow-tag` artifact. Triggers are
+relevant main-branch pushes and PRs plus manual and repository dispatch;
+production jobs remain excluded from PRs under the interim protected-builder
+rule. The per-ref concurrency group cancels only superseded PR validation and
+never cancels a publication run that may be mutating a live index.
+**Production R2 upload has not been
 exercised through this workflow** -- see `docs/native-ab-publication.md`'s
 "CI publication flow" / "First production publication checklist" sections
 for the full secret inventory and what remains before the first real run.
+
+**Installer ISO workflow.** `.github/workflows/build-installer-iso.yml`
+separately owns `pin-check` -> `prepare` -> `build-iso` ->
+`test-public-origin-iso` -> `promote-iso`. Main-branch pushes use a positive
+path list covering the Firn profile/payload and its build, trust, publication,
+and smoke-test inputs; manual and org-wide `build` repository dispatches remain
+available because those dispatches do not identify their source component.
+There is no PR trigger. The build uses `native-build` for R2 candidate-upload
+credentials, the verifier boots the publicly re-downloaded ISO, and
+`native-promotion` signs and publishes the index before checking the stable
+redirect. A non-cancelling installer-specific concurrency group prevents two
+ISO index mutations from interleaving without serializing the slower native
+product pipeline.
 
 `shared/native-ab/ci/bootstrap-mkosi.sh` and `shared/native-ab/ci/check-
 mkosi-pin.sh` implement "Mkosi Pin Governance" (the plan: "CI must derive
@@ -364,13 +376,14 @@ local and workflow mkosi from the same commit and fail if they diverge").
 `bootstrap-mkosi.sh <target-dir>` is now the ONE implementation of "fetch
 mkosi at the commit build.yml's `systemd/mkosi@<sha>` action pins" --
 Justfile's `ensure-mkosi` recipe delegates to it instead of carrying its
-own copy of the same six lines, and `build-native-images.yml`'s `build-*`
-jobs call it directly (no `uses: systemd/mkosi@<sha>` action, so there is
-no second literal pin that could drift from build.yml's). `check-mkosi-
-pin.sh` is the explicit regression guard: it asserts build.yml's pin is a
-full 40-character commit SHA, that `build-native-images.yml` carries no
-conflicting `systemd/mkosi@<sha>` literal of its own, and (when a `.mkosi/`
-checkout is present) that its HEAD matches the pin exactly. Both scripts
+own copy of the same six lines, and both native build workflows call it
+directly (no `uses: systemd/mkosi@<sha>` action, so there is no second
+literal pin that could drift from build.yml's). `check-mkosi-pin.sh` is the
+explicit regression guard: it asserts build.yml's pin is a full 40-character
+commit SHA, that `build-native-images.yml` and `build-installer-iso.yml`
+carry no conflicting `systemd/mkosi@<sha>` literal of their own, and (when a
+`.mkosi/` checkout is present) that its HEAD matches the pin exactly. Both
+scripts
 are dry-runnable with no network/build required for the no-checkout-yet
 case; `pin-check` runs `check-mkosi-pin.sh` before any build job starts,
 and each `build-*` job re-runs it right after its own bootstrap step.
@@ -740,9 +753,9 @@ preset-reconcile machinery. See `testing.md` for the full assertion
 sequence including the ack-gated notification and tampered-signature
 fail-closed cases.
 
-### Installer ISO (phase 8)
+### Firn installer ISO
 
-`mkosi.profiles/native-installer/` (Include=`shared/native-installer/mkosi.conf`)
+`mkosi.profiles/firn-installer/` (Include=`shared/firn-installer/mkosi.conf`)
 is a payload-free network-installer image: no Snow/Snowfield/Cayo content, no
 `Dependencies=`, `BaseTrees=` reset to empty (cancels the root `mkosi.conf`'s
 `BaseTrees=%O/base` -- this profile must never inherit the shared bootc/
@@ -750,7 +763,7 @@ sysext base). `Format=directory`, `Bootable=no`: mkosi's own UKI/systemd-boot/
 signing pipeline is not used at all. docs/native-ab-contracts.md §8's boot
 chain -- Microsoft firmware db -> Debian-signed shim -> Debian-signed GRUB ->
 Debian-signed stock kernel -> installer initrd/userspace -- is assembled
-entirely OUTSIDE mkosi by `shared/native-installer/tools/build-iso.sh`
+entirely OUTSIDE mkosi by `shared/firn-installer/tools/build-iso.sh`
 (mkosi has no ISO/El Torito output format at all -- checked the pinned man
 page's `Format=` enumeration). That script pulls the signed boot chain
 material straight out of the built rootfs (packages, not anything mkosi
@@ -764,16 +777,21 @@ cryptsetup/TPM/systemd family is pinned `/forky` (reusing
 contract §8's "coherent Forky systemd 261" requirement even though the boot
 KERNEL is stock trixie).
 
+The frontend is the packaged `frostyard-firn` TUI, configured by
+`shared/firn-installer/catalog.json`; Snosi owns the media payload and Firn
+owns installer execution. `shared/firn-installer/README.md` is the current
+boundary reference.
+
 The installer userspace is the ENTIRE built rootfs packed as the kernel's
 initramfs (cpio+zstd, `find`+`cpio` must run in the SAME subshell as the
 `cd` that scopes them -- a `cd` in a subshell that is only the first stage
 of a pipe does not affect the next pipeline stage). A top-level
 `/init -> usr/lib/systemd/systemd` symlink (added by
-`shared/native-installer/postinst/mkosi.postinst.chroot`) means there is no
+`shared/firn-installer/postinst/mkosi.postinst.chroot`) means there is no
 `switch_root`: systemd boots directly as PID 1 with the packed tree as final
 root (no `/etc/initrd-release`, so systemd never enters "initrd mode").
 `Locale=`/`Keymap=`/`Timezone=`/`Hostname=`/`RootPassword=hashed:` are all
-set explicitly in `shared/native-installer/mkosi.conf` so `systemd-firstboot`
+set explicitly in `shared/firn-installer/mkosi.conf` so `systemd-firstboot`
 has nothing left to prompt for -- root-caused live: left unset,
 `systemd-firstboot.service` blocks the ENTIRE boot indefinitely on an
 interactive timezone prompt with no TTY to answer it, which looks exactly
@@ -825,12 +843,12 @@ profile) in place of the trusted GRUB, is rejected by shim itself
 boot is a genuine Secure Boot enforcement result, not an accidentally-
 permissive OVMF configuration. `check-native-publication-guard.sh`'s
 production-name matching (`cayo-ab`/`snow-ab`/`snowfield-ab` only) already
-excludes `native-installer` with no code change needed.
+excludes `firn-installer` with no code change needed.
 
 Two carry-over fixes from the phase 8.1 review, both in
-`shared/native-installer/tools/build-iso.sh`: (1) the script's 2nd argument
+`shared/firn-installer/tools/build-iso.sh`: (1) the script's 2nd argument
 is now an OUTPUT DIRECTORY, not a caller-chosen file path -- it always
-writes the frozen public name (`snosi-native-installer_<version>_x86-64.iso`,
+writes the frozen public name (`snosi-installer_<version>_x86-64.iso`,
 docs/native-ab-contracts.md "Installer ISO") inside it, and stamps the
 version into both the ISO9660 volume ID (`SNOSI_INSTALLER_<version>`, 30
 d-characters, under the 32-char limit) and a
@@ -864,7 +882,11 @@ own-boot-medium refusal in the real initramfs (cayo-ab step 3). First green run
 75/75 (2026-07-15); see testing.md "Phase 8 (ISO install end-to-end)" for the
 full step breakdown and the real product bugs it surfaced.
 
-### snosi-install CLI (Task 8.2)
+### Retired snosi-install CLI (historical Task 8.2)
+
+The in-tree Bash installer and graphical setup described below were replaced
+by Firn. They remain here only as historical rationale for still-named legacy
+tests; do not extend these paths as current installer architecture.
 
 `shared/native-installer/tree/usr/libexec/snosi-install` replaces the
 phase-8.1 placeholder (`test/cayo-ab-install-spike.sh` shipped verbatim at
@@ -987,9 +1009,9 @@ into `PUB_DEST_PATH`; `publish-candidate.sh`/`promote.sh` use
 incident-response tool taking `<product> <version> <dest>` directly) grew
 an optional `--dest-path <path>` override for the same reason, defaulting
 to the unchanged `product_path()` derivation when omitted.
-`prepare-iso-publication.sh` sets BOTH `product` and `channel` to the
-literal string `snosi-native-installer` (matching the frozen object name's
-own prefix, `snosi-native-installer_<version>_x86-64.iso`) rather than
+`prepare-iso-publication.sh` sets BOTH `product` and `channel` to the literal
+string `snosi-installer` (matching the frozen object name's own prefix,
+`snosi-installer_<version>_x86-64.iso`) rather than
 following the OS pipeline's product-vs-channel split, since that string IS
 what `promote.sh`'s outgoing-index archival step greps for.
 
@@ -1406,7 +1428,8 @@ Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GP
 |----------|---------|---------|
 | `build.yml` | Push/PR/dispatch | Build base + sysexts; publish to R2 only outside PRs. The root mkosi build job retains only `contents: read`. |
 | `build-images.yml` | Push/PR/repository_dispatch/dispatch | Matrix build of 6 profiles, push OCI to ghcr.io, generate SBOMs, sign with Cosign |
-| `build-native-images.yml` | Push/PR/repository_dispatch/dispatch; promotion excluded from PRs | Native A/B products + installer ISO build, candidate publish, public-origin verify, protected promote (Phase 7/8) |
+| `build-native-images.yml` | Push/PR/repository_dispatch/dispatch; promotion excluded from PRs | Native A/B product build, candidate publish, public-origin verify, protected promote (Phase 7) |
+| `build-installer-iso.yml` | Relevant main pushes/repository_dispatch/dispatch | Firn installer ISO build, public-origin boot verification, and protected index promotion |
 | `deploy-native-installer-redirect.yml` | Main changes under the Worker / dispatch | Test and deploy the R2-index-derived stable installer redirect |
 | `check-dependencies.yml` | Weekly (Mon 9am UTC) | Check external downloads and inline OCI tool pins, create PRs |
 | `check-packages.yml` | Daily (8am UTC) | Check APT package version updates, create PRs |

@@ -7,6 +7,7 @@ on:
       # The redirect worker is deployed and validated by its own workflows;
       # it cannot affect bootc secure contracts or runner harnesses.
       - "workers/**"
+      - ".github/workflows/build-installer-iso.yml"
       - ".github/workflows/deploy-native-installer-redirect.yml"
       # Workflows that never run on push/PR (scheduled, dispatch-only, or
       # issue/review-event) and repository metadata cannot affect the
@@ -53,6 +54,7 @@ on:
     branches: [main]
     paths-ignore:
       - "workers/**"
+      - ".github/workflows/build-installer-iso.yml"
       - ".github/workflows/deploy-native-installer-redirect.yml"
       # Workflows that never run on push/PR (scheduled, dispatch-only, or
       # issue/review-event) and repository metadata cannot affect the

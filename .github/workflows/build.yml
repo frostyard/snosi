@@ -16,6 +16,7 @@ on:
       - "docs/**"
       - "skills/**"
       - "workers/**"
+      - ".github/workflows/build-installer-iso.yml"
       - ".github/workflows/deploy-native-installer-redirect.yml"
       # Workflows that never run on push/PR (scheduled, dispatch-only, or
       # issue/review-event) and repository metadata cannot affect this
@@ -58,6 +59,7 @@ on:
       - "docs/**"
       - "skills/**"
       - "workers/**"
+      - ".github/workflows/build-installer-iso.yml"
       - ".github/workflows/deploy-native-installer-redirect.yml"
       # Workflows that never run on push/PR (scheduled, dispatch-only, or
       # issue/review-event) and repository metadata cannot affect this

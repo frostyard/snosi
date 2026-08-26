@@ -44,6 +44,8 @@ make_native_fixture() {
         "$FIXTURE/shared/native-ab/keys/"
     cp "$REPO_ROOT/.github/workflows/build-native-images.yml" \
         "$FIXTURE/.github/workflows/"
+    cp "$REPO_ROOT/.github/workflows/build-installer-iso.yml" \
+        "$FIXTURE/.github/workflows/"
 }
 
 initialize_fixture_repository() {

@@ -372,7 +372,7 @@ staged_at=<iso-8601>          staged_at=<iso-8601>
 
 ### 7.3 Native OS + ISO (snosi's own pipeline → snosi .transfer files)
 - OS layout: `os/native/v1/<product>/x86-64/`, transfers `Verify=yes`, signed `SHA256SUMS.gpg` (`snosi/shared/native-ab/channels/*/tree/usr/lib/sysupdate.d/*.transfer`, `snosi/shared/native-ab/publish/promote.sh:300-313`).
-- ISO layout: flat `isos/native/v1/`, frozen name `snosi-native-installer_<14-digit>_x86-64.iso`.
+- ISO layout: flat `isos/native/v1/`, frozen name `snosi-installer_<14-digit>_x86-64.iso`.
 - **Not produced by repogen** — this is snosi's separate publish pipeline (`shared/native-ab/publish/`). 🟢 (signed, schema-checked).
 
 ### 7.4 bootc-debian deb versioning
