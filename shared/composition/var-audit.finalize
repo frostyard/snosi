@@ -12,7 +12,7 @@
 #
 # For each path found under $BUILDROOT/var, this script:
 #   - classifies it against the product's outcome map
-#     (shared/composition/<cayo|snow>/var-outcomes.txt), selected by
+#     (shared/composition/<cayo|snow|flurry|sundog>/var-outcomes.txt), selected by
 #     $IMAGE_ID (snow and snowfield share the snow map: same payload
 #     composition, see shared/composition/snow/mkosi.conf),
 #   - FAILS the build listing every path that matched no glob (an
@@ -57,6 +57,9 @@ case "$IMAGE_ID" in
         ;;
     flurry)
         map="$SRCDIR/shared/composition/flurry/var-outcomes.txt"
+        ;;
+    sundog)
+        map="$SRCDIR/shared/composition/sundog/var-outcomes.txt"
         ;;
     *)
         echo "var-audit.finalize: no /var outcome map wired for IMAGE_ID='$IMAGE_ID'" >&2
