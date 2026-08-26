@@ -495,17 +495,6 @@ jobs:
             echo "mise_version=${LATEST_MISE#v}" >> $GITHUB_OUTPUT
           fi
 
-          # Check ttfx (built from source into the flurry image -- the
-          # omarchy-screensaver renderer; upstream ships no binaries)
-          CURRENT_TTFX=$(jq -r '.ttfx.version' "$CHECKSUMS")
-          LATEST_TTFX=$(gh_api https://api.github.com/repos/omacom-io/ttfx/releases/latest | jq -r '.tag_name')
-          if [[ "$LATEST_TTFX" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
-             ver_gt "${LATEST_TTFX#v}" "$CURRENT_TTFX"; then
-            UPDATES="${UPDATES}ttfx: $CURRENT_TTFX -> ${LATEST_TTFX#v}\n"
-            echo "ttfx_update=true" >> $GITHUB_OUTPUT
-            echo "ttfx_version=${LATEST_TTFX#v}" >> $GITHUB_OUTPUT
-          fi
-
           # Check xdg-terminal-exec (vendored into the flurry image over
           # Debian's 0.12.3, which predates --print-id; the flurry build
           # fails closed when Debian reaches 0.13, retiring this entry)
@@ -603,8 +592,6 @@ jobs:
           JBM_VERSION: ${{ steps.check.outputs.jbm_version }}
           MISE_UPDATE: ${{ steps.check.outputs.mise_update }}
           MISE_VERSION: ${{ steps.check.outputs.mise_version }}
-          TTFX_UPDATE: ${{ steps.check.outputs.ttfx_update }}
-          TTFX_VERSION: ${{ steps.check.outputs.ttfx_version }}
           XTE_UPDATE: ${{ steps.check.outputs.xte_update }}
           XTE_VERSION: ${{ steps.check.outputs.xte_version }}
           SYFT_UPDATE: ${{ steps.check.outputs.syft_update }}
@@ -730,19 +717,6 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VERSION" \
               '.mise.url=$u | .mise.sha256=$s | .mise.version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-          if [[ "$TTFX_UPDATE" == "true" ]]; then
-            VERSION="$TTFX_VERSION"
-            validate_update_value "ttfx" "$VERSION" '^[0-9]+\.[0-9]+\.[0-9]+$'
-            URL="https://github.com/omacom-io/ttfx/archive/refs/tags/v${VERSION}.tar.gz"
-            TMP=$(mktemp)
-            curl -fsSL --max-time 120 -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$VERSION" \
-              '.ttfx.url=$u | .ttfx.sha256=$s | .ttfx.version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi
