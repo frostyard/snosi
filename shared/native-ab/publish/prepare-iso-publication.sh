@@ -15,8 +15,8 @@
 #
 # Unlike prepare-native-publication.sh, this does not derive anything from
 # a built mkosi manifest: the ISO is assembled entirely outside mkosi by
-# shared/native-installer/tools/build-iso.sh, which already enforces the
-# frozen public name (snosi-native-installer_<version>_x86-64.iso) and
+# shared/firn-installer/tools/build-iso.sh, which already enforces the frozen
+# public name (snosi-installer_<version>_x86-64.iso) and
 # stamps the version into the ISO itself -- this script just stages that
 # already-correctly-named file (plus its SHA256SUMS) for the publication
 # pipeline, the same "prepare, then candidate/verify/promote" split every
@@ -24,8 +24,8 @@
 #
 # Usage: prepare-iso-publication.sh <iso-path> <version> <dest-dir>
 #
-#   iso-path  the built ISO, e.g. output/snosi-native-installer_<version>_
-#             x86-64.iso (shared/native-installer/tools/build-iso.sh's
+#   iso-path  the built ISO, e.g. output/snosi-installer_<version>_x86-64.iso
+#             (shared/firn-installer/tools/build-iso.sh's
 #             output). Its basename MUST already be the frozen public name
 #             for the given version -- this script refuses to "publish" a
 #             mis-named file rather than silently renaming it.

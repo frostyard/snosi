@@ -140,13 +140,13 @@ signed promotion, withdrawal) lives in `shared/native-ab/publish/publish-candida
 ```text
 https://repository.frostyard.org/os/native/v1/<product>/x86-64/     # product = cayo | snow | snowfield
 https://repository.frostyard.org/isos/native/v1/
-https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso
+https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso
 https://repository.frostyard.org/ext/<name>/                        # sysexts, unchanged
 ```
 
 The installer `latest` URL is a moving discovery endpoint implemented by
 `workers/native-installer-redirect/`. It returns an uncacheable `302` to the
-single immutable `snosi-native-installer_<version>_x86-64.iso` entry in the
+single immutable `snosi-installer_<version>_x86-64.iso` entry in the
 live R2 `SHA256SUMS`; it carries no independent version state and never proxies
 ISO bytes. `SHA256SUMS` plus `SHA256SUMS.gpg`, not the redirect, remain the
 integrity and authenticity contract.

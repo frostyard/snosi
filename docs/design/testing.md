@@ -820,9 +820,10 @@ un-retried — see CLAUDE.md "Native A/B Prototype".
 
 `test/native-boot-smoke-test.sh` and `test/native-iso-boot-smoke-test.sh` are
 the promotion gate added by `docs/plans/2026-07-17-native-boot-validation-
-design.md`/`...-plan.md`: `build-native-images.yml`'s `test-public-origin`/
-`test-public-origin-iso` jobs run them, against the SAME re-verified candidate
-bytes `verify-remote.sh` just checked, immediately before recording the
+design.md`/`...-plan.md`: `build-native-images.yml`'s `test-public-origin`
+jobs and `build-installer-iso.yml`'s `test-public-origin-iso` job run them
+against the SAME re-verified candidate bytes `verify-remote.sh` just checked,
+immediately before recording the
 `native-verified-<product>`/`native-verified-iso` marker that `promote-*`
 requires -- an image that re-verifies over HTTP but does not boot can no
 longer be promoted. Neither test enforces Secure Boot or TPM (no MOK
@@ -1015,9 +1016,10 @@ artifact tests (including the QEMU `native-ab-update-test.sh` and
 MOK, a persistent vTPM, signing material, or the large real-build artifacts.
 
 Two boot-validation tests now DO run automatically as of 2026-07-17 (see
-"Boot Smoke Tests" above): `build-native-images.yml`'s `test-public-origin`/
-`test-public-origin-iso` jobs run `native-boot-smoke-test.sh`/
-`native-iso-boot-smoke-test.sh` on every build that reaches promotion, and
+"Boot Smoke Tests" above): `build-native-images.yml`'s `test-public-origin`
+jobs run `native-boot-smoke-test.sh`, and `build-installer-iso.yml`'s
+`test-public-origin-iso` job runs `native-iso-boot-smoke-test.sh` on every
+build that reaches promotion; additionally,
 `native-nightly.yml` runs `native-ab-secure-boot-test.sh` in default mode
 nightly (rotating `cayo-ab`/`snow-ab`/`snowfield-ab`), with no GitHub
 environment or repository secrets -- it generates its own ephemeral Secure

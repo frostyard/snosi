@@ -56,12 +56,13 @@ Push/PR events ignore sysext-only dependency metadata
 (`shared/download/sysext-checksums.json`,
 `shared/download/package-versions.json`, `latest-versions.txt`) when those are
 the only changed paths. They also ignore Markdown/docs, agent-context stores,
-the standalone redirect worker, repository metadata (issue templates,
-dependabot/renovate config), workflow files that never run on push/PR
+the standalone installer ISO and redirect workflows, repository metadata
+(issue templates, dependabot/renovate config), workflow files that never run on push/PR
 (scheduled, dispatch-only, or issue/review-event workflows), and sibling
-push/PR workflow files this workflow never reads (`build-native-images.yml`,
-`test-bootc-secure.yml`, `validate.yml`) — `build.yml` is deliberately never
-ignored anywhere because it is the canonical mkosi pin source.
+push/PR workflow files this workflow never reads (`build-installer-iso.yml`,
+`build-native-images.yml`, `test-bootc-secure.yml`, `validate.yml`) —
+`build.yml` is deliberately never ignored anywhere because it is the
+canonical mkosi pin source.
 `test/workflow-path-filter-test.sh` (wired into `validate.yml`) pins every
 expensive workflow's ignore list, including negative assertions for the
 load-bearing triggers (`build.yml` for `build-native-images.yml` via
@@ -186,12 +187,8 @@ the mechanical job-by-job summary.
    a `native-verified-<product>` marker on success. The smoke step's serial
    console log is uploaded as a `native-smoke-console-<product>` artifact
    (`if: always() && steps.smoke.outcome == 'failure'`) so a boot failure is
-   debuggable without re-running the job locally. An equivalent
-   `test-public-origin-iso` job does the same for the installer ISO leg
-   (`verify-remote.sh` against `isos/native/v1`, then `test/
-   native-iso-boot-smoke-test.sh` -- plain OVMF, no Secure Boot, polls the
-   serial log for a login prompt -- then the `native-verified-iso` marker).
-   **The smoke test is now the actual promotion gate**: both the "Record
+   debuggable without re-running the job locally. **The smoke test is the
+   actual promotion gate**: both the "Record
    verified marker" and "Upload verified marker" steps require
    `steps.smoke.outcome == 'success'` in addition to `steps.verify.outcome
    == 'success'`, so a candidate that re-verifies over HTTP but fails to
@@ -205,7 +202,7 @@ the mechanical job-by-job summary.
    (holds `NATIVE_UPDATE_SIGNING_KEY`, the OpenPGP update-signing private
    key). Downloads its own `native-verified-<product>` marker and
    `native-prepared-<product>` artifact (both `continue-on-error: true`);
-    no-ops if either is missing. The four promotion jobs conditionally run an
+    no-ops if either is missing. The three promotion jobs conditionally run an
     `Install rclone` step only when both artifacts are present; it runs
     `apt-get update` immediately before installation to avoid stale
     hosted-runner indexes on delayed reruns. Otherwise writes the signing key to
@@ -226,6 +223,27 @@ here" rather than a failure -- the same pattern `build-images.yml`'s own
 artifact ... continue-on-error: true`). This is what makes one product's
 build/verify/promote failure never block another product's promotion in
 the same run.
+
+### build-installer-iso.yml — Installer ISO Build and Publish
+
+**Trigger and custody:** Main-branch pushes are restricted with a positive
+`paths` list to the Firn installer profile/payload and its actual build,
+trust, publication, and smoke-test inputs. Manual dispatch and the org-wide
+`repository_dispatch` type `build` remain available. The generic dispatch has
+no source-component payload, so it cannot yet distinguish Firn from other
+component releases. There is no pull-request trigger. `native-build` gates R2
+candidate upload (the Debian-signed boot chain uses no Snosi private key), and
+`native-promotion` gates OpenPGP index signing.
+
+**Jobs:** `pin-check` -> `prepare` -> `build-iso` ->
+`test-public-origin-iso` -> `promote-iso`. The verification job re-downloads
+the candidate from `isos/native/v1`, boots it with
+`test/native-iso-boot-smoke-test.sh`, and emits `native-verified-iso` only
+after both byte verification and the serial-login smoke test pass. Promotion
+retains signature-first/manifest-last ordering, then verifies the served
+signed index and stable installer redirect. Its own non-cancelling concurrency
+group serializes installer-index mutations independently from native product
+publication.
 
 **Secret inventory, protected environments, and the full "first production
 publication" checklist:** see `docs/native-ab-publication.md`. Short
@@ -555,4 +573,4 @@ Runs OpenSSF Scorecard analysis for supply-chain security assessment. Publishes 
 | Desktop/server OCI images | ghcr.io/frostyard/ | buildah push + cosign sign + SBOM via ORAS |
 | Manifests | R2 manifests bucket | Direct upload |
 | Native A/B images (cayo-ab/snow-ab/snowfield-ab) | repository.frostyard.org/os/native/v1/\<product\>/x86-64/ | `rclone` candidate upload + independent HTTP re-verify + `promote.sh` (OpenPGP-signed `SHA256SUMS`/`SHA256SUMS.gpg`) via `build-native-images.yml`; production upload not yet exercised, see `docs/native-ab-publication.md` |
-| Native installer stable URL | repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso | Cloudflare Worker derives an uncacheable redirect from the live R2 `SHA256SUMS`; immutable ISO publication remains in `build-native-images.yml` |
+| Native installer stable URL | repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso | Cloudflare Worker derives an uncacheable redirect from the live R2 `SHA256SUMS`; immutable ISO publication runs through `build-installer-iso.yml` |

@@ -20,6 +20,15 @@ trigger_block() { # workflow event
     ' "$workflow"
 }
 
+path_filter_block() { # workflow event filter
+    local workflow=$1 event=$2 filter=$3
+    trigger_block "$workflow" "$event" | awk -v header="    $filter:" '
+        $0 == header { in_filter=1; next }
+        in_filter && $0 ~ /^    [[:alnum:]_-]+:$/ { exit }
+        in_filter { print }
+    '
+}
+
 assert_ignored() { # description workflow event path
     local description=$1 workflow=$2 event=$3 path=$4 block
     block=$(trigger_block "$workflow" "$event")
@@ -40,6 +49,26 @@ assert_not_ignored() { # description workflow event path
     fi
 }
 
+assert_included() { # description workflow event path
+    local description=$1 workflow=$2 event=$3 path=$4 block
+    block=$(path_filter_block "$workflow" "$event" paths)
+    if [[ $block == *"- \"$path\""* ]]; then
+        pass "$description"
+    else
+        fail "$description"
+    fi
+}
+
+assert_positive_path_filter() { # description workflow event
+    local description=$1 workflow=$2 event=$3 block
+    block=$(trigger_block "$workflow" "$event")
+    if [[ $block == *"    paths:"* && $block != *"    paths-ignore:"* ]]; then
+        pass "$description"
+    else
+        fail "$description"
+    fi
+}
+
 common_ignored_paths=(
     '**/*.md'
     '.agents/**'
@@ -49,6 +78,7 @@ common_ignored_paths=(
     'docs/**'
     'skills/**'
     'workers/**'
+    '.github/workflows/build-installer-iso.yml'
     '.github/workflows/deploy-native-installer-redirect.yml'
 )
 
@@ -94,9 +124,50 @@ for name in build-images.yml build-native-images.yml build.yml test-bootc-secure
     done
 done
 
+iso_only_paths=(
+    'mkosi.profiles/firn-installer/**'
+    'shared/firn-installer/**'
+    'test/native-iso-boot-smoke-test.sh'
+)
+for event in push pull_request; do
+    for path in "${iso_only_paths[@]}"; do
+        assert_ignored "build-native-images.yml $event ignores ISO-only $path" \
+            "$WORKFLOWS/build-native-images.yml" "$event" "$path"
+    done
+done
+
+installer_iso_inputs=(
+    '.github/workflows/build-installer-iso.yml'
+    '.github/workflows/build.yml'
+    'cosign.pub'
+    'mkosi.conf'
+    'mkosi.version'
+    'mkosi.profiles/firn-installer/**'
+    'mkosi.sandbox/**'
+    'mkosi.tools.sandbox/**'
+    'shared/download/image-checksums.json'
+    'shared/download/sysext-checksums.json'
+    'shared/download/verified-download.sh'
+    'shared/firn-installer/**'
+    'shared/native-ab/ci/**'
+    'shared/native-ab/keys/import-pubring.gpg'
+    'shared/native-ab/keys/mok-2026.crt'
+    'shared/native-ab/publish/**'
+    'shared/native-ab-secure/package-manager/**'
+    'test/lib/vm.sh'
+    'test/native-iso-boot-smoke-test.sh'
+)
+assert_positive_path_filter 'build-installer-iso.yml push uses only a positive path filter' \
+    "$WORKFLOWS/build-installer-iso.yml" push
+for path in "${installer_iso_inputs[@]}"; do
+    assert_included "build-installer-iso.yml push includes $path" \
+        "$WORKFLOWS/build-installer-iso.yml" push "$path"
+done
+
 # Load-bearing triggers that must never be ignored:
 # - build.yml carries the canonical mkosi pin read by
-#   shared/native-ab/ci/bootstrap-mkosi.sh (used by build-native-images.yml).
+#   shared/native-ab/ci/bootstrap-mkosi.sh (used by both native build
+#   workflows).
 # - check-bootc-publication-guard.sh validates build-images.yml on every
 #   test-bootc-secure contracts run.
 for event in push pull_request; do
@@ -124,6 +195,7 @@ bootc_contract_ignored_paths=(
     '.knowledge/**'
     '.memory/**'
     'skills/**'
+    '.github/workflows/build-installer-iso.yml'
     'README.md'
     'AGENTS.md'
     'shared/download/package-versions.json'

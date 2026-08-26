@@ -206,8 +206,9 @@ jobs:
         run: ./test/update-checksums-split-test.sh
 
       - name: Validate expensive-workflow path filters
-        # Static guard: docs and the standalone redirect worker must not fan
-        # out into image matrices, and Scorecard remains schedule-driven.
+        # Static guard: ISO-only changes run only the installer workflow;
+        # docs and the standalone redirect worker do not fan out into image
+        # matrices, and Scorecard remains schedule-driven.
         run: ./test/workflow-path-filter-test.sh
 
       - name: Validate dependency workflow token fallback

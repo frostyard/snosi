@@ -162,17 +162,47 @@ else
             || { echo "FAIL: $workflow: $job must exclude pull requests" >&2; fail=1; }
     done
 
-    iso_job=$(awk '
+    if grep -Eq '^  (build-iso|test-public-origin-iso|promote-iso):$' "$workflow"; then
+        echo "FAIL: $workflow: installer ISO jobs must live in build-installer-iso.yml" >&2
+        fail=1
+    fi
+fi
+
+iso_workflow=".github/workflows/build-installer-iso.yml"
+if [[ ! -f "$iso_workflow" ]]; then
+    echo "FAIL: missing $iso_workflow" >&2
+    fail=1
+else
+    if grep -Eq '^  pull_request:' "$iso_workflow"; then
+        echo "FAIL: $iso_workflow: protected ISO publication must not run on pull requests" >&2
+        fail=1
+    fi
+
+    for job in build-iso test-public-origin-iso promote-iso; do
+        job_block=$(awk -v job="$job" '
+          $0 == "  " job ":" { capture=1 }
+          capture && /^  [A-Za-z0-9_-]+:$/ && $0 != "  " job ":" { exit }
+          capture { print }
+        ' "$iso_workflow")
+        [[ -n "$job_block" ]] \
+            || { echo "FAIL: $iso_workflow: missing $job job" >&2; fail=1; }
+    done
+
+    build_iso_job=$(awk '
       /^  build-iso:$/ { capture=1 }
       capture && /^  [A-Za-z0-9_-]+:$/ && $0 != "  build-iso:" { exit }
       capture { print }
-    ' "$workflow")
-    [[ -n "$iso_job" ]] \
-        || { echo "FAIL: $workflow: missing build-iso job" >&2; fail=1; }
-    grep -qF 'environment: native-build' <<<"$iso_job" \
-        || { echo "FAIL: $workflow: build-iso must use native-build" >&2; fail=1; }
-    grep -qF "if: github.event_name != 'pull_request'" <<<"$iso_job" \
-        || { echo "FAIL: $workflow: build-iso must exclude pull requests" >&2; fail=1; }
+    ' "$iso_workflow")
+    grep -qF 'environment: native-build' <<<"$build_iso_job" \
+        || { echo "FAIL: $iso_workflow: build-iso must use native-build" >&2; fail=1; }
+
+    promote_iso_job=$(awk '
+      /^  promote-iso:$/ { capture=1 }
+      capture && /^  [A-Za-z0-9_-]+:$/ && $0 != "  promote-iso:" { exit }
+      capture { print }
+    ' "$iso_workflow")
+    grep -qF 'environment: native-promotion' <<<"$promote_iso_job" \
+        || { echo "FAIL: $iso_workflow: promote-iso must use native-promotion" >&2; fail=1; }
 fi
 
 exit "$fail"

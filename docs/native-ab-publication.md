@@ -12,7 +12,7 @@ The pipeline scripts live in `shared/native-ab/publish/`:
 | Script | Purpose |
 |---|---|
 | `prepare-native-publication.sh` | Turns one mkosi build's outputs into the frozen public artifact names + unsigned `SHA256SUMS` + `publication-info.json`. Phase 3. |
-| `prepare-iso-publication.sh` | Sibling of the above for the network-installer ISO (Task 8.2): stages `shared/native-installer/tools/build-iso.sh`'s already-version-stamped-and-named output plus an unsigned `SHA256SUMS` + `publication-info.json` whose `dest_path` is the flat `isos/native/v1` namespace (no per-product/x86-64 subpath). |
+| `prepare-iso-publication.sh` | Sibling of the above for the network-installer ISO (Task 8.2): stages `shared/firn-installer/tools/build-iso.sh`'s already-version-stamped-and-named output plus an unsigned `SHA256SUMS` + `publication-info.json` whose `dest_path` is the flat `isos/native/v1` namespace (no per-product/x86-64 subpath). |
 | `generate-sbom.sh` | Generates `<channel>_<version>.sbom.spdx.json` directly from the mkosi package manifest. Called by `prepare-native-publication.sh`; not normally invoked standalone. |
 | `publish-candidate.sh` | Uploads immutable versioned objects to a per-version candidate staging path. |
 | `verify-remote.sh` | Independently re-verifies every candidate object over HTTP (size, full SHA-256, range GETs) before anything is promoted. |
@@ -161,7 +161,8 @@ API returns `success: true`. It reads `CF_ZONE_ID` and `CF_API_TOKEN` from the
 environment (set by the promote job from the `native-promotion` secrets); the
 CI promote step adds `--purge-hook` only when both are present, so
 staging/rehearsal runs without CF secrets simply skip the purge. The
-`build-native-images.yml` wiring is already in place.
+`build-native-images.yml` and `build-installer-iso.yml` wiring is already in
+place.
 
 A purge-API `success: true` means the purge was *accepted*, not that the edge is
 already serving fresh bytes. So the promote step then runs
@@ -233,15 +234,14 @@ product, just staged by `prepare-iso-publication.sh` instead of
 `prepare-native-publication.sh`:
 
 ```console
-# Build + assemble (see CLAUDE.md "Native A/B Prototype" / `just
-# native-installer-iso`): produces output/snosi-native-installer_<version>_
-# x86-64.iso, already version-stamped and correctly named by
-# shared/native-installer/tools/build-iso.sh itself.
+# Build + assemble (see `just firn-installer-iso`): produces
+# output/snosi-installer_<version>_x86-64.iso, already version-stamped and
+# correctly named by shared/firn-installer/tools/build-iso.sh itself.
 $ VERSION=$(date -u +%Y%m%d%H%M%S)
-$ shared/native-installer/tools/build-iso.sh output/native-installer output "$VERSION"
+$ shared/firn-installer/tools/build-iso.sh output/firn-installer output "$VERSION"
 
 $ shared/native-ab/publish/prepare-iso-publication.sh \
-    "output/snosi-native-installer_${VERSION}_x86-64.iso" "$VERSION" /var/tmp/iso-publish-out
+    "output/snosi-installer_${VERSION}_x86-64.iso" "$VERSION" /var/tmp/iso-publish-out
 $ shared/native-ab/publish/publish-candidate.sh /var/tmp/iso-publish-out rclone:r2:frostyardrepo
 $ shared/native-ab/publish/verify-remote.sh /var/tmp/iso-publish-out \
     https://repository.frostyard.org/isos/native/v1
@@ -250,9 +250,9 @@ $ shared/native-ab/publish/promote.sh --signing-key .snosi-private/os-update-sig
     rclone:r2:frostyardrepo
 ```
 
-`publication-info.json`'s `product`/`channel` are both
-`snosi-native-installer` (matching the frozen object name's literal prefix,
-`snosi-native-installer_<version>_x86-64.iso`) and its `dest_path` is
+`publication-info.json`'s `product`/`channel` are both `snosi-installer`
+(matching the frozen object name's literal prefix,
+`snosi-installer_<version>_x86-64.iso`) and its `dest_path` is
 `isos/native/v1` -- `publish-candidate.sh`/`promote.sh` read that field
 (`PUB_DEST_PATH`, `shared/native-ab/publish/publish-lib.sh`) instead of
 always deriving `os/native/v1/<product>/x86-64`, so no OS-artifact behavior
@@ -263,7 +263,7 @@ path explicitly:
 
 ```console
 $ shared/native-ab/publish/withdraw.sh --dest-path isos/native/v1 \
-    snosi-native-installer 20260714150036 rclone:r2:frostyardrepo
+    snosi-installer 20260714150036 rclone:r2:frostyardrepo
 ```
 
 `test/native-publication-pipeline-test.sh`'s "ISO-shaped fixture leg"
@@ -275,13 +275,13 @@ ISO) as part of the same fast, non-root, per-PR check.
 The user-facing moving URL is:
 
 ```text
-https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso
+https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso
 ```
 
 `workers/native-installer-redirect/` owns the exact-path Cloudflare Worker
 route. The Worker reads `isos/native/v1/SHA256SUMS` directly through an R2
 binding, requires exactly one filename matching
-`snosi-native-installer_<14-digit-version>_x86-64.iso`, confirms that object
+`snosi-installer_<14-digit-version>_x86-64.iso`, confirms that object
 exists with an R2 `head()`, and returns an uncacheable `302` to the immutable
 public URL. Missing, oversized, malformed, or ambiguous indexes and missing
 target objects fail closed with `503`; only `GET` and `HEAD` are accepted. It
@@ -301,7 +301,7 @@ $ shared/native-ab/publish/verify-published-index.sh \
     --expect-version "$RESTORED_VERSION" \
     https://repository.frostyard.org/isos/native/v1
 $ shared/native-ab/publish/verify-installer-redirect.sh \
-    https://repository.frostyard.org/isos/native/v1/snosi-native-installer-latest-x86-64.iso \
+    https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso \
     "$RESTORED_VERSION"
 ```
 
@@ -312,9 +312,9 @@ type drift check, TypeScript check, and Wrangler dry-run before deployment. It
 uses the existing `NATIVE_R2_ACCOUNT_ID` and a dedicated
 `CF_WORKERS_API_TOKEN` in `native-promotion`; scope that token to Worker script
 and route edits for `frostyard.org`. The R2 bucket binding is configured in
-`wrangler.jsonc`, so no S3 access key is exposed to the Worker. After every ISO
-promotion, `build-native-images.yml` runs `verify-installer-redirect.sh` with
-the promoted version.
+`wrangler.jsonc`, so no S3 access key is exposed to the Worker. After every
+ISO promotion, `build-installer-iso.yml` runs
+`verify-installer-redirect.sh` with the promoted version.
 
 ## Retention policy application
 
@@ -382,23 +382,24 @@ real key:
 
 ## CI publication flow
 
-`.github/workflows/build-native-images.yml` automates the procedure above.
-It is a **thin caller**: every build/publish/verify/promote step is a call
-into one of the scripts documented above (or `test/native-ab-secure-
-artifact-test.sh` / `test/snowfield-artifact-test.sh`) -- the only logic
-that lives directly in the workflow YAML is orchestration glue (job
-ordering, secret-file plumbing, disk-space mitigation) that has no
-meaningful existence outside a GitHub Actions runner. If you find yourself
-adding a `jq`/`sha256sum`/`curl` pipeline directly in a `run:` block instead
-of extending one of the in-repo scripts, that is a defect -- scripts are
-testable locally (see "Local rehearsal" below and `shared/native-ab/ci/`);
-raw YAML steps are not.
+`.github/workflows/build-native-images.yml` automates native A/B product
+publication. `.github/workflows/build-installer-iso.yml` independently
+automates installer ISO publication. Both are **thin callers**: every
+build/publish/verify/promote step is a call into one of the scripts documented
+above (or the relevant artifact/smoke test) -- the only logic that lives
+directly in workflow YAML is orchestration glue (job ordering, secret-file
+plumbing, disk-space mitigation) that has no meaningful existence outside a
+GitHub Actions runner. If you find yourself adding a
+`jq`/`sha256sum`/`curl` pipeline directly in a `run:` block instead of
+extending one of the in-repo scripts, that is a defect -- scripts are testable
+locally (see "Local rehearsal" below and `shared/native-ab/ci/`); raw YAML
+steps are not.
 
 ### Trigger
 
-Builds run on **every push and PR to `main`** (mirroring `build-images.yml`,
-same sysext `paths-ignore`), plus `workflow_dispatch` and `repository_dispatch`.
-Protected production assembly and PR validation are separated:
+Native product builds run on **every relevant push and PR to `main`**, plus
+`workflow_dispatch` and `repository_dispatch`. Protected production assembly
+and PR validation are separated:
 
 - **PR builds** run one non-publishing `build-pr` matrix across cayo, snow,
   and snowfield. It generates a per-run RSA-4096 MOK and RSA-2048 PCR signing
@@ -415,16 +416,24 @@ Protected production assembly and PR validation are separated:
   restricts to protected (`main`) branches, so a `workflow_dispatch` fired
   from a feature branch cannot promote either.
 
+Installer ISO builds have no pull-request trigger. They run on manual dispatch,
+the org-wide `repository_dispatch` type `build`, or a main-branch push that
+touches an explicit ISO input such as `shared/firn-installer/**`, its mkosi
+profile, pinned download metadata, trust identities, publication scripts, or
+the ISO smoke test. The generic org dispatch currently carries no source
+component identity, so it cannot yet be narrowed to Firn releases; keeping it
+ensures a newly published `frostyard-firn` package rebuilds the medium. ISO-only
+push changes are ignored by `build-native-images.yml`.
+
 `native-build` must be restricted to protected/default-branch access. This
 keeps production Secure Boot/MOK and PCR signing credentials out of every PR,
 while `build-pr` still validates signing mechanics with disposable credentials.
 The promotion (OpenPGP) key remains main-scoped through `native-promotion`.
 
-The per-ref `concurrency` group
-(`build-native-images-${{ github.ref }}`, `cancel-in-progress` only for PRs)
-ensures two `main`/dispatch runs can never interleave `promote.sh` invocations
-against the same product's live `SHA256SUMS`/`SHA256SUMS.gpg`, while superseded
-PR builds (which never promote) may cancel to save runner time.
+Separate per-ref `concurrency` groups serialize native product and installer
+publication independently. Native PR builds may cancel when superseded; ISO
+runs never cancel because they may already be mutating the live installer
+index.
 
 ### Jobs
 
@@ -436,8 +445,14 @@ PR builds (which never promote) may cancel to save runner time.
 | `build-cayo` / `build-snow` / `build-snowfield` | Bootstraps pinned mkosi, builds the profile, runs the static artifact test(s), `prepare-native-publication.sh --xz`, `publish-candidate.sh` | `native-build` environment; not pull requests |
 | `test-public-origin` | `verify-remote.sh` against the real public URL, one matrix leg per product | -- (read-only, no secrets) |
 | `promote-cayo` / `promote-snow` / `promote-snowfield` | `promote.sh` | `native-promotion` environment |
-| `build-iso` / `test-public-origin-iso` / `promote-iso` | Builds the network installer, verifies its candidate, promotes its signed index, then verifies the stable redirect | `native-build` / `native-promotion` environments as appropriate |
 | `release-notes` | Non-blocking GitHub Release summarizing whichever products actually promoted | -- |
+
+`build-installer-iso.yml` has its own `pin-check` and `prepare` jobs, followed
+by `build-iso` -> `test-public-origin-iso` -> `promote-iso`. The build uses the
+`native-build` environment only for R2 candidate-upload credentials; the
+Debian-signed ISO boot chain consumes no Snosi private signing material.
+Promotion stays in `native-promotion`, retains the OpenPGP key cleanup, and
+verifies both the served signed index and stable redirect.
 
 Each `build-*`/`promote-*` triple is three independent jobs, not a matrix,
 so one product's failure (a build error, a rejected signature, a network
@@ -512,8 +527,8 @@ checklist" below.
 ## First production publication checklist
 
 Everything above this point can be rehearsed locally. This is what remains
-before `build-native-images.yml` is allowed to touch the real
-`repository.frostyard.org` origin:
+before the native image and installer ISO workflows are allowed to touch the
+real `repository.frostyard.org` origin:
 
 1. **Production key ceremony.** Complete "Production key ceremony" above
    for the OpenPGP update-signing key: generate offline, export the public
@@ -568,9 +583,9 @@ before `build-native-images.yml` is allowed to touch the real
    `--purge-hook` -- wire it in as part of this checklist, not before.
 9. **Re-verify after the first real promotion.** `curl -I` the two metadata
    URLs from a network path outside the promotion environment, confirm a
-   second region sees the matching pair, and only then consider
-   `build-native-images.yml` production-ready for unattended pushes to
-   `main`.
+   second region sees the matching pair, and only then consider the native
+   image and installer ISO workflows production-ready for unattended pushes
+   to `main`.
 
 ## Local rehearsal (no real R2/Cloudflare)
 

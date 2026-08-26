@@ -9,25 +9,25 @@
 # repo's single source of truth for the pinned mkosi commit -- Justfile's
 # `mkosi_commit` (used by `just ensure-mkosi`, and therefore every local
 # `just cayo-ab`/`snow-ab`/`snowfield-ab`/etc. build) greps it directly, and
-# .github/workflows/build-native-images.yml's build jobs bootstrap mkosi via
-# shared/native-ab/ci/bootstrap-mkosi.sh, which greps the SAME line -- so
-# there is exactly one implementation of "how mkosi gets bootstrapped", not
-# a second copy that could silently diverge. This script is the explicit
-# regression guard for that property, run as an actual CI step (not just
-# implied by construction):
+# The native image and installer ISO workflow build jobs bootstrap mkosi via
+# shared/native-ab/ci/bootstrap-mkosi.sh, which greps the SAME line -- so there
+# is exactly one implementation of "how mkosi gets bootstrapped", not a second
+# copy that could silently diverge. This script is the explicit regression
+# guard for that property, run as an actual CI step (not just implied by
+# construction):
 #
 #   1. build.yml's pin parses as a plausible full git commit SHA (not a
 #      short SHA, branch name, or tag -- those are not acceptable pins for
 #      a format this repo treats as part of the published image contract,
 #      per the plan's "Treat the mkosi commit as part of the published
 #      image format, not merely a build tool version").
-#   2. build-native-images.yml carries NO literal `systemd/mkosi@<sha>` pin
-#      of its own. This is the specific defect this whole mechanism exists
-#      to prevent -- e.g. someone later copy-pastes a `uses: systemd/
-#      mkosi@...` step from build-images.yml into build-native-images.yml,
-#      pinned to whatever commit build-images.yml happens to carry at that
-#      moment, silently reintroducing a second, independently-updated pin.
-#      If one is ever added, it must be byte-identical to build.yml's.
+#   2. Neither build-native-images.yml nor build-installer-iso.yml carries a
+#      conflicting literal `systemd/mkosi@<sha>` pin. This is the specific
+#      defect this whole mechanism exists to prevent -- e.g. someone later
+#      copy-pastes a `uses: systemd/mkosi@...` step from build-images.yml into
+#      either workflow, pinned to whatever commit build-images.yml happens to
+#      carry at that moment, silently reintroducing a second,
+#      independently-updated pin.
 #   3. If a local mkosi checkout is present (i.e. this is running after
 #      shared/native-ab/ci/bootstrap-mkosi.sh, in CI or locally), its
 #      checked-out HEAD commit equals build.yml's pin exactly.
@@ -53,10 +53,15 @@ root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 mkosi_checkout="${1:-$root_dir/.mkosi}"
 
 build_yml="$root_dir/.github/workflows/build.yml"
-native_yml="$root_dir/.github/workflows/build-native-images.yml"
+build_workflows=(
+    "$root_dir/.github/workflows/build-native-images.yml"
+    "$root_dir/.github/workflows/build-installer-iso.yml"
+)
 
 [[ -f "$build_yml" ]] || { echo "Error: missing $build_yml" >&2; exit 1; }
-[[ -f "$native_yml" ]] || { echo "Error: missing $native_yml" >&2; exit 1; }
+for workflow in "${build_workflows[@]}"; do
+    [[ -f "$workflow" ]] || { echo "Error: missing $workflow" >&2; exit 1; }
+done
 
 # Same extraction Justfile's `mkosi_commit` / bootstrap-mkosi.sh use.
 pin="$(grep -m1 -oE 'systemd/mkosi@[0-9a-f]+' "$build_yml" | cut -d@ -f2 || true)"
@@ -70,18 +75,20 @@ pin="$(grep -m1 -oE 'systemd/mkosi@[0-9a-f]+' "$build_yml" | cut -d@ -f2 || true
 }
 echo "build.yml mkosi pin: $pin"
 
-# Check 2: build-native-images.yml must not carry its own independent pin.
-native_pins="$(grep -oE 'systemd/mkosi@[0-9a-f]+' "$native_yml" | cut -d@ -f2 | sort -u || true)"
-if [[ -n "$native_pins" ]]; then
-    while IFS= read -r native_pin; do
-        [[ -z "$native_pin" ]] && continue
-        if [[ "$native_pin" != "$pin" ]]; then
-            echo "Error: .github/workflows/build-native-images.yml pins systemd/mkosi@$native_pin, which does not match build.yml's $pin -- these must never diverge (Mkosi Pin Governance)" >&2
-            exit 1
-        fi
-    done <<<"$native_pins"
-fi
-echo "ok - build-native-images.yml carries no conflicting mkosi pin"
+# Check 2: build workflows must not carry their own independent pin.
+for workflow in "${build_workflows[@]}"; do
+    workflow_pins="$(grep -oE 'systemd/mkosi@[0-9a-f]+' "$workflow" | cut -d@ -f2 | sort -u || true)"
+    if [[ -n "$workflow_pins" ]]; then
+        while IFS= read -r workflow_pin; do
+            [[ -z "$workflow_pin" ]] && continue
+            if [[ "$workflow_pin" != "$pin" ]]; then
+                echo "Error: $workflow pins systemd/mkosi@$workflow_pin, which does not match build.yml's $pin -- these must never diverge (Mkosi Pin Governance)" >&2
+                exit 1
+            fi
+        done <<<"$workflow_pins"
+    fi
+    echo "ok - $(basename "$workflow") carries no conflicting mkosi pin"
+done
 
 # Check 3: if mkosi has actually been bootstrapped, its HEAD must be the pin.
 if [[ -d "$mkosi_checkout/.git" ]]; then
