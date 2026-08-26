@@ -142,6 +142,13 @@ Live-VM findings (2026-08-26, root-caused on the user's incus install):
   (Omarchy's Arch `theme-system.sh` Yaru action-icon symlinks are NOT
   needed: Debian's yaru-theme-icon already ships
   go-previous/next-symbolic.svg in scalable/actions.)
+- **Screensaver renderer missing** (issue #786): `omarchy-screensaver`
+  runs `ttfx` (omacom-io's Rust port of terminaltexteffects; omarchy
+  migration 1786355450 replaced the Python original). No deb, no upstream
+  binaries — built from the pinned v0.3.2 source tarball at image build
+  (`ttfx.chroot`; trixie's rustc 1.85 suffices; Cargo.lock inside the
+  pinned tarball + `--locked` transitively pins the crate tree; cargo
+  lives only in the discarded build overlay).
 - **Dead `~/Projects` bookmark**: upstream `omarchy-provision-user`
   bookmarks Projects in gtk-3.0/bookmarks but only mkdirs
   Downloads/Pictures/Videos — a genuine upstream gap (only the v3→v4
