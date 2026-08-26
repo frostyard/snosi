@@ -264,10 +264,11 @@ jobs:
       - name: Test publication guards
         run: bats --print-output-on-failure test/publication-guards.bats
 
-      - name: Test runtime etc and duplicate package guards
+      - name: Test runtime etc and package contracts
         run: |
           ./test/runtime-etc-guard-test.sh
           ./test/duplicate-packages-test.sh
+          ./test/base-hardware-utils-test.sh
 
       - name: Test RequiredBy guard and initrd requires-pruning fixtures
         run: |
