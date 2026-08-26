@@ -61,6 +61,14 @@ Snowfield hardware gates remain blocked.
 |-------|--------|--------|
 | **snow** | backports | GNOME desktop, podman, flatpak |
 | **snowfield** | linux-surface | GNOME desktop (Surface devices) |
+| **flurry** | backports | Hyprland desktop modeled after Omarchy |
+| **sundog** | backports | KDE Plasma Wayland, SDDM/Breeze, Flatpak-first Discover |
+
+Sundog is deliberately bootc-only. It translates Snow's workstation policy to
+Plasma—Wayland as the sole offered session, tuned power policy, Flathub,
+Podman/Distrobox, printing/scanning, the shared hardware baseline, and the
+desktop-sysext GUI closure—without creating a native A/B channel. See
+[ADR-0014](../adr/0014-name-kde-bootc-product-sundog.md).
 
 ### Server Images (OCI, pushed to ghcr.io)
 

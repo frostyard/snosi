@@ -29,6 +29,8 @@ The project produces:
 | ------------------- | --------------------------------------------------------------- | ------------- |
 | **snow**            | GNOME desktop with backports kernel                             | directory → OCI (buildah/chunkah) |
 | **snowfield**       | snow with linux-surface kernel for Surface devices              | directory → OCI (buildah/chunkah) |
+| **flurry**          | Hyprland desktop modeled after Omarchy                          | directory → OCI (buildah/chunkah) |
+| **sundog**          | KDE Plasma Wayland desktop with Snow's immutable workstation opinions | directory → OCI (buildah/chunkah) |
 | **cayo**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
 | **cayo-ab-raw**     | Experimental native A/B server image (dev fixture, never published) | GPT disk (EROFS + dm-verity) |
 | **cayo-ab**         | Production native A/B server image (Secure Boot + TPM/LUKS `/var`) | GPT disk (EROFS + dm-verity) |
@@ -267,6 +269,8 @@ Profiles in `mkosi.profiles/` define complete image variants by composing shared
 ```
 mkosi.profiles/
 ├── cayo/           ← Headless server + podman
+├── flurry/         ← Hyprland desktop + backports kernel
+├── sundog/         ← KDE Plasma Wayland desktop + backports kernel (bootc only)
 ├── snow/           ← GNOME desktop + backports kernel
 └── snowfield/      ← GNOME desktop + Surface kernel
 ```
@@ -300,6 +304,8 @@ shared/
 │       └── chunkah-package.sh ← Chunks OCI candidates for efficient updates
 ├── packages/
 │   ├── cayo/mkosi.conf        ← Server packages + podman
+│   ├── flurry/mkosi.conf      ← Hyprland desktop packages
+│   ├── sundog/mkosi.conf      ← KDE Plasma desktop packages
 │   ├── snow/mkosi.conf        ← GNOME desktop packages
 │   ├── edge/mkosi.conf        ← Microsoft Edge browser
 │   ├── azurevpn/mkosi.conf    ← Azure VPN Client

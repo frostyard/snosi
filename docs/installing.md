@@ -15,17 +15,19 @@ installer.
 
 | Path | Choose it when | Products | Target disk |
 | --- | --- | --- | --- |
-| Bootc live ISO | You want the established bootc/composefs layout and graphical installer | `snow`, `snowfield`, `cayo` | At least 30 GiB |
+| Bootc live ISO | You want the established bootc/composefs layout and graphical installer | `snow`, `snowfield`, `flurry`, `sundog`, `cayo` | At least 30 GiB |
 | Native A/B installer | You want signed A/B systemd-sysupdate images, Secure Boot through MOK, and encrypted `/var` | `snow-ab`, `snowfield-ab`, `cayo-ab` | 15.5 GiB for Cayo; 21.5 GiB for Snow or Snowfield |
 
 Use a larger disk than the minimum when possible. The native minimum leaves
 only 4 GiB for `/var`; applications, containers, Flatpaks, home directories,
 and update state all consume `/var`.
 
-Product selection is the same on both paths:
+Available products depend on the installation path:
 
 - **Snow** is the general-purpose GNOME desktop.
 - **Snowfield** is the GNOME desktop for Microsoft Surface devices.
+- **Flurry** is the Hyprland desktop and is available only through bootc.
+- **Sundog** is the KDE Plasma desktop and is available only through bootc.
 - **Cayo** is the headless server image.
 
 The native installer supports UEFI x86-64 systems. Leave Secure Boot enabled;

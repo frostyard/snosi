@@ -11,7 +11,9 @@ factory-`/etc` capture),
 [ADR-0006](../adr/0006-name-triggered-publication-guards.md) (publication
 guards), [ADR-0009](../adr/0009-snosi-env-var-classes.md) (test-hook
 gating), [ADR-0012](../adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md)
-(chunkah xattrs).
+(chunkah xattrs), and
+[ADR-0014](../adr/0014-name-kde-bootc-product-sundog.md) (Sundog's KDE
+bootc-only product boundary).
 
 ## Script Execution Order
 
@@ -23,11 +25,13 @@ Download and install items not available as Debian packages. These run inside th
 
 Per-product BuildScripts/PostInstallationScripts/FinalizeScripts/PostOutputScripts
 live in `shared/composition/<product>/mkosi.conf` (`shared/composition/cayo`,
-`shared/composition/snow`) and are `Include=`d by every profile that ships that
-product's payload — the bootc profile (`cayo`/`snow`/`snowfield`) and the native
-A/B profiles (`cayo-ab-raw`, `cayo-ab`, `snow-ab`, `snowfield-ab`) alike — so the two transports
-cannot drift apart. See CLAUDE.md "Configuration Composition" for the ordering
-rules that apply when editing these fragments.
+`shared/composition/snow`, `shared/composition/flurry`, and
+`shared/composition/sundog`) and are `Include=`d by every profile that ships that
+product's payload. All five bootc profiles select one; the native A/B profiles
+reuse the Cayo or Snow composition so those two products cannot drift between
+transports. Flurry and Sundog intentionally have no native A/B profile. See
+CLAUDE.md "Configuration Composition" for the ordering rules that apply when
+editing these fragments.
 
 **All profiles (shared):**
 
@@ -39,7 +43,7 @@ The base package set in `mkosi.images/base/mkosi.conf` explicitly includes
 `pciutils` and `usbutils`, making `lspci` and `lsusb` available in every product
 rather than depending on a desktop package's transitive dependencies.
 
-**Desktop profiles (snow/snowfield) only:**
+**GNOME desktop profiles (snow/snowfield) only:**
 
 | Script | Location | Purpose |
 |--------|----------|---------|
@@ -57,7 +61,7 @@ bootc and ostree install as regular APT packages from the Frostyard repository (
 - **Runtime lib pinning:** the debs declare only a partial `Depends` list; base `Packages=` keeps the full set of runtime link deps explicit (`libfuse3-4`, `libsoup-3.0-0`, `liblzma5`, `libzstd1`, `libmount1`, `libselinux1`, `libcom-err2`, `libext2fs2t64`, plus the declared ones). Do not remove them from `Packages=` just because apt does not demand them.
 - **History (until 2026-07):** both were compiled from source during the base image build via `shared/bootc/build/bootc.chroot` (BuildScript + `BuildPackages=` overlay deps + rustup toolchain + ostree double-install + stub-deb dpkg registration in `shared/bootc/postinst/bootc-register.chroot`). All of that machinery was removed when the deb path landed; see git history if the in-tree build ever needs resurrecting.
 
-**Bootc secure composition (Task 4):** the three OCI profiles include
+**Bootc secure composition (Task 4):** the five OCI profiles include
 `shared/bootc-secure/mkosi.conf` immediately after the bootc runtime package
 fragment. It owns an isolated, low-priority Forky APT sandbox and an explicit,
 ABI-coherent Forky systemd family, avoiding accidental Trixie/Forky library
@@ -283,13 +287,13 @@ Consumers of the update state:
   version labels. No-ops gracefully on nbc (non-bootc) installs.
 - `bootc-update-notify.path` + `.service` (user scope) with
   `/usr/libexec/bootc-update-notify` — desktop notification. The path unit
-  fires when the semaphore appears mid-session or is modified (newer image
-  re-staged), and PathExists= also triggers at session start when the file
-  already exists; the helper is ack-gated per staged digest (same pattern as
+  fires only when the semaphore is modified; the service's static
+  `graphical-session.target.wants` link handles login while a semaphore
+  already exists. The helper is ack-gated per staged digest (same pattern as
   snosi-etc-drift-notify) so users see one notification per staged update,
   not one per login or trigger. The toast requires the `notify-send` CLI from
-  `libnotify-bin` (the graphical package set `shared/packages/snow/mkosi.conf`,
-  snow+snowfield only) — the transitively-present `libnotify4` is just the
+  `libnotify-bin`, shipped by every graphical package set (Snow/Snowfield,
+  Flurry, and Sundog) — the transitively-present `libnotify4` is just the
   library and does not ship the CLI, so without the package the helper
   `command -v notify-send || exit 0`s into a silent no-op (this affects
   snosi-etc-drift-notify too). Both units set `StartLimitIntervalSec=0`: the

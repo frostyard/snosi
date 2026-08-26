@@ -499,10 +499,13 @@ a package: chatgpt's deb hard-depends on mesa-vulkan-drivers (the
 divergent mesa family's Vulkan ICDs), which snow never pulled — so
 `shared/packages/snow/mkosi.conf` now ships it explicitly (kept in sync
 with gui-base by comments on both sides). Verification procedure for additions
-(run 2026-08-26): flurry closure = `output/base.manifest` ∪ the flurry
-profile manifest; snow closure = base ∪ `apt-get install --simulate` of
-`shared/packages/snow/mkosi.conf` in a podman trixie container using the
-repo's `mkosi.sandbox/etc/apt` config and base's dpkg status.
+(run 2026-08-26): flurry and sundog closures = `output/base.manifest` ∪
+the respective profile manifest; snow closure = base ∪
+`apt-get install --simulate` of `shared/packages/snow/mkosi.conf` in a
+podman trixie container using the repo's `mkosi.sandbox/etc/apt` config
+and base's dpkg status. `test/sundog-profile-test.sh` additionally pins
+Sundog's explicit gui-base package list to exact set parity with
+`shared/packages/gui-base/mkosi.conf`.
 
 **The tripwire**: every gui-base sysext also lists
 `shared/sysext/finalize/sysext-no-divergent-libs.sh` in

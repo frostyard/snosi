@@ -27,6 +27,7 @@ Docs are split by the question they answer (the shape defined by
 - [adr/0011-mkosi-bootstrapped-and-pin-shared.md](adr/0011-mkosi-bootstrapped-and-pin-shared.md) — mkosi runs from a repo-local checkout pinned to the workflow's action commit, bootstrapped pre-sudo
 - [adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md](adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md) — OCI layers are chunked by changelog-derived update cadence; secure images chunk before digest sealing, never after
 - [adr/0013-no-requiredby-enablement-prune-stale-requires.md](adr/0013-no-requiredby-enablement-prune-stale-requires.md) — shipped units never use RequiredBy= enablement (CI guard), and the native A/B initrd prunes stale .requires links that would brick boot at "Failed to isolate default target"
+- [adr/0014-name-kde-bootc-product-sundog.md](adr/0014-name-kde-bootc-product-sundog.md) — the KDE Plasma product is Sundog, carries Snow's immutable desktop opinions through a Wayland/SDDM/Flatpak translation, and remains bootc-only
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design
