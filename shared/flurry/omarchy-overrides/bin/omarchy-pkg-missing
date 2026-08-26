@@ -3,13 +3,13 @@
 # omarchy:summary=Returns true if any of the named packages are missing from the system (or false if they're all there).
 # omarchy:args=<packages...>
 
-# snosi override: Debian dpkg instead of pacman; callers often pass Arch
-# package names, so fall back to a same-named command on PATH.
+# snosi override: Debian dpkg + PATH + Arch-name mapping instead of pacman
+# (see omarchy-pkg-present; shared resolution in omarchy-snosi-lib).
+
+source /usr/share/omarchy/bin/omarchy-snosi-lib
 
 for pkg in "$@"; do
-  if ! dpkg -s "$pkg" &>/dev/null && ! command -v "$pkg" &>/dev/null; then
-    exit 0
-  fi
+  snosi_pkg_present_one "$pkg" || exit 0
 done
 
 exit 1
