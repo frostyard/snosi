@@ -112,6 +112,14 @@ just flurry                      # or: sudo .mkosi/bin/mkosi --profile flurry -f
   base ships their units); `omarchy-theme-set <theme>` end to end; app
   launches work (`gtk-launch` from libgtk-3-bin — omarchy launches EVERY
   desktop entry via `uwsm-app -- gtk-launch <id>`).
+- **Sysext caveat (root-caused live)**: app sysexts built as deltas vs
+  BASE carry every GUI lib base lacks -- chatgpt/claude-desktop ship
+  trixie's libxkbcommon 1.7, which shadow-downgrades flurry's backports
+  1.13 on merge and kills Hyprland at the next greeter start (harmless
+  same-version shadowing on snow). Until the sysext/product lib story is
+  resolved (see the tracking issue), treat lib-heavy Electron sysexts as
+  incompatible with flurry; recovery is deleting the extension symlink
+  from /var/lib/extensions (offline if needed) and rebooting.
 - incus VM testing: default storage pool may be a small loop file — a
   sparse 50G root + a multi-GB podman pull can ENOSPC-kill qemu (state
   ERROR). Check `incus storage info default` first.
