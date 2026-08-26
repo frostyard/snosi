@@ -1,0 +1,25 @@
+#!/bin/bash
+set -euo pipefail
+
+# ttfx: omacom-io's single-binary Rust port of terminaltexteffects -- the
+# renderer behind omarchy-screensaver (issue #786; omarchy replaced the
+# Python `terminaltexteffects` with it in migration 1786355450). No Debian
+# package and upstream publishes no prebuilt binaries, so build from the
+# pinned release tarball. The tarball pin transitively pins the whole
+# crate dependency tree: Cargo.lock ships inside it and --locked makes
+# cargo refuse any drift, with cargo's own checksum enforcement on every
+# crate download. Needs BuildPackages=cargo (shared/composition/flurry).
+# Writes to $DESTDIR only (frostyard/snosi#293).
+
+source "$SRCDIR/shared/download/verified-download.sh"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+verified_download "ttfx" "$TMP/ttfx.tar.gz"
+tar -xzf "$TMP/ttfx.tar.gz" -C "$TMP" --strip-components=1
+[[ -f "$TMP/Cargo.lock" ]] || { echo "ttfx.chroot: pinned tarball ships no Cargo.lock; refusing an unpinned dependency build" >&2; exit 1; }
+CARGO_HOME="$TMP/cargo" cargo build --release --locked --manifest-path "$TMP/Cargo.toml"
+"$TMP/target/release/ttfx" --version >/dev/null
+install -D -m 0755 "$TMP/target/release/ttfx" "$DESTDIR/usr/bin/ttfx"
+
+echo "ttfx installed: $("$TMP/target/release/ttfx" --version 2>/dev/null || echo built)"
