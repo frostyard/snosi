@@ -1,18 +1,24 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Per-user desktop notification for a staged OS update. Ack-gated per staged
 # digest: notifies once per staged update, not per login or path trigger.
+# Activated two ways, both static (no [Install]): its own
+# graphical-session.target.wants/ link runs it once at session start
+# (covers logging in while an update is already staged -- the condition
+# below no-ops it otherwise), and bootc-update-notify.path triggers it when
+# the semaphore is written mid-session. The path unit deliberately has no
+# PathExists= (level-triggered conditions retrigger-loop on a file that
+# persists until reboot -- see its header), so this wants link is
+# load-bearing, not a convenience.
 [Unit]
 Description=Notify about a staged OS update pending reboot
 After=graphical-session.target
 ConditionPathExists=/run/snosi/update-staged
-# See bootc-update-notify.path: one staging can trigger this several times in a
-# burst. Repeat runs no-op via the per-digest ack but still count as starts, so
-# disable the default start-rate limit to avoid a spurious start-limit failure.
+# One staging can trigger this several times in a burst (see the path
+# unit). Repeat runs no-op via the per-digest ack but still count as
+# starts, so disable the default start-rate limit to avoid a spurious
+# start-limit failure.
 StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
 ExecStart=/usr/libexec/bootc-update-notify
-
-# No [Install]: triggered solely by bootc-update-notify.path (whose
-# PathExists= also fires at session start when the semaphore already exists).
