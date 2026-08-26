@@ -32,10 +32,13 @@ changes. Origin story: PRs #772–#778, firn#81, issue #777.
   `flurry-sddm-state-seed.service` (+ `usr/libexec/` script),
   `user-preset/90-flurry.preset`.
 - `shared/flurry/scripts/build/omarchy.chroot` — the vendor script (below).
-- `shared/flurry/scripts/build/flurry-extras.chroot` — Nerd Font + mise.
+- `shared/flurry/scripts/build/flurry-extras.chroot` — Nerd Font + mise +
+  upstream xdg-terminal-exec v0.14.x vendored over Debian's 0.12.3 (omarchy
+  needs `--print-id`, added upstream in 0.13.0; a dpkg version guard fails
+  the build — retire signal — once Debian ships >= 0.13).
 - `shared/flurry/omarchy-overrides/` — whole-file command replacements.
 - `shared/flurry/omarchy-neutralize-allow.txt` — guard allowlist.
-- Pins: `omarchy`, `jetbrains-mono-nerd`, `mise` in
+- Pins: `omarchy`, `jetbrains-mono-nerd`, `mise`, `xdg-terminal-exec` in
   `shared/download/image-checksums.json`, refreshed by
   `.github/workflows/check-dependencies.yml` (omarchy follows release TAGS,
   not HEAD, deliberately).
@@ -69,7 +72,9 @@ changes. Origin story: PRs #772–#778, firn#81, issue #777.
    `monitor.reserved` nil-guard (remove at hyprland ≥ 0.56 in backports);
    foot 1.21 `[colors-dark]`→`[colors]` + `cursor=`→`[cursor]` (remove at
    foot ≥ 1.23); Qt 6.8 QML reserved word `transient` renamed in the
-   notifications plugin (remove at Qt ≥ 6.9); Homebrew PATH appended to
+   notifications plugin (remove at Qt ≥ 6.9); `~/Projects` added to
+   omarchy-provision-user's mkdir (upstream gap — it bookmarks Projects but
+   never creates it; remove when upstream fixes); Homebrew PATH appended to
    `default/bash/env-bootstrap` (the single PATH authority: skel .bashrc,
    uwsm env.d, profile.d, rc chain all source it — hook PATH/env things
    THERE, nowhere else; no shell on either product is a login shell, so

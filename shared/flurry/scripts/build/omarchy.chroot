@@ -276,6 +276,15 @@ BREW
 awk -v block="$brew_block" '/^export PATH$/ { print block; print ""; } { print }' "$EB" >"$EB.tmp"
 mv "$EB.tmp" "$EB"
 sh -n "$EB" || { echo "omarchy.chroot: patched env-bootstrap fails sh -n" >&2; exit 1; }
+# Upstream gap (not trixie drift): omarchy-provision-user bookmarks
+# ~/Projects in gtk-3.0/bookmarks but only ever mkdirs Downloads/Pictures/
+# Videos -- the fresh-install path never creates Projects (only the v3->v4
+# upgrade script does), leaving a dead file-manager bookmark. Remove when
+# upstream adds Projects to this mkdir (candidate for an upstream PR).
+compat_patch "$OMARCHY/bin/omarchy-provision-user" \
+    'mkdir -p ~/Downloads ~/Pictures ~/Videos ~/.config/gtk-3.0' \
+    's|mkdir -p ~/Downloads ~/Pictures ~/Videos ~/.config/gtk-3.0|mkdir -p ~/Downloads ~/Projects ~/Pictures ~/Videos ~/.config/gtk-3.0|' \
+    'upstream missing ~/Projects mkdir'
 
 # --- snosi override layer ---------------------------------------------------
 # Whole-file replacements for commands whose Arch mechanics are remapped;

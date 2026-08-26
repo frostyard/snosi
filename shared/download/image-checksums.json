@@ -39,6 +39,11 @@
     "sha256": "f2092b1e67f0abc8803d3be120dd2bc5b656dd99680ba3159f710e149da10d05",
     "version": "2026.8.12"
   },
+  "xdg-terminal-exec": {
+    "url": "https://github.com/Vladimir-csp/xdg-terminal-exec/archive/refs/tags/v0.14.3.tar.gz",
+    "sha256": "82ac2dfdb357361d15f5163cdeb3cfd457bbb30bf5d2e14436393f493bd32afe",
+    "version": "0.14.3"
+  },
   "cosign-installer": {
     "url": "https://github.com/sigstore/cosign/releases/download/v2.6.2/cosign-linux-amd64",
     "sha256": "d437b8f0d30f5dec169337607fcfa0238de1348503e175f1bb5b94330b1ee409",

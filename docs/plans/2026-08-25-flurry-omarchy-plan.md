@@ -123,6 +123,31 @@ static wants, `Before=display-manager.service`,
 machine's sole uid>=1000 account on first boot, covering every install
 method; SDDM owns the file from the first real login.
 
+Live-VM findings (2026-08-26, root-caused on the user's incus install):
+- **Screensaver refused to launch** ("only runs in Alacritty, Foot, Ghostty,
+  or Kitty"): `omarchy-launch-screensaver` gates on
+  `xdg-terminal-exec --print-id`, which landed upstream in 0.13.0; trixie's
+  0.12.3 *discards* the unknown option (and launches a bare terminal), so the
+  id was always empty. Fixed by vendoring upstream v0.14.3 (single-file
+  POSIX-sh reference implementation, flag superset of 0.12.3) over
+  `/usr/bin/xdg-terminal-exec` in `flurry-extras.chroot` — pinned in
+  `image-checksums.json`, tracked by check-dependencies, and guarded by a
+  build-time `dpkg --compare-versions` check that fails the build (retire
+  signal) once Debian ships >= 0.13. `omarchy-default-terminal`'s show/set
+  flow depends on the same flag.
+- **Nautilus/GTK icons rendered as scaled-up blurs**: Yaru/Adwaita icons are
+  almost entirely SVG and `librsvg2-common` (the SVG gdk-pixbuf loader) is
+  only a Recommends of the GTK stack, which mkosi does not install; snow
+  inherits it via the GNOME meta packages. Added to the flurry package set.
+  (Omarchy's Arch `theme-system.sh` Yaru action-icon symlinks are NOT
+  needed: Debian's yaru-theme-icon already ships
+  go-previous/next-symbolic.svg in scalable/actions.)
+- **Dead `~/Projects` bookmark**: upstream `omarchy-provision-user`
+  bookmarks Projects in gtk-3.0/bookmarks but only mkdirs
+  Downloads/Pictures/Videos — a genuine upstream gap (only the v3→v4
+  upgrade script creates it). Compat-patched the mkdir line; candidate for
+  an upstream basecamp PR.
+
 ## Installer integration (firn, 2026-08-25)
 
 Firn is the installer (single TUI binary; ISO built by snosi's
