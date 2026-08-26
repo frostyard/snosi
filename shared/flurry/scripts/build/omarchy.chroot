@@ -30,6 +30,41 @@ SKEL="$DESTDIR/etc/skel"
 # --- /usr/share/omarchy: the runtime tree ----------------------------------
 mkdir -p "$OMARCHY"
 cp -a "$SRC"/. "$OMARCHY"/
+# On-machine agent skills: omarchy-provision-user symlinks every directory
+# under default/agents/skills/ into each user's agent skill dirs
+# (~/.claude/skills, ~/.codex/skills, ...). Upstream ships the end-user
+# `omarchy` skill there; we add two:
+# 1. The Quickshell plugin/IPC guide (upstream keeps it repo-only at
+#    agents/skills/shell-dev.md) wrapped as an installable skill, so
+#    on-machine agents can WRITE shell plugins/applets, not just configs.
+#    Deliberate divergence from upstream's install set; grep-guarded so a
+#    re-pin that moves the file forces a re-triage.
+[[ -f "$OMARCHY/agents/skills/shell-dev.md" ]] || {
+    echo "omarchy.chroot: agents/skills/shell-dev.md vanished upstream -- re-triage the shell-dev skill vendoring" >&2
+    exit 1
+}
+mkdir -p "$OMARCHY/default/agents/skills/omarchy-shell-dev"
+{
+    cat <<'FRONTMATTER'
+---
+name: omarchy-shell-dev
+description: >
+  Write or modify Quickshell plugins/widgets/applets for the omarchy shell
+  (bar widgets, panels, IPC handlers). Use when creating a plugin under
+  ~/.config/omarchy/plugins/, editing manifest.json, calling omarchy-shell
+  IPC, or extending the bar beyond what shell.json configures. The plain
+  omarchy skill covers configuration; this one covers plugin CODE.
+---
+
+FRONTMATTER
+    cat "$OMARCHY/agents/skills/shell-dev.md"
+} >"$OMARCHY/default/agents/skills/omarchy-shell-dev/SKILL.md"
+# 2. The Flurry-deltas skill (snosi-authored): stops on-machine agents
+#    giving Arch/pacman advice on this Debian image-based system.
+mkdir -p "$OMARCHY/default/agents/skills/flurry"
+install -m 0644 "$SRCDIR/shared/flurry/agent-skills/flurry/SKILL.md" \
+    "$OMARCHY/default/agents/skills/flurry/SKILL.md"
+
 # Repo-only content that is never installed (omarchy's PKGBUILD excludes
 # these too) and Arch-only machinery that must not ship on Debian/immutable.
 rm -rf "$OMARCHY"/.github "$OMARCHY"/.editorconfig "$OMARCHY"/.gitignore \
