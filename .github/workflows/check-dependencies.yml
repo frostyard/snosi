@@ -507,9 +507,15 @@ jobs:
 
           # Cosign v3 cannot verify these key-signed images when GitHub
           # provenance attestations are present, so follow stable v2 only.
+          # v2.6.3-v2.6.5 regressed the same way for `verify --key` on
+          # attested digests (bisected 2026-08-26; 2.6.2 last good), so they
+          # are excluded explicitly. A future v2 release may fix it: the
+          # secure-build "Re-verify key signature after attestation" step is
+          # the arbiter -- if a proposed bump passes it, drop it from this
+          # blocklist.
           CURRENT_COSIGN=$(awk '$1 == "cosign-release:" { gsub(/"/, "", $2); print $2; exit }' .github/workflows/build-images.yml)
           LATEST_COSIGN=$(gh_api 'https://api.github.com/repos/sigstore/cosign/releases?per_page=100' |
-            jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name | select(test("^v2\\.[0-9]+\\.[0-9]+$"))' |
+            jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name | select(test("^v2\\.[0-9]+\\.[0-9]+$")) | select(IN("v2.6.3", "v2.6.4", "v2.6.5") | not)' |
             sort -V | tail -n1)
           if [[ "$LATEST_COSIGN" =~ ^v2\.[0-9]+\.[0-9]+$ ]] &&
              ver_gt "${LATEST_COSIGN#v}" "${CURRENT_COSIGN#v}"; then
