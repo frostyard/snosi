@@ -1,0 +1,5 @@
+# localsend sysext: LocalSend file sharing (Flutter), relocated /opt -> /usr/lib
+/usr/lib/localsend_app/localsend_app
+/usr/bin/localsend
+/usr/bin/localsend_app
+/usr/share/applications/localsend_app.desktop

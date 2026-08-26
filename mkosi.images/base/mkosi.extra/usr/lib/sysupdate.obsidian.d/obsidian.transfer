@@ -1,0 +1,20 @@
+[Transfer]
+Features=obsidian
+Verify=true
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/obsidian/
+MatchPattern=obsidian_@v_%w_%a.raw.zst \
+             obsidian_@v_%w_%a.raw.xz \
+             obsidian_@v_%w_%a.raw.gz \
+             obsidian_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=obsidian_@v_%w_%a.raw.zst \
+             obsidian_@v_%w_%a.raw.xz \
+             obsidian_@v_%w_%a.raw.gz \
+             obsidian_@v_%w_%a.raw
+CurrentSymlink=obsidian.raw
