@@ -505,9 +505,9 @@ Native A/B images (`/usr/lib/snosi/native-ab` marker) never run bootc/nbc.
 
 ### Base Image: bootc + ostree from Frostyard debs
 
-The base package set explicitly includes `pciutils` and `usbutils`, so every
-product provides host PCI and USB diagnostics without relying on transitive
-dependencies.
+The base package set explicitly includes `pciutils`, `usbutils`, and `socat`,
+so every product provides host PCI/USB diagnostics and a general-purpose
+bidirectional relay without relying on transitive dependencies.
 
 bootc and ostree install as regular APT packages (`bootc`, `libostree-1-1` — the latter ships the library AND the ostree CLI) from the Frostyard repository, built and published by [frostyard/bootc-debian](https://github.com/frostyard/bootc-debian). Debian Trixie ships no bootc package and only ostree 2025.2 (too old for current bootc), hence the external packaging.
 

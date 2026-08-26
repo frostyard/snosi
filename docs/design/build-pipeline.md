@@ -36,8 +36,9 @@ rules that apply when editing these fragments.
 | `brew.chroot` | `shared/scripts/build/` | Downloads Homebrew installer via `verified_download()`, runs in non-interactive mode, creates `$DESTDIR/usr/share/homebrew.tar.zst` (installed into the image by mkosi), sets `user.component=linuxbrew` xattr for chunkah |
 
 The base package set in `mkosi.images/base/mkosi.conf` explicitly includes
-`pciutils` and `usbutils`, making `lspci` and `lsusb` available in every product
-rather than depending on a desktop package's transitive dependencies.
+`pciutils`, `usbutils`, and `socat`, making `lspci`, `lsusb`, and a
+general-purpose bidirectional relay available in every product rather than
+depending on a desktop package's transitive dependencies.
 
 **Desktop profiles (snow/snowfield) only:**
 
