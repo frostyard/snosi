@@ -549,6 +549,28 @@ nonfatal. The GitHub-release DEB's complete `Depends` expression must pass
 `assert_deb_dependencies_satisfied` before `dpkg -i`; add newly required
 runtime packages through `Packages=` rather than installing them implicitly.
 
+**Desktop-app sysexts build against `gui-base`, not `base` (issue #781):**
+app sysext deltas omit only packages their BUILD BASE has, so base-built
+Electron/GTK deltas carried the whole GUI closure — and products that pin
+those libs from other suites (flurry: xkbcommon/pipewire/alsa/mesa from
+backports) got shadow-DOWNGRADED for all of `/usr` on merge (killed
+Hyprland, root-caused live 2026-08-25). `mkosi.images/gui-base` is an
+internal never-published directory image (base + common GUI lib closure);
+the nine desktop-app sysexts use `Dependencies=gui-base` +
+`BaseTrees=%O/gui-base` + the `sysext-no-divergent-libs.sh` finalize
+tripwire (fails the build on any delta file matching
+`shared/sysext/divergent-lib-families.txt`). THE CONTRACT: every gui-base
+package must be in EVERY desktop product's closure (presence, not
+version, drives delta omission — each product supplies its own suite's
+version at merge). Packages absent from a desktop product stay OUT
+(libxss1/zenity/fonts-liberation/libayatana-appindicator3-1 today).
+Wiring parity and script behavior are pinned by
+`test/sysext-divergent-libs-test.sh` (validate.yml). Server sysexts stay
+base-built (incus needs its qemu GUI libs on cayo); content-only rebases
+require a `SYSEXT_REVISION` bump or the republish silently skips. Full
+pattern: `docs/design/sysexts.md` "Desktop-App Sysexts Build Against
+gui-base".
+
 Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var` at runtime. Configs needed in `/etc` must be:
 
 1. Captured to `/usr/share/factory/etc` during build (via `mkosi.finalize`) — capture ONLY the specific paths the sysext's tmpfiles rules reference, never all of `/etc` (the buildroot `/etc` is the merged base view; a full capture ships `/etc/shadow` and SSH host keys in the published sysext)

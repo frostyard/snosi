@@ -274,6 +274,9 @@ jobs:
           ./test/required-by-guard-test.sh
           ./test/etc-overlay-prune-test.sh
 
+      - name: Test gui-base sysext divergent-lib contract
+        run: ./test/sysext-divergent-libs-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:
