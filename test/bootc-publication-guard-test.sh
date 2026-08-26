@@ -27,7 +27,7 @@ make_fixture() {
         "$fixture/shared/bootc-secure/ci" \
         "$fixture/.github/workflows"
 
-    for profile in cayo snow snowfield; do
+    for profile in cayo snow snowfield flurry; do
         mkdir -p "$fixture/mkosi.profiles/$profile"
         printf 'Include=%%D/shared/bootc-secure/mkosi.conf\n' >"$fixture/mkosi.profiles/$profile/mkosi.conf"
     done
