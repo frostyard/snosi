@@ -19,3 +19,36 @@ snosi_immutable() {
     "Apps: 'flatpak install <app>' -- CLI tools: 'brew install <tool>'" \
     "or 'mise use -g <tool>' -- system services: snosi sysexts."
 }
+
+# Package-presence resolution for omarchy's Arch-named gating calls
+# (omarchy-pkg-present/-missing): callers pass Arch package names, which
+# often differ from what flurry actually ships. Resolution order:
+#   1. dpkg -s <name>           (image-installed debs)
+#   2. command -v <name>        (sysext-merged binaries -- sysexts overlay
+#                                /usr but never the dpkg database)
+#   3. the same two checks with a trailing "-bin" stripped (AUR naming:
+#      voxtype-bin, nordvpn-bin, microsoft-edge-stable-bin, ...)
+#   4. an explicit Arch->Debian alias for names the suffix rule cannot fix.
+# Keep the alias table minimal and only for things flurry can actually
+# have; an unshipped app correctly stays "missing".
+declare -A _SNOSI_PKG_ALIASES=(
+  [visual-studio-code-bin]="code"
+  [libreoffice-fresh]="libreoffice"
+)
+
+snosi_pkg_present_one() {
+  local pkg="$1"
+  dpkg -s "$pkg" &>/dev/null && return 0
+  command -v "$pkg" &>/dev/null && return 0
+  if [[ "$pkg" == *-bin ]]; then
+    local stripped="${pkg%-bin}"
+    dpkg -s "$stripped" &>/dev/null && return 0
+    command -v "$stripped" &>/dev/null && return 0
+  fi
+  local alias="${_SNOSI_PKG_ALIASES[$pkg]:-}"
+  if [[ -n "$alias" ]]; then
+    dpkg -s "$alias" &>/dev/null && return 0
+    command -v "$alias" &>/dev/null && return 0
+  fi
+  return 1
+}
