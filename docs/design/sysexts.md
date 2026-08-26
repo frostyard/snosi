@@ -463,6 +463,70 @@ succeeds the moment the cache is stale or absent.
   own copy of either will mask newer base state the same way the icon cache
   did. Evaluate per sysext.
 
+## Desktop-App Sysexts Build Against gui-base (issue #781)
+
+App sysexts are `Overlay=yes` deltas: apt omits from the delta exactly the
+packages the *build base* already has. Built against the server-ish `base`,
+an Electron/GTK app's delta carried its whole GUI closure — including
+libraries desktop products pin from **other suites**. Flurry ships
+libxkbcommon/pipewire/alsa/mesa from trixie-backports; the merged delta's
+trixie copy shadow-**downgrades** the product's version for the entire
+`/usr` overlay (root-caused live 2026-08-25: chatgpt + claude-desktop
+deltas shipped libxkbcommon 1.7 over flurry's 1.13 and killed Hyprland at
+the next greeter start with a missing `V_1.11.0` symbol; snow suffered the
+same shadowing on mesa but survived because gbm's ABI tolerated it).
+
+**The fix — `mkosi.images/gui-base`**: an internal, never-published
+directory image (base + the common GUI lib closure). Desktop-app sysexts
+(1password, azurevpn, bitwarden, chatgpt, claude-desktop, edge,
+github-copilot, sunshine, vscode) set `Dependencies=gui-base` +
+`BaseTrees=%O/gui-base`, so their deltas omit the entire common GUI stack
+and each product supplies its own suite's version at merge time.
+
+**The contract** (stated in gui-base's own conf): every package in
+gui-base must be in the installed closure of EVERY desktop product.
+Package *presence* is what drives delta omission — versions are
+irrelevant, so gui-base installs plain trixie even where products use
+backports. A package some desktop product lacks must stay OUT (it would
+strip that lib from deltas and break the app on that product): today
+libxss1 and xdg-utils (absent from snow), zenity / fonts-liberation /
+the ayatana-appindicator+dbusmenu stack (absent from flurry), and
+gnupg2 / libminiupnpc18 (absent from both) stay in the deltas that need
+them, which is safe — a lib no product ships from a divergent suite
+cannot shadow-downgrade anything. The closure can also be GROWN to admit
+a package: chatgpt's deb hard-depends on mesa-vulkan-drivers (the
+divergent mesa family's Vulkan ICDs), which snow never pulled — so
+`shared/packages/snow/mkosi.conf` now ships it explicitly (kept in sync
+with gui-base by comments on both sides). Verification procedure for additions
+(run 2026-08-26): flurry closure = `output/base.manifest` ∪ the flurry
+profile manifest; snow closure = base ∪ `apt-get install --simulate` of
+`shared/packages/snow/mkosi.conf` in a podman trixie container using the
+repo's `mkosi.sandbox/etc/apt` config and base's dpkg status.
+
+**The tripwire**: every gui-base sysext also lists
+`shared/sysext/finalize/sysext-no-divergent-libs.sh` in
+`FinalizeScripts=`, which fails the build if the delta contains any file
+matching `shared/sysext/divergent-lib-families.txt` (xkbcommon, pipewire,
+mesa, alsa, hyprland, systemd families). This catches the two rot modes:
+gui-base losing a package, and apt *upgrading* a lib into the delta
+because the app now requires a newer version than gui-base carries.
+`test/sysext-divergent-libs-test.sh` (wired into `validate.yml`) pins the
+script's behavior plus the wiring parity: BaseTrees=gui-base ⇔ tripwire
+present, in both directions.
+
+**Deliberately still base-built**: server/CLI sysexts, including incus —
+it carries qemu's GUI libs precisely because cayo (no GUI closure) needs
+them in the delta. Consequence: enabling lib-heavy *server* sysexts on
+flurry remains cautioned (skills/flurry/SKILL.md), and sysexts built in
+**other repositories** are outside this guarantee entirely — an updex-side
+merge-time shadow check is the possible future defense for those
+(issue #781's option 4).
+
+**Publishing note**: rebasing a sysext onto gui-base changes content
+without changing its KEYPACKAGE version, so each moved sysext carries a
+`SYSEXT_REVISION` bump — without it the republish is silently skipped
+(`skip-duplicates`) and installs keep the shadowing deltas forever.
+
 ## Adding a New Sysext
 
 1. Create `mkosi.images/<name>/mkosi.conf` following the pattern above

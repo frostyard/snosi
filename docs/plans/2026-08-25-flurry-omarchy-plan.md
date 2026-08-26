@@ -183,6 +183,13 @@ key pre-creates the home dir, silently skipping skel — fatal for flurry
   as `custom_picker_binary` — verify xdph falls back cleanly, else trim the
   skel config.
 - ufw-docker integration when the docker sysext is enabled.
+- ~~Sysext deltas shadow-downgrading flurry's backports libs (issue
+  #781)~~ FIXED (2026-08-26): the nine desktop-app sysexts now build
+  against `gui-base` so their deltas carry no product-divergent GUI libs;
+  see docs/design/sysexts.md "Desktop-App Sysexts Build Against gui-base".
+  Residual: server sysexts (incus) and externally-built sysexts remain
+  outside the guarantee — an updex merge-time shadow check (issue #781
+  option 4) is the future defense for those.
 - First-login blips seen in the VM, benign but untriaged: a stray ghostty
   instance killed by `omarchy-restart-terminal`'s SIGUSR2 during the initial
   theme-set (terminal selection order?). RESOLVED since: fumon's
