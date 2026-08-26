@@ -495,6 +495,19 @@ jobs:
             echo "mise_version=${LATEST_MISE#v}" >> $GITHUB_OUTPUT
           fi
 
+          # Check xdg-terminal-exec (vendored into the flurry image over
+          # Debian's 0.12.3, which predates --print-id; the flurry build
+          # fails closed when Debian reaches 0.13, retiring this entry)
+          CURRENT_XTE=$(jq -r '.["xdg-terminal-exec"].version' "$CHECKSUMS")
+          LATEST_XTE=$(gh_api 'https://api.github.com/repos/Vladimir-csp/xdg-terminal-exec/tags?per_page=100' |
+            jq -r '.[].name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' | sort -V | tail -n1)
+          if [[ "$LATEST_XTE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
+             ver_gt "${LATEST_XTE#v}" "$CURRENT_XTE"; then
+            UPDATES="${UPDATES}xdg-terminal-exec: $CURRENT_XTE -> ${LATEST_XTE#v}\n"
+            echo "xte_update=true" >> $GITHUB_OUTPUT
+            echo "xte_version=${LATEST_XTE#v}" >> $GITHUB_OUTPUT
+          fi
+
           # Check Syft CLI used for SBOM generation
           CURRENT_SYFT=$(awk '$1 == "syft-version:" { print $2; exit }' .github/workflows/build-images.yml)
           LATEST_SYFT=$(gh_api https://api.github.com/repos/anchore/syft/releases/latest | jq -r '.tag_name')
@@ -579,6 +592,8 @@ jobs:
           JBM_VERSION: ${{ steps.check.outputs.jbm_version }}
           MISE_UPDATE: ${{ steps.check.outputs.mise_update }}
           MISE_VERSION: ${{ steps.check.outputs.mise_version }}
+          XTE_UPDATE: ${{ steps.check.outputs.xte_update }}
+          XTE_VERSION: ${{ steps.check.outputs.xte_version }}
           SYFT_UPDATE: ${{ steps.check.outputs.syft_update }}
           SYFT_VERSION: ${{ steps.check.outputs.syft_version }}
           COSIGN_UPDATE: ${{ steps.check.outputs.cosign_update }}
@@ -702,6 +717,19 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VERSION" \
               '.mise.url=$u | .mise.sha256=$s | .mise.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$XTE_UPDATE" == "true" ]]; then
+            VERSION="$XTE_VERSION"
+            validate_update_value "xdg-terminal-exec" "$VERSION" '^[0-9]+\.[0-9]+\.[0-9]+$'
+            URL="https://github.com/Vladimir-csp/xdg-terminal-exec/archive/refs/tags/v${VERSION}.tar.gz"
+            TMP=$(mktemp)
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VERSION" \
+              '.["xdg-terminal-exec"].url=$u | .["xdg-terminal-exec"].sha256=$s | .["xdg-terminal-exec"].version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi
