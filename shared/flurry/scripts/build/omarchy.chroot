@@ -209,6 +209,38 @@ compat_patch "$OMARCHY/shell/plugins/notifications/Service.qml" \
     'var transient = false' \
     's/\btransient\b/xTransient/g; s/xTransient` hint/transient` hint/; s/hints\["xTransient"\]/hints["transient"]/' \
     'Qt 6.8 reserved word transient'
+# Homebrew on PATH (frostyard/snosi#777): omarchy's env-bootstrap is the
+# single PATH authority for every shell entry point (skel .bashrc, uwsm
+# session env, profile.d login shells, the bash rc chain), and it knows
+# nothing of snosi's /home/linuxbrew tree (unpacked by brew-setup.service)
+# -- yet the omarchy-pkg-* overrides point users at `brew install`. Append
+# a dedup-guarded brew bin dir before the final `export PATH`, same
+# append-not-prepend precedence policy as the user tool paths above. Not a
+# sed one-liner, so guarded by hand like compat_patch: an omarchy re-pin
+# that restructures env-bootstrap fails the build for re-triage.
+EB="$OMARCHY/default/bash/env-bootstrap"
+grep -qx 'export PATH' "$EB" || {
+    echo "omarchy.chroot: compat patch target vanished (brew PATH): no bare 'export PATH' line in $EB" >&2
+    exit 1
+}
+! grep -q linuxbrew "$EB" || {
+    echo "omarchy.chroot: compat patch target vanished (brew PATH): $EB already mentions linuxbrew" >&2
+    exit 1
+}
+brew_block=$(cat <<'BREW'
+# snosi (Flurry): Homebrew lives at /home/linuxbrew (unpacked on first boot
+# by brew-setup.service); appended so system binaries keep precedence.
+if [ -d /home/linuxbrew/.linuxbrew/bin ]; then
+  case ":$PATH:" in
+    *":/home/linuxbrew/.linuxbrew/bin:"*) ;;
+    *) PATH="${PATH:+$PATH:}/home/linuxbrew/.linuxbrew/bin" ;;
+  esac
+fi
+BREW
+)
+awk -v block="$brew_block" '/^export PATH$/ { print block; print ""; } { print }' "$EB" >"$EB.tmp"
+mv "$EB.tmp" "$EB"
+sh -n "$EB" || { echo "omarchy.chroot: patched env-bootstrap fails sh -n" >&2; exit 1; }
 
 # --- snosi override layer ---------------------------------------------------
 # Whole-file replacements for commands whose Arch mechanics are remapped;
