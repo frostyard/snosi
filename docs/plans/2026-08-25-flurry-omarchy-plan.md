@@ -145,10 +145,10 @@ Live-VM findings (2026-08-26, root-caused on the user's incus install):
 - **Screensaver renderer missing** (issue #786): `omarchy-screensaver`
   runs `ttfx` (omacom-io's Rust port of terminaltexteffects; omarchy
   migration 1786355450 replaced the Python original). No deb, no upstream
-  binaries — built from the pinned v0.3.2 source tarball at image build
-  (`ttfx.chroot`; trixie's rustc 1.85 suffices; Cargo.lock inside the
-  pinned tarball + `--locked` transitively pins the crate tree; cargo
-  lives only in the discarded build overlay).
+  binaries — first built in-tree (`ttfx.chroot`, retired 2026-08-26),
+  now installed from the frostyard APT repo like the rest of the
+  omarchy in-house apps (frostyard/omarchy-apps; see the tier-1 block in
+  shared/packages/flurry/mkosi.conf).
 - **Dead `~/Projects` bookmark**: upstream `omarchy-provision-user`
   bookmarks Projects in gtk-3.0/bookmarks but only mkdirs
   Downloads/Pictures/Videos — a genuine upstream gap (only the v3→v4
