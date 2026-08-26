@@ -2,8 +2,11 @@
 
 # omarchy:summary=Set the Omarchy package channel.
 
-# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
-source /usr/share/omarchy/bin/omarchy-snosi-lib
-snosi_note "Flurry follows a single snosi image channel." \
-  "To follow a different image: sudo bootc switch <image-ref>"
-exit 1
+# snosi override: Flurry has no channels -- there is exactly one published
+# image stream, and OS updates follow it automatically (bootc-update-stage).
+# Deliberately a no-op: earlier guidance suggested `bootc switch <ref>`,
+# but bootc's registry-transport pull is broken for snosi images (the
+# stager uses podman for the transfer), so pointing users at it invited
+# breakage.
+echo "Flurry has a single release channel; there is nothing to switch."
+exit 0
