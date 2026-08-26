@@ -7,11 +7,16 @@ installer ISO for all snosi image families, with
 a package payload satisfying firn's step-declared tool preflight for
 both the bootc and native A/B install families.
 
-## The firn binary is NOT committed
+## The firn binary comes from the frostyard apt repo
 
-`tree/usr/bin/firn` is gitignored and provisioned at build time: the
-`just firn-installer` / `just firn-installer-iso` recipes run
-`_firn-binary` first, which builds it from a sibling firn checkout:
+`mkosi.conf` installs `Packages=frostyard-firn` (published by firn's
+release via repogen), so CI needs no sibling firn checkout. The image
+postinst still fails the build loudly if `/usr/bin/firn` is missing.
+
+For dev testing of *unreleased* firn, the `just firn-installer` /
+`just firn-installer-iso` recipes still run `_firn-binary` first, which
+builds from a sibling checkout into the gitignored `tree/usr/bin/firn`
+(ExtraTrees then overrides the packaged binary):
 
 ```sh
 # FIRN_SRC defaults to ../firn relative to this repo's root;
@@ -19,17 +24,17 @@ both the bootc and native A/B install families.
 FIRN_SRC=/path/to/firn just firn-installer
 ```
 
-`_firn-binary` runs `CGO_ENABLED=0 go build ./cmd/firn-cli` with the
-same ldflags version stamping as firn's own Makefile, so the binary on
-the medium reports the source checkout's `git describe` version. The
-image postinst fails the build loudly if the binary is missing, so a
-bare `mkosi --profile firn-installer build` without the just recipe
-cannot produce an installer-less ISO.
+## The product catalog is snosi's
 
-**TODO:** switch this local-build provisioning to installing the
-`frostyard-firn` Debian package from the frostyard repository once firn
-cuts a release — at that point `_firn-binary`, the gitignore entry, and
-the postinst presence check move to a plain `Packages=` entry.
+`catalog.json` ships to `/etc/firn/catalog.json`, which firn reads as a
+**wholesale** override of its compiled-in picker list (firn ADR-0010:
+the catalog is media payload). Adding a product to the installer is
+therefore a snosi change: add the entry here — every product must be
+listed, and entries must satisfy firn's `checkCatalog` (bootc: `ref` +
+`cosign_pub_key`, no `product`; ab: `product`, no `ref`/key). The
+pinned `cosign` CLI (scripts/build/cosign.chroot) and
+`/usr/lib/snosi/cosign.pub` back the bootc entries' signature
+verification — firn's preflight requires both.
 
 ## Kiosk units
 

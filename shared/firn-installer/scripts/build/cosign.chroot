@@ -1,0 +1,21 @@
+#!/bin/bash
+set -euo pipefail
+
+# Ships the pinned cosign CLI on the installer ISO. Firn's bootc preflight
+# declares the `cosign` tool for every catalog entry that carries a
+# cosign_pub_key (internal/steps/assemble.go appends it to bootcTools), and
+# every bootc entry in the shipped catalog does -- without this binary,
+# every bootc install from the ISO fails preflight before touching the
+# disk. Pinned in shared/download/image-checksums.json and refreshed by the
+# same check-dependencies cosign check that tracks build-images.yml's
+# cosign-release (v2-only: v3 cannot verify these key-signed images when
+# GitHub provenance attestations are present). Writes to $DESTDIR only
+# (frostyard/snosi#293).
+
+source "$SRCDIR/shared/download/verified-download.sh"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+verified_download "cosign-installer" "$TMP/cosign"
+install -D -m 0755 "$TMP/cosign" "$DESTDIR/usr/bin/cosign"
+echo "cosign installed to /usr/bin/cosign"

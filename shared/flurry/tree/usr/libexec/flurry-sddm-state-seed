@@ -1,0 +1,24 @@
+#!/bin/bash
+set -euo pipefail
+
+# Writes SDDM's last-user state for the machine's sole human account so the
+# Omarchy password-only greeter is usable on first boot. See the unit for
+# the full rationale. Exits quietly (retrying next boot via the unit's
+# ConditionPathExists) when there is not exactly one human account yet.
+
+state=/var/lib/sddm/state.conf
+[[ -e "$state" ]] && exit 0
+
+mapfile -t users < <(awk -F: '$3 >= 1000 && $3 < 60000 && $7 !~ /(nologin|false)$/ {print $1}' /etc/passwd)
+if (( ${#users[@]} != 1 )); then
+    echo "flurry-sddm-state-seed: ${#users[@]} human accounts found; leaving state unseeded"
+    exit 0
+fi
+
+install -d -m 0750 -o sddm -g sddm /var/lib/sddm
+tmp=$(mktemp /var/lib/sddm/.state.conf.XXXXXX)
+printf '[Last]\nUser=%s\nSession=/usr/share/wayland-sessions/omarchy.desktop\n' "${users[0]}" >"$tmp"
+chown sddm:sddm "$tmp"
+chmod 0600 "$tmp"
+mv "$tmp" "$state"
+echo "flurry-sddm-state-seed: seeded last user '${users[0]}'"
