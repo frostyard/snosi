@@ -9,6 +9,16 @@
     "sha256": "720ecc392eef1992780af2aaabd4733916807155c8ee217ed67f3f93287bb415",
     "version": "2026.8.0"
   },
+  "obsidian": {
+    "url": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/obsidian_1.13.7_amd64.deb",
+    "sha256": "17dc33b49cb3e785ecc27edd2ea0c79e40207798b554fd2886e36ebee7af9ae0",
+    "version": "1.13.7"
+  },
+  "localsend": {
+    "url": "https://github.com/localsend/localsend/releases/download/v1.18.2/LocalSend-1.18.2-linux-x86-64.deb",
+    "sha256": "cc42a4f3eacdcb25ec31f0016b1272acb003145ab30484db8965450e20c72cd2",
+    "version": "1.18.2"
+  },
   "microsoft-azurevpnclient": {
     "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_3.1.0_amd64.deb",
     "sha256": "636c829e1bc8aef3e71adc6c729971bd7c09deab2ccdb82c6c7ce4185b35e861",

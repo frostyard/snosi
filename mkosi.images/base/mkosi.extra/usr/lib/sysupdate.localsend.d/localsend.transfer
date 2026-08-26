@@ -1,0 +1,20 @@
+[Transfer]
+Features=localsend
+Verify=true
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/localsend/
+MatchPattern=localsend_@v_%w_%a.raw.zst \
+             localsend_@v_%w_%a.raw.xz \
+             localsend_@v_%w_%a.raw.gz \
+             localsend_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=localsend_@v_%w_%a.raw.zst \
+             localsend_@v_%w_%a.raw.xz \
+             localsend_@v_%w_%a.raw.gz \
+             localsend_@v_%w_%a.raw
+CurrentSymlink=localsend.raw

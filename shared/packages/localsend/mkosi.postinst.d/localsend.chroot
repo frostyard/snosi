@@ -1,0 +1,19 @@
+#!/bin/bash
+# LocalSend sysext: install the pinned upstream .deb and relocate /opt ->
+# /usr/lib (sysexts can only ship /usr; /opt is /var-backed at runtime).
+set -euo pipefail
+[[ "${DEBUG_BUILD:-0}" == "1" ]] && set -x
+
+source "$SRCDIR/shared/download/verified-download.sh"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "localsend" "$DEBS/localsend.deb"
+
+dpkg -i "$DEBS/localsend.deb"
+
+mv /opt/localsend_app /usr/lib/localsend_app
+rm -rf /opt/localsend_app
+mkdir -p /usr/bin
+ln -sf /usr/lib/localsend_app/localsend_app /usr/bin/localsend
+ln -sf /usr/lib/localsend_app/localsend_app /usr/bin/localsend_app
+sed -i 's|/opt/localsend_app/localsend_app|/usr/bin/localsend_app|g' /usr/share/applications/localsend_app.desktop

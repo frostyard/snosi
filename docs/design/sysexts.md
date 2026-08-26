@@ -479,7 +479,8 @@ same shadowing on mesa but survived because gbm's ABI tolerated it).
 **The fix — `mkosi.images/gui-base`**: an internal, never-published
 directory image (base + the common GUI lib closure). Desktop-app sysexts
 (1password, azurevpn, bitwarden, chatgpt, claude-desktop, edge,
-github-copilot, sunshine, vscode) set `Dependencies=gui-base` +
+github-copilot, localsend, moonlight, obsidian, sunshine, vscode) set
+`Dependencies=gui-base` +
 `BaseTrees=%O/gui-base`, so their deltas omit the entire common GUI stack
 and each product supplies its own suite's version at merge time.
 

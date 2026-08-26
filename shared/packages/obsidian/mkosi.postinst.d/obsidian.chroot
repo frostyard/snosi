@@ -1,0 +1,19 @@
+#!/bin/bash
+# Obsidian sysext: install the pinned upstream .deb and relocate /opt ->
+# /usr/lib (sysexts can only ship /usr; /opt is /var-backed at runtime).
+set -euo pipefail
+[[ "${DEBUG_BUILD:-0}" == "1" ]] && set -x
+
+source "$SRCDIR/shared/download/verified-download.sh"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "obsidian" "$DEBS/obsidian.deb"
+
+dpkg -i "$DEBS/obsidian.deb"
+
+mv /opt/Obsidian /usr/lib/Obsidian
+rm -rf /opt/Obsidian
+mkdir -p /usr/bin
+ln -sf /usr/lib/Obsidian/obsidian /usr/bin/obsidian
+chmod 4755 /usr/lib/Obsidian/chrome-sandbox
+sed -i 's|/opt/Obsidian/obsidian|/usr/bin/obsidian|g' /usr/share/applications/md.obsidian.Obsidian.desktop

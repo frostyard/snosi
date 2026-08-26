@@ -60,6 +60,25 @@ jobs:
             echo "bitwarden_version=$LATEST_BW" >> $GITHUB_OUTPUT
           fi
 
+          # Check Obsidian (releases include mobile-only tags with no .deb --
+          # pick the newest release actually carrying an amd64.deb asset)
+          CURRENT_OBS=$(jq -r '.obsidian.version' "$CHECKSUMS")
+          LATEST_OBS=$(gh_api 'https://api.github.com/repos/obsidianmd/obsidian-releases/releases?per_page=15' | jq -r '[.[] | select(.draft == false and .prerelease == false) | select([.assets[].name | test("_amd64\\.deb$")] | any)][0].tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_OBS" && "$LATEST_OBS" != "null" ]] && ver_gt "$LATEST_OBS" "$CURRENT_OBS"; then
+            UPDATES="${UPDATES}obsidian: $CURRENT_OBS -> $LATEST_OBS\n"
+            echo "obsidian_update=true" >> $GITHUB_OUTPUT
+            echo "obsidian_version=$LATEST_OBS" >> $GITHUB_OUTPUT
+          fi
+
+          # Check LocalSend
+          CURRENT_LSEND=$(jq -r '.localsend.version' "$CHECKSUMS")
+          LATEST_LSEND=$(gh_api https://api.github.com/repos/localsend/localsend/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_LSEND" && "$LATEST_LSEND" != "null" ]] && ver_gt "$LATEST_LSEND" "$CURRENT_LSEND"; then
+            UPDATES="${UPDATES}localsend: $CURRENT_LSEND -> $LATEST_LSEND\n"
+            echo "localsend_update=true" >> $GITHUB_OUTPUT
+            echo "localsend_version=$LATEST_LSEND" >> $GITHUB_OUTPUT
+          fi
+
           # Check GitHub Copilot desktop app
           CURRENT_GITHUB_COPILOT=$(jq -r '."github-copilot".version' "$CHECKSUMS")
           LATEST_GITHUB_COPILOT=$(gh_api https://api.github.com/repos/github/app/releases | jq -r '[.[] | select(.draft == false and .prerelease == false)][0].tag_name' | sed 's/^v//')
@@ -181,6 +200,10 @@ jobs:
         # keeps a malicious upstream tag from injecting shell commands.
         env:
           BITWARDEN_UPDATE: ${{ steps.check.outputs.bitwarden_update }}
+          OBSIDIAN_UPDATE: ${{ steps.check.outputs.obsidian_update }}
+          OBSIDIAN_VERSION: ${{ steps.check.outputs.obsidian_version }}
+          LOCALSEND_UPDATE: ${{ steps.check.outputs.localsend_update }}
+          LOCALSEND_VERSION: ${{ steps.check.outputs.localsend_version }}
           BITWARDEN_VERSION: ${{ steps.check.outputs.bitwarden_version }}
           GITHUB_COPILOT_UPDATE: ${{ steps.check.outputs.github_copilot_update }}
           GITHUB_COPILOT_VERSION: ${{ steps.check.outputs.github_copilot_version }}
@@ -215,6 +238,30 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '.bitwarden.url=$u | .bitwarden.sha256=$s | .bitwarden.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$OBSIDIAN_UPDATE" == "true" ]]; then
+            VER="$OBSIDIAN_VERSION"
+            URL="https://github.com/obsidianmd/obsidian-releases/releases/download/v${VER}/obsidian_${VER}_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.obsidian.url=$u | .obsidian.sha256=$s | .obsidian.version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$LOCALSEND_UPDATE" == "true" ]]; then
+            VER="$LOCALSEND_VERSION"
+            URL="https://github.com/localsend/localsend/releases/download/v${VER}/LocalSend-${VER}-linux-x86-64.deb"
+            TMP=$(mktemp)
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.localsend.url=$u | .localsend.sha256=$s | .localsend.version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi

@@ -1,0 +1,6 @@
+# obsidian sysext: Obsidian desktop app (Electron), relocated /opt -> /usr/lib
+/usr/lib/Obsidian/obsidian
+/usr/lib/Obsidian/chrome-sandbox
+/usr/bin/obsidian
+/usr/share/applications/md.obsidian.Obsidian.desktop
+/usr/share/icons/hicolor/512x512/apps/obsidian.png
