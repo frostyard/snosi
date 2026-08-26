@@ -223,7 +223,7 @@ The `base` image ([mkosi.images/base/mkosi.conf](mkosi.images/base/mkosi.conf)) 
 - Network management (NetworkManager, wpasupplicant)
 - Container tooling prerequisites (erofs-utils, skopeo)
 - Firmware packages for common hardware
-- Core utilities (fish, zsh, vim, git)
+- Core utilities (fish, zsh, vim, git) and host hardware diagnostics (`lspci`, `lsusb`)
 
 ### System Extensions (sysexts)
 
