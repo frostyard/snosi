@@ -6,23 +6,27 @@
 # neutral: it keys off /run/snosi/update-staged's digest= OR version=,
 # whichever is present), different unit NAME so a native system's `systemctl
 # --user status` reads sensibly instead of naming a transport it doesn't
-# use. Fire the staged-update notification when the semaphore appears
-# (update staged mid-session) or changes (a newer staged version replaced an
-# older one). PathExists= also triggers immediately if the file is already
-# present when the session starts, so login-while-pending is covered too.
+# use. Fires when the semaphore is written mid-session. Deliberately
+# PathModified= ONLY -- edge-triggered via inotify. PathExists= is
+# level-triggered: it re-arms every time the triggered service exits, and
+# because the semaphore persists until the applying reboot BY DESIGN, that
+# loops service starts until systemd's path trigger limit (200 in 2s) kills
+# this unit with 'trigger-limit-hit' (root-caused live 2026-08-26 on a
+# flurry install; the earlier StartLimitIntervalSec=0 fix had only unmasked
+# this second limiter). The login-while-pending case PathExists= used to
+# cover is handled by the static graphical-session.target.wants/ link on
+# snosi-update-notify.service itself (condition-gated, ack-gated).
 [Unit]
 Description=Watch for a staged native A/B update
 # The stager writes the semaphore in several syscalls, so one staging emits
-# multiple PathModified events in a burst; combined with the login-time
-# PathExists trigger this can exceed systemd's default start-rate limit
-# (5/10s) and leave this unit in a permanent 'unit-start-limit-hit' failure
-# that stops watching. Disable the limit -- the triggered service is
-# ack-gated, so repeat triggers for the same staged version are harmless
-# no-ops.
+# multiple PathModified events in a burst that can exceed systemd's default
+# start-rate limit (5/10s) and leave this unit in a permanent
+# 'unit-start-limit-hit' failure that stops watching. Disable the limit --
+# the triggered service is ack-gated, so repeat triggers for the same staged
+# version are harmless no-ops.
 StartLimitIntervalSec=0
 
 [Path]
-PathExists=/run/snosi/update-staged
 PathModified=/run/snosi/update-staged
 
 # No [Install]: static /usr wants activation (graphical-session.target.wants/).

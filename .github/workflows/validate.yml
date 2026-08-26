@@ -278,6 +278,9 @@ jobs:
       - name: Test gui-base sysext divergent-lib contract
         run: ./test/sysext-divergent-libs-test.sh
 
+      - name: Test staged-update notify unit trigger shape
+        run: ./test/update-notify-units-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:
