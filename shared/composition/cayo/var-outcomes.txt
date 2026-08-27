@@ -58,7 +58,7 @@ lib/apt/lists	tmpfiles
 lib/apt/mirrors/partial	tmpfiles
 lib/apt/periodic	tmpfiles
 lib/bluetooth	tmpfiles
-lib/dbus/machine-id	tmpfiles
+lib/dbus*	tmpfiles
 lib/dictionaries-common/aspell	tmpfiles
 lib/dictionaries-common/hunspell	tmpfiles
 lib/dictionaries-common/wordlist	tmpfiles
@@ -75,6 +75,9 @@ lib/homebrew	tmpfiles
 lib/ispell	tmpfiles
 lib/misc	tmpfiles
 lib/NetworkManager	tmpfiles
+lib/nfs/sm	tmpfiles
+lib/nfs/sm.bak	tmpfiles
+lib/nfs/state	tmpfiles
 lib/nix	tmpfiles
 lib/PackageKit	tmpfiles
 lib/plymouth	tmpfiles

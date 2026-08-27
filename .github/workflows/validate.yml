@@ -277,6 +277,7 @@ jobs:
           ./test/runtime-etc-guard-test.sh
           ./test/duplicate-packages-test.sh
           ./test/base-hardware-utils-test.sh
+          ./test/socat-package-test.sh
 
       - name: Test RequiredBy guard and initrd requires-pruning fixtures
         run: |

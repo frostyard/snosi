@@ -35,7 +35,7 @@ lib/bluetooth	tmpfiles
 lib/AccountsService/icons	tmpfiles
 lib/alsa	tmpfiles
 lib/apache2	tmpfiles
-lib/dbus/machine-id	tmpfiles
+lib/dbus*	tmpfiles
 lib/emacsen-common/state/flavor/installed	tmpfiles
 lib/emacsen-common/state/flavor/pending	tmpfiles
 # ghostscript ships ~250 individual CMap symlinks via a generated tmpfiles.d
@@ -44,6 +44,9 @@ lib/ghostscript/CMap/**	tmpfiles
 lib/homebrew	tmpfiles
 lib/misc	tmpfiles
 lib/NetworkManager	tmpfiles
+lib/nfs/sm	tmpfiles
+lib/nfs/sm.bak	tmpfiles
+lib/nfs/state	tmpfiles
 lib/PackageKit	tmpfiles
 lib/nix	tmpfiles
 lib/plymouth	tmpfiles
