@@ -1,5 +1,5 @@
-code=1.134.0-1787078834
+code=1.135.0-1787669172
 docker-ce=5:29.7.2-1~debian.13~trixie
 1password-cli=2.39.0-1
-claude-desktop=1.37937.1
-chatgpt=26.820.60940
+claude-desktop=1.37937.3
+chatgpt=26.820.71523
