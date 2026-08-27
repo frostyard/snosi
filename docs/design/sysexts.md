@@ -455,13 +455,20 @@ succeeds the moment the cache is stale or absent.
   (theme rescan is gated on directory mtimes); icons are reliably present from
   the next session start. The `.desktop` entry itself appears without a cache
   concern — GIO scans `/usr/share/applications` directly.
-- Related caches with the same shadow-the-singleton failure shape to keep in
-  mind for future desktop sysexts: `/usr/share/applications/mimeinfo.cache`
-  and `/usr/share/glib-2.0/schemas/gschemas.compiled`. These are NOT stripped
-  today — absence has real costs (GIO needs mimeinfo.cache for MIME→app
-  lookups; GSettings requires compiled schemas) — but a sysext shipping its
-  own copy of either will mask newer base state the same way the icon cache
-  did. Evaluate per sysext.
+- `/usr/share/glib-2.0/schemas/gschemas.compiled` has the same
+  shadow-the-singleton shape and IS stripped by `sysext-strip-icon-cache.sh`
+  (since 2026-08-26). Building against `gui-base` (which ships
+  `libglib2.0-bin`) means any app deb that drops schema XML fires the
+  `libglib2.0-0t64` trigger and compiles a cache from *gui-base's* schema set
+  into the delta; merged on snow it masked `org.gnome.SessionManager`,
+  `org.gnome.shell`, `org.gnome.mutter` and the `zz0-*` overrides, and GDM
+  crash-looped to a bare cursor (claude-desktop 1.37937.1 + chatgpt
+  26.820.60940, the first builds after #784). The base image always ships a
+  complete cache from its own finalize, so the delta copy is pure hazard.
+- `/usr/share/applications/mimeinfo.cache` is the remaining cache with this
+  shape. It is NOT stripped today — no current sysext ships one, and absence
+  in the base would cost GIO its MIME→app lookups — but a sysext shipping its
+  own copy will mask newer base state the same way. Evaluate per sysext.
 
 ## Desktop-App Sysexts Build Against gui-base (issue #781)
 
