@@ -57,7 +57,7 @@ lib/apt/mirrors/partial	tmpfiles
 lib/apt/periodic	tmpfiles
 lib/bluetooth	tmpfiles
 lib/colord/icc	tmpfiles
-lib/dbus/machine-id	tmpfiles
+lib/dbus*	tmpfiles
 lib/emacsen-common/state/flavor/installed	tmpfiles
 lib/emacsen-common/state/flavor/pending	tmpfiles
 # bazaar-flatpak.conf's L rule (a static per-app flatpak override, not
@@ -70,6 +70,9 @@ lib/ghostscript/CMap/**	tmpfiles
 lib/homebrew	tmpfiles
 lib/misc	tmpfiles
 lib/NetworkManager	tmpfiles
+lib/nfs/sm	tmpfiles
+lib/nfs/sm.bak	tmpfiles
+lib/nfs/state	tmpfiles
 lib/nix	tmpfiles
 lib/PackageKit	tmpfiles
 lib/plymouth	tmpfiles
