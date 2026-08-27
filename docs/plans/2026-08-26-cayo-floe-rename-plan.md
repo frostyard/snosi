@@ -108,9 +108,30 @@ groups:
       `Output=floe`/`floe-ab`, include paths.
 - [ ] `shared/composition/cayo/` → `floe/` (mkosi.conf, `var-outcomes.txt`,
       references in `var-audit.finalize`).
+- [ ] `shared/packages/cayo/` → `shared/packages/floe/`, and the include
+      that consumes it: `shared/composition/cayo/mkosi.conf` line
+      `Include=%D/shared/packages/cayo/mkosi.conf` becomes
+      `%D/shared/packages/floe/mkosi.conf` in the renamed composition
+      fragment. This is the server package set for BOTH transports (the
+      composition fragment is the only consumer), so leaving it behind
+      leaves a live cayo-named build path after the "atomic" rename. Also
+      update the two comments that cite it as the firmware precedent
+      (`shared/firn-installer/mkosi.conf`, `shared/native-installer/mkosi.conf`)
+      and the README composition table row.
 - [ ] `shared/cayo/` → `shared/floe/` (postinst.chroot, tree — including
       `usr/share/cayo/bundles` → `usr/share/floe/bundles` and anything in
       `shared/scripts/common-postinst.sh` that names the path).
+- [ ] Inside that tree, rename the live-media kernel-argument conditions
+      `ConditionKernelCommandLine=!cayo-linux.live=1` →
+      `!floe-linux.live=1` in all three units that carry it:
+      `usr/lib/systemd/system/brew-setup.service`,
+      `usr/lib/systemd/system/incus.socket.d/override.conf`,
+      `usr/lib/systemd/system/docker.socket.d/override.conf`. The karg
+      follows the `<ImageId>-linux.live=1` convention snow/flurry use
+      (`snow-linux.live=1`); nothing in-tree sets it, so the condition
+      strings are the only thing to rename — and grep confirms it, since
+      a `cayo-linux.live` left behind would silently never match a
+      floe-identified live image.
 - [ ] `shared/native-ab/channels/cayo/` → `floe/`: repart labels
       `floe_%A_r` (+ verity partition config), `SplitName=floe_@v.root.raw`,
       and the three transfers — `Source Path=…/os/native/v1/floe/x86-64/`,
@@ -229,10 +250,44 @@ groups:
       entirely — no update-path migration exists or should be built
       (constraint 2 above). Note this leaves `floe-ab` publishing with zero
       known installs; nightlies and lab's install lanes remain its coverage.
+- [ ] **Publish floe N+1.** The Phase 2 merge publishes exactly one signed
+      floe version (call it N); a subsequent staged update cannot be
+      demonstrated until a second one exists. After BOTH machines are
+      booted on floe, publish N+1: either the next unrelated main-branch
+      merge that triggers `build-images.yml`, or a manual
+      `workflow_dispatch` of `build-images.yml` on `main` (protected
+      `secure-build` — pushes/signs the immutable version digest, verifies
+      it, then moves `latest`). Record N+1's 14-digit
+      `org.opencontainers.image.version` and its immutable digest from the
+      run. Do this *after* the reinstall, not before: the ISO pulls
+      `floe:latest`, so a host installed after N+1 lands on N+1 and would
+      then need an N+2 to prove the same thing.
+- [ ] **Verify N+1 lands on each host through the normal path.** On each
+      machine: wait for the hourly `bootc-update-stage.timer` or run
+      `sudo /usr/libexec/bootc-update-stage`; confirm
+      `/run/snosi/update-check` reads `outcome=staged` and
+      `remote_version=<N+1>`, and `/run/snosi/update-staged` records N+1's
+      digest (capture it now — the applying reboot clears the file);
+      `snosi-update-status` shows the floe image staged. Reboot (natural or
+      manual, never forced by the stager). After reboot: `snosi-update-status`
+      running version is N+1, `bootc status` booted image is
+      `ghcr.io/frostyard/floe` at the digest captured pre-reboot, and the
+      rollback deployment is floe N (cayo is no longer in `bootc status` on
+      the migrated bootc host). Compare *versions* across sources and
+      digests only within the same host's containers-storage — the same
+      build has a different digest per transport.
+- [ ] `floe-ab` gets its own N+1 from its own `build-native-images.yml` run
+      (the same main merge, or a separate `workflow_dispatch` of that
+      workflow — dispatching `build-images.yml` does not run it), verified
+      by that workflow's public-origin index check
+      and boot smoke test plus lab's floe-ab install lane (Phase 4) — there
+      is no floe-ab install to stage it onto (Phase 3 leaves the native
+      channel with zero known installs).
 - [ ] **Done when:** both machines are booted on floe (`IMAGE_ID=floe` in
-      `/etc/os-release`), have taken at least one subsequent staged floe
-      update through the normal stager, and rollback is confirmed no longer
-      needed.
+      `/etc/os-release`), each has taken floe N+1 — one version newer than
+      the floe version it first booted — through the normal stager and a
+      reboot, with running version and booted digest verified as above, and
+      rollback to cayo is confirmed no longer needed.
 
 ## Phase 4 — Downstream repos (parallelizable after Phase 2 publishes)
 
