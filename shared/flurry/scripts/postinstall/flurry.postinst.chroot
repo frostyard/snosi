@@ -25,4 +25,20 @@ if [ -f /etc/pam.d/sddm ]; then
     sed -i '/pam_gnome_keyring\.so/d' /etc/pam.d/sddm
 fi
 
+# gawk must own the `awk` alternative. Omarchy's scripts are Arch-native and
+# assume /usr/bin/awk is gawk (3-arg match(), strtonum(), \s); mawk silently
+# empties the keybindings menu and the power-profile list rather than failing
+# anything. shared/packages/flurry/mkosi.conf installs gawk, whose postinst
+# outranks mawk -- assert the link actually landed so a priority change
+# upstream breaks the build instead of the desktop.
+awk_impl=$(readlink -f /usr/bin/awk)
+case "$awk_impl" in
+    */gawk) ;;
+    *)
+        echo "flurry.postinst: /usr/bin/awk resolves to '$awk_impl', expected gawk --" \
+             "omarchy's awk scripts need gawk extensions" >&2
+        exit 1
+        ;;
+esac
+
 echo "Post-installation complete."
