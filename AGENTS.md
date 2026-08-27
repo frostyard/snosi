@@ -312,9 +312,9 @@ evidence. User and recovery guidance lives in `docs/snosi-kargs.md`.
 
 **Bootc OCI signature policy (Task 6, 2026-07-28):** secure bootc profiles ship
 `/etc/containers/policy.json` with global `reject` and exact
-`sigstoreSigned` scopes only for `ghcr.io/frostyard/cayo`, `snow`, and
-`snowfield`; each uses the committed public-only `cosign.pub` copied to
-`/usr/lib/snosi/cosign.pub`. Cosign v2.6.1 signatures record repository rather
+`sigstoreSigned` scopes only for `ghcr.io/frostyard/cayo`, `snow`,
+`snowfield`, `flurry`, and `sundog`; each uses the committed public-only
+`cosign.pub` copied to `/usr/lib/snosi/cosign.pub`. Cosign v2.6.1 signatures record repository rather
 than tag identities, so this MUST use `signedIdentity: matchRepository` and
 the GHCR `registries.d` entry MUST retain `use-sigstore-attachments: true`.
 LOCAL transports are accepted with `insecureAcceptAnything`: `containers-storage`
