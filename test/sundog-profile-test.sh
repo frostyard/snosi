@@ -42,14 +42,18 @@ require_line "$composition" 'shared/packages/sundog/mkosi\.conf' "Sundog package
 
 declare -a required_packages=(
     kde-plasma-desktop kwin-wayland sddm sddm-theme-breeze
-    plasma-nm plasma-pa powerdevil polkit-kde-agent-1
+    plasma-nm plasma-pa kscreen powerdevil polkit-kde-agent-1 libpam-kwallet5
     xdg-desktop-portal-kde qt6-wayland dolphin konsole
-    plasma-discover-backend-flatpak kde-config-flatpak
+    plasma-discover-backend-flatpak kde-config-flatpak fcitx5 kde-config-fcitx5
     plymouth-theme-breeze flatpak tuned tuned-ppd podman distrobox
 )
 for package in "${required_packages[@]}"; do
     require_line "$packages" "^[[:space:]]*(Packages=)?${package}$" "required package is missing: $package"
 done
+
+if grep -Eq '^[[:space:]]*(Packages=)?im-config$' "$packages"; then
+    fail "im-config must not override Plasma Wayland input-method activation"
+fi
 
 declare -a forbidden_packages=(
     gdm3 gnome-shell hyprland kwin-x11 plasma-discover-backend-packagekit
@@ -78,6 +82,11 @@ done < <(
 require_line "$postinst" 'OS_NAME="Sundog Linux"' "OS branding is missing"
 require_line "$postinst" 'rm -f /usr/share/xsessions/plasmax11\.desktop' "X11 session is not suppressed"
 require_line "$postinst" 'display-manager\.service' "static SDDM alias is missing"
+require_line "$composition" 'ExtraTrees=%D/shared/desktop/tree' "shared desktop recovery tree is missing"
+require_line "$root/shared/desktop/tree/usr/lib/tmpfiles.d/saned.conf" \
+    '^d /var/lib/saned 0755 saned saned - -$' "saned factory state is not recovered"
+require_line "$root/shared/desktop/tree/usr/lib/tmpfiles.d/upower.conf" \
+    '^d /var/lib/upower 0755 root root - -$' "upower factory state is not recovered"
 require_line "$root/shared/sundog/tree/etc/sddm.conf.d/10-sundog.conf" '^Current=breeze$' "SDDM Breeze theme is not selected"
 require_line "$root/shared/sundog/tree/etc/plymouth/plymouthd.conf" '^Theme=breeze$' "Plymouth Breeze theme is not selected"
 
