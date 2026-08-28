@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 snosi is a bootable container image build system using [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). Images are deployed via bootc/systemd-boot with atomic updates.
 
-**Outputs:** 4 OCI desktop images (snow, snowfield, flurry, and sundog — flurry is the Hyprland/Omarchy-replica desktop, while sundog is the bootc-only KDE Plasma desktop; see docs/plans/2026-08-25-flurry-omarchy-plan.md and docs/adr/0014-name-kde-bootc-product-sundog.md), 1 OCI server image (cayo), and 26 sysext overlay images (1password, 1password-cli, azurevpn, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, vscode).
+**Outputs:** 4 OCI desktop images (snow, snowfield, flurry, and sundog — flurry is the Hyprland/Omarchy-replica desktop, while sundog is the bootc-only KDE Plasma desktop; see docs/plans/2026-08-25-flurry-omarchy-plan.md and docs/adr/0014-name-kde-bootc-product-sundog.md), 1 OCI server image (cayo), and 27 sysext overlay images (1password, 1password-cli, azurevpn, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode).
 
 ## Build Commands
 
@@ -14,7 +14,7 @@ Requires: just, git, python3, root/sudo access. mkosi itself is auto-bootstrappe
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 26 sysexts
+just sysexts            # Build base + all 27 sysexts
 just snow               # Build snow desktop image
 just snowfield          # Build snowfield (Surface kernel)
 just flurry             # Build flurry Hyprland desktop image
@@ -540,14 +540,52 @@ these before changing anything under the native A/B tree:
 
 ### Sysext Constraints
 
+**Sysext udev rules and kernel modules (2026-08-28):** a
+`/usr/lib/udev/rules.d/` entry shipped inside a sysext is applied on NO boot
+unless the sysext also wires the post-merge reload.
+`systemd-sysext.service` declares only `Before=sysinit.target` and carries no
+ordering against `systemd-udevd.service`; udev wins in practice (live snow
+install: udev 8.36s, merge 9.24s), parses its rules once at daemon start, and
+is never told to look again. `OPTIONS+="static_node="` does not rescue this —
+udev applies static-node permissions only at daemon startup, exactly when the
+rule does not yet exist. Root-caused on voxtype: ydotool's `80-uinput.rules`
+never applied, `/dev/uinput` stayed `root:root 0600`, `ydotoold` died
+"Permission denied" and burned its five `Restart=always` attempts in ~0.5s into
+`start-limit-hit`, and voxtype silently used `fallback_to_clipboard` — it
+transcribed and typed nothing, with no error anywhere a user would look.
+Sunshine had the same latent defect. Fix: `ExtraTrees=%D/shared/sysext/tree`
+plus a `multi-user.target.d/10-<name>.conf` `Upholds=snosi-sysext-udev-reload.service`
+drop-in. That unit runs `After=reload-sysext.service systemd-udevd.service`,
+`Before=multi-user.target`, and executes `/usr/lib/snosi/sysext-udev-reload`:
+`udevadm control --reload` -> `settle` -> `systemd-modules-load` ->
+`udevadm trigger --action=add --subsystem-match=misc` -> `settle`. **The order
+is the fix** — creating the device is what makes the reloaded rule fire, so the
+modprobe must follow the reload; steps 1 and 3 are fail-closed, settle timeouts
+are advisory. The `misc` scoping is deliberate: re-triggering `add` across
+`input` would churn every keyboard and mouse through libinput/mutter.
+`test/sysext-udev-reload-test.sh` (validate.yml) fixtures the order and
+fail-closed behavior and enforces wiring parity from a DERIVED consumer set
+(any sysext whose `required-paths.txt` claims a `/usr/lib/udev/rules.d/` or
+`/usr/lib/modules-load.d/` path). Anything added to `shared/sysext/tree` must
+be inert for every consumer — `ExtraTrees=` takes the whole tree.
+
 **Sunshine sysext:** Sunshine is a desktop-only, self-hosted game-streaming
 host for Moonlight installed from its official pinned Trixie deb through
 `verified_download()`. Its native `/usr` layout retains the package's
 `cap_sys_admin,cap_sys_nice` capability, `uhid` modules-load entry, and udev
-access rules. After first enabling and merging the sysext, the modules-load
-entry and virtual-input udev rules take effect on the next boot unless manually
-applied. Its upstream user service is available for manual user startup; do not
-add a preset or `Upholds=` activation.
+access rules; those last two reach udev only through the post-merge reload
+above. Its upstream user service is available for manual user startup; do not
+add a preset or `Upholds=` activation for Sunshine itself.
+
+**Voxtype sysext:** AI voice dictation for Wayland from the Frostyard APT
+repository, bundling its own text-output chain (`wtype` for wlroots/Hyprland,
+`ydotool` from trixie-backports for GNOME/mutter — the only driver mutter
+supports — and `wl-clipboard` for the fallback). It ships
+`modules-load.d/60-voxtype.conf` for `uinput` and depends on the post-merge
+udev reload above; without it dictation transcribes but inserts no text. Its
+`ydotool.service.d/10-voxtype.conf` sets `RestartSec=5s` because the deb's
+`Restart=always` at the default 100ms exhausts its start limit in half a
+second.
 
 **Pilothouse sysext:** Snosi overrides only `pilothoused.service` `ExecStart`
 to retain the packaged Debian socket, socket-group, and sudo-group arguments
@@ -564,7 +602,7 @@ those libs from other suites (flurry: xkbcommon/pipewire/alsa/mesa from
 backports) got shadow-DOWNGRADED for all of `/usr` on merge (killed
 Hyprland, root-caused live 2026-08-25). `mkosi.images/gui-base` is an
 internal never-published directory image (base + common GUI lib closure);
-the desktop-app sysexts (twelve today; the wiring-parity test enumerates them) use `Dependencies=gui-base` +
+the desktop-app sysexts (thirteen today; the wiring-parity test enumerates them) use `Dependencies=gui-base` +
 `BaseTrees=%O/gui-base` + the `sysext-no-divergent-libs.sh` finalize
 tripwire (fails the build on any delta file matching
 `shared/sysext/divergent-lib-families.txt`). THE CONTRACT: every gui-base

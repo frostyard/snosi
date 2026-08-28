@@ -1,0 +1,56 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Make udev rules and kernel modules shipped inside a merged sysext take
+# effect on the boot that merged them.
+#
+# Why this exists: `systemd-sysext.service` carries only
+# `Before=sysinit.target` and NO ordering against `systemd-udevd.service`,
+# and udev wins that race in practice (observed live on a snow install:
+# udev started at 8.36s, the merge began at 9.24s). udev therefore parses
+# its rules before any `/usr/lib/udev/rules.d/` entry a sysext ships
+# exists, and nothing later tells it to look again. The rule is silently
+# never applied — on this boot or any other. The voxtype sysext's
+# `80-uinput.rules` hit exactly this: `/dev/uinput` stayed root:root 0600,
+# `ydotoold` died with "failed to open uinput device: Permission denied",
+# and voxtype fell through to its clipboard fallback, so dictation
+# transcribed but never typed.
+#
+# Do NOT "simplify" this by relying on the rules' own
+# OPTIONS+="static_node=" — udev applies static-node permissions only at
+# daemon startup, which is precisely the moment the rule does not yet
+# exist. Creating the real device (step 3) is what makes the reloaded rule
+# fire.
+set -euo pipefail
+
+# Absolute path, overridable only so test/sysext-udev-reload-test.sh can
+# substitute a stub (same shape as bootc-update-stage's SNOSI_RUN_DIR).
+MODULES_LOAD=${SNOSI_MODULES_LOAD:-/usr/lib/systemd/systemd-modules-load}
+
+# `udevadm settle` returns nonzero on timeout. That is advisory here: a
+# busy event queue is not a reason to leave the rules unapplied, and the
+# steps that actually matter fail loudly on their own.
+settle() {
+    udevadm settle --timeout=30 ||
+        echo "sysext-udev-reload: udevadm settle timed out, continuing" >&2
+}
+
+# 1. Re-read the rules directories, now that the sysext overlay is merged.
+udevadm control --reload
+
+# 2. --reload is asynchronous and applies to NEW devices only, so flush the
+#    queue before creating any.
+settle
+
+# 3. Load the modules that sysext /usr/lib/modules-load.d/ entries ask for.
+#    Failing here is fail-closed on purpose: a module that does not load is
+#    the same silent-no-typing class of bug this script exists to end.
+"$MODULES_LOAD"
+
+# 4. Step 3 only produces an event for a module that was not already
+#    loaded. Re-apply rules to the misc subsystem so a device created
+#    before the merge (uinput, uhid) still picks up the sysext's rule.
+#    Deliberately scoped to `misc`: re-triggering `add` across `input`
+#    would churn every keyboard and mouse through libinput/mutter for no
+#    benefit to any sysext shipped here.
+udevadm trigger --action=add --subsystem-match=misc
+settle
