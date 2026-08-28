@@ -99,8 +99,12 @@ and never needs the pre-staged scope.
 One PR renames the product in-repo. It must be atomic because the
 name-triggered publication guards (ADR-0006), the contracts test, and the
 workflows all enumerate product names — a half-rename fails `validate.yml`.
-`grep -ri cayo` over the tree is the working checklist; the load-bearing
-groups:
+Both a content inventory and a tracked-path inventory are mandatory:
+`git grep -in cayo` finds contents, while
+`git ls-files | grep -i cayo` finds names whose contents do not repeat the
+product name. Classify every result as living (rename below) or historical
+(retain per the docs rule below). Neither command substitutes for the other;
+the load-bearing groups:
 
 **Profiles and composition**
 - [ ] `mkosi.profiles/cayo` → `floe`, `cayo-ab` → `floe-ab`,
@@ -120,7 +124,11 @@ groups:
       and the README composition table row.
 - [ ] `shared/cayo/` → `shared/floe/` (postinst.chroot, tree — including
       `usr/share/cayo/bundles` → `usr/share/floe/bundles` and anything in
-      `shared/scripts/common-postinst.sh` that names the path).
+      `shared/scripts/common-postinst.sh` that names the path). The filename-
+      only inventory must also rename
+      `tree/usr/lib/systemd/system/journald.conf.d/10-cayo-bootc-persistent.conf`
+      → `10-floe-bootc-persistent.conf`; the file itself contains no `cayo`
+      string, so content search cannot find it.
 - [ ] Inside that tree, rename the live-media kernel-argument conditions
       `ConditionKernelCommandLine=!cayo-linux.live=1` →
       `!floe-linux.live=1` in all three units that carry it:
@@ -152,7 +160,26 @@ groups:
       `floe-ab`; same server `default_groups`. The ISO picker is driven by
       this snosi-owned file, not by a firn release, so the ISO republishes
       correctly from this PR alone (`build-installer-iso.yml` triggers on
-      `shared/firn-installer/**`).
+      `shared/firn-installer/**`). Update and run
+      `test/firn-catalog-test.sh`, including its `^cayo` server-product
+      classifier; otherwise the renamed entry takes the desktop assertion
+      branch and the test no longer validates the server groups.
+- [ ] Resolve the superseded-but-still-executable native installer in this
+      repository. It is distinct from the dormant external
+      fisherman/bootc-installer/dakota-iso projects: `just
+      native-installer-iso` still builds it and `validate.yml` still tests
+      its CLI and GUI. Keep the generic `native-installer`/`snosi-install`
+      names, but rename its live product vocabulary and fixtures:
+      `shared/native-installer/tree/usr/libexec/snosi-install` accepts
+      `floe-ab`, derives bare `floe` and
+      `os/native/v1/floe/x86-64`, and reports floe's server/flatpak and disk-
+      size rules; the GUI self-check/default fixture offers `floe-ab`.
+      Rename the path-only `test/cayo-ab-install-spike.sh` →
+      `test/floe-ab-install-spike.sh` and update all comments/callers. Update
+      `test/snosi-install-test.sh`, `test/snosi-setup-model-test.py`,
+      `test/native-installer-e2e-test.sh`, and the installer ISO/config
+      comments and fixtures. Do not freeze a reachable executable with stale
+      cayo identities.
 
 **CI, guards, Justfile**
 - [ ] `build-images.yml`: both matrix entries `profile: cayo` → `floe`.
@@ -183,6 +210,10 @@ groups:
       `native-ab-secure-boot-test.sh`, `native-boot-smoke-test.sh`, etc.).
 - [ ] `test/workflow-path-filter-test.sh` and any other test pinning
       workflow content that names cayo jobs.
+- [ ] The filename inventory explicitly classifies
+      `test/cayo-ab-install-spike.sh` as living and renames it as specified
+      above. The old cayo ship-plan filenames under `docs/plans/` are
+      historical and remain unchanged.
 
 **Docs — living only**
 - [ ] Update: `CLAUDE.md`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`,
@@ -209,6 +240,10 @@ groups:
       before capturing.
 - [ ] Local `just floe` build; full `validate.yml` suite green; fixture
       suites for every touched test.
+- [ ] Re-run both inventories. Every remaining content or path hit is listed
+      in the historical exclusions above (including this rename plan and the
+      old ship plans); no active build, test, installer, or payload path
+      retains cayo.
 
 **Post-merge, first main-branch run**
 - [ ] `build-images.yml` publishes and signs `ghcr.io/frostyard/floe`
@@ -292,47 +327,95 @@ groups:
 ## Phase 4 — Downstream repos (parallelizable after Phase 2 publishes)
 
 Ordered only by "the artifact must exist before the consumer points at it";
-within that, these are independent.
+within that, these are independent. In **each** checkout, begin and end with
+both complete tracked inventories:
+
+```
+git grep -in cayo
+git ls-files | grep -i cayo
+```
+
+The following lists are the 2026-08-28 baselines. New hits discovered at
+implementation time must be classified in the same PR rather than ignored
+because they are absent from this snapshot.
 
 - [ ] **lab** (points at published artifacts — merge only after Phase 2's
-      first publication): rename `manifests/image-poll-cayo-latest.yaml` →
-      floe (image ref, CronWorkflow name, state key `digest-cayo-latest` →
-      `digest-floe-latest` in `manifests/image-polling-digests.yaml`; a
-      fresh empty key just triggers one initial QA pass — fine); defaults in
-      `argo/snosi-disk-boot-test.yaml`, `snosi-install-test.yaml`
-      (`cayo-ab` → `floe-ab`), `workflow-templates/run-incus-disk-tests`,
-      `run-incus-install-tests`, `run-firn-install-tests`; the
-      `firn-install-test` matrix products; Justfile/README/roadmap examples
-      where they are living commands (leave historical run logs alone).
-- [ ] **firn**: built-in catalog `internal/tui/catalog.go` (bootc `floe`
-      entry + ab `floe-ab`); `trust.go` is already generic
-      (`floe-ab` → `os/native/v1/floe` derives mechanically) — update only
-      its doc comments; e2e defaults (`test/e2e-bootc.sh`,
-      `e2e-bootc-secure.sh`, `e2e-ab.sh`, `e2e-tui.sh` fixtures and
-      choose-patterns). Cut a firn release so the *next* ISO build ships a
-      firn whose fallback catalog matches (not blocking — the ISO picker is
-      snosi's catalog.json).
-- [ ] **pilothouse**: cosmetic — demo fleet data in
-      `internal/modules/fleet/module.go` / `views.templ` (regenerate
-      `views_templ.go`), and update `docs/branding.md`'s intentional-
-      occurrence allowlist (it explicitly documents these cayo strings; the
-      rename must keep that doc truthful).
-- [ ] **frostyard.github.io** (`site/`): move
-      `content/docs/images/server/cayo/` → `floe/`, rewrite content, add a
-      redirect/alias from the old URL if the generator supports it.
-- [ ] **frostyard-org**: `src/pages/cayo.astro` → `floe.astro` + redirect.
+      first publication): the content inventory has 15 files and the only
+      filename hit is `manifests/image-poll-cayo-latest.yaml`. Rename that
+      manifest to floe (image ref, CronWorkflow name, and state key
+      `digest-cayo-latest` → `digest-floe-latest` in
+      `manifests/image-polling-digests.yaml`). Update the living surfaces:
+      `Justfile`, `README.md`, `argo/firn-install-test.yaml`,
+      `argo/snosi-install-test.yaml`, `argo/snosi-disk-boot-test.yaml`, and
+      `argo/workflow-templates/{run-incus-install-tests,run-incus-disk-tests,run-container-tests,run-firn-install-tests}.yaml`.
+      In `docs/roadmap.md`, change current tables/commands but retain dated
+      evidence as historical. Leave `docs/adr/{0002,0006}-*.md` and
+      `site/src/data/runs.json` unchanged as decision/run history. Run
+      `just validate` and `just site-build`, then run the floe image poll,
+      disk-install, and Firn-install lanes against the published artifacts.
+- [ ] **firn**: the content inventory has 19 files and no filename hits.
+      Rename all living source and test identities:
+      `internal/tui/{catalog.go,catalog_test.go}`,
+      `internal/bootcimg/storage.go`, `internal/trust/{trust.go,trust_test.go}`,
+      `internal/sysconfig/{user.go,overlay_test.go}`,
+      `internal/steps/{bootc.go,ab_test.go}`,
+      `internal/recipe/recipe_test.go`, `cmd/firn/tui_test.go`, and
+      `test/{e2e-bootc.sh,e2e-bootc-secure.sh,e2e-ab.sh,e2e-tui.sh}`.
+      The catalog expects bootc `floe` and native `floe-ab`; generic trust
+      derivation must resolve `floe-ab` to `os/native/v1/floe`. Update only
+      living commitments in `docs/plans/roadmap.md`; retain ADRs 0003, 0004,
+      and 0012 as history. Run `make ci` and the affected E2E fixture/default
+      checks. Cut a firn release so the next ISO build ships a matching
+      fallback catalog (not blocking — the ISO picker is snosi's
+      `catalog.json`).
+- [ ] **pilothouse**: the content inventory has six files and no filename
+      hits. Rename demo identities in `internal/modules/fleet/module.go` and
+      `views.templ`; update `module_test.go`, `views_test.go`, and the
+      placeholder hostname in `cmd/pilothouse/listen_test.go`; regenerate
+      `views_templ.go`; and rewrite `docs/branding.md`'s intentional-
+      occurrence allowlist so it no longer blesses cayo. Run `make ci`.
+- [ ] **frostyard.github.io**: the content inventory has eight files; the two
+      tracked path hits are the `_index.md` files under
+      `content/docs/images/server/cayo/` and its `cayo-loaded/` child. Move
+      the living server page to floe and retire the obsolete loaded-variant
+      page per the current sysext model (preserve an old-URL redirect).
+      Update `content/docs/{status.md,images/_index.md,images/server/_index.md}`
+      and `templates/pages/home.templ`; retain the two dated site plan files
+      as history. Run `just test` and `just build`. Verify the deployed
+      `/docs/images/server/cayo/` URL redirects to
+      `/docs/images/server/floe/` and the destination returns 200.
+- [ ] **frostyard-org**: the content inventory has three files and the only
+      filename hit is `src/pages/cayo.astro`. Rename it to `floe.astro`,
+      update `src/pages/index.astro` and `README.md`, and add an explicit
+      `/cayo` → `/floe` redirect. Run `npm ci && npm run ci`. Verify the
+      deployed `/cayo` URL redirects to `/floe` and the destination returns
+      200.
 - [ ] **fisherman / bootc-installer / dakota-iso**: dormant, inactive,
       superseded (confirmed 2026-08-26) — no rename work. Their stale cayo
       references are historical record, like the archived `frostyard/cayo`
       repo.
 - [ ] **Done when:** lab's floe poll + install lanes are green against
-      published floe artifacts, and a site search for "cayo" returns only
-      deliberately historical pages.
+      published floe artifacts; every downstream repository's test/build
+      gate above passes; both old website URLs redirect to their floe URLs
+      with a 200 destination; and both content and filename inventories in
+      all five repositories return only the explicitly historical records
+      classified above.
 
 ## Phase 5 — Retirement (small, after Phase 3 sign-off)
 
 - [ ] snosi PR: remove the `ghcr.io/frostyard/cayo` scope from
       `policy.json` + policy test (floe/snow/snowfield/flurry remain).
+- [ ] Reconcile the Phase 1 escape hatch on **both** migrated hosts. First run
+      `snosi-etc-diff /etc/containers/policy.json`; if the operator installed
+      the manual whole-file override, restore the current image copy with
+      `sudo snosi-etc-diff --restore /etc/containers/policy.json` rather than
+      editing the persistent overlay a second time. Verify the effective
+      file with `jq`: `ghcr.io/frostyard/floe` is still
+      `sigstoreSigned`/`matchRepository`, `ghcr.io/frostyard/cayo` is absent,
+      and `default` remains `reject`. Confirm the file no longer appears in
+      `snosi-etc-diff`. This step is required even if neither operator
+      remembers using the escape hatch; persistent `/etc` drift does not
+      disappear when the image policy changes.
 - [ ] Edit the GHCR `cayo` package description to "renamed to floe
       (2026-08); frozen" — keep digests indefinitely (cheap, and rollback
       deployments reference them).
@@ -340,8 +423,9 @@ within that, these are independent.
       `RENAMED-to-floe` marker object. Do not break old signed indexes.
 - [ ] Update the user-memory note (`minisnow` etc.) and close the tracking
       issue with links to the ADR.
-- [ ] **Done when:** a freshly-installed floe system's policy no longer
-      trusts the cayo repository, and both operators have confirmed a full
+- [ ] **Done when:** a fresh floe install and both migrated hosts' effective
+      policies no longer trust the cayo repository, the two migrated hosts
+      have no policy-file drift, and both operators have confirmed a full
       update cycle on floe with cayo nowhere in `bootc status`.
 
 ## Open questions
