@@ -42,10 +42,10 @@ require_line "$composition" 'shared/packages/sundog/mkosi\.conf' "Sundog package
 
 declare -a required_packages=(
     kde-plasma-desktop kwin-wayland sddm sddm-theme-breeze
-    plasma-nm plasma-pa kscreen powerdevil polkit-kde-agent-1 libpam-kwallet5
+    plasma-nm plasma-pa bluedevil kscreen powerdevil polkit-kde-agent-1 libpam-kwallet5
     xdg-desktop-portal-kde qt6-wayland dolphin konsole
     plasma-discover-backend-flatpak kde-config-flatpak fcitx5 kde-config-fcitx5
-    plymouth-theme-breeze flatpak tuned tuned-ppd podman distrobox
+    plymouth-theme-breeze flatpak print-manager tuned tuned-ppd podman distrobox
 )
 for package in "${required_packages[@]}"; do
     require_line "$packages" "^[[:space:]]*(Packages=)?${package}$" "required package is missing: $package"
