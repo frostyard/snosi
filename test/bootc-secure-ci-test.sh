@@ -3,8 +3,6 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck disable=SC1091
-source "$ROOT_DIR/shared/bootc-secure/ci/run-full-window.sh"
 
 task123_fixture_coverage_is_present() { # workflow
     local workflow=$1
@@ -63,11 +61,10 @@ all_self_hosted_jobs_avoid_repository_secrets() { # workflow directory
     ((found == 1))
 }
 
-self_hosted_job_uses_job_token() { # workflow job
-    local block
-    block=$(workflow_job_block "$1" "$2")
-    [[ $block == *'GHCR_TOKEN: ${{ github.token }}'* ]] \
-        && [[ $block != *'GHCR_TOKEN: ${{ secrets.'* ]]
+workflows_avoid_retired_dakota_lane() { # workflow directory
+    ! grep -RqsE \
+        'live-full-window|run-window-in-container|run-full-window|stage-state-root|dakota_ref|DAKOTA_REF' \
+        "$1"
 }
 
 workflow_job_selects_runc() { # workflow job
@@ -101,48 +98,6 @@ unconfigured_harness_blocks_cleanly() { # harness
     [[ $status -eq 2 && $output == *'BLOCKED:'* && $output != *'Error: retaining'* ]]
 }
 
-work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
-chmod 700 "$work"
-
-refs="$work/refs.env"
-cat >"$refs" <<'EOF'
-OCI_REF=ghcr.io/frostyard/cayo@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-TRACKING_REF=ghcr.io/frostyard/cayo:secure-test
-UPDATE_N1_REF=ghcr.io/frostyard/cayo@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-UPDATE_N2_REF=ghcr.io/frostyard/cayo@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-UPDATE_N1_VERSION=20260729123456
-UPDATE_N2_VERSION=20260729123457
-ROTATION_OLD_REF=ghcr.io/frostyard/cayo@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
-ROTATION_TRANSITION_REF=ghcr.io/frostyard/cayo@sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
-ROTATION_NEW_REF=ghcr.io/frostyard/cayo@sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-EOF
-chmod 600 "$refs"
-
-assert_true 'mode-0700 absolute state root is accepted' validate_state_root "$work"
-chmod 755 "$work"
-assert_false 'world-readable state root is rejected' validate_state_root "$work"
-chmod 700 "$work"
-assert_true 'plain known refs are sourced' load_refs_env "$refs"
-assert_true 'known refs are available after sourcing' test "$OCI_REF" = 'ghcr.io/frostyard/cayo@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-printf 'UNKNOWN=value\n' >>"$refs"
-assert_false 'unknown refs variable is rejected' load_refs_env "$refs"
-cp "$refs" "$work/unknown.env"
-head -n -1 "$refs" >"$work/valid.env"
-mv "$work/valid.env" "$refs"
-chmod 600 "$refs"
-printf 'OCI_REF=$(id)\n' >>"$refs"
-assert_false 'command substitution is rejected' load_refs_env "$refs"
-head -n -1 "$refs" >"$work/valid.env"
-mv "$work/valid.env" "$refs"
-chmod 600 "$refs"
-printf 'OCI_REF =value\n' >>"$refs"
-assert_false 'whitespace syntax is rejected' load_refs_env "$refs"
-head -n -1 "$refs" >"$work/valid.env"
-mv "$work/valid.env" "$refs"
-chmod 600 "$refs"
-chmod 644 "$refs"
-assert_false 'world-readable refs are rejected' load_refs_env "$refs"
 assert_true 'unconfigured secure install harness blocks without a cleanup retention diagnostic' \
     unconfigured_harness_blocks_cleanly bootc-secure-install-test.sh
 assert_true 'unconfigured secure update harness blocks without a cleanup retention diagnostic' \
@@ -157,10 +112,8 @@ assert_true 'every self-hosted workflow job is restricted to main' \
     all_self_hosted_jobs_are_main_only "$ROOT_DIR/.github/workflows"
 assert_true 'no self-hosted workflow job receives a repository secret' \
     all_self_hosted_jobs_avoid_repository_secrets "$ROOT_DIR/.github/workflows"
-assert_true 'manual full-window uses only its job-scoped token for GHCR' \
-    self_hosted_job_uses_job_token "$ROOT_DIR/.github/workflows/test-bootc-secure.yml" live-full-window
-assert_true 'nightly full-window uses only its job-scoped token for GHCR' \
-    self_hosted_job_uses_job_token "$ROOT_DIR/.github/workflows/bootc-secure-nightly.yml" live-full-window
+assert_true 'workflows do not invoke the retired Dakota adapter lane' \
+    workflows_avoid_retired_dakota_lane "$ROOT_DIR/.github/workflows"
 assert_true 'secure-build selects and verifies the runc OCI runtime' \
     workflow_job_selects_runc "$ROOT_DIR/.github/workflows/build-images.yml" secure-build
 assert_true 'mechanics-build selects and verifies the runc OCI runtime' \

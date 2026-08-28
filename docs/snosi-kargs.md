@@ -121,7 +121,7 @@ the argument, then requires the global addon to survive a real
 change; the extended QEMU leg will run in the existing native nightly.
 
 **BLOCKED:** bootc live persistence across a deployment update requires the
-external Dakota/bootc-installer runner and authorized secure OCI artifacts that
-Snosi does not own. Until that evidence exists, do not promise that an external
-bootc ESP writer preserves `/loader/addons`; `snosi-kargs status` reports a
+Firn-native Snosi lifecycle lane and authorized secure OCI artifacts. Until
+that evidence exists, do not promise that a bootc ESP writer preserves
+`/loader/addons`; `snosi-kargs status` reports a
 missing artifact as pending so an operator can re-apply it.

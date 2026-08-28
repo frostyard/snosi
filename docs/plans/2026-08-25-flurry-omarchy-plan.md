@@ -178,10 +178,9 @@ key pre-creates the home dir, silently skipping skel — fatal for flurry
   `build-images.yml` secure-build + PR matrices and `build-mechanics.yml`;
   policy.json carries the `ghcr.io/frostyard/flurry` `sigstoreSigned` scope
   (test updated); the publication guard, verify/promote scripts, and static
-  test all include flurry. Still deferred: the live secure-harness rotations
-  (`bootc-secure-nightly.yml`, `test-bootc-secure.yml` dispatch options,
-  `stage-state-root.sh`/`run-full-window.sh`) — those need flurry secure
-  install fixtures that do not exist yet.
+  test all include flurry. Still deferred: adding flurry to the future
+  Firn-native Snosi lifecycle lane; that needs secure install fixtures that do
+  not exist yet.
 - Native A/B `flurry-ab` (channel fragment, repart, sysupdate transfers, CI).
 - Vendor gpu-screen-recorder (screen recording is stubbed), tensaku
   (screenshot editing falls back), voxtype, localsend, moonlight-qt,

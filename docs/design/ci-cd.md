@@ -287,13 +287,13 @@ referrer digest, gate Snow release creation on complete metadata publication,
 decide whether `latest` moves only after metadata completion, and make general
 output cleanup unconditional where retained runners require it.
 `test-bootc-secure.yml` supplies PR/push fixture contracts,
-`bootc-secure-nightly.yml` supplies fixture coverage plus a self-hosted live
-full-window attempt, and `test-install.yml` remains explicitly insecure legacy
-mechanics coverage. Live Task 9/10 needs authorized signed secure
-N/N+1/N+2/transition OCI fixtures and external runners. Until then its
-unconfigured harnesses must exit 2 with `BLOCKED:`. The 2026-07-27 published
-`latest` images lacked `io.snosi.bootc.secureboot-capable`, so they are not
-valid live secure inputs. A manual Snowfield hardware run remains separate.
+`bootc-secure-nightly.yml` repeats those secretless fixtures, and
+`test-install.yml` remains explicitly insecure legacy mechanics coverage.
+Firn's enforced-Secure-Boot E2E and lab `run-firn-install-tests` matrix own
+fresh-install evidence under core ADR-0031. Snosi update, recovery, rotation,
+and reconciliation still need a Firn-native lifecycle lane with authorized
+signed N/N+1/N+2/transition OCI fixtures. A manual Snowfield hardware run
+remains separate.
 The PR/push fixture contracts include Task 1-3's spike `--fixtures` mode, the
 privileged disposable-LUKS recovery-byte regression (installing `cryptsetup`
 only for that check), and the Task 3 console-pump socket fixture; no live
@@ -363,9 +363,10 @@ runtime `/etc` mutation guard, frozen native A/B contracts and publication
 guard, bootc secure CI wiring and publication guard, and signed sysext metadata
 policy. These are selected because they are fast, deterministic, require no
 root or network after checkout, and cover policy that must remain true even
-when no code is changing. Deep image-build and boot evidence remains in
-`native-nightly.yml` and `bootc-secure-nightly.yml`; this workflow does not
-duplicate those expensive jobs or publish artifacts.
+when no code is changing. Deep native image-build and boot evidence remains in
+`native-nightly.yml`; secure bootc installation evidence belongs to Firn's lab
+matrix. This workflow does not duplicate those expensive jobs or publish
+artifacts.
 
 Default permissions are empty and the sole job receives only `contents: read`.
 Checkout credentials are not persisted, no environment or repository secret is

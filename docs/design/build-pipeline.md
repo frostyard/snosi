@@ -162,8 +162,8 @@ enter kernel module trust depending on shim/kernel MOK routing; offline signing
 is the narrower option. `test/snosi-kargs-test.sh` is the non-root PATH-stubbed
 contract. The native secure QEMU harness now requires PCR 11 to remain stable,
 PCR 12 to change, TPM unlock to survive, a corrupt addon to be skipped without
-bricking, and the global addon to survive sysupdate. Bootc deployment-update
-persistence stays `BLOCKED:` until its external live runner and authorized
+bricking, and the global addon to survive sysupdate. Bootc deployment-update persistence
+stays `BLOCKED:` until a Firn-native Snosi lifecycle lane and authorized
 artifacts exist.
 
 **Protected bootc publication and evidence boundary (Task 10):**
@@ -179,9 +179,10 @@ restrictive policy copy, and artifact), and only then moves `latest`; a failed
 immutable candidate cannot change `latest`. This is CI scaffolding and fixture
 coverage, not production Secure Boot evidence: the 2026-07-27 `latest` images
 were inspected without `io.snosi.bootc.secureboot-capable`, so they cannot feed
-Task 9 live mode. Task 9/10 live install, update, rotation, full-window, and
-Snowfield hardware evidence remain BLOCKED pending authorized signed secure
-N/N+1/N+2/transition fixtures and external runners.
+the retired Task 9 live mode. Firn's E2E/lab matrix owns fresh-install
+evidence; update, recovery, rotation, reconciliation, and Snowfield hardware
+evidence remain BLOCKED pending authorized signed secure
+N/N+1/N+2/transition fixtures and the appropriate lifecycle or hardware lane.
 Build-specific secure composition and publication mechanics stay in this
 document; the normative operational recovery and evidence rules are in
 [`docs/bootc-secure-operations.md`](../bootc-secure-operations.md).

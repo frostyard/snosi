@@ -248,37 +248,24 @@ validation leaves the signed UKI byte-identical.
 `test/bootc-secure-static-test.sh` pins the drop-in's exact `install_items+=`
 line and the validator's rule assertion.
 
-## Task 9 Secure Install Harness
+## Secure Bootc Installation
 
 The normative operations status and recovery/evidence rules are in
 [`docs/bootc-secure-operations.md`](../bootc-secure-operations.md); this
-section describes the harness interface and its fixture/live boundary only.
+section describes the current ownership and fixture boundary.
 
 `test/bootc-secure-install-test.sh --fixtures` covers the pure acceptance
-contract for the external Fisherman/bootc-installer/Dakota path: only the
-three production profiles and immutable matching GHCR digest references are
-accepted; recovery credentials must be nonempty mode 0600; Type #2-only BLS,
-composefs binding, and exactly one signed-PCR-11 token are required. It also
-proves incomplete live inputs yield `BLOCKED` rather than a false pass.
+contract frozen for the former Task 9 adapter path: only the three production
+profiles and immutable matching GHCR digest references are accepted; recovery
+credentials must be nonempty mode 0600; Type #2-only BLS, composefs binding,
+and exactly one signed-PCR-11 token are required. This fixture coverage remains
+useful for image invariants, but it is not the supported installer path.
 
-Live mode consumes `DAKOTA_ISO`, `OCI_REF`, `MOK_CERT`, `PCR_PUBLIC`,
-`RECOVERY_KEY`, `TARGET_DISK`, `BOOTC_SECURE_INSTALLER`, and
-`BOOTC_SECURE_RECOVERY_COMMAND`. The installer runner receives a generated
-non-interactive recipe and owns booting its fresh ISO through its documented
-test path; Snosi owns the Microsoft-only rejection, same-varstore MOK
-enrollment, OVMF/swtpm boot evidence, guest assertions, and bounded cleanup.
-The negative runner must emit the exact case-specific rejection marker for unsigned, wrong-key, wrong-repository,
-false-capability, wrong-MOK, composefs mismatch, ESP-full, interrupted
-finalization/reconciliation, TPM replacement, and recovery-reenrollment
-fixtures. TPM replacement and recovery reenrollment use the separate positive
-recovery runner and must prove a new token, retained recovery unlock, and a
-distinct unattended reboot. Current public external documentation describes only the generic
-Dakota autoinstall route, not this secure contract, so normal live invocation
-is expected to exit 2 until Task 8's external runner and artifacts exist. A
-snowfield run remains insufficient without the explicit Surface hardware gate.
-The recovery runner receives `--state` pointing at a mode-0600, path-only
-manifest created before QEMU/swtpm stop, plus `--iso`, the recipe, and the
-recovery file. The final update handoff copies that same manifest semantics.
+Under frostyard/core ADR-0031, Firn is the sole secure bootc installer. Firn's
+enforced-Secure-Boot E2E and the lab `run-firn-install-tests` matrix own fresh
+install-and-boot evidence. Snosi workflows must not clone Dakota, pin its
+deleted adapters, or wrap Firn in the retired Task 9 protocol. Snowfield still
+requires its explicit representative Surface hardware gate.
 
 ## Task 9 Secure Update Harness
 
@@ -292,15 +279,12 @@ upgrade, then verifies staged/booted/rollback continuity, secure runtime
 invariants, and the persistence matrix after every boot. Its marked negative
 runner must prove each rejection, newly-created failed update state after the
 harness clears the prior runtime files, cleared semaphore, and
-continued bootability. Live mode is deliberately BLOCKED pending external
-runners and authorized signed secure N/N+1/N+2/transition OCI fixtures.
-Fixture success proves only the harness protocol and fail-closed behavior; it
-is not live Task 9/10 evidence. The published 2026-07-27 `latest` images were
-inspected without `io.snosi.bootc.secureboot-capable`, so they are correctly
-rejected as live secure fixtures. Fisherman now carries the recipe's
-same-repository tracking tag while its provenance retains the accepted-N
-immutable digest. Snowfield still needs representative Surface hardware
-validation.
+continued bootability. Live update evidence is not scheduled because its Dakota-produced
+installed-state handoff was retired. Fixture success proves only the harness
+protocol and fail-closed behavior. A replacement must be a Snosi-owned,
+Firn-native lifecycle lane operating on a Firn-installed system with authorized
+signed N/N+1/N+2/transition OCI fixtures. Snowfield still needs representative
+Surface hardware validation.
 The handoff's TPM state/socket paths are passed exactly to the shared starter.
 Every Task 9 cryptsetup check first derives exactly one backing `/dev` path from
 `cryptsetup status root`; recovery bytes travel only through SSH stdin. Guest
@@ -1030,12 +1014,12 @@ Bootc secure validation has separate tiers. `validate.yml` and
 `test-bootc-secure.yml` run no-secret fixture and static contracts on PRs;
 `build-images.yml` PR jobs exercise explicitly insecure local mechanics only.
 Protected candidate publication validates the immutable digest before `latest`
-promotion. `bootc-secure-nightly.yml` runs the same fixtures and attempts a
-self-hosted Task 9/10 full window, visibly returning `BLOCKED` when its
-runner-owned state is absent. A manual self-hosted full-window run and the
-manual Snowfield hardware tier are the only routes to their respective live
-evidence. None of these tiers converts fixture success into production Secure
-Boot support.
+promotion. `bootc-secure-nightly.yml` repeats the secretless fixture contracts.
+Firn's enforced-Secure-Boot E2E and lab matrix own fresh-install evidence; the
+manual Snowfield hardware job owns only its representative-device evidence.
+Update, recovery, rotation, and reconciliation still need a Firn-native
+Snosi lifecycle lane. None of these tiers converts fixture success into
+production Secure Boot support.
 
 The `test-install.yml` workflow runs these tests on manual dispatch:
 1. Sets up KVM-enabled runner

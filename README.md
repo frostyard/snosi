@@ -478,12 +478,12 @@ credential owner, retaining mode-0600 credentials without capabilities.
 Protected active
 and optional previous PCR public identities remain outside the writable mount;
 the copied public inputs are checked against those identities after execution.
-This remains not production Secure Boot support: the failed protected run did
-not reach validation, push, signing, or promotion, and published `latest` images inspected
-on 2026-07-27 lacked `io.snosi.bootc.secureboot-capable` and are unsuitable for
-the secure install/update harnesses. MOK/TPM enrollment and full secure
-installation remain blocked pending signed secure N/N+1/N+2/transition OCI
- fixtures and prepared external runners. Use
+This remains not production Secure Boot support. Firn is the sole supported
+secure bootc installer and its enforced-Secure-Boot E2E plus the lab
+`run-firn-install-tests` matrix own fresh-install proof. Snosi's former
+Dakota/Fisherman Task 9 adapter lane is retired. Installed-image update,
+recovery, rotation, and bootloader-reconciliation evidence still require a
+Firn-native Snosi lifecycle lane and authorized signed OCI fixtures. Use
  `--firmware uefi-insecure` only for bcvk mechanics testing, not Secure Boot
  validation. Native A/B Secure Boot validation and the established bootc
  install/test workflow are unaffected.
@@ -501,32 +501,21 @@ measured into PCR 12, and deliberately excluded from Snosi's signed-PCR-11
 LUKS policy. Dangerous root, verity, LUKS, and emergency arguments are refused
 unless an operator completes the interactive `--force` confirmation. Native
 Secure Boot/TPM/update behavior has QEMU coverage; bootc persistence remains
-`BLOCKED:` on the external secure-install/update runner and authorized
-artifacts.
+unproven pending the Firn-native lifecycle lane and authorized artifacts.
 
-The external Fisherman/bootc-installer/Dakota secure-install boundary is
-defined in [`docs/bootc-secure-install-contract.md`](docs/bootc-secure-install-contract.md).
-It freezes the schema-1 installer requirements, immutable Cosign pull, DPS
-LUKS2/Btrfs layout, Type #2-only bootc invocation, TPM/recovery flow, and ESP
-repair boundary. It is a contract only; installer implementation and runtime
-proof are outside this repository. The external implementation checkboxes are
-complete, but Snosi live evidence remains blocked until authorized secure OCI
-fixtures and prepared runners are available to the harness.
+The image-facing schema-1 requirements are defined by
+`/usr/lib/snosi/bootc-secure.json` and validated by
+`test/bootc-secure-install-contract-test.sh`. Firn consumes that contract and
+owns secure fresh installation. The former
+[`docs/bootc-secure-install-contract.md`](docs/bootc-secure-install-contract.md)
+Task 9 adapter protocol is retained only as frozen compatibility and fixture
+history; no workflow clones Dakota or invokes those adapters.
 
 `test/bootc-secure-install-test.sh --fixtures` validates Task 9's install
-harness contract without privileged artifacts. Its live mode is deliberately
-fail-closed: it requires `PROFILE` (`cayo`, `snow`, or `snowfield`), a freshly
-built secure Dakota ISO, an immutable matching `OCI_REF`, MOK/PCR public
-identities, a mode-0600 recovery credential, a blank 30 GiB target disk, and
-external supported-test runners in `BOOTC_SECURE_INSTALLER` and
-`BOOTC_SECURE_RECOVERY_COMMAND`. The
-runners must follow the exact marked protocol in the secure-install contract;
-missing inputs print `BLOCKED:` and exit 2;
-this is not E2E evidence. Snowfield additionally requires the existing
-representative Surface-hardware gate.
-Recovery runners receive an owned, mode-0600 path-only state manifest plus the
-Dakota ISO and recipe, so they can reach the retained SSH identity without any
-secret bytes entering manifest JSON.
+harness contract without privileged artifacts. This is retained fail-closed
+fixture coverage, not the supported installer path or E2E evidence. Firn's lab
+matrix supplies fresh-install evidence. Snowfield additionally requires the
+existing representative Surface-hardware gate.
 
 `test/bootc-secure-update-test.sh --fixtures` validates the paired update
 handoff. Live mode consumes the mode-0600, path-only install-state manifest,
@@ -537,9 +526,9 @@ The retained manifest's exact TPM state/socket paths are reused; runtime LUKS
 checks derive the backing `/dev` path from `cryptsetup status root`, and MOK
 verification compares public host/guest certificate fingerprints without
 passing a host path to the guest.
-It remains BLOCKED until those runners and secure artifacts exist. Fisherman
-now carries the same-repository tracking tag through the install recipe while
-provenance retains the accepted immutable N digest.
+Live update, rollback, and recovery remain unproven until a Snosi-owned
+Firn-native lifecycle lane supplies an installed-state handoff and authorized
+secure artifacts.
 
 CI keeps these boundaries explicit. Pull requests build only local bootc
 mechanics images labelled `io.snosi.bootc.secureboot-capable=false`; they do not
