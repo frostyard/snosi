@@ -574,7 +574,15 @@ Desktop configuration overlay:
 
 Server configuration overlay:
 - APT sources for Docker
-- NetworkManager/IWD networking config
+- NetworkManager: no Wi-Fi backend override — cayo uses NetworkManager's
+  default `wpa_supplicant` backend, matching the `wpasupplicant` package that
+  base installs. An early cayo overlay shipped
+  `etc/NetworkManager/conf.d/iwd.conf` with `wifi.backend=iwd` while no product
+  installs `iwd`, pointing NetworkManager at an absent backend (frostyard/snosi#805,
+  removed 2026-08). `test/wifi-backend-test.sh` (validate.yml) fails the build
+  if any shipped payload tree selects a `wifi.backend=` whose implementing
+  package is not in that payload's closure (base plus the product's package
+  set); selecting `iwd` therefore requires installing `iwd` first.
 - systemd mounts and presets (no desktop services)
 - sysusers/tmpfiles for avahi, dnsmasq, docker, incus
 
