@@ -7,3 +7,9 @@
 /usr/share/icons/hicolor/scalable/apps/dev.lizardbyte.app.Sunshine.svg
 /usr/share/sunshine/apps.json
 /usr/share/sunshine/web/index.html
+# Post-merge udev rule reload + uhid load: without these the rules and
+# modules-load entry above are never applied on any boot. Shared payload
+# comes from shared/sysext/tree.
+/usr/lib/snosi/sysext-udev-reload
+/usr/lib/systemd/system/snosi-sysext-udev-reload.service
+/usr/lib/systemd/system/multi-user.target.d/10-sunshine.conf

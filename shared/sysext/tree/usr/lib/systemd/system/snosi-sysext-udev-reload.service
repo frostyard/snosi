@@ -1,0 +1,20 @@
+[Unit]
+Description=Apply udev rules and kernel modules shipped by system extensions
+Documentation=https://github.com/frostyard/snosi/blob/main/docs/design/sysexts.md
+# reload-sysext.service is what makes this unit visible to PID 1 at all (it
+# runs the post-merge `systemctl daemon-reload`); udevd must be up before we
+# ask it to re-read its rules.
+After=reload-sysext.service systemd-udevd.service
+# Pulled in by each consuming sysext's multi-user.target.d/10-<name>.conf
+# `Upholds=` drop-in — the same activation pattern every sysext service
+# uses, because a preset-created .wants symlink is dropped at PID 1 scan
+# time when the unit is still inside an unmerged overlay. Ordering before
+# the target keeps this ahead of any user session (ydotool.service and
+# friends live in the graphical session, well after multi-user.target).
+Before=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/snosi/sysext-udev-reload
+TimeoutStartSec=120
