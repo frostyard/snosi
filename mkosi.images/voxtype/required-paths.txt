@@ -8,3 +8,11 @@
 /usr/lib/udev/rules.d/80-uinput.rules
 /usr/bin/wl-copy
 /usr/bin/wl-paste
+# Post-merge udev rule reload + uinput load: without these the rule above is
+# never applied and ydotoold cannot open /dev/uinput (dictation transcribes
+# but types nothing). Shared payload comes from shared/sysext/tree.
+/usr/lib/snosi/sysext-udev-reload
+/usr/lib/systemd/system/snosi-sysext-udev-reload.service
+/usr/lib/modules-load.d/60-voxtype.conf
+/usr/lib/systemd/system/multi-user.target.d/10-voxtype.conf
+/usr/lib/systemd/user/ydotool.service.d/10-voxtype.conf

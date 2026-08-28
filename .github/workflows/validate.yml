@@ -227,6 +227,14 @@ jobs:
         # Fixture-only and repository-static: no root, network, or image build.
         run: ./test/sysext-authoring-contract-test.sh
 
+      - name: Validate sysext udev/module reload contract
+        # Fixture suite for shared/sysext/tree's post-merge udev reload (udev
+        # parses its rules before systemd-sysext merges, so a sysext-shipped
+        # rule is otherwise never applied) plus static wiring parity across
+        # every sysext claiming a udev rule or modules-load entry. No root,
+        # network, or image build.
+        run: ./test/sysext-udev-reload-test.sh
+
       - name: Validate sysext required paths finalizer
         # Fixture regression test for whitespace-preserving parsing of sysext
         # required-paths.txt entries. No root, network, or image build.

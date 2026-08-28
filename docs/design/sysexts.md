@@ -161,7 +161,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 ### sunshine
 - `mkosi.postinst.chroot` downloads Sunshine's official pinned Trixie `.deb` with `verified_download()` and installs it with `dpkg -i`; its payload already uses the native `/usr` layout, so no relocation is needed
 - Desktop-only self-hosted game streaming host for Moonlight; retain the package's `cap_sys_admin,cap_sys_nice` file capability on `/usr/bin/sunshine`, `uhid` modules-load entry, and udev access rules
-- After first enabling and merging the sysext, the `uhid` modules-load entry and virtual-input udev rules take effect on the next boot unless manually applied
+- The `uhid` modules-load entry and virtual-input udev rules reach udev only via `snosi-sysext-udev-reload.service` (`ExtraTrees=%D/shared/sysext/tree` + the `Upholds=` drop-in). udev parses its rules before `systemd-sysext.service` merges the overlay, so without that reload they were applied on *no* boot, not merely a delayed one — see [udev Rules and Kernel Modules in Sysexts](#udev-rules-and-kernel-modules-in-sysexts)
 - The upstream `app-dev.lizardbyte.app.Sunshine.service` user unit is available for manual user startup only: no user preset and no `Upholds=` drop-in provide automatic activation
 - Ships a hicolor icon, so `sysext-strip-icon-cache.sh` is required
 
@@ -257,6 +257,15 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/systemd/system-preset/40-tailscale.preset` — Enable tailscaled
 - `usr/lib/systemd/system/multi-user.target.d/10-tailscale.conf` — `Upholds=tailscaled.service` drop-in for reliable boot activation
 - `usr/lib/tmpfiles.d/tailscale.conf` — Factory config injection
+
+### voxtype
+- No postinst — `voxtype` comes from the Frostyard APT repository (built by frostyard/omarchy-apps) and apt resolves its runtime dependencies; the text-output chain (`wtype`, `ydotool`, `wl-clipboard`) is bundled so the sysext is self-contained on every desktop product
+- `ydotool` has no Trixie candidate, so apt takes the sandbox's trixie-backports one (same pattern as lemonade's `libcpp-httplib0.41`)
+- Its deb ships `80-uinput.rules` and the `ydotool.service` **user** unit. The rule only reaches udev via `snosi-sysext-udev-reload.service` — see [udev Rules and Kernel Modules in Sysexts](#udev-rules-and-kernel-modules-in-sysexts); without it `/dev/uinput` stays `root:root 0600`, `ydotoold` cannot start, and voxtype falls through to its clipboard fallback (transcribes, types nothing)
+- `usr/lib/modules-load.d/60-voxtype.conf` — loads `uinput`, whose node otherwise exists only as a kmod static node
+- `usr/lib/systemd/system/multi-user.target.d/10-voxtype.conf` — `Upholds=snosi-sysext-udev-reload.service`
+- `usr/lib/systemd/user/ydotool.service.d/10-voxtype.conf` — `RestartSec=5s`. The deb's unit is `Restart=always` at the default 100ms, so its five permitted starts burn out in ~0.5s and land permanently in `start-limit-hit`; spreading them over ~20s means a slow boot cannot resurrect that failure mode
+- Desktop dictation tool with no *system* service of its own: no system preset, and the user unit is started by the user (or their compositor keybinding), not by a preset
 
 ### vscode
 - No `mkosi.extra/` — the Microsoft `code` deb installs natively under `/usr` (`/usr/share/code` + `/usr/bin/code` symlink), so no relocation is needed
@@ -386,6 +395,94 @@ This drop-in is brand-new to systemd after the post-merge `daemon-reload`, so it
 Example path inside the sysext: `usr/lib/systemd/system/multi-user.target.d/10-tailscale.conf`
 
 The preset (`40-<name>.preset`) is still required to set the enabled state; the drop-in handles the activation timing.
+
+## udev Rules and Kernel Modules in Sysexts
+
+**A `/usr/lib/udev/rules.d/` entry shipped in a sysext is never applied — not
+on the boot that merged the sysext, and not on any boot after it — unless the
+sysext also ships the post-merge reload described here.**
+
+**Root cause.** `systemd-sysext.service` declares only `Before=sysinit.target`
+and carries *no* ordering against `systemd-udevd.service`. udev wins that race
+in practice: on a live snow install, `systemd-udevd.service` started at
+**8.36s** and `systemd-sysext.service` began merging at **9.24s**. udev parses
+its rules directories once, at daemon start, so every rule inside the overlay
+is invisible, and nothing later tells udev to look again. This is not
+first-boot-only — it repeats identically on every subsequent boot.
+
+`OPTIONS+="static_node="` does **not** rescue this. udev applies static-node
+permissions only at daemon startup, which is precisely the moment the rule does
+not yet exist.
+
+**How it presented (voxtype, 2026-08-28).** The voxtype sysext ships ydotool's
+`80-uinput.rules` (`KERNEL=="uinput", GROUP="input", MODE="0660"`). `uinput` is
+not a loaded module, so `/dev/uinput` existed only as a kmod static node at
+`root:root 0600`. The rule never applied, `ydotoold` exited with `failed to open
+uinput device: Permission denied` and burned its five `Restart=always` attempts
+in ~0.5s into `start-limit-hit`, and voxtype silently took its
+`fallback_to_clipboard` path. The user-visible symptom was "it transcribes but
+doesn't insert text anywhere" — no error surfaced anywhere a user would look.
+The sunshine sysext (`60-sunshine.rules` + a `uhid` modules-load entry) had the
+same latent defect.
+
+**Required pattern.** The sysext wires the shared payload in `shared/sysext/tree`:
+
+```ini
+[Content]
+ExtraTrees=%D/shared/sysext/tree
+```
+
+and ships the standard activation drop-in at
+`mkosi.extra/usr/lib/systemd/system/multi-user.target.d/10-<name>.conf`:
+
+```ini
+[Unit]
+Upholds=snosi-sysext-udev-reload.service
+```
+
+`snosi-sysext-udev-reload.service` runs `After=reload-sysext.service
+systemd-udevd.service` and `Before=multi-user.target` — comfortably ahead of any
+user session — and executes `/usr/lib/snosi/sysext-udev-reload`, which does, in
+this order:
+
+1. `udevadm control --reload` — udev re-reads the now-merged rules directories.
+2. `udevadm settle` — `--reload` is asynchronous and applies to *new* devices
+   only, so flush the queue before creating any.
+3. `/usr/lib/systemd/systemd-modules-load` — load the modules that sysext
+   `/usr/lib/modules-load.d/` entries ask for. **Creating the device here is
+   what makes the reloaded rule fire**; this step must come after step 1.
+4. `udevadm trigger --action=add --subsystem-match=misc` — step 3 emits no event
+   for a module that was already loaded, so re-apply rules to `misc` (where
+   `uinput` and `uhid` live) to cover a device that existed before the merge.
+
+A module the rule depends on therefore needs its own
+`mkosi.extra/usr/lib/modules-load.d/60-<name>.conf` (voxtype ships one for
+`uinput`; sunshine's `uhid` entry comes from the deb).
+
+**Scope and limits.** Step 4 is deliberately restricted to the `misc`
+subsystem: re-triggering `add` across `input` would churn every keyboard and
+mouse through libinput/mutter for no benefit to any sysext shipped here. A
+future sysext whose rules match a *different* subsystem's pre-existing devices
+will need that subsystem added, with the same explicit justification. Steps 1
+and 3 are fail-closed (a failed reload aborts before any device is created
+under the stale ruleset; a module that will not load fails the unit) — a silent
+success is the exact failure mode this pattern exists to end. `udevadm settle`
+timeouts are advisory and only warn.
+
+**Enforced by** `test/sysext-udev-reload-test.sh` (wired into `validate.yml`).
+It fixtures the script's command order and fail-closed behavior, pins the
+unit's ordering and its lack of an `[Install]` section, and enforces static
+wiring parity: the consumer set is *derived* — any sysext whose
+`required-paths.txt` claims a path under `/usr/lib/udev/rules.d/` or
+`/usr/lib/modules-load.d/` must carry the `ExtraTrees=` line, the `Upholds=`
+drop-in, and both shared payload paths, and a sysext that wires the tree
+without needing it fails too. That derivation is necessary but not sufficient:
+a sysext can ship deb-provided udev rules without naming one in
+`required-paths.txt`, so list the rule when you add it.
+
+**Anything added to `shared/sysext/tree` must be inert for every sysext that
+includes it** — `ExtraTrees=` takes the whole tree, so a consumer opting in for
+the udev reload also receives whatever else lands there.
 
 ## Runtime Setup Service Pattern
 
