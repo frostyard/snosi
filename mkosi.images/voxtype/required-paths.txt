@@ -1,0 +1,10 @@
+# voxtype sysext: AI voice dictation for Wayland (Frostyard APT package)
+/usr/bin/voxtype
+# Text-output chain: wtype (wlroots), ydotool (GNOME/uinput), clipboard fallback
+/usr/bin/wtype
+/usr/bin/ydotool
+/usr/bin/ydotoold
+/usr/lib/systemd/user/ydotool.service
+/usr/lib/udev/rules.d/80-uinput.rules
+/usr/bin/wl-copy
+/usr/bin/wl-paste

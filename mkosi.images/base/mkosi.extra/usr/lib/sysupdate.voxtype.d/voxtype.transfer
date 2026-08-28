@@ -1,0 +1,20 @@
+[Transfer]
+Features=voxtype
+Verify=true
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/voxtype/
+MatchPattern=voxtype_@v_%w_%a.raw.zst \
+             voxtype_@v_%w_%a.raw.xz \
+             voxtype_@v_%w_%a.raw.gz \
+             voxtype_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=voxtype_@v_%w_%a.raw.zst \
+             voxtype_@v_%w_%a.raw.xz \
+             voxtype_@v_%w_%a.raw.gz \
+             voxtype_@v_%w_%a.raw
+CurrentSymlink=voxtype.raw

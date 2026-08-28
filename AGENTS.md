@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 snosi is a bootable container image build system using [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). Images are deployed via bootc/systemd-boot with atomic updates.
 
-**Outputs:** 3 OCI desktop images (snow, snowfield, flurry — flurry is the Hyprland/Omarchy-replica desktop, see docs/plans/2026-08-25-flurry-omarchy-plan.md), 1 OCI server image (cayo), and 26 sysext overlay images (1password, 1password-cli, azurevpn, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, vscode).
+**Outputs:** 3 OCI desktop images (snow, snowfield, flurry — flurry is the Hyprland/Omarchy-replica desktop, see docs/plans/2026-08-25-flurry-omarchy-plan.md), 1 OCI server image (cayo), and 27 sysext overlay images (1password, 1password-cli, azurevpn, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode).
 
 ## Build Commands
 
@@ -14,7 +14,7 @@ Requires: just, git, python3, root/sudo access. mkosi itself is auto-bootstrappe
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 26 sysexts
+just sysexts            # Build base + all 27 sysexts
 just snow               # Build snow desktop image
 just snowfield          # Build snowfield (Surface kernel)
 just cayo               # Build cayo server image
@@ -560,7 +560,7 @@ those libs from other suites (flurry: xkbcommon/pipewire/alsa/mesa from
 backports) got shadow-DOWNGRADED for all of `/usr` on merge (killed
 Hyprland, root-caused live 2026-08-25). `mkosi.images/gui-base` is an
 internal never-published directory image (base + common GUI lib closure);
-the desktop-app sysexts (twelve today; the wiring-parity test enumerates them) use `Dependencies=gui-base` +
+the desktop-app sysexts (thirteen today; the wiring-parity test enumerates them) use `Dependencies=gui-base` +
 `BaseTrees=%O/gui-base` + the `sysext-no-divergent-libs.sh` finalize
 tripwire (fails the build on any delta file matching
 `shared/sysext/divergent-lib-families.txt`). THE CONTRACT: every gui-base
