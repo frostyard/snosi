@@ -9,7 +9,9 @@ guards), [ADR-0008](../adr/0008-digest-first-release-latest-is-promotion.md)
 handoff), [ADR-0011](../adr/0011-mkosi-bootstrapped-and-pin-shared.md)
 (mkosi pin governance),
 [ADR-0012](../adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md)
-(chunk-before-seal).
+(chunk-before-seal), and
+[ADR-0014](../adr/0014-name-kde-bootc-product-sundog.md) (Sundog's KDE
+bootc-only publication boundary).
 
 ## Workflows
 
@@ -69,8 +71,9 @@ load-bearing triggers (`build.yml` for `build-native-images.yml` via
 `bootstrap-mkosi.sh`; `build-images.yml` and `docs/**` for
 `test-bootc-secure.yml` via the publication guard and docs contracts).
 
-Both the PR `mechanics-build` path and protected `secure-build` path iterate the
-three profiles (snow, snowfield, cayo); only the latter can publish.
+Both the PR `mechanics-build` path and protected `secure-build` path iterate
+the five bootc profiles (cayo, snow, snowfield, flurry, sundog); only the latter
+can publish.
 
 Both jobs select the GitHub runner bundle's `runc` through a job-local
 `containers.conf.d` drop-in and verify the effective runtime before building.
@@ -80,7 +83,11 @@ calls without changing the runtime policy inside shipped images.
 
 Each matrix build resets mkosi dependencies to `base` (`--dependency= --dependency=base`). This prevents the root sysext dependency list from being appended into every profile build. The sysext publishing set is built once by `build.yml`; profile image jobs build only `base` plus the selected main image.
 
-**Jobs:** `mechanics-build` runs on pull requests with read-only permissions. It performs the three-profile disk preparation, build, insecure local package, smoke test, and cleanup path without secrets or registry writes. `secure-build` runs only on `main` non-PR events inside the protected `native-build` environment.
+**Jobs:** `mechanics-build` runs on pull requests with read-only permissions.
+It performs the five-profile disk preparation, build, insecure local package,
+smoke test, and cleanup path without secrets or registry writes.
+`secure-build` runs only on `main` non-PR events inside the protected
+`native-build` environment.
 
 GHCR authentication is repository- and run-scoped: `secure-build` grants
 `packages: write`, while `release` grants only `packages: read`; both use
@@ -89,8 +96,9 @@ Docker login writes the user-context auth file used by Cosign and Skopeo.
 Registry-login `run:` steps map `github.actor` to `GHCR_USER` in `env:` and
 quote that shell variable; direct GitHub context interpolation in shell source
 is forbidden. No long-lived GHCR PAT is required. Scheduled mechanics run `31150007630`
-successfully pushed all three profiles with the same repository token, proving
-the cayo, snow, and snowfield package access needed by secure publication.
+successfully pushed the then-current three profiles with the same repository
+token, proving the repository-token access model later extended to Flurry and
+Sundog by the same matrix.
 
 **Protected publication steps:**
 1. Transiently materialize the durable production MOK/PCR signing credentials supplied by the four `NATIVE_*` secrets, then build and package each profile. The supplied MOK certificate and derived PCR public key must byte-match the committed public identities; runner-local credential files are removed unconditionally after local artifact validation and before registry writes. The distinct disposable PR keys remain ephemeral.

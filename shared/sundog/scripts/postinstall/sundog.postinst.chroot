@@ -1,0 +1,37 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "Running post-installation customizations..."
+
+OS_PRETTY_NAME="Sundog Linux"
+OS_NAME="Sundog Linux"
+source "$SRCDIR"/shared/scripts/common-postinst.sh
+
+# Cayo's tree is the current canonical copy of the shared bootc system
+# policy. Remove its sole product-specific payload and give the persistent
+# journal drop-in the Sundog name; the contents are profile-neutral.
+rm -rf /usr/share/cayo
+if [[ -f /usr/lib/systemd/system/journald.conf.d/10-cayo-bootc-persistent.conf ]]; then
+    mv /usr/lib/systemd/system/journald.conf.d/10-cayo-bootc-persistent.conf \
+        /usr/lib/systemd/system/journald.conf.d/10-sundog-bootc-persistent.conf
+fi
+
+# Keep Flathub configured exactly as on Snow. The descriptor (including the
+# signing key) remains canonical in Snow's tree until desktop infrastructure
+# is split into a product-neutral fragment.
+install -Dm0644 \
+    "$SRCDIR/shared/snow/tree/etc/flatpak/remotes.d/flathub.flatpakrepo" \
+    /etc/flatpak/remotes.d/flathub.flatpakrepo
+
+# Debian's plasma-workspace ships an X11 session descriptor even when the
+# X11 KWin compositor is absent. Do not offer a session that cannot start;
+# Sundog's supported desktop session is Plasma on Wayland.
+rm -f /usr/share/xsessions/plasmax11.desktop
+
+# The static /usr alias selects SDDM on every boot without relying on mutable
+# /etc enablement. The build-time enable is still useful to mkosi's preset
+# pass and mirrors the established Flurry display-manager contract.
+ln -sfn sddm.service /usr/lib/systemd/system/display-manager.service
+systemctl enable sddm.service
+
+echo "Post-installation complete."

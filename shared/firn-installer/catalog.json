@@ -66,6 +66,24 @@
     ]
   },
   {
+    "family": "bootc",
+    "name": "sundog",
+    "description": "KDE Plasma desktop with backports kernel",
+    "ref": "ghcr.io/frostyard/sundog:latest",
+    "cosign_pub_key": "/usr/lib/snosi/cosign.pub",
+    "default_groups": [
+      "sudo",
+      "adm",
+      "video",
+      "input",
+      "render",
+      "plugdev",
+      "netdev",
+      "lpadmin",
+      "scanner"
+    ]
+  },
+  {
     "family": "ab",
     "name": "snow-ab",
     "description": "Native A/B GNOME desktop with backports kernel",

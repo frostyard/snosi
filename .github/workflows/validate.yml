@@ -296,6 +296,9 @@ jobs:
       - name: Test gui-base sysext divergent-lib contract
         run: ./test/sysext-divergent-libs-test.sh
 
+      - name: Test Sundog KDE bootc profile contract
+        run: ./test/sundog-profile-test.sh
+
       - name: Test staged-update notify unit trigger shape
         run: ./test/update-notify-units-test.sh
 
@@ -392,6 +395,6 @@ jobs:
         run: |
           sudo mkosi summary > /dev/null
           ./check-profile-dependencies.sh
-          for profile in cayo snow snowfield flurry; do
+          for profile in cayo snow snowfield flurry sundog; do
             sudo mkosi --profile "$profile" summary > /dev/null
           done

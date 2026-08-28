@@ -41,6 +41,15 @@
             "type": "matchRepository"
           }
         }
+      ],
+      "ghcr.io/frostyard/sundog": [
+        {
+          "type": "sigstoreSigned",
+          "keyPath": "/usr/lib/snosi/cosign.pub",
+          "signedIdentity": {
+            "type": "matchRepository"
+          }
+        }
       ]
     },
     "containers-storage": {

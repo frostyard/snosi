@@ -62,6 +62,8 @@ jobs:
             description: "Snowfield Linux OS Image"
           - profile: flurry
             description: "Flurry Linux OS Image"
+          - profile: sundog
+            description: "Sundog Linux OS Image"
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1

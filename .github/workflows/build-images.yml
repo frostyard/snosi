@@ -137,6 +137,8 @@ jobs:
             description: "Snowfield Linux OS Image"
           - profile: flurry
             description: "Flurry Linux OS Image"
+          - profile: sundog
+            description: "Sundog Linux OS Image"
 
     steps:
       - name: Show disk space (before)
@@ -529,6 +531,8 @@ jobs:
             description: "Snowfield Linux OS Image"
           - profile: flurry
             description: "Flurry Linux OS Image"
+          - profile: sundog
+            description: "Sundog Linux OS Image"
     steps:
       - name: Show disk space (before)
         run: sudo df -h
