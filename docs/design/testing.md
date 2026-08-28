@@ -811,8 +811,9 @@ immediately before recording the
 `native-verified-<product>`/`native-verified-iso` marker that `promote-*`
 requires -- an image that re-verifies over HTTP but does not boot can no
 longer be promoted. Neither test enforces Secure Boot or TPM (no MOK
-enrollment, no vTPM); that deeper chain is `native-nightly.yml`'s job (Tier
-2, non-blocking) via the pre-existing `test/native-ab-secure-boot-test.sh`.
+enrollment, no vTPM). Firn's lab matrix covers secure native installation and
+TPM-backed boot; the deeper signed-addon and update chain remains available
+manually through `test/native-ab-secure-boot-test.sh`.
 
 `native-boot-smoke-test.sh` boots a native A/B product's disk artifact:
 
@@ -999,16 +1000,14 @@ artifact tests (including the QEMU `native-ab-update-test.sh` and
 `native-ab-components-test.sh`) remain manual because CI does not provision
 MOK, a persistent vTPM, signing material, or the large real-build artifacts.
 
-Two boot-validation tests now DO run automatically as of 2026-07-17 (see
+Two boot-validation tests run automatically (see
 "Boot Smoke Tests" above): `build-native-images.yml`'s `test-public-origin`
 jobs run `native-boot-smoke-test.sh`, and `build-installer-iso.yml`'s
 `test-public-origin-iso` job runs `native-iso-boot-smoke-test.sh` on every
-build that reaches promotion; additionally,
-`native-nightly.yml` runs `native-ab-secure-boot-test.sh` in default mode
-nightly (rotating `cayo-ab`/`snow-ab`/`snowfield-ab`), with no GitHub
-environment or repository secrets -- it generates its own ephemeral Secure
-Boot/MOK and PCR-signing keys per run. `--full-window` and the other
-destructive/rotation harnesses remain manual-only.
+build that reaches promotion. Firn's lab matrix separately covers secure
+native installation and TPM-backed boot. `native-ab-secure-boot-test.sh`,
+`--full-window`, and the other destructive/rotation harnesses remain
+manual-only.
 
 Bootc secure validation has separate tiers. `validate.yml` and
 `test-bootc-secure.yml` run no-secret fixture and static contracts on PRs;

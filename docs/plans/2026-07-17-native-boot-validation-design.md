@@ -3,6 +3,11 @@
 Date: 2026-07-17
 Status: Implemented (see docs/plans/2026-07-17-native-boot-validation-plan.md)
 
+> **Status update (2026-08-28):** Tier 1 remains the promotion gate.
+> `native-nightly.yml` was retired; Firn's lab matrix now owns secure native
+> install-and-boot coverage, while `test/native-ab-secure-boot-test.sh` remains
+> available manually for its additional signed-addon and update assertions.
+
 ## Problem
 
 `build-native-images.yml` builds, byte-verifies, signs, and promotes the three
@@ -33,7 +38,7 @@ Tiered validation:
 |------|------|------|-------|--------|
 | 1 | Boot smoke test: published disk image reaches `multi-user.target` | Every run (push, PR, dispatch) | `test-public-origin` matrix legs (GHA hosted) | Yes — blocks the verified marker, therefore promotion |
 | 1b | ISO serial smoke: published ISO boots to a login prompt | Every run | `test-public-origin-iso` (GHA hosted) | Yes — same marker mechanism |
-| 2 | Deep secure chain: install → enforced SB → TPM enroll → boot → signed update hop | Nightly + manual dispatch | New `native-nightly.yml` (GHA hosted) | No — signal only |
+| 2 | Deep secure chain: install → enforced SB → TPM enroll → boot → signed update hop | Manual | `test/native-ab-secure-boot-test.sh`; Firn lab covers install/boot only | No — signal only |
 | 3 | `--full-window` / installer e2e in automation | Deferred | Self-hosted Incus runner on selfie | Deferred |
 
 ## Tier 1 — Boot smoke gate
@@ -155,9 +160,9 @@ a 2–4 min boot/assert/poweroff cycle. Well under the job's current slack;
 `/var/tmp` is already bind-mounted to `/mnt` in these jobs so runner-disk
 pressure is handled.
 
-## Tier 2 — Nightly deep harness
+## Tier 2 — Deep harness (nightly retired; manual only)
 
-### New workflow: `.github/workflows/native-nightly.yml`
+### Retired workflow: `.github/workflows/native-nightly.yml`
 
 - **Triggers**: `schedule` (one nightly cron) + `workflow_dispatch` (with a
   profile input). `permissions: {}` at top; jobs get `contents: read`.

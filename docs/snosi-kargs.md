@@ -117,8 +117,8 @@ enrollment and requires the argument to appear with Secure Boot still enforced
 and `/var` auto-unlocked. It also requires PCR 11 to stay unchanged while PCR
 12 changes, corrupts one addon byte and requires the machine to boot without
 the argument, then requires the global addon to survive a real
-`systemd-sysupdate` hop. The fixture suite is the validation run for this
-change; the extended QEMU leg will run in the existing native nightly.
+`systemd-sysupdate` hop. The fixture suite is the automatic validation run for
+this change; the extended QEMU leg remains available for manual execution.
 
 **BLOCKED:** bootc live persistence across a deployment update requires the
 Firn-native Snosi lifecycle lane and authorized secure OCI artifacts. Until

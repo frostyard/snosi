@@ -1,5 +1,10 @@
 # Native A/B Boot Validation Implementation Plan
 
+> **Status update (2026-08-28):** The Tier 1 promotion-gating smoke tests
+> remain active. The non-blocking `native-nightly.yml` created by this
+> historical plan was retired; Firn's lab matrix owns secure native
+> install-and-boot coverage, and the deeper lifecycle harness remains manual.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Gate native A/B promotion on a QEMU boot smoke test of the published bytes, and add a nightly deep secure-boot validation workflow.
