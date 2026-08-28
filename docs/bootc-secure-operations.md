@@ -2,15 +2,14 @@
 
 > [!WARNING]
 > Implementation and fixture contracts are complete, but production support is
-> withheld pending live install, update, and rotation evidence for each profile
-> and representative Snowfield hardware evidence. The 2026-07-27 published
-> `latest` images lack the secure capability label and are not secure-install
-> evidence. A missing runner or authorized artifact must remain visibly
-> `BLOCKED:`; fixture success is not live security evidence.
+> withheld pending update, recovery, rotation, reconciliation, and
+> representative Snowfield hardware evidence. Firn owns fresh secure bootc
+> installation and its E2E/lab matrix is the installation evidence source.
+> Fixture success is not live lifecycle evidence.
 
 This is the normative operator entry point for the secure bootc path. It applies
-only to fresh `cayo`, `snow`, and `snowfield` installs. The detailed external
-installer contract is [docs/bootc-secure-install-contract.md](bootc-secure-install-contract.md),
+only to fresh `cayo`, `snow`, and `snowfield` installs. The frozen legacy
+adapter contract is [docs/bootc-secure-install-contract.md](bootc-secure-install-contract.md),
 the assembly compatibility contract is [docs/bootc-secure-assembly-compatibility.md](bootc-secure-assembly-compatibility.md),
 and the image schema source is
 [shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json](../shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json).
@@ -22,10 +21,11 @@ handoff).
 ## Support Status
 
 Secure image assembly, static contracts, fixture contracts, and CI mechanics are
-implemented. They do not establish a supported production path. Live evidence
-remains blocked until authorized signed secure N/N+1/N+2 and transition OCI
-artifacts, prepared Dakota/bootc-installer/Fisherman runners, and representative
-Snowfield hardware results exist. Do not use an image unless inspection confirms
+implemented. Firn is the sole secure bootc installer under core ADR-0031, with
+fresh-install evidence supplied by its enforced-Secure-Boot E2E and the lab
+matrix. Production support still requires authorized signed secure N/N+1/N+2
+and transition OCI artifacts, a Firn-native Snosi lifecycle lane, and
+representative Snowfield hardware results. Do not use an image unless inspection confirms
 `io.snosi.bootc.secureboot-capable=true` and
 `io.snosi.bootc.secureboot-assembly=bootc-1.16.8-storage-digest-v1`.
 
@@ -77,13 +77,13 @@ digest before policy copy.
 
 ## Fresh Installation
 
-This procedure describes acceptance criteria, not an installer command. The
-privileged installation action is owned by the external Dakota,
-bootc-installer, and Fisherman implementation.
+This procedure describes acceptance criteria, not an installer command. Firn
+owns the privileged installation action and consumes the image's schema-1
+`/usr/lib/snosi/bootc-secure.json` contract directly.
 
 Before that action, require all of the following:
 
-1. A freshly built Debian-trusted Dakota ISO.
+1. A current, verified Firn installer ISO.
 2. An accepted immutable `ghcr.io/frostyard/<profile>@sha256:...` reference and
    a separate tracking tag in the same repository.
 3. Public MOK and PCR identities that byte-match the selected image.
@@ -101,8 +101,8 @@ or LUKS kernel arguments.
 After completion, use only public or non-secret installed-state data for
 verification. Confirm the immutable provenance record, Type #2 BLS entry, UKI
 hash and composefs identity, public MOK/PCR fingerprints, and one TPM token.
-Treat absent external runners or artifacts as `BLOCKED:` rather than attempting
-an unsupported manual substitute.
+Use Firn's E2E and lab matrix for installation evidence; do not revive the
+retired Dakota/Fisherman adapter protocol as a manual substitute.
 
 ## Recovery Credential Custody
 
@@ -116,8 +116,8 @@ Loss of both TPM authorization and the external recovery passphrase is unrecover
 
 ## MOK Restage
 
-**External privileged action:** Dakota/bootc-installer/Fisherman owns MOK
-restage. Snosi provides no CLI for it.
+MOK restage is an installed-image responsibility. Snosi currently provides no
+supported CLI or Firn-native lifecycle lane for it.
 
 Preconditions: authenticate the existing encrypted root with the recovery
 credential, retain the same immutable installed deployment and firmware state,
@@ -131,8 +131,8 @@ unlock test result as evidence.
 
 ## TPM Replacement And Recovery Reenrollment
 
-**External privileged action:** Dakota/bootc-installer/Fisherman owns TPM
-replacement and reenrollment. Snosi provides no CLI for it.
+TPM replacement and reenrollment are installed-image responsibilities. Snosi
+currently provides no supported CLI or Firn-native lifecycle lane for them.
 
 ### Clear the stale SRK after replacing a TPM
 
@@ -197,8 +197,8 @@ record.
 
 ## ESP Repair
 
-**External privileged action:** Dakota/bootc-installer/Fisherman owns ESP
-repair. Snosi provides no general ESP reconstruction CLI.
+ESP repair is an installed-image responsibility. Snosi currently provides no
+general reconstruction CLI or Firn-native lifecycle lane.
 
 The narrow exception is [`snosi-kargs`](snosi-kargs.md), which owns only
 `loader/addons/50-snosi-cmdline-local.addon.efi`. It may mount the one ESP beside the
@@ -206,12 +206,12 @@ encrypted root when `bootctl` cannot identify an existing writable mount, and
 uses verified same-filesystem replacement with restoration on sync failure. It
 does not repair or modify shim, MokManager, systemd-boot, UKIs, or BLS metadata.
 Bootc persistence of this addon across a deployment update remains `BLOCKED:`
-pending the external live runner and authorized secure OCI artifacts.
+pending a Firn-native Snosi lifecycle lane and authorized secure OCI artifacts.
 
 Preconditions: recovery-authenticate the existing encrypted root; retain the
 immutable deployment reference, composefs ID, expected UKI hash, MOK public
 certificate, and PCR public identity; and identify the one ESP beside the root
-backing partition. The external action reconstructs only the ESP from the
+backing partition. A future authorized Snosi action reconstructs only the ESP from the
 authenticated deployment and must verify hashes and signatures for Debian shim,
 MokManager, MOK-signed systemd-boot, Type #2 UKIs, and BLS metadata.
 
@@ -222,8 +222,8 @@ status` for the selected Type #2 entry. ESP repair cannot alter deployment state
 
 ## PCR Signing-Key Rotation
 
-**External privileged action:** the authorized release and external installer
-implementations own the live ceremony. Snosi provides no rotation CLI.
+The authorized release process and a future Snosi lifecycle implementation own
+the live ceremony. Snosi currently provides no rotation CLI.
 
 1. Generate new RSA-2048, default-exponent PCR material offline; retain only
    the approved public identity in the release workflow.
@@ -261,38 +261,27 @@ enrolled firmware trust. Remove the old MOK only after every old-signed rollback
 | --- | --- | --- |
 | PR mechanics | Secretless build composition and insecure-label mechanics | Signed assembly, registry publication, installation, or Secure Boot |
 | Candidate | Protected assembly validation and immutable candidate verification | A successful external install or update |
-| Nightly | Ephemeral-key secure-chain regression coverage | Production identities, published artifacts, or hardware coverage |
-| Full-window | Prepared runner evidence across update, rollback, and transition windows | Representative Surface hardware behavior |
+| Nightly | Secretless fixture-contract regression coverage | Installation, production identities, published artifacts, or hardware coverage |
+| Firn E2E/lab | Secure fresh installation and boot for the Firn matrix | Snosi update, recovery, rotation, reconciliation, or Surface hardware behavior |
+| Lifecycle | Future Firn-native Snosi evidence across update, rollback, recovery, and transition windows | Representative Surface hardware behavior |
 | Hardware | The required representative device's install, input, power, update, rollback, and fallback evidence | Other hardware models or a generalized production claim |
 | Legacy mechanics | Existing bootc/nbc behavior and migration mechanics | Conversion to the secure DPS LUKS/MOK/TPM layout |
 
 ### Self-hosted runner trust boundary
 
-The `bootc-secure` and `snowfield-hardware` runners are persistent registrations,
-not ephemeral VMs. `setup-self-hosted-runner.sh` runs them as a dedicated
-no-login, no-sudo account and wipes the Actions workspace after every job, but
-that cleanup is not equivalent to reimaging the host and cannot recover a
-compromised runner installation.
+Only the manual `snowfield-hardware` job remains on a persistent self-hosted
+Actions runner. It is restricted at the job level to `refs/heads/main` and
+requires explicit `workflow_dispatch`. `test/bootc-secure-ci-test.sh`
+inventories every self-hosted job, fails if one lacks the main-ref guard, and
+rejects any reintroduction of the retired Dakota full-window wiring.
 
-All self-hosted jobs are therefore restricted at the job level to
-`refs/heads/main`. The live and hardware jobs additionally require an explicit
-`workflow_dispatch`; the nightly accepts only its scheduled or manually
-requested runs. `test/bootc-secure-ci-test.sh` inventories every self-hosted job
-and fails if any lacks the main-ref guard. Maintainers must also keep Actions
-approval required for all external contributors as described by the setup
-script.
-
-The full-window jobs receive only their job-scoped `GITHUB_TOKEN`, exposed to
-the container as `GHCR_TOKEN`, with `packages: write` for the required tracking
-tag update. It expires with the job and is not a durable registry credential.
 The production MOK/PCR signing keys, Cosign key, and R2 credentials remain in
 the hosted, protected `native-build` environment and must never be added to a
 self-hosted job.
 
-After suspected runner compromise, stop dispatching these jobs, remove the
-runner registration, reimage the host, rerun `setup-self-hosted-runner.sh`, and
-restage only reviewed mode-0700 state. A workspace wipe alone is not sufficient
-incident recovery.
+After suspected runner compromise, stop dispatching the hardware job, remove
+the runner registration, reimage the host, and restage only reviewed mode-0700
+state. A workspace wipe alone is not sufficient incident recovery.
 
 ## Existing Installations
 

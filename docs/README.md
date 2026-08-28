@@ -69,7 +69,7 @@ when next rewritten.
 
 - [native-ab-contracts.md](native-ab-contracts.md) — **frozen normative source of truth** for native A/B naming, paths, and policy (spec-natured; candidate for `specs/`)
 - [integration-contracts.md](integration-contracts.md) — cross-tool producer→consumer contract map with fragility ratings
-- [bootc-secure-install-contract.md](bootc-secure-install-contract.md) — contract between secure OCI images and the external installer repos
+- [bootc-secure-install-contract.md](bootc-secure-install-contract.md) — frozen legacy Task 9 adapter contract; Firn consumes the image's schema-1 contract directly
 - [bootc-secure-assembly-compatibility.md](bootc-secure-assembly-compatibility.md) — assemble-uki.sh compatibility contract with bootc 1.16.8
 - [bootc-secure-operations.md](bootc-secure-operations.md) — normative secure-bootc operations runbook (pinned by `test/bootc-secure-docs-test.sh`)
 - [native-ab-publication.md](native-ab-publication.md) — native A/B production publication runbook

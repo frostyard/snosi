@@ -1,5 +1,15 @@
 # Bootc Secure Installation Contract
 
+> [!IMPORTANT]
+> This document freezes the retired Task 9 Dakota/Fisherman adapter protocol
+> for compatibility and fixture history. Firn is the sole supported secure
+> bootc installer under
+> [frostyard/core ADR-0031](https://github.com/frostyard/core/blob/main/docs/adr/0031-retire-dakota-secure-bootc-installer.md)
+> and consumes `/usr/lib/snosi/bootc-secure.json` directly. Snosi no longer
+> schedules or dispatches the adapter protocol described below. Installed-image
+> update, recovery, rotation, and bootloader reconciliation remain Snosi-owned
+> responsibilities and need a Firn-native lifecycle lane.
+
 This is the contract between Snosi secure OCI images and the external
 `frostyard/fisherman`, `frostyard/bootc-installer`, and
 `frostyard/dakota-iso` repositories. It applies only to fresh installs of
@@ -379,9 +389,9 @@ requiring a value no installer can supply.
 not replace the representative Surface hardware install, input, power, update,
 rollback, and fallback gate.
 
-Task 10 provides fixture, candidate, and nightly CI orchestration for this
-contract. Live Task 9 execution remains BLOCKED pending authorized secure
-artifacts and prepared external runners; workflow wiring is not live evidence.
+Task 10 still provides fixture, candidate, and nightly contract coverage.
+Live Task 9 execution is RETIRED under core ADR-0031; Firn's E2E and lab
+matrix are the current fresh-install evidence source.
 
 ESP repair is a recovery operation, not a new install: after authenticating the
 existing encrypted root with the recovery passphrase, reconstruct and verify

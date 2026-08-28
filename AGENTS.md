@@ -48,12 +48,13 @@ certificate and RSA-2048 PCR public key at `/usr/lib/snosi/`. Its schema-1
 and installer tasks; schema 1 pins its encrypted root mapper as `root`, which
 the reconciler and deferred installer must use. It is not a signed-UKI production path: do not add private
 key material or claim Secure Boot support until Tasks 5 onward pass.
-Task 8a extends schema 1's additive `installer` object with the exact external
-Fisherman/bootc-installer/Dakota contract: pinned versions, 1 GiB ESP and 30
+Task 8a extends schema 1's additive `installer` object with the exact installer
+contract now consumed by Firn: pinned versions, 1 GiB ESP and 30
 GiB online-install disk floors, immutable Cosign acceptance, DPS LUKS2/Btrfs,
 Type #2-only bootc options, MOK/TPM/recovery policy, provenance, restage, and
-ESP repair. `docs/bootc-secure-install-contract.md` is normative; it defines
-requirements only and does not implement an installer in this repository.
+ESP repair. `/usr/lib/snosi/bootc-secure.json` is the machine-readable
+installer contract; `docs/bootc-secure-install-contract.md` retains the retired
+Task 9 adapter protocol for compatibility and fixture history.
 The Forky systemd family is a deliberate cross-suite compatibility risk with
 Frostyard's bootc/libostree debs, not an inferred package guarantee. Task 4
 validated one real cayo build with bootc 1.16.3, libostree 2026.2, and systemd
@@ -164,31 +165,16 @@ The real cayo proof validates immutable-source assembly, OCI retention, and
 signature binding only; executing this reconciler against an installed FAT ESP
 is deferred to the Task 9 secure-install runtime harness.
 
-**Task 9 secure install harness (2026-07-29):**
-`test/bootc-secure-install-test.sh --fixtures` is the always-runnable contract
-layer. Live mode accepts only `PROFILE=cayo|snow|snowfield`, a matching
-immutable `ghcr.io/frostyard/<profile>@sha256:...` reference, a fresh secure
-Dakota ISO, public MOK/PCR identities, a nonempty mode-0600 recovery file, and
-a blank at-least-30-GiB target. It calls the external secure installer only
-through `BOOTC_SECURE_INSTALLER --non-interactive --iso ... --recipe ...`, then
-proves pre-enrollment shim rejection, same-varstore MOK enrollment, TPM reboot,
-and installed-state invariants. It prepares the shared OVMF/swtpm state before
-invoking `BOOTC_SECURE_INSTALLER` and requires its exact installed marker.
-`BOOTC_SECURE_RECOVERY_COMMAND` separately proves TPM replacement and recovery
-reenrollment. There is deliberately NO negative-fixture runner: this harness
-proves a good image installs and boots, not that a bad one is refused. Refusal
-stays enforced by the shipped policy.json and covered by
-`test/bootc-container-policy-test.sh RUN_LIVE=1`; install-time refusal of a
-deliberately-broken image is knowingly unproven. Do not reintroduce a weaker,
-non-causal negative check in its place. External implementation
-is complete, but no prepared runner/artifact set is currently supplied to this
-run;
-missing inputs must print `BLOCKED:` and exit 2, never claim E2E success. The
-Task 8 schema/contract is complete in Snosi; external implementation remains
-external. Snowfield retains the separate representative Surface hardware gate.
-Before a recovery runner, the install harness creates an owned mode-0600,
-path-only state manifest from its recipe and passes it with the Dakota ISO;
-the final exported handoff copies that same manifest shape.
+**Secure bootc installation ownership (core ADR-0031, 2026-08-12):**
+Firn is the sole supported secure bootc installer. Its enforced-Secure-Boot E2E
+and the lab `run-firn-install-tests` matrix own fresh-install proof for cayo,
+snow, and snowfield. Never restore or pin the retired Dakota/Fisherman Task 9
+adapter lane. `test/bootc-secure-install-test.sh --fixtures` remains
+always-runnable, fail-closed coverage of image invariants and the frozen legacy
+adapter contract; it is not current installer E2E evidence. Installed-image
+update, recovery, rotation, and bootloader reconciliation remain Snosi-owned
+responsibilities and require a Firn-native lifecycle lane. Snowfield retains
+the separate representative Surface hardware gate.
 
 **Assertions shared by the install and update harnesses live in exactly ONE
 place: `test/lib/bootc-secure-assertions.sh`** (`esp_cat`,
@@ -219,10 +205,10 @@ requires immutable N+1/N+2 refs with distinct 14-digit image versions, an
 atomic publisher for the same tracking tag,
 and a causal negative runner; it runs the production updater for first switch
 and steady-state upgrade, then asserts every secure runtime and persistence
-invariant across updates and rollback. It is BLOCKED until those external
-runners and secure artifacts exist. Fisherman now carries the same-repository
-tracking tag through the recipe while provenance retains accepted-N's immutable
-digest. Snowfield still needs the representative Surface hardware gate.
+invariant across updates and rollback. The former Dakota-produced install
+handoff is retired; live evidence now requires a Snosi-owned Firn-native
+lifecycle lane plus authorized secure artifacts. Snowfield still needs the
+representative Surface hardware gate.
 The retained handoff's TPM state/socket paths are reused exactly; all Task 9
 LUKS checks derive the single backing `/dev` device from `cryptsetup status
 root`, and guest MOK verification uses the immutable guest certificate plus a
@@ -261,13 +247,11 @@ candidate image's pinned bootc; they do not require or accept an independently
 installed host bootc as the storage-digest authority.
 A failed candidate never moves `latest`. `native-build` must be restricted in
 GitHub settings to protected/default branches; native PRs use disposable
-RSA-4096 MOK and RSA-2048 PCR credentials and cannot publish. Fixture/static
-contracts, candidate scaffolding, and nightly/full-window orchestration are
-complete, but they are not live Task 9/10 evidence. The 2026-07-27 published
-`latest` images lacked `io.snosi.bootc.secureboot-capable`; live install,
-update, rotation, full-window, and Snowfield hardware validation remain
-BLOCKED until authorized signed secure N/N+1/N+2/transition OCI fixtures and
-prepared external runners exist. Do not claim production bootc Secure Boot
+RSA-4096 MOK and RSA-2048 PCR credentials and cannot publish. Fixture/static contracts and candidate scaffolding are complete, but they are
+not live lifecycle evidence. Firn owns fresh-install proof; update, recovery,
+rotation, bootloader-reconciliation, and Snowfield hardware validation remain
+unproven until authorized signed secure artifacts and the appropriate
+Firn-native or hardware lanes exist. Do not claim production bootc Secure Boot
 support from these contracts.
 Deferred publication follow-ups: bind SBOM signing to the exact uploaded
 referrer digest, gate Snow release creation on complete metadata publication,
@@ -302,9 +286,10 @@ root's single colocated ESP, never remounting an existing read-only mount.
 `test/snosi-kargs-test.sh` covers the fixture/security matrix.
 `test/native-ab-secure-boot-test.sh` now requires signed load, PCR 11
 stability/PCR 12 change, TPM unlock, corrupt-signature fail-open, and native
-sysupdate survival. Bootc update persistence is still `BLOCKED:` pending its
-external live runner/artifacts and must not be claimed from fixture or native
-evidence. User and recovery guidance lives in `docs/snosi-kargs.md`.
+sysupdate survival. Bootc update persistence is still `BLOCKED:` pending a
+Firn-native Snosi lifecycle lane and authorized artifacts; it must not be
+claimed from fixture or native evidence. User and recovery guidance lives in
+`docs/snosi-kargs.md`.
 
 **Bootc OCI signature policy (Task 6, 2026-07-28):** secure bootc profiles ship
 `/etc/containers/policy.json` with global `reject` and exact
@@ -668,7 +653,7 @@ The target (e.g. `gnome-session.target`) comes from the service's `WantedBy=` in
 - `build-native-images.yml` (Phase 7) - Native A/B (`cayo-ab`/`snow-ab`/`snowfield-ab`) build/publish pipeline; a thin caller of `shared/native-ab/publish/*.sh` and `shared/native-ab/ci/*.sh` — see `docs/native-ab-publication.md`'s "CI publication flow" section for the full job graph, secret inventory, and the "First production publication checklist" that must be completed before it is allowed to touch real R2. Triggers on relevant push + PR changes to main (including `build.yml`, whose mkosi pin it reads) plus `workflow_dispatch`/`repository_dispatch`; ISO-only paths are ignored. PRs run only the non-publishing `build-pr` matrix with runner-generated RSA-4096 MOK and RSA-2048 PCR credentials. Production `build-{cayo,snow,snowfield}` and promotion stay outside PRs in their protected environments. Each product independently uploads, public-origin verifies, boots via `test/native-boot-smoke-test.sh`, and promotes, so one failure never blocks another. Each fresh promotion runner refreshes APT immediately before installing rclone.
 - `build-installer-iso.yml` - Independent Firn installer ISO publication pipeline. Main pushes use a positive list of ISO build/trust/publication/smoke-test inputs; manual and generic org `build` repository dispatch remain because dispatches do not identify their source component. It has no PR trigger. `pin-check`/`prepare` feed `build-iso` in `native-build`, `test-public-origin-iso` re-downloads and boots the candidate to a serial login prompt, and `promote-iso` signs the index in `native-promotion` before verifying the served index and stable redirect. Its non-cancelling concurrency group serializes ISO publication without waiting on native product builds.
 - `nightly-compliance.yml` - Runs the existing secretless runtime `/etc`, native publication, bootc publication, and signed-sysext policy contracts every day at 04:30 UTC and on manual dispatch. It has read-only contents access, performs no publication, and uses a non-cancelling concurrency group so a slow run is not hidden by the next schedule.
-- `bootc-secure-nightly.yml` / `test-bootc-secure.yml` - The full-window and Snowfield hardware jobs use persistent self-hosted runners, so every such job has an explicit `refs/heads/main` condition; manual live jobs additionally require `workflow_dispatch`. Full-window publication gets only the expiring job token with job-scoped `packages: write`, never the production signing or R2 secrets. `test/bootc-secure-ci-test.sh` inventories all self-hosted jobs and enforces the main-ref guard. `test-bootc-secure.yml`'s push/PR contracts job ignores agent-context stores, top-level Markdown, sysext/image dependency metadata, repository metadata, inert workflow files, and sibling workflows it never reads — but deliberately keeps `docs/**` and `build-images.yml` as triggers (`bootc-secure-docs-test.sh` validates `docs/bootc-secure-*.md`; `check-bootc-publication-guard.sh` validates `build-images.yml`), pinned by `test/workflow-path-filter-test.sh`. The runner setup uses a dedicated no-login/no-sudo account and wipes workspaces, but is not equivalent to an ephemeral reimage; see `docs/bootc-secure-operations.md` for the trust boundary and compromise recovery.
+- `bootc-secure-nightly.yml` / `test-bootc-secure.yml` - The nightly runs secretless fixture contracts only; secure fresh-install E2E belongs to Firn's lab matrix under core ADR-0031. `test-bootc-secure-ci-test.sh` rejects retired Dakota full-window wiring and inventories the remaining Snowfield self-hosted hardware job, which is main-only and manual. `test-bootc-secure.yml`'s push/PR contracts job ignores agent-context stores, top-level Markdown, sysext/image dependency metadata, repository metadata, inert workflow files, and sibling workflows it never reads — but deliberately keeps `docs/**` and `build-images.yml` as triggers (`bootc-secure-docs-test.sh` validates `docs/bootc-secure-*.md`; `check-bootc-publication-guard.sh` validates `build-images.yml`), pinned by `test/workflow-path-filter-test.sh`.
 - `native-nightly.yml` - Nightly (cron + dispatch) deep secure-chain validation: runs `test/native-ab-secure-boot-test.sh` default mode on a hosted runner with KVM+swtpm+virt-firmware, rotating profiles by day of week (Sun snowfield-ab, Tue/Thu/Sat cayo-ab, else snow-ab). Uses NO secrets/environments — all key material is ephemeral per-run (PCR key RSA-2048 per contract §7). Non-blocking: promotion gating stays with the Tier 1 smoke test. Design: `docs/plans/2026-07-17-native-boot-validation-design.md`.
 - `check-dependencies.yml` - Weekly check for external dependency updates, creates target-specific PRs with updated checksums or inline OCI build-tool pins (Syft, compatible Cosign v2, chunkah digest). Version-based checks are downgrade-guarded (`ver_gt`, sort -V strictly-newer) — coder deliberately tracks its stable channel (GitHub "latest"), whose version numbers run behind mainline
 - `check-packages.yml` - Daily check for external APT package version updates. Its 15-minute job timeout bounds the repository-write token lifetime if an external request stalls. `shared/download/latest-apt-version.sh` bounds each fetch to 60 seconds and 50 MiB compressed, independently caps decompressed `Packages` data at 50 MiB, rejects malformed/truncated indexes, and then creates a sentinel-update PR when versions change.

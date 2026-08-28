@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Static contract consumed by Fisherman, bootc-installer, and Dakota media.
+# Schema-1 image contract plus the frozen legacy Task 9 adapter documentation.
 # shellcheck disable=SC2016 # Matches the literal documented recovery variable.
 set -euo pipefail
 
@@ -102,7 +102,7 @@ grep -Fq '`completed_at`' "$documentation"
 grep -Fq 'representative Surface hardware' "$documentation"
 grep -Fq 'qemu-img` raw image' "$documentation"
 grep -Fq 'leave them stopped' "$documentation"
-grep -Fq 'Live Task 9 execution remains BLOCKED' "$documentation"
+grep -Fq 'Live Task 9 execution is RETIRED under core ADR-0031' "$documentation"
 grep -Fq 'UPDATE_N1_VERSION' "$documentation"
 grep -Fq -- '--slot N+1|N+2' "$documentation"
 grep -Fq '^[0-9]{14}$' "$documentation"
