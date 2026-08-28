@@ -56,6 +56,7 @@ The project produces:
 | **podman**          | Podman + Distrobox                                              | sysext        |
 | **sunshine**        | Sunshine self-hosted game streaming host for Moonlight          | sysext        |
 | **tailscale**       | Tailscale VPN client                                            | sysext        |
+| **voxtype**         | Voxtype AI voice dictation for Wayland                          | sysext        |
 | **vscode**          | Visual Studio Code desktop application                          | sysext        |
 
 Protected bootc publication validates each candidate with host Podman while
@@ -208,7 +209,7 @@ sudo test/native-ab-update-test.sh \
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1password 1password-cli azurevpn bitwarden chatgpt claude-desktop code-server coder debdev dev docker edge github-copilot incus k3s lemonade nix paseo pilothouse podman sunshine tailscale vscode
+  1password 1password-cli azurevpn bitwarden chatgpt claude-desktop code-server coder debdev dev docker edge github-copilot incus k3s lemonade localsend moonlight nix obsidian paseo pilothouse podman sunshine tailscale voxtype vscode
                                      snow            cayo
                                       │
                                   snowfield
@@ -252,6 +253,7 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | **podman**        | Podman, Distrobox, buildah, crun              | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf)               |
 | **sunshine**      | Sunshine self-hosted game streaming host for Moonlight | [mkosi.images/sunshine/mkosi.conf](mkosi.images/sunshine/mkosi.conf)     |
 | **tailscale**     | Tailscale VPN client                          | [mkosi.images/tailscale/mkosi.conf](mkosi.images/tailscale/mkosi.conf)         |
+| **voxtype**       | Voxtype AI voice dictation for Wayland         | [mkosi.images/voxtype/mkosi.conf](mkosi.images/voxtype/mkosi.conf)             |
 | **vscode**        | Visual Studio Code desktop application         | [mkosi.images/vscode/mkosi.conf](mkosi.images/vscode/mkosi.conf)               |
 
 The Pilothouse sysext explicitly configures Updex, Podman, Docker, and Incus.
@@ -608,7 +610,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all 23 sysexts (1password, 1password-cli, azurevpn, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode). The PR-facing root mkosi build holds only `contents: read` and no package, OIDC, or attestation write scope.
+1. Builds the base image and all 27 sysexts (1password, 1password-cli, azurevpn, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode). The PR-facing root mkosi build holds only `contents: read` and no package, OIDC, or attestation write scope.
 2. Outside pull requests, publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Outside pull requests, uploads package manifests for version tracking
 
