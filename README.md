@@ -7,9 +7,9 @@ A bootable container image build system using [mkosi](https://github.com/systemd
 
 - [Firn installer — all image families, bootc and A/B (latest x86-64)](https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso)
 - [Installer checksums](https://repository.frostyard.org/isos/native/v1/SHA256SUMS) and [OpenPGP signature](https://repository.frostyard.org/isos/native/v1/SHA256SUMS.gpg)
-- Older bootc installer: [Bootc live installation media](https://repository.frostyard.org/isos/snow-live-latest.iso)
+
 See the [supported installation guide](docs/installing.md) to choose an image,
-verify the native installer, create boot media, install safely, and recover or
+verify the Firn installer, create boot media, install safely, and recover or
 update the installed system.
 
 ## Community
@@ -648,8 +648,9 @@ gh attestation verify oci://ghcr.io/frostyard/snow:latest --owner frostyard
 The `test-install.yml` workflow verifies the signature before every installation test.
 Secure bootc OCI images additionally enforce this key at pull/install/update time
 through containers/image policy. The only accepted repositories are
-`ghcr.io/frostyard/cayo`, `ghcr.io/frostyard/snow`, and
-`ghcr.io/frostyard/snowfield`; other images, keys, and repository identities are
+`ghcr.io/frostyard/cayo`, `ghcr.io/frostyard/snow`,
+`ghcr.io/frostyard/snowfield`, `ghcr.io/frostyard/flurry`, and
+`ghcr.io/frostyard/sundog`; other images, keys, and repository identities are
 rejected. Cosign v2.6.1 signs repository identities, so the policy uses
 repository matching rather than tag matching and enables GHCR Sigstore
 attachments explicitly.

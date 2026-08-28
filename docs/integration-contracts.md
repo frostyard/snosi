@@ -32,7 +32,7 @@ Frostyard workspace root (the parent of `snosi/`).
 | chairlift | `frostyard-chairlift` | `snosi/shared/packages/snow/mkosi.conf:6`; `snosi/shared/packages/flurry/mkosi.conf:8` | snow, snowfield (+ `-ab`), flurry |
 | snow-first-setup | `snow-first-setup` | `snosi/shared/packages/snow/mkosi.conf:7` | snow, snowfield (+ `-ab`) |
 | intuneme | `frostyard-intuneme` | `snosi/shared/packages/snow/mkosi.conf:79`; `snosi/shared/packages/flurry/mkosi.conf:9` | snow, snowfield (+ `-ab`), flurry |
-| bootc | `bootc` | `snosi/shared/packages/bootc/mkosi.conf:5` | bootc profiles (cayo, snow, snowfield, flurry) |
+| bootc | `bootc` | `snosi/shared/packages/bootc/mkosi.conf:5` | bootc profiles (cayo, snow, snowfield, flurry, sundog) |
 | ostree | `libostree-1-1` | `snosi/shared/packages/bootc/mkosi.conf:6` | bootc profiles |
 | pilothouse | `frostyard-pilothouse` | `snosi/mkosi.images/pilothouse/mkosi.conf:23` (sysext) | opt-in sysext, all products |
 
