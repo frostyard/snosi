@@ -193,10 +193,10 @@ the mechanical job-by-job summary.
    `steps.smoke.outcome == 'success'` in addition to `steps.verify.outcome
    == 'success'`, so a candidate that re-verifies over HTTP but fails to
    boot is never promoted. Secure Boot/TPM fidelity is deliberately NOT
-   covered here (no MOK enrollment, no vTPM) -- that belongs to the deep,
-   non-blocking `native-nightly.yml` workflow below. See
-   `docs/plans/2026-07-17-native-boot-validation-design.md` for the
-   two-tier rationale.
+   covered here (no MOK enrollment, no vTPM). Firn's lab matrix covers secure
+   native installation and TPM-backed boot; deeper signed-addon and update
+   lifecycle validation remains manual in
+   `test/native-ab-secure-boot-test.sh`.
 5. `promote-cayo` / `promote-snow` / `promote-snowfield` -- independent
    jobs, each gated on the `native-promotion` protected GitHub environment
    (holds `NATIVE_UPDATE_SIGNING_KEY`, the OpenPGP update-signing private
@@ -302,56 +302,18 @@ This section defines CI tiers and their limits; the normative operator recovery
 and evidence-retention rules are in
 [`docs/bootc-secure-operations.md`](../bootc-secure-operations.md).
 
-### native-nightly.yml — Nightly Deep Secure-Boot Validation (Tier 2, 2026-07-17)
+### Retired native deep-validation workflow
 
-**Trigger:** Scheduled (`0 6 * * *` UTC), manual dispatch with a `profile`
-input (`rotate` default, or force one of `cayo-ab`/`snow-ab`/`snowfield-ab`).
-`concurrency: {group: native-nightly, cancel-in-progress: false}`.
+`.github/workflows/native-nightly.yml` was retired on 2026-08-28. It rebuilt
+an entire native image on a hosted runner for a non-blocking signal, while the
+published-byte boot gate already lives in `build-native-images.yml` and Firn's
+lab matrix covers secure native installation and TPM-backed boot. The final
+run also depended on host TPM PCR visibility that was absent, leaving its PCR
+11/12 assertions empty.
 
-This is Tier 2 of the two-tier boot-validation design
-(`docs/plans/2026-07-17-native-boot-validation-design.md`): where
-`build-native-images.yml`'s Tier 1 smoke test proves the exact promoted
-bytes boot at all (no Secure Boot, no TPM), this workflow runs the full
-deep secure chain -- install, enforced Secure Boot, TPM enrollment/
-auto-unlock, boot, and a signed N→N+1 update hop -- by driving `test/
-native-ab-secure-boot-test.sh` in its default (non-`--full-window`) mode
-on a hosted `ubuntu-latest` runner with KVM, swtpm, and virt-firmware
-installed at job time. It builds its own images from the checked-out
-commit, so it is a genuine deep regression signal, not a re-check of
-already-published bytes.
-
-**Profile rotation** (day-of-week, UTC): Sunday `snowfield-ab`; Tuesday/
-Thursday/Saturday `cayo-ab`; every other day `snow-ab` -- spreads the
-~3-4 hour deep run (builds dominate) across all three products over a week
-instead of running all three nightly.
-
-**Zero-secret design (the load-bearing security property):** the workflow
-declares no GitHub environment and touches no repository secrets. Because
-the harness builds its own throwaway images, all key material is generated
-fresh, in-job, immediately before the run: an ephemeral RSA-4096 Secure
-Boot/MOK keypair and an ephemeral RSA-2048 (default exponent 65537) PCR
-signing keypair -- RSA-2048 specifically, per `docs/native-ab-contracts.md`
-§7, the only algorithm the full TPM unlock chain accepts (RSA-4096 fails
-`Esys_LoadExternal`, ECC fails `Esys_VerifySignature`). The harness itself
-generates its own ephemeral OpenPGP update-signing key internally, so
-nothing durable or production-facing is ever read by this workflow.
-
-**`KEEP_VM=1` is required, not optional:** the harness's `cleanup()` trap
-`rm -rf`s its `$WORK_DIR` unconditionally on EXIT -- including on a failed
-run -- unless `KEEP_VM=1` is set, in which case it returns early and leaves
-the workdir (with `console.log`/`http.log`/`swtpm.log`) in place without
-blocking the script's own exit code. Without this, the `Upload harness
-logs` step's artifact glob would never match anything on a failure, since
-the very directory it wants to upload would already be gone by the time
-the step runs. `TMPDIR` is passed through explicitly for the same
-CI-disk-exhaustion reasons as every other native build job.
-
-**Non-blocking, by design:** nothing in the release/promotion pipeline
-depends on this workflow succeeding or even running -- the actual
-promotion gate remains the Tier 1 smoke test inside
-`build-native-images.yml`. A nightly failure is a signal to investigate,
-not a blocker; `if: failure()` uploads `nightly-harness-logs-<profile>`
-for exactly that purpose.
+`test/native-ab-secure-boot-test.sh` remains the manual deep lifecycle harness
+for signed addons and the N→N+1 update hop. Retiring the schedule does not turn
+Firn's install matrix into evidence for those additional lifecycle assertions.
 
 ### nightly-compliance.yml — Nightly Policy Drift Detection
 
@@ -363,10 +325,10 @@ runtime `/etc` mutation guard, frozen native A/B contracts and publication
 guard, bootc secure CI wiring and publication guard, and signed sysext metadata
 policy. These are selected because they are fast, deterministic, require no
 root or network after checkout, and cover policy that must remain true even
-when no code is changing. Deep native image-build and boot evidence remains in
-`native-nightly.yml`; secure bootc installation evidence belongs to Firn's lab
-matrix. This workflow does not duplicate those expensive jobs or publish
-artifacts.
+when no code is changing. Native published-byte boot evidence remains in
+`build-native-images.yml`; secure native and bootc installation evidence
+belongs to Firn's lab matrix. This workflow does not duplicate those expensive
+jobs or publish artifacts.
 
 Default permissions are empty and the sole job receives only `contents: read`.
 Checkout credentials are not persisted, no environment or repository secret is

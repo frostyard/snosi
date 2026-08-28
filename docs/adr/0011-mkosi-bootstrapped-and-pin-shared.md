@@ -71,8 +71,7 @@ checkout wins by planting a poisoned `PATH` mkosi.
 - Implemented by: `shared/native-ab/ci/bootstrap-mkosi.sh`, `Justfile`
   (`ensure-mkosi`), `.github/workflows/build.yml` (the authoritative pin)
 - Guarded by: `shared/native-ab/ci/check-mkosi-pin.sh`
-  (`.github/workflows/build-native-images.yml`,
-  `.github/workflows/native-nightly.yml`),
+  (`.github/workflows/build-native-images.yml`),
   `test/check-profile-dependencies-local-mkosi-test.sh`
 - Builds on: [core ADR-0021 — SHA-pinned actions and least-privilege CI](https://github.com/frostyard/core/blob/main/docs/adr/0021-sha-pinned-actions-and-least-privilege-ci.md),
   [core ADR-0023 — verified pinned downloads](https://github.com/frostyard/core/blob/main/docs/adr/0023-verified-pinned-downloads.md)
