@@ -1,11 +1,28 @@
 # Bootc and Native A/B Coexistence Plan
 
 **Date:** 2026-07-14
-**Status:** Proposed  
+**Status:** Superseded — 2026-08-29. The coexistence this plan describes shipped, but native A/B is now being phased out; it is no longer the direction snosi is taking.
 **Last verified:** 2026-08-29
+**Superseded by:** the transport position in [`ROADMAP.md`](../../ROADMAP.md) ("Position: bootc is the transport; native A/B is being phased out"). Phase-out obligations are tracked in frostyard/snosi#889.
 **Scope:** Keep the existing bootc products supported while introducing secure
 native A/B variants of Cayo, Snow, and Snowfield, an R2 publication pipeline,
 and a network installer ISO.
+
+> **This document records superseded direction. Do not act on it.**
+>
+> The coexistence arrangement it describes shipped: bootc and native A/B ran in
+> parallel, exactly as planned here. That arrangement is now ending. bootc was
+> always the preferred transport, and it now does what snosi needs, so the
+> reason for carrying a second transport in parallel has expired. Native A/B is
+> being phased out over a 60-day window ending 2026-10-28 (see
+> [`ROADMAP.md`](../../ROADMAP.md)); this plan's "in parallel, indefinitely"
+> framing no longer holds.
+>
+> Everything below is kept as a historical record of what was built and
+> shipped — the goals, the security posture, and the constraints discovered are
+> all real, and the phase-out depends on some of them (notably that migration
+> is reinstall-only, never an update hop). Read it for what happened, not for
+> what to do next.
 
 The mkosi pin governance this plan introduced is recorded as
 [ADR-0011](../adr/0011-mkosi-bootstrapped-and-pin-shared.md).
