@@ -16,6 +16,8 @@ fi
 # Package installs and triggers can run after mkosi's package cleanup. Their
 # logs and caches are build residue, never sysext payload.
 rm -rf "$BUILDROOT/var/log" "$BUILDROOT/var/cache"
+rm -rf "$BUILDROOT/var/lib/dictionaries-common"
+rmdir --ignore-fail-on-non-empty "$BUILDROOT/var/lib" 2>/dev/null || true
 
 offenders=()
 for top_level in var opt; do

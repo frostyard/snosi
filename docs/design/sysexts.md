@@ -119,10 +119,11 @@ check.
 Every sysext also runs
 `shared/sysext/finalize/sysext-usr-only.sh` against that delta. It first removes
 the build-only `/var/log` and `/var/cache` trees produced when package installs
-or triggers run after mkosi's package cleanup. Empty `/var` and `/opt`
-mountpoint directories are harmless, but any other entry below either
-directory fails the build and names the first offending path. The guard uses
-physical traversal and never follows a symlink into a host path.
+or triggers run after mkosi's package cleanup, plus dictionaries-common's
+generated `/var/lib/dictionaries-common` state. Empty `/var` and `/opt`
+mountpoint directories are harmless, but any other entry below either directory
+fails the build and names the first offending path. The guard uses physical
+traversal and never follows a symlink into a host path.
 
 **Delta semantics:** for `Overlay=yes` images the finalize `$BUILDROOT` is the
 sysext DELTA (the overlay upper layer — exactly what ships), not the merged

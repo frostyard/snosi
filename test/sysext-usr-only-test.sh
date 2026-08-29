@@ -47,11 +47,13 @@ fi
 
 reset_buildroot
 mkdir -p "$BUILDROOT/var/log" "$BUILDROOT/var/cache/dictionaries-common"
+mkdir -p "$BUILDROOT/var/lib/dictionaries-common/hunspell"
 printf 'build log\n' >"$BUILDROOT/var/log/dpkg.log"
 printf 'build cache\n' >"$BUILDROOT/var/cache/dictionaries-common/aspell.db"
+printf 'generated state\n' >"$BUILDROOT/var/lib/dictionaries-common/hunspell/hunspell-en-us"
 run_finalize
 if [[ $RUN_STATUS -eq 0 && ! -e "$BUILDROOT/var/log" &&
-    ! -e "$BUILDROOT/var/cache" ]]; then
+    ! -e "$BUILDROOT/var/cache" && ! -e "$BUILDROOT/var/lib" ]]; then
     pass "build-only package logs and caches are removed before payload validation"
 else
     fail "build-only package residue was not cleaned: $RUN_OUTPUT"
