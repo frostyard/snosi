@@ -240,6 +240,11 @@ jobs:
         # required-paths.txt entries. No root, network, or image build.
         run: ./test/sysext-required-paths-test.sh
 
+      - name: Validate sysext usr-only finalizer
+        # Fixture regression test for rejecting /var and /opt delta payloads
+        # without following links outside the buildroot.
+        run: ./test/sysext-usr-only-test.sh
+
       - name: Validate Pilothouse sysext integration
         # Structural service/drop-in and direct-DEB dependency fixtures. No root,
         # network, live endpoints, or image build.

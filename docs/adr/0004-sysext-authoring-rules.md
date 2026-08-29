@@ -18,7 +18,7 @@ noticed.
 
 ## Decision
 
-Sysexts follow four authoring rules:
+Sysexts follow five authoring rules:
 
 1. **Payloads are `/usr`-only.** Packages that install to `/opt` are
    relocated to `/usr/lib/<pkg>` in the image's postinst chroot script, with
@@ -47,6 +47,10 @@ Sysexts follow four authoring rules:
    the build, and any listed path missing from the output fails the build
    ("refusing to produce a broken extension"). Because `Overlay=yes` makes
    `$BUILDROOT` the *delta*, base-image paths must not be listed.
+5. **Every sysext delta is checked for `/var` and `/opt` payloads** by
+   `shared/sysext/finalize/sysext-usr-only.sh`. Empty root mountpoint
+   directories are permitted, but any entry below them fails the build with
+   the offending path. The check never follows symlinks outside the delta.
 
 ## Consequences
 
@@ -62,9 +66,9 @@ Sysexts follow four authoring rules:
   sees exactly which `/etc` bytes ship; scoped subtrees owned by the package
   (e.g. `/etc/1password`, `/etc/nix`) are acceptable, whole-`/etc` capture
   never is.
-- `/usr`-only remains convention plus mkosi's sysext format — there is no
-  separate linter rejecting stray `/var` or `/opt` payloads; the
-  required-paths manifests (all-`/usr` today) are the observable check.
+- `/usr`-only is enforced before artifact production: stray `/var` or `/opt`
+  entries fail the shared finalize guard, while required-paths manifests prove
+  that each sysext's expected `/usr` payload is present.
 
 ## Alternatives considered
 
@@ -84,10 +88,13 @@ Sysexts follow four authoring rules:
 - Shapes: [design/sysexts.md](../design/sysexts.md),
   [design/build-pipeline.md](../design/build-pipeline.md) (Package
   Relocation)
-- Implemented by: `shared/sysext/finalize/sysext-required-paths.sh`,
+- Implemented by: `shared/sysext/finalize/sysext-usr-only.sh`,
+  `shared/sysext/finalize/sysext-required-paths.sh`,
   `mkosi.images/*/required-paths.txt`, `mkosi.images/*/mkosi.finalize`,
   `shared/packages/*/mkosi.postinst.d/*.chroot`
-- Guarded by: `test/sysext-required-paths-test.sh`
+- Guarded by: `test/sysext-required-paths-test.sh`,
+  `test/sysext-usr-only-test.sh`, and
+  `test/sysext-authoring-contract-test.sh`
   (`.github/workflows/validate.yml`), `test/pilothouse-sysext-test.sh`
 - Builds on:
   [core ADR-0007 — sysext filename pattern](https://github.com/frostyard/core/blob/main/docs/adr/0007-frostyard-sysext-filename-pattern.md),
