@@ -15,11 +15,12 @@ import sys
 with open(sys.argv[1]) as f:
     contract = json.load(f)
 
+bootc_version = contract["assembly"]["bootc_version"]
 assert contract["schema"] == 1
 assert contract["encrypted_root_mapper"] == "root"
 assert contract["installer"] == {
     "minimum_versions": {
-        "bootc": "1.16.8",
+        "bootc": bootc_version,
         "cosign": "2.6.1",
         "systemd": "261.1-3",
     },
@@ -73,7 +74,10 @@ with open(sys.argv[1]) as f:
 with open(sys.argv[2]) as f:
     documentation = f.read()
 
-for version in installer["minimum_versions"].values():
+for name, version in installer["minimum_versions"].items():
+    if name == "bootc":
+        assert "installer.minimum_versions.bootc" in documentation
+        continue
     assert version in documentation
 for capacity in installer["minimum_capacities"].values():
     assert str(capacity) in documentation

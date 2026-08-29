@@ -39,9 +39,13 @@ make_fixture() {
     : >"$fixture/shared/native-ab/keys/pcr-signing-2026.pub"
     : >"$fixture/shared/bootc-secure/tree/etc/containers/policy.json"
     : >"$fixture/shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml"
-    : >"$fixture/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
+    cp "$root/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json" \
+        "$fixture/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
+    cp "$root/shared/bootc-secure/compatibility.sh" \
+        "$fixture/shared/bootc-secure/compatibility.sh"
 
     cat >"$fixture/shared/bootc-secure/ci/verify-published-image.sh" <<'EOF'
+source "$ROOT_DIR/shared/bootc-secure/compatibility.sh"
 inspection=$(skopeo inspect --authfile "$AUTH_FILE" \
     "docker://$IMAGE@$EXPECTED_DIGEST")
 tag_digest=$(skopeo inspect --authfile "$AUTH_FILE" --format '{{.Digest}}' \
@@ -54,10 +58,11 @@ DOCKER_CONFIG=$auth_dir cosign verify --key "$ROOT_DIR/cosign.pub" \
     "$IMAGE@$EXPECTED_DIGEST" >/dev/null
 sudo skopeo copy --src-authfile "$AUTH_FILE" \
     "docker://$IMAGE@$EXPECTED_DIGEST" "containers-storage:$LOCAL_REF"
-jq -e --arg digest "$EXPECTED_DIGEST" '
+jq -e --arg digest "$EXPECTED_DIGEST" \
+    --arg compatibility "$BOOTC_SECURE_ASSEMBLY_COMPATIBILITY" '
     .Digest == $digest and
     .Labels["io.snosi.bootc.secureboot-capable"] == "true" and
-    .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.8-storage-digest-v1"
+    .Labels["io.snosi.bootc.secureboot-assembly"] == $compatibility
 ' <<<"$inspection" >/dev/null
 EOF
 

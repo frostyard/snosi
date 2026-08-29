@@ -25,9 +25,10 @@ authoritative. The `installer` object defines the requirements below.
 
 ## Prerequisites
 
-- The installer medium must provide bootc `1.16.8` exactly, and at minimum
-  Cosign `2.6.1` and the coherent Forky systemd `261.1-3` family. The two
-  policies are deliberately different:
+- The installer medium must provide exactly the bootc version in
+  `installer.minimum_versions.bootc` in the machine-readable contract, and at
+  minimum Cosign `2.6.1` and the coherent Forky systemd `261.1-3` family. The
+  two policies are deliberately different:
 
   - **bootc is an exact pin.** The secure assembly depends on observed,
     non-upstream-stable behaviour of that release — the hidden storage-digest

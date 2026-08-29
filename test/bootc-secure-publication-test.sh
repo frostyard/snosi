@@ -5,6 +5,8 @@ set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 HELPER="$ROOT_DIR/shared/bootc-secure/ci/verify-published-image.sh"
+CONTRACT="$ROOT_DIR/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
+ASSEMBLY_COMPATIBILITY=$(jq -er '.assembly.compatibility' "$CONTRACT")
 DIGEST="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 IMAGE="ghcr.io/frostyard/cayo"
 VERSION="20260729010101"
@@ -104,7 +106,8 @@ EOF
 chmod +x "$WORK/bin/skopeo" "$WORK/bin/cosign" "$WORK/bin/sudo"
 
 export INSPECTION
-INSPECTION=$(jq -nc --arg digest "$DIGEST" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": "bootc-1.16.8-storage-digest-v1"}}')
+INSPECTION=$(jq -nc --arg digest "$DIGEST" --arg compatibility "$ASSEMBLY_COMPATIBILITY" \
+    '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": $compatibility}}')
 
 run_case "accepted immutable secure image is copied" success "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 grep -Fqx "skopeo inspect --authfile $AUTH_FILE docker://$IMAGE@$DIGEST" "$WORK/commands" && pass "Skopeo inspects immutable metadata with explicit auth" || fail "Skopeo inspects immutable metadata with explicit auth"
@@ -148,16 +151,21 @@ TAG_DIGEST="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
     run_case "version tag digest mismatch is rejected" failure \
     "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 
-INSPECTION=$(jq -nc --arg digest "$DIGEST" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "false", "io.snosi.bootc.secureboot-assembly": "bootc-1.16.8-storage-digest-v1"}}')
+INSPECTION=$(jq -nc --arg digest "$DIGEST" --arg compatibility "$ASSEMBLY_COMPATIBILITY" \
+    '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "false", "io.snosi.bootc.secureboot-assembly": $compatibility}}')
 run_case "false secure capability is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
-INSPECTION=$(jq -nc --arg digest "$DIGEST" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-assembly": "bootc-1.16.8-storage-digest-v1"}}')
+INSPECTION=$(jq -nc --arg digest "$DIGEST" --arg compatibility "$ASSEMBLY_COMPATIBILITY" \
+    '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-assembly": $compatibility}}')
 run_case "missing secure capability is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 INSPECTION=$(jq -nc --arg digest "$DIGEST" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": "wrong"}}')
 run_case "wrong secure assembly is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
-INSPECTION=$(jq -nc --arg digest "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": "bootc-1.16.8-storage-digest-v1"}}')
+INSPECTION=$(jq -nc --arg digest "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
+    --arg compatibility "$ASSEMBLY_COMPATIBILITY" \
+    '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": $compatibility}}')
 run_case "remote digest mismatch is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 
-INSPECTION=$(jq -nc --arg digest "$DIGEST" '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": "bootc-1.16.8-storage-digest-v1"}}')
+INSPECTION=$(jq -nc --arg digest "$DIGEST" --arg compatibility "$ASSEMBLY_COMPATIBILITY" \
+    '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": $compatibility}}')
 COSIGN_VERIFY_FAIL=1 run_case "failed Cosign verification is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 SKOPEO_COPY_FAIL=1 run_case "failed policy copy is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 

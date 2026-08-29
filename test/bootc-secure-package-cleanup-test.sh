@@ -5,6 +5,10 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PACKAGER="$ROOT_DIR/shared/outformat/image/buildah-package.sh"
+CONTRACT="$ROOT_DIR/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
+BOOTC_SECURE_VERSION=$(jq -er '.assembly.bootc_version' "$CONTRACT")
+BOOTC_SECURE_ASSEMBLY_COMPATIBILITY=$(jq -er '.assembly.compatibility' "$CONTRACT")
+export BOOTC_SECURE_VERSION
 failures=0
 
 fail() {
@@ -19,7 +23,9 @@ image_path() {
 write_fixtures() { # state root
     local state=$1 root=$2
     mkdir -p "$state/bin" "$state/images" "$state/containers" "$state/mounts" "$root/proc" "$root/usr/bin" "$root/usr/lib/modules/test-kernel" \
+        "$root/usr/lib/snosi" \
         "$root/boot/EFI/Linux" "$root/boot/EFI/BOOT"
+    cp "$CONTRACT" "$root/usr/lib/snosi/bootc-secure.json"
     : >"$root/usr/lib/modules/test-kernel/vmlinuz"
     : >"$root/usr/lib/modules/test-kernel/initramfs.img"
     printf 'keep-linux\n' >"$root/boot/EFI/Linux/keep.txt"
@@ -47,7 +53,7 @@ if [[ ${BUILD_FIXTURE_CHROOT_FAIL:-0} == 1 ]]; then
     echo 'fixture rootfs loader failure' >&2
     exit 86
 fi
-printf '%s\n' "${BUILD_FIXTURE_BOOTC_VERSION:-bootc 1.16.8}"
+printf '%s\n' "${BUILD_FIXTURE_BOOTC_VERSION:-bootc $BOOTC_SECURE_VERSION}"
 EOF
     cat >"$state/bin/umount" <<'EOF'
 #!/bin/bash
@@ -309,7 +315,7 @@ remove_proc_dir() { rmdir "$2/proc"; }
 run_probe_failure_case proc-missing 'rootfs proc directory is missing' remove_proc_dir UNUSED 0
 run_probe_failure_case proc-pre-mounted 'rootfs proc is already mounted' mark_proc_mounted UNUSED 0
 run_probe_failure_case chroot-fails 'fixture rootfs loader failure' none BUILD_FIXTURE_CHROOT_FAIL 1
-run_probe_failure_case wrong-version 'expected bootc 1.16.8, observed bootc 1.16.2' none BUILD_FIXTURE_BOOTC_VERSION 'bootc 1.16.2'
+run_probe_failure_case wrong-version "expected bootc $BOOTC_SECURE_VERSION, observed bootc 1.16.2" none BUILD_FIXTURE_BOOTC_VERSION 'bootc 1.16.2'
 run_probe_failure_case umount-fails 'failed to unmount rootfs proc' none BUILD_FIXTURE_UMOUNT_FAIL 1
 
 run_case assembler-fails
@@ -356,7 +362,7 @@ run_success_case() {
     ! grep -Fxq 'io.snosi.bootc.secureboot-capable=true' "$state/container-1-labels" || fail "first candidate gained the secure capability label"
     ! grep -Fq 'io.snosi.bootc.secureboot-assembly=' "$state/container-1-labels" || fail "first candidate gained the assembly label"
     grep -Fxq 'io.snosi.bootc.secureboot-capable=true' "$state/container-2-labels" || fail "final container lost the secure label"
-    grep -Fxq 'io.snosi.bootc.secureboot-assembly=bootc-1.16.8-storage-digest-v1' "$state/container-2-labels" || fail "final container lost the assembly label"
+    grep -Fxq "io.snosi.bootc.secureboot-assembly=$BOOTC_SECURE_ASSEMBLY_COMPATIBILITY" "$state/container-2-labels" || fail "final container lost the assembly label"
     "$state/assembler" --remove-injected "$root"
 }
 
