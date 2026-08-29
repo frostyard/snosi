@@ -1028,3 +1028,17 @@ The `test-install.yml` workflow runs these tests on manual dispatch:
 5. Runs the full test suite
 
 Not run automatically on every PR due to infrastructure requirements (KVM, large disk, long runtime).
+
+### Worker Tests (installer-redirect-worker)
+
+All of the above tiers exercise bash/QEMU harnesses. `validate.yml`'s
+`installer-redirect-worker` job is the one exception: it validates the
+Cloudflare Worker that implements the stable native-installer redirect (see
+"Stable native-installer download" in
+[design/overview.md](overview.md)). It runs on pull requests and
+main-branch pushes touching `workers/native-installer-redirect/**`, working
+from that directory with Node 24: `npm run check` (`tsc --noEmit`, then
+`wrangler types --check`, then `vitest run`) followed by
+`npm run deploy:dry-run` to validate the deployment bundle without deploying.
+It never touches the production R2 binding or Cloudflare account — that only
+happens in `deploy-native-installer-redirect.yml` after a merge to `main`.
