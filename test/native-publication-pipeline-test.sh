@@ -43,6 +43,7 @@ DEV_PUBRING="$ROOT_DIR/shared/native-ab/keys/import-pubring.gpg"
 WORK_DIR=""
 HTTP_PID=""
 IGNORE_RANGE_PID=""
+COLD_RANGE_PID=""
 S3_PID=""
 PORT=0
 PASS=0
@@ -104,6 +105,7 @@ print_summary() {
 cleanup() {
     [[ -z "$HTTP_PID" ]] || kill "$HTTP_PID" 2>/dev/null || true
     [[ -z "$IGNORE_RANGE_PID" ]] || kill "$IGNORE_RANGE_PID" 2>/dev/null || true
+    [[ -z "$COLD_RANGE_PID" ]] || kill "$COLD_RANGE_PID" 2>/dev/null || true
     [[ -z "$S3_PID" ]] || kill "$S3_PID" 2>/dev/null || true
     [[ -z "$WORK_DIR" || ! -d "$WORK_DIR" ]] || rm -rf "$WORK_DIR"
 }
@@ -243,7 +245,8 @@ kill -0 "$IGNORE_RANGE_PID" 2>/dev/null || {
     exit 1
 }
 set +e
-ignored_range_out="$("$PUBLISH_DIR/verify-remote.sh" "$PREPARED1" \
+ignored_range_out="$(PUBLISH_HTTP_RANGE_ATTEMPTS=2 PUBLISH_HTTP_RANGE_RETRY_DELAY=0 \
+    "$PUBLISH_DIR/verify-remote.sh" "$PREPARED1" \
     "http://127.0.0.1:${IGNORE_RANGE_PORT}/os/native/v1/${PRODUCT}/x86-64" 2>&1)"
 ignored_range_rc=$?
 set -e
@@ -251,6 +254,38 @@ assert_true "verify-remote.sh fails when origin returns HTTP 200 for Range" \
     bash -c "[[ $ignored_range_rc -ne 0 ]]"
 assert_contains "ignored Range failure names HTTP 200 instead of a hash mismatch" \
     "$ignored_range_out" "server ignored Range 0-4095: HTTP 200"
+assert_contains "persistently ignored Range is retried before failing closed" \
+    "$ignored_range_out" "retrying range GET 0-4095"
+
+# Regression guard for build-installer-iso.yml run 33199899342: a cold object
+# behind Cloudflare answers its FIRST Range request with a full HTTP 200 and
+# serves correct 206s afterwards. A single-shot range check reads that as "the
+# origin ignores Range" and fails a perfectly good publication. verify-remote.sh
+# must absorb that first-fetch artifact via retry -- while the case above
+# proves an origin that ignores Range on EVERY attempt still fails closed.
+echo "=== verify-remote.sh: cold-origin first Range ignored, then honored ==="
+COLD_RANGE_PORT=$((PORT + 2))
+python3 "$ROOT_DIR/test/lib/range-http-server.py" "$COLD_RANGE_PORT" "$DEST" --ignore-first-ranges 1 \
+    >"$WORK_DIR/cold-range-http.log" 2>&1 &
+COLD_RANGE_PID=$!
+sleep 1
+kill -0 "$COLD_RANGE_PID" 2>/dev/null || {
+    echo "Error: cold-Range HTTP server failed to start" >&2
+    cat "$WORK_DIR/cold-range-http.log" >&2
+    exit 1
+}
+set +e
+cold_range_out="$(PUBLISH_HTTP_RANGE_ATTEMPTS=4 PUBLISH_HTTP_RANGE_RETRY_DELAY=0 \
+    "$PUBLISH_DIR/verify-remote.sh" "$PREPARED1" \
+    "http://127.0.0.1:${COLD_RANGE_PORT}/os/native/v1/${PRODUCT}/x86-64" 2>&1)"
+cold_range_rc=$?
+set -e
+assert_true "verify-remote.sh passes when only the first Range GET is ignored" \
+    bash -c "[[ $cold_range_rc -eq 0 ]]"
+assert_contains "cold-origin pass is reached by retrying, not by skipping the check" \
+    "$cold_range_out" "retrying range GET"
+assert_contains "cold-origin retry reports which attempt finally returned 206" \
+    "$cold_range_out" "succeeded on attempt 2"
 
 echo "=== promote.sh: ordering, sidecars, gpgv ==="
 promote1_out="$("$PUBLISH_DIR/promote.sh" "${PROMOTE_KEY_ARGS[@]}" --pubring "$PUBRING" "$PREPARED1" "$BASE_URL" "$DEST")"

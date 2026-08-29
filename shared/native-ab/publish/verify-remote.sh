@@ -14,7 +14,12 @@
 #      correct sub-range bytes (systemd-sysupdate/curl -r resumable
 #      transfers depend on this; an origin/CDN that silently ignores Range
 #      and returns the full 200 body every time would otherwise pass a
-#      naive check while breaking real range requests).
+#      naive check while breaking real range requests). Each range GET is
+#      retried (PUBLISH_HTTP_RANGE_ATTEMPTS / PUBLISH_HTTP_RANGE_RETRY_DELAY
+#      in publish-lib.sh): a cold object behind Cloudflare answers only its
+#      FIRST Range request with a full 200 and serves correct 206s after
+#      that, and a single-shot check reads that warm-up artifact as a broken
+#      origin. An origin that ignores Range on EVERY attempt still fails.
 #
 # Fails closed: the first mismatch aborts (rc=1) and prints which object and
 # which check failed. Never trusts "the upload command exited 0" as proof of
