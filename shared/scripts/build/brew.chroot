@@ -8,18 +8,53 @@ set -euo pipefail
 # working tree on every local build (frostyard/snosi#293).
 
 BREW_OUTPUT="$DESTDIR/usr/share/homebrew.tar.zst"
+BREW_HOME="${BREW_HOME:-/home/linuxbrew}"
+BREW_INSTALLER="${BREW_INSTALLER:-/tmp/brew-install}"
+BREW_DOCKERENV="${BREW_DOCKERENV:-/.dockerenv}"
+BREW_INSTALL_ATTEMPTS="${BREW_INSTALL_ATTEMPTS:-3}"
+BREW_RETRY_DELAY="${BREW_RETRY_DELAY:-5}"
+
+[[ "$BREW_HOME" == /* && "$BREW_HOME" != "/" ]] || {
+    echo "Error: BREW_HOME must be an absolute path other than /" >&2
+    exit 1
+}
+[[ "$BREW_INSTALLER" == /* && "$BREW_DOCKERENV" == /* ]] || {
+    echo "Error: Homebrew temporary paths must be absolute" >&2
+    exit 1
+}
+[[ "$BREW_INSTALL_ATTEMPTS" =~ ^[1-9][0-9]*$ && "$BREW_RETRY_DELAY" =~ ^[0-9]+$ ]] || {
+    echo "Error: Homebrew retry settings must be non-negative integers with at least one attempt" >&2
+    exit 1
+}
 
 source "$SRCDIR/shared/download/verified-download.sh"
 
+cleanup() {
+    rm -f "$BREW_INSTALLER"
+    rm -f "$BREW_DOCKERENV"
+    rm -rf "$BREW_HOME"
+}
+trap cleanup EXIT
+
 mkdir -p "$DESTDIR/usr/share"
 
-verified_download "brew-install" "/tmp/brew-install"
-touch /.dockerenv
-env --ignore-environment "PATH=/usr/bin:/bin:/usr/sbin:/sbin" "HOME=/home/linuxbrew" "NONINTERACTIVE=1" /usr/bin/bash /tmp/brew-install
-tar --zstd -cvf "$BREW_OUTPUT" "/home/linuxbrew/.linuxbrew"
+verified_download "brew-install" "$BREW_INSTALLER"
+touch "$BREW_DOCKERENV"
+
+attempt=1
+while ! env --ignore-environment "PATH=/usr/bin:/bin:/usr/sbin:/sbin" \
+    "HOME=$BREW_HOME" "NONINTERACTIVE=1" /usr/bin/bash "$BREW_INSTALLER"; do
+    rm -rf "$BREW_HOME"
+    if ((attempt >= BREW_INSTALL_ATTEMPTS)); then
+        echo "Error: Homebrew installer failed after $attempt attempts" >&2
+        exit 1
+    fi
+
+    echo "Homebrew installer attempt $attempt/$BREW_INSTALL_ATTEMPTS failed; retrying in ${BREW_RETRY_DELAY}s" >&2
+    ((BREW_RETRY_DELAY == 0)) || sleep "$BREW_RETRY_DELAY"
+    attempt=$((attempt + 1))
+done
+
+tar --zstd -cvf "$BREW_OUTPUT" "$BREW_HOME/.linuxbrew"
 setfattr -n user.component -v "linuxbrew" "$BREW_OUTPUT"
 setfattr -n user.update-interval -v "biweekly" "$BREW_OUTPUT"
-
-rm -f /tmp/brew-install
-rm -f /.dockerenv
-rm -rf /home/linuxbrew
