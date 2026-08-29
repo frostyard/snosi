@@ -1,8 +1,11 @@
 # Bootc Secure Assembly Compatibility Contract
 
 `shared/bootc-secure/assemble-uki.sh` is a maintained compatibility adapter
-for the Frostyard `bootc` package at upstream version `1.16.8`. It is not an
-upstream-stable bootc interface.
+for the Frostyard `bootc` package version recorded in
+`shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json` at
+`assembly.bootc_version`. That field is the canonical active version; the
+derived `assembly.compatibility` value identifies the matching assembly
+contract. This adapter is not an upstream-stable bootc interface.
 
 The chunk-before-seal ordering this contract pins is decided in
 [ADR-0012](adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md).

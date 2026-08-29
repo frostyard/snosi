@@ -27,7 +27,7 @@ required_headings=(
 
 required_strings=(
     'io.snosi.bootc.secureboot-capable=true'
-    'io.snosi.bootc.secureboot-assembly=bootc-1.16.8-storage-digest-v1'
+    'the `io.snosi.bootc.secureboot-assembly` label equals `assembly.compatibility`'
     '/dev/mapper/root'
     "ROOT_BACKING_DEVICE=\$(cryptsetup status root | awk '/^[[:space:]]*device:/{print \$2; exit}')"
     "ROOT_BACKING_DEVICE_COUNT=\$(cryptsetup status root | awk '/^[[:space:]]*device:/{print \$2}' | grep -Ec '^/dev/')"

@@ -59,15 +59,16 @@ probe_rootfs_bootc_version() ( # rootfs
         printf 'Error: rootfs bootc execution failed:\n%s\n' "$output" >&2
         exit 1
     fi
-    [[ $output == 'bootc 1.16.8' ]] || {
-        printf 'Error: expected bootc 1.16.8, observed %s\n' "$output" >&2
+    [[ $output == "bootc $BOOTC_SECURE_VERSION" ]] || {
+        printf 'Error: expected bootc %s, observed %s\n' \
+            "$BOOTC_SECURE_VERSION" "$output" >&2
         exit 1
     }
 )
 
 readonly SECURE_CAPABLE_LABEL="io.snosi.bootc.secureboot-capable=true"
 readonly SECURE_INCAPABLE_LABEL="io.snosi.bootc.secureboot-capable=false"
-readonly SECURE_ASSEMBLY_LABEL="io.snosi.bootc.secureboot-assembly=bootc-1.16.8-storage-digest-v1"
+SECURE_ASSEMBLY_LABEL=""
 first_image=""
 final_container=""
 final_mount=""
@@ -89,6 +90,15 @@ if [[ ${SNOSI_BOOTC_SECURE:-0} == 1 ]]; then
     : "${SNOSI_BOOTC_PCR_KEY:?SNOSI_BOOTC_PCR_KEY is required for secure assembly}"
     : "${SNOSI_BOOTC_PCR_CERT:?SNOSI_BOOTC_PCR_CERT is required for secure assembly}"
     ASSEMBLER="$(dirname "${BASH_SOURCE[0]}")/../../bootc-secure/assemble-uki.sh"
+    COMPATIBILITY_HELPER="$(dirname "${BASH_SOURCE[0]}")/../../bootc-secure/compatibility.sh"
+    [[ -r $COMPATIBILITY_HELPER ]] || {
+        echo "Error: bootc secure compatibility helper is unavailable" >&2; exit 1;
+    }
+    # shellcheck source=shared/bootc-secure/compatibility.sh
+    source "$COMPATIBILITY_HELPER"
+    snosi_bootc_secure_load_compatibility \
+        "$(dirname "${BASH_SOURCE[0]}")/../../bootc-secure/tree/usr/lib/snosi/bootc-secure.json" || exit 1
+    SECURE_ASSEMBLY_LABEL="io.snosi.bootc.secureboot-assembly=$BOOTC_SECURE_ASSEMBLY_COMPATIBILITY"
     case ${SNOSI_BOOTC_SECURE_TEST_HOOKS:-0} in
         0)
             [[ -z ${SNOSI_BOOTC_SECURE_TEST_ASSEMBLER:-} ]] || {
@@ -129,7 +139,7 @@ if [[ ${SNOSI_BOOTC_SECURE:-0} == 1 ]]; then
     }
     digest=$(snosi_storage_composefs_digest "$first_image")
     [[ $digest =~ ^[[:xdigit:]]{128}$ ]] || { echo "Error: unsupported bootc storage-digest interface" >&2; exit 1; }
-    SNOSI_BOOTC_SECURE_COMPOSEFS_DIGEST="$digest" SNOSI_BOOTC_SECURE_BOOTC_VERSION=1.16.8 \
+    SNOSI_BOOTC_SECURE_COMPOSEFS_DIGEST="$digest" SNOSI_BOOTC_SECURE_BOOTC_VERSION="$BOOTC_SECURE_VERSION" \
         SNOSI_BOOTC_SECURE_UKIFY_IMAGE="$first_image" \
         SNOSI_BOOTC_PREVIOUS_PCR_KEY="${SNOSI_BOOTC_PREVIOUS_PCR_KEY:-}" \
         "$ASSEMBLER" "$ROOTFS_DIR" \

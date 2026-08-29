@@ -62,6 +62,7 @@ required_files=(
     shared/bootc-secure/tree/etc/containers/policy.json
     shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml
     shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json
+    shared/bootc-secure/compatibility.sh
     shared/bootc-secure/ci/resolve-snow-release-predecessor.sh
 )
 for required in "${required_files[@]}"; do
@@ -368,8 +369,14 @@ if [[ ! -f $verifier ]]; then
     fail_check "missing secure image verifier: shared/bootc-secure/ci/verify-published-image.sh"
 else
     verifier_text=$(<"$verifier")
+    require_text "$verifier" "$verifier_text" \
+        'source "$ROOT_DIR/shared/bootc-secure/compatibility.sh"'
+    if ! grep -Fq -- '--arg compatibility "$BOOTC_SECURE_ASSEMBLY_COMPATIBILITY"' \
+            <<<"$verifier_text"; then
+        fail_check "$verifier: missing canonical assembly compatibility argument"
+    fi
     require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-capable"] == "true" and'
-    require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.8-storage-digest-v1"'
+    require_text "$verifier" "$verifier_text" '    .Labels["io.snosi.bootc.secureboot-assembly"] == $compatibility'
     # shellcheck disable=SC1003,SC2016 # Match the literal verifier shell source.
     require_text "$verifier" "$verifier_text" \
         'inspection=$(skopeo inspect --authfile "$AUTH_FILE" \'

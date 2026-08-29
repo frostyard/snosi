@@ -1,11 +1,10 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Assemble the pinned bootc-1.16.8 compatibility UKI. This is deliberately not
+# Assemble the pinned bootc compatibility UKI. This is deliberately not
 # an upstream-stable interface: buildah-package.sh supplies the OCI digest.
 set -euo pipefail
 umask 077
 
-readonly EXPECTED_BOOTC_VERSION="1.16.8"
 readonly CANDIDATE_UKIFY_MOK_KEY=/run/snosi-ukify-mok.key
 readonly CANDIDATE_UKIFY_MOK_CERT=/run/snosi-ukify-mok.crt
 readonly CANDIDATE_UKIFY_PCR_KEY=/run/snosi-ukify-pcr.key
@@ -19,6 +18,11 @@ valid_digest() { [[ ${1:-} =~ ^[[:xdigit:]]{128}$ ]]; }
 
 # shellcheck source=shared/bootc-secure/storage-digest-probe.sh
 source "$(dirname "${BASH_SOURCE[0]}")/storage-digest-probe.sh"
+# shellcheck source=shared/bootc-secure/compatibility.sh
+source "$(dirname "${BASH_SOURCE[0]}")/compatibility.sh"
+BOOTC_SECURE_CANONICAL_CONTRACT="$(dirname "${BASH_SOURCE[0]}")/tree/usr/lib/snosi/bootc-secure.json"
+readonly BOOTC_SECURE_CANONICAL_CONTRACT
+snosi_bootc_secure_load_compatibility "$BOOTC_SECURE_CANONICAL_CONTRACT"
 
 discover_kernel() { # rootfs
     local root=$1 path version
@@ -66,7 +70,10 @@ validate_root_contract() { # rootfs
     local root=$1 contract
     contract="$root/usr/lib/snosi/bootc-secure.json"
     [[ -f "$contract" ]] || die "missing bootc secure rootfs contract"
-    jq -e '.schema == 1 and .mok_certificate == "/usr/lib/snosi/mok.crt" and .pcr_public_key == "/usr/lib/snosi/pcr-signing.pub" and .encrypted_root_mapper == "root" and .systemd_suite == "forky" and ((has("assembly") | not) or .assembly == {compatibility: "bootc-1.16.8-storage-digest-v1", bootc_version: "1.16.8", storage_digest_command: "bootc container compute-composefs-digest-from-storage", ukify: "direct-two-pass"})' "$contract" >/dev/null || die "unexpected bootc secure rootfs contract"
+    jq -e --arg version "$BOOTC_SECURE_VERSION" \
+        --arg compatibility "$BOOTC_SECURE_ASSEMBLY_COMPATIBILITY" \
+        '.schema == 1 and .mok_certificate == "/usr/lib/snosi/mok.crt" and .pcr_public_key == "/usr/lib/snosi/pcr-signing.pub" and .encrypted_root_mapper == "root" and .systemd_suite == "forky" and .assembly == {compatibility: $compatibility, bootc_version: $version, storage_digest_command: "bootc container compute-composefs-digest-from-storage", ukify: "direct-two-pass"} and .installer.minimum_versions.bootc == $version' \
+        "$contract" >/dev/null || die "unexpected bootc secure rootfs contract"
 }
 
 # The gate tracks only caller-owned private keys. Generic PEM scans reject
@@ -404,8 +411,8 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     credential_gate_init "$gate" "$mok_key" "$pcr_key" "$previous_key"
     digest=${SNOSI_BOOTC_SECURE_COMPOSEFS_DIGEST:-}
     valid_digest "$digest" || die "missing or invalid pre-injection OCI composefs digest"
-    [[ ${SNOSI_BOOTC_SECURE_BOOTC_VERSION:-} == "$EXPECTED_BOOTC_VERSION" ]] || die "assembly requires pinned bootc $EXPECTED_BOOTC_VERSION"
     validate_root_contract "$root"
+    [[ ${SNOSI_BOOTC_SECURE_BOOTC_VERSION:-} == "$BOOTC_SECURE_VERSION" ]] || die "assembly requires pinned bootc $BOOTC_SECURE_VERSION"
     credential_gate_scan_tree "$gate" rootfs "$root"
     refuse_existing_uki "$root"
     kernel_info=$(discover_kernel "$root")
@@ -758,9 +765,7 @@ self_test() {
     work=$(mktemp -d); trap 'rm -rf -- "$work"' RETURN
     mkdir -p "$work/root/boot/EFI/Linux" "$work/root/usr/lib/modules/one"
     mkdir -p "$work/root/usr/lib/snosi"
-    cat >"$work/root/usr/lib/snosi/bootc-secure.json" <<'EOF'
-{"schema":1,"mok_certificate":"/usr/lib/snosi/mok.crt","pcr_public_key":"/usr/lib/snosi/pcr-signing.pub","encrypted_root_mapper":"root","systemd_suite":"forky"}
-EOF
+    cp "$BOOTC_SECURE_CANONICAL_CONTRACT" "$work/root/usr/lib/snosi/bootc-secure.json"
     validate_root_contract "$work/root"
     touch "$work/root/boot/EFI/Linux/old.efi"
     if (refuse_existing_uki "$work/root") >/dev/null 2>&1; then rc=1; fi

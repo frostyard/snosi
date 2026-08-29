@@ -6,6 +6,10 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 POLICY="$ROOT_DIR/shared/bootc-secure/tree/etc/containers/policy.json"
 REGISTRIES="$ROOT_DIR/shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml"
+# shellcheck source=shared/bootc-secure/compatibility.sh
+source "$ROOT_DIR/shared/bootc-secure/compatibility.sh"
+snosi_bootc_secure_load_compatibility \
+    "$ROOT_DIR/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
 
 if [[ $# -ne 5 ]]; then
     printf 'usage: %s IMAGE VERSION_TAG EXPECTED_DIGEST LOCAL_REF AUTH_FILE\n' "${0##*/}" >&2
@@ -46,10 +50,11 @@ fi
 
 inspection=$(skopeo inspect --authfile "$AUTH_FILE" \
     "docker://$IMAGE@$EXPECTED_DIGEST")
-jq -e --arg digest "$EXPECTED_DIGEST" '
+jq -e --arg digest "$EXPECTED_DIGEST" \
+    --arg compatibility "$BOOTC_SECURE_ASSEMBLY_COMPATIBILITY" '
     .Digest == $digest and
     .Labels["io.snosi.bootc.secureboot-capable"] == "true" and
-    .Labels["io.snosi.bootc.secureboot-assembly"] == "bootc-1.16.8-storage-digest-v1"
+    .Labels["io.snosi.bootc.secureboot-assembly"] == $compatibility
 ' <<<"$inspection" >/dev/null
 
 tag_digest=$(skopeo inspect --authfile "$AUTH_FILE" --format '{{.Digest}}' \

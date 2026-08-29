@@ -27,7 +27,8 @@ matrix. Production support still requires authorized signed secure N/N+1/N+2
 and transition OCI artifacts, a Firn-native Snosi lifecycle lane, and
 representative Snowfield hardware results. Do not use an image unless inspection confirms
 `io.snosi.bootc.secureboot-capable=true` and
-`io.snosi.bootc.secureboot-assembly=bootc-1.16.8-storage-digest-v1`.
+the `io.snosi.bootc.secureboot-assembly` label equals `assembly.compatibility`
+in `shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json`.
 
 ## Trust Boundaries
 

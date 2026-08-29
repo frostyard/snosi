@@ -155,6 +155,22 @@ grep -q '^ExtraTrees=%D/shared/native-ab/keys/pcr-signing-2026.pub:/usr/lib/snos
 
 contract="$tree/usr/lib/snosi/bootc-secure.json"
 [[ -f "$contract" ]]
+# shellcheck source=shared/bootc-secure/compatibility.sh
+source "$root/shared/bootc-secure/compatibility.sh"
+snosi_bootc_secure_load_compatibility "$contract"
+[[ $BOOTC_SECURE_VERSION == "$(jq -er '.assembly.bootc_version' "$contract")" ]]
+[[ $BOOTC_SECURE_ASSEMBLY_COMPATIBILITY == \
+    "bootc-$BOOTC_SECURE_VERSION-storage-digest-v1" ]]
+
+compatibility_fixture=$(mktemp)
+trap 'rm -f "$compatibility_fixture"' EXIT
+jq '.installer.minimum_versions.bootc = "9.9.9"' "$contract" \
+    >"$compatibility_fixture"
+if snosi_bootc_secure_load_compatibility "$compatibility_fixture" 2>/dev/null; then
+    echo "inconsistent bootc compatibility contract was accepted" >&2
+    exit 1
+fi
+
 python3 - "$contract" <<'PY'
 import json
 import sys
@@ -162,6 +178,7 @@ import sys
 with open(sys.argv[1]) as f:
     contract = json.load(f)
 
+bootc_version = contract["assembly"]["bootc_version"]
 assert {key: contract[key] for key in (
     "schema", "mok_certificate", "pcr_public_key", "encrypted_root_mapper",
     "systemd_suite", "assembly",
@@ -172,12 +189,13 @@ assert {key: contract[key] for key in (
     "encrypted_root_mapper": "root",
     "systemd_suite": "forky",
     "assembly": {
-        "compatibility": "bootc-1.16.8-storage-digest-v1",
-        "bootc_version": "1.16.8",
+        "compatibility": f"bootc-{bootc_version}-storage-digest-v1",
+        "bootc_version": bootc_version,
         "storage_digest_command": "bootc container compute-composefs-digest-from-storage",
         "ukify": "direct-two-pass",
     },
 }
+assert contract["installer"]["minimum_versions"]["bootc"] == bootc_version
 PY
 
 reconciler="$tree/usr/libexec/snosi-bootc-bootloader-reconcile"
