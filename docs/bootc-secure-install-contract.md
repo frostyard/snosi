@@ -100,6 +100,10 @@ Refusal is enforced elsewhere and is not re-proven here: the shipped
 `sigstoreSigned` scopes (see `docs/bootc-secure-operations.md`), and
 `test/bootc-container-policy-test.sh RUN_LIVE=1` exercises unsigned, wrong-key,
 and wrong-repository rejection through Podman against real published images.
+Rootless users receive a permissive
+`$HOME/.config/containers/policy.json` on first login so ordinary workload
+pulls do not inherit the system-image trust policy. User tmpfiles creates it
+only when absent, preserving any policy the user already configured.
 What is NOT covered by that, and is currently unproven, is refusal at
 install time by this path: a deliberately-broken image reaching the installer.
 
