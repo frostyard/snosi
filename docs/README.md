@@ -10,6 +10,11 @@ Docs are split by the question they answer (the shape defined by
 | [specs/](specs/) | **What exactly** is the contract? | Precise, testable interface definitions, changed only alongside implementing code |
 | [plans/](plans/) | **When/in what order** do we build? | Phased plans and their paired designs; updated as work lands |
 
+One layer sits above this table: [`../ROADMAP.md`](../ROADMAP.md) answers
+**which of these matter next, and why** — the near/mid/long-term horizons, the
+two-transport position, and what the project is deliberately not doing. It
+states intent; the categories below hold the record.
+
 ## Index
 
 ### Decisions (ADRs)
@@ -82,6 +87,7 @@ when next rewritten.
 
 ### Process and governance (indexed in place)
 
+- [../ROADMAP.md](../ROADMAP.md) — direction and horizons; the layer above `adr/` and `plans/`
 - [org-adrs.md](org-adrs.md) — org-wide frostyard/core ADRs binding snosi
 - [risk-tiers.md](risk-tiers.md) — PR risk-tier classification
 - [review-rubric.md](review-rubric.md) — PR review rubric

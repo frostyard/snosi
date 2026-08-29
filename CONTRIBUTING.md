@@ -5,6 +5,11 @@ Thanks for contributing to snosi.
 ## Before you start
 
 - Read `README.md` for project goals and build outputs.
+- Read [`ROADMAP.md`](ROADMAP.md) for direction: what is being worked on next,
+  what is designed but unscheduled, what the project is deliberately **not**
+  doing, and the bar a new sysext has to meet. Checking it first is the
+  cheapest way to find out that an idea is already planned — or already
+  declined.
 - Follow the [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) in all project spaces.
 - Read `CLAUDE.md` and `docs/design/overview.md` for repository architecture, contracts, and operational constraints.
 - For security issues, follow the private reporting instructions in
