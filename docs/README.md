@@ -77,6 +77,8 @@ when next rewritten.
 - [nbc-to-bootc-migration.md](nbc-to-bootc-migration.md) — operator runbook: legacy nbc hosts → bootc
 - [installing.md](installing.md) — user-facing installation guide for published images
 - [snosi-kargs.md](snosi-kargs.md) — persistent custom kernel arguments on secure installs
+- [../runbooks/image-publication-failure.md](../runbooks/image-publication-failure.md) — on-call triage for a failed/stalled secure-build publish (push/sign/verify/validate/promote)
+- [postmortem-template.md](postmortem-template.md) — blameless postmortem template; pair with [.github/ISSUE_TEMPLATE/incident_report.md](../.github/ISSUE_TEMPLATE/incident_report.md)
 
 ### Process and governance (indexed in place)
 
