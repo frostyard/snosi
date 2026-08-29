@@ -41,7 +41,9 @@ Key platform facts this rests on (verified 2026-08-25):
   `shared/flurry/tree/` (snow-derived bootc infrastructure minus
   GNOME/bazaar/incus, plus `display-manager.service -> sddm.service` static
   alias and an sddm tmpfiles rule), `flurry.postinst.chroot` (os-release,
-  `systemctl enable sddm`, gnome-keyring stripped from sddm PAM).
+  `systemctl enable sddm`, gnome-keyring stripped from sddm PAM). The build
+  runs Omarchy's pinned `default-keyring.sh` against `/etc/skel`, so every
+  first-boot user starts with Omarchy's passwordless default keyring.
 - `shared/composition/flurry/var-outcomes.txt` + the `flurry)` arm in
   `shared/composition/var-audit.finalize`.
 - Justfile `flurry`/`_flurry` targets; `validate.yml` summary loop includes

@@ -87,6 +87,9 @@ done
 mkdir -p "$SKEL/.config"
 cp -a "$SRC/config"/. "$SKEL/.config"/
 cp -f "$SRC/default/bashrc" "$SKEL/.bashrc"
+# New users do not run omarchy-provision-user during snosi installation, so
+# seed upstream's passwordless default keyring through /etc/skel.
+HOME="$SKEL" bash "$SRC/install/user/default-keyring.sh"
 # Hyprland toggles are generated state, seeded under .local/state.
 mkdir -p "$SKEL/.local/state/omarchy/toggles/hypr"
 cp -a "$SRC/default/hypr/toggles"/. "$SKEL/.local/state/omarchy/toggles/hypr"/
