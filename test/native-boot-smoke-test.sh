@@ -77,6 +77,36 @@ die() {
     exit 1
 }
 
+# dump_failed_unit_diagnostics - Print per-unit status and journal for every
+# failed unit in the guest.
+#
+# `systemctl --failed` names the unit but not the reason, and the serial
+# console tail is capped at 60 lines and carries early-boot noise rather than
+# the failing unit's own output. Without this, a promotion-blocking failure in
+# CI is only reproducible by rebuilding the candidate and booting it by hand
+# (hit 2026-08-29: plymouth-start.service degraded the snow candidate and the
+# uploaded artifacts held no journal for it).
+#
+# Diagnostics only: this never changes the pass/fail decision, so every command
+# is best-effort and the caller still dies on the state check.
+dump_failed_unit_diagnostics() {
+    local units unit
+    # Collect first: vm_ssh runs ssh, which would consume the loop's stdin.
+    mapfile -t units < <(vm_ssh "systemctl list-units --state=failed --no-legend --plain --no-pager" 2>/dev/null | awk '{print $1}' || true)
+    (( ${#units[@]} )) || return 0
+    for unit in "${units[@]}"; do
+        [[ -n "$unit" ]] || continue
+        # Only pass through well-formed unit names -- these are interpolated
+        # into a remote shell command.
+        [[ "$unit" =~ ^[A-Za-z0-9:_.@-]+\.[a-z]+$ ]] || continue
+        echo "--- systemctl status $unit ---" >&2
+        vm_ssh "systemctl status --no-pager --full '$unit'" >&2 || true
+        echo "--- journalctl -u $unit ---" >&2
+        vm_ssh "journalctl --no-pager --full --lines=100 -u '$unit'" >&2 || true
+    done
+    echo "--- end failed unit diagnostics ---" >&2
+}
+
 cleanup() {
     local rc=$?
     vm_stop >/dev/null 2>&1 || true
@@ -151,6 +181,7 @@ state="$(vm_ssh "timeout 300 systemctl is-system-running --wait" 2>/dev/null || 
 if [[ "$state" != "running" ]]; then
     echo "--- failed units ---" >&2
     vm_ssh "systemctl --failed --no-legend" >&2 || true
+    dump_failed_unit_diagnostics
     die "system state is '$state', expected 'running' (startup incomplete or failed units)"
 fi
 echo "PASS: system state is 'running' (startup complete, no failed units)"
