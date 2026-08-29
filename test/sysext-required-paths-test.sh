@@ -56,4 +56,6 @@ if (( failures > 0 )); then
     exit 1
 fi
 
+"$ROOT_DIR/test/sysext-usr-only-test.sh"
+
 echo "sysext-required-paths-test: PASSED"
