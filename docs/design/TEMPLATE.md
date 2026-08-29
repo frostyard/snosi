@@ -36,4 +36,4 @@ that pin its contracts, and the roadmap phase that builds it. -->
 
 - Rationale: [ADR-NNNN](../adr/NNNN-….md)
 - Contracts: [specs/…](../specs/….md)
-- Built in: [roadmap — Phase N](../plans/roadmap.md)
+- Built in: [roadmap — Phase N](../../ROADMAP.md)
