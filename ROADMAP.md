@@ -102,14 +102,14 @@ worth a contributor's time.
 
 - **Reconcile the plan record with the transport decision.**
   [`docs/plans/2026-07-13-mkosi-native-ab-root-design.md`](docs/plans/2026-07-13-mkosi-native-ab-root-design.md)
-  is titled "Replace bootc with mkosi-native A/B root updates" and is still
-  marked **In progress**, with a step 12 reading "Retire bootc only after fleet
-  closure". That is now backwards. It and
-  [`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`](docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md)
-  (still **Proposed**, describing an arrangement that both shipped and is now
-  ending) should be marked `Superseded` with a pointer to this decision. Two
-  live plans arguing for the opposite of current direction is the most
-  expensive kind of stale record: it is the kind a contributor acts on.
+  is marked **Superseded** as of 2026-08-29 and carries a banner saying so; its
+  step 12 ("Retire bootc only after fleet closure") is historical record, not
+  direction. What remains is
+  [`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`](docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md),
+  still **Proposed**, describing a coexistence arrangement that both shipped
+  and is now ending. It should be marked `Superseded` too. A live plan arguing
+  for the opposite of current direction is the most expensive kind of stale
+  record: it is the kind a contributor acts on.
 
 - **Close the bootc update-validation prerequisites.**
   The bootc update validation plan is blocked on discrete, small prerequisites
@@ -129,22 +129,22 @@ worth a contributor's time.
   just gained decays file by file. The remaining work is one fail-closed guard
   in the style of the existing `check-*.sh` scripts, wired into `validate.yml`.
 
-- **Decide the graphical installer's future.**
-  `snosi-setup` — a GTK4/libadwaita kiosk first-run experience — was scoped as
-  a frontend for the `snosi-install` backend behind the **native** installer
-  ISO, and this file previously called it the project's single largest adoption
-  lever on the grounds that "the native transport is the more defensible one".
-  That premise is gone. Phase 1 is merged and the CLI backend is
-  feature-complete, so the question is no longer whether to build it but what
-  it installs: retarget the frontend at a bootc install flow, or drop it with
-  the transport it was built for. This should be answered before any further
-  implementation effort, not after.
-  → [`docs/plans/2026-07-17-graphical-installer-plan.md`](docs/plans/2026-07-17-graphical-installer-plan.md)
-
 ## Mid term
 
 Designed, deliberately not scheduled. These need a decision before they need
 code.
+
+- **Graphical installer (`snosi-setup`) — nice to have, not needed soon.**
+  A GTK4/libadwaita kiosk first-run experience over the `snosi-install`
+  backend. Phase 1 is merged and the CLI backend is feature-complete, so this
+  is buildable whenever someone wants it. It is deliberately *not* near-term
+  work. This file previously called it the project's single largest adoption
+  lever, on the grounds that "the native transport is the more defensible one
+  and is currently gated behind a text installer" — that premise is gone with
+  the transport it named. Anyone picking it up should first settle what it
+  installs, since it was scoped against the native installer ISO and the
+  supported path is bootc. A good contribution, not a blocker for anything.
+  → [`docs/plans/2026-07-17-graphical-installer-plan.md`](docs/plans/2026-07-17-graphical-installer-plan.md)
 
 - **Snosi update/sysext API daemon.**
   Reading [`docs/integration-contracts.md`](docs/integration-contracts.md)

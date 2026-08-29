@@ -1,7 +1,22 @@
 # Design: Replace bootc with mkosi-native A/B root updates
 
-**Status:** In progress — prototype and acceptance runs pass; bootc removal is still gated on the external deployment and production acceptance steps below.  
+**Status:** Superseded — 2026-08-29. snosi is not replacing bootc. bootc is the supported transport and the native A/B transport is being phased out by 2026-10-28.  
 **Last verified:** 2026-08-29
+**Superseded by:** the transport position in [`ROADMAP.md`](../../ROADMAP.md) ("Position: bootc is the transport; native A/B is being phased out"). Phase-out obligations are tracked in frostyard/snosi#889.
+
+> **This document records superseded direction. Do not act on it.**
+>
+> It was written to replace bootc with a native GPT A/B root, and its step 12
+> reads "Retire bootc only after fleet closure". That outcome has been
+> reversed: bootc was always the preferred model, and it now does what snosi
+> needs, so the reason for carrying a second transport has expired. The native
+> A/B transport it designed is the thing being retired.
+>
+> Everything below is kept as a historical record of what was built and
+> validated — the prototype, the acceptance runs, and the constraints
+> discovered are all real, and the phase-out depends on some of them (notably
+> that a native install migrates by reinstall, never by an update hop). Read it
+> for what happened, not for what to do next.
 
 ## Status
 
