@@ -17,9 +17,15 @@ else
     )
 fi
 
-verified_download() {
+verified_download() (
     local key="$1"
     local output_path="$2"
+    local output_dir output_name tmp=""
+
+    cleanup_verified_download() {
+        [[ -z "$tmp" || ! -e "$tmp" ]] || rm -f -- "$tmp"
+    }
+    trap cleanup_verified_download EXIT
 
     local url="" checksum="" checksums_file
     for checksums_file in "${CHECKSUMS_FILES[@]}"; do
@@ -34,18 +40,27 @@ verified_download() {
 
     [[ -n "$url" ]] || { echo "Error: No URL for key '$key'" >&2; return 1; }
     [[ -n "$checksum" ]] || { echo "Error: No checksum for key '$key'" >&2; return 1; }
+    [[ ! -d "$output_path" ]] || { echo "Error: Output path is a directory: $output_path" >&2; return 1; }
+
+    output_dir="$(dirname "$output_path")"
+    output_name="$(basename "$output_path")"
+    tmp="$(mktemp "$output_dir/.${output_name}.XXXXXX")" ||
+        { echo "Error: Cannot create temporary output for $key" >&2; return 1; }
 
     echo "Downloading $key..."
-    curl --retry 3 --location --fail --silent --show-error --output "$output_path" "$url" || { echo "Error: Download failed" >&2; return 1; }
+    curl --retry 3 --location --fail --silent --show-error --output "$tmp" "$url" ||
+        { echo "Error: Download failed" >&2; return 1; }
 
     local actual
-    actual=$(sha256sum "$output_path" | cut -d' ' -f1)
+    actual=$(sha256sum "$tmp" | cut -d' ' -f1)
     if [[ "$actual" != "$checksum" ]]; then
         echo "Error: Checksum mismatch for $key" >&2
         echo "  Expected: $checksum" >&2
         echo "  Actual:   $actual" >&2
-        rm -f "$output_path"
         return 1
     fi
+
+    mv -f -- "$tmp" "$output_path"
+    tmp=""
     echo "Verified $key"
-}
+)

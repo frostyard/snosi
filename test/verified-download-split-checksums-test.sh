@@ -144,6 +144,24 @@ expect_download "sysext-checksums.json key downloads and verifies" \
 expect_download "image-checksums.json key downloads and verifies" \
     "image-fixture" "$WORK_DIR/out/image.txt" "image payload fixture"
 
+printf 'do not overwrite' >"$WORK_DIR/symlink-target.txt"
+ln -s "$WORK_DIR/symlink-target.txt" "$WORK_DIR/out/symlink.txt"
+if run_verified_download "" \
+    "image-fixture" "$WORK_DIR/out/symlink.txt" "$WORK_DIR/symlink.log"; then
+    assert_file_content "pre-existing output symlink is replaced" \
+        "$WORK_DIR/out/symlink.txt" "image payload fixture"
+    assert_file_content "pre-existing output symlink target is not overwritten" \
+        "$WORK_DIR/symlink-target.txt" "do not overwrite"
+    if [[ -L "$WORK_DIR/out/symlink.txt" ]]; then
+        record_fail "download output is a regular file" "output remains a symlink"
+    else
+        record_pass "download output is a regular file"
+    fi
+else
+    record_fail "pre-existing output symlink is safely replaced" \
+        "verified_download failed; log: $(cat "$WORK_DIR/symlink.log")"
+fi
+
 expect_failure "missing key fails" \
     "" "missing-fixture" "$WORK_DIR/out/missing.txt"
 
