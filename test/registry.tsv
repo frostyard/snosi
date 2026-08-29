@@ -1,0 +1,112 @@
+# test/registry.tsv -- declarative inventory of the test/ suite.
+#
+# Extracts the previously implicit "which test is executed by what" contract
+# out of .github/workflows/*.yml, where it existed only as ~97 hand-written
+# `run:` steps. Verified by test/test-registry-test.sh. See
+# docs/design/testing.md and frostyard/snosi#851.
+#
+# Columns: test<TAB>class<TAB>runner
+#
+#   ci       runner = comma-separated .github/workflows/ files that must each
+#            still reference this test. Dropping the last reference fails the
+#            guard instead of silently going dark.
+#   nested   runner = the test/ script that executes this one. Only used where
+#            an actual invocation was confirmed, never a prose mention.
+#   helper   harness/launcher, not an assertion runner; nothing executes it
+#            on its own.
+#   unwired  KNOWN GAP: reachable from no workflow. This is dark coverage
+#            tracked by frostyard/snosi#851 -- NOT an approved manual-only
+#            class. Moving an entry out of `unwired` requires wiring it up.
+#
+# The guard intentionally does NOT require that every file under test/ appear
+# here, so that in-flight branches adding tests do not break on merge.
+base-hardware-utils-test.sh	ci	validate.yml
+bootc-bootloader-reconcile-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-container-policy-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-install-test.sh	ci	test-install.yml
+bootc-migration-test.sh	unwired	-
+bootc-publication-guard-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-release-predecessor-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-secure-artifact-negative-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-secure-artifact-test.sh	ci	bootc-secure-nightly.yml,build-images.yml,test-bootc-secure.yml,validate.yml
+bootc-secure-ci-test.sh	ci	nightly-compliance.yml,validate.yml
+bootc-secure-docs-test.sh	ci	test-bootc-secure.yml,validate.yml
+bootc-secure-install-contract-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-secure-install-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-secure-package-cleanup-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-secure-promotion-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-secure-publication-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-secure-rotation-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-secure-spike-test.sh	ci	test-bootc-secure.yml,validate.yml
+bootc-secure-static-test.sh	unwired	-
+bootc-secure-update-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-update-test.sh	unwired	-
+bootstrap-mkosi-test.sh	unwired	-
+build-workflow-permissions-test.py	ci	validate.yml
+cayo-ab-install-spike.sh	nested	native-ab-secure-boot-test.sh
+check-dependencies-workflow-token-test.sh	ci	validate.yml
+check-mkosi-pin-test.sh	unwired	-
+check-profile-dependencies-local-mkosi-test.sh	ci	validate.yml
+copilot-automation-secret-test.py	ci	validate.yml
+dps-luks-cleanup-test.sh	unwired	-
+duplicate-packages-test.sh	ci	validate.yml
+etc-overlay-prune-test.sh	ci	validate.yml
+firn-catalog-test.sh	ci	validate.yml
+firn-installer-iso-test.sh	unwired	-
+flurry-keyring-test.sh	unwired	-
+generate-sbom-test.sh	unwired	-
+latest-apt-version-test.sh	ci	validate.yml
+native-ab-components-test.sh	unwired	-
+native-ab-contracts-test.sh	ci	nightly-compliance.yml,validate.yml
+native-ab-include-order-test.sh	unwired	-
+native-ab-publication-test.sh	unwired	-
+native-ab-secure-artifact-negative-test.sh	unwired	-
+native-ab-secure-artifact-test.sh	ci	build-native-images.yml
+native-ab-secure-boot-test.sh	unwired	-
+native-ab-secure-rotation-test.sh	unwired	-
+native-ab-secure-update-test.sh	unwired	-
+native-ab-static-test.sh	ci	validate.yml
+native-ab-update-test.sh	unwired	-
+native-ab-updateux-test.sh	unwired	-
+native-boot-smoke-test.sh	ci	build-native-images.yml
+native-installer-e2e-test.sh	unwired	-
+native-installer-iso-test.sh	unwired	-
+native-iso-boot-smoke-test.sh	ci	build-installer-iso.yml,build-native-images.yml
+native-publication-pipeline-test.sh	ci	validate.yml
+native-publish-test.sh	ci	validate.yml
+native-rclone-install-test.py	ci	validate.yml
+output-organizer-test.sh	unwired	-
+pilothouse-sysext-test.sh	ci	validate.yml
+policy-as-code-test.py	ci	validate.yml
+publication-guards.bats	ci	validate.yml
+required-by-guard-test.sh	ci	validate.yml
+run-qemu.sh	helper	-
+runtime-etc-guard-test.sh	ci	validate.yml
+secure-vm-fixture-test.sh	unwired	-
+snosi-etc-diff-test.sh	ci	validate.yml
+snosi-firstboot-test.sh	ci	validate.yml
+snosi-install-test.sh	ci	validate.yml
+snosi-kargs-test.sh	ci	validate.yml
+snosi-setup-boot-test.sh	unwired	-
+snosi-setup-model-test.py	ci	validate.yml
+snosi-setup-pages-test.py	ci	validate.yml
+snowfield-artifact-test.sh	ci	build-native-images.yml
+socat-package-test.sh	ci	validate.yml
+sunshine-capabilities-test.sh	ci	validate.yml
+sunshine-package-dependencies-test.sh	ci	validate.yml
+sysext-authoring-contract-test.sh	ci	validate.yml
+sysext-divergent-libs-test.sh	ci	validate.yml
+sysext-postoutput-test.sh	unwired	-
+sysext-required-paths-test.sh	ci	validate.yml
+sysext-signature-verification-test.sh	ci	nightly-compliance.yml,validate.yml
+sysext-udev-reload-test.sh	ci	validate.yml
+task2-recovery-key-bytes-test.sh	ci	test-bootc-secure.yml,validate.yml
+task3-console-pump-test.py	ci	test-bootc-secure.yml,validate.yml
+test-registry-test.sh	unwired	-
+tss-user-initrd-static-test.sh	ci	validate.yml
+update-checksums-split-test.sh	ci	validate.yml
+update-notify-units-test.sh	ci	validate.yml
+verified-download-split-checksums-test.sh	ci	validate.yml
+verify-installer-redirect-test.sh	unwired	-
+wifi-backend-test.sh	ci	validate.yml
+workflow-path-filter-test.sh	ci	validate.yml

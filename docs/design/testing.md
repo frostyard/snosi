@@ -17,10 +17,65 @@ A/B validation harnesses. The install path validates OCI load → bootc install 
 QEMU boot → SSH-based test suite. The update paths validate bootc or sysupdate
 hops, deployment continuity, persistence, rollback, and failure handling.
 
+## Test Registry (`test/registry.tsv`)
+
+There is no test discovery glob in this repository: a test becomes live only by
+being named by hand in a `.github/workflows/*.yml` step. That wiring step used
+to be an unenforced convention, so a test could be committed, reviewed and
+merged while being executed by nothing, and nothing reported it.
+
+`test/registry.tsv` makes that contract explicit and checkable. Each row is
+`test<TAB>class<TAB>runner`:
+
+| class | meaning | `runner` column |
+| --- | --- | --- |
+| `ci` | executed in CI | comma-separated workflow files that must each still reference the test |
+| `nested` | executed by another test, not by a workflow directly | the invoking `test/` script |
+| `helper` | harness/launcher, not an assertion runner | `-` |
+| `unwired` | **known gap** — reachable from no workflow | `-` |
+
+`test/test-registry-test.sh` verifies the registry. It is hermetic: no network,
+no root, no image build, and runs in under a second. It fails when
+
+- a registry entry names a file that does not exist under `test/`,
+- a `ci` entry is no longer referenced by a workflow it names (a test silently
+  dropped from CI),
+- a `nested` entry is no longer invoked by its named parent test,
+- a `helper`/`unwired` entry *is* referenced by a workflow (a stale registry
+  that under-reports live coverage),
+- a class is unrecognised, or an entry is duplicated.
+
+> **The guard is not yet wired to a runner**, and is therefore listed as
+> `unwired` in its own registry — it is currently subject to the very defect it
+> detects. Wiring it requires a change under `.github/workflows/`, which the
+> automation that produced this file cannot write. A maintainer should add this
+> step to the `static-checks` job of `.github/workflows/validate.yml`:
+>
+> ```yaml
+>       - name: Test test/registry.tsv matches actual test wiring
+>         run: ./test/test-registry-test.sh
+> ```
+>
+> and then move `test-registry-test.sh` to `ci	validate.yml` in
+> `test/registry.tsv`. The guard's own `unwired`-vs-`ci` check enforces that
+> those two steps stay consistent.
+
+The guard deliberately does **not** require that every file under `test/` appear
+in the registry. Making it fail closed on unregistered files would break every
+in-flight branch that adds a test script the moment an unrelated PR merged. New
+tests should still be added to the registry in the PR that introduces them.
+
+`unwired` is a defect class, not an approved "manual-only" class. It records
+dark coverage tracked by frostyard/snosi#851 — including
+`test/secure-vm-fixture-test.sh`, the only direct cover for the fail-closed
+contract of `test/lib/secure-vm.sh`. Moving an entry out of `unwired` means
+wiring it to a runner, not relabelling it.
+
 ## Architecture
 
 ```
 test/
+├── registry.tsv               # Declarative inventory; guarded by test-registry-test.sh
 ├── bootc-install-test.sh      # Orchestrator script (headless, for CI)
 ├── bootc-update-test.sh       # Update/rollback orchestrator (headless)
 ├── bootc-container-policy-test.sh # OCI policy contract; RUN_LIVE=1 proves signed Cayo pull then containers-storage consumption
