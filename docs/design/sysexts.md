@@ -191,7 +191,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 
 ### coder
 - `mkosi.postinst.chroot` — Downloads the coder .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Single static binary + two units, all natively under `/usr`; no relocation
-- `mkosi.finalize` — Captures `/etc/coder.d/` to factory defaults; `coder.service` is gated on `ConditionFileNotEmpty=/etc/coder.d/coder.env`, so the enabled+upheld unit stays inert until an admin fills in `CODER_ACCESS_URL` etc.
+- `mkosi.finalize` — Captures `/etc/coder.d/` to factory defaults and removes the package preinst's build-time `/var/home/coder` skeleton; `coder.service` is gated on `ConditionFileNotEmpty=/etc/coder.d/coder.env`, so the enabled+upheld unit stays inert until an admin fills in `CODER_ACCESS_URL` etc.
 - `usr/lib/sysusers.d/coder.conf` — Recreates the `coder` system user at boot (the deb preinst's `useradd` lands in the buildroot `/etc/passwd`, stripped from the delta) with membership in `docker` (mirrors preinst) and `incus-admin` (Incus-template provisioning); `m` lines implicitly create those groups when the owning sysext isn't merged
 - `usr/lib/tmpfiles.d/coder.conf` — Factory config injection + `/home/coder` creation
 - `usr/lib/systemd/system-preset/40-coder.preset` — Enables `coder.service`, explicitly disables `coder-workspace-proxy.service` (separate opt-in role, needs its own env file)

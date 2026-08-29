@@ -12,3 +12,8 @@ if [ -d "$BUILDROOT/etc/coder.d" ]; then
     cp --archive --update=none "$BUILDROOT/etc/coder.d" \
        "$BUILDROOT/usr/share/factory/etc/"
 fi
+
+# The package preinst creates this build-time home from /etc/skel. Runtime
+# ownership and home creation come from coder's sysusers/tmpfiles fragments.
+rm -rf "$BUILDROOT/var/home/coder"
+rmdir --ignore-fail-on-non-empty "$BUILDROOT/var/home" 2>/dev/null || true
