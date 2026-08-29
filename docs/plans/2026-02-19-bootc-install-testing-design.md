@@ -1,5 +1,8 @@
 # Bootc Installation Testing Design
 
+**Status:** Shipped — `test/bootc-install-test.sh` and `.github/workflows/test-install.yml` implement this design.  
+**Last verified:** 2026-08-29
+
 ## Problem
 
 snosi images are built with mkosi and deployed via bootc, but there is no automated testing of the installation path. The current installer (`nbc`) is being phased out in favor of upstream `bootc install to-disk`. We need a way to validate that snosi images install and boot correctly, both locally and in CI.

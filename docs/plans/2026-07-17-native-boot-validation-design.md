@@ -1,7 +1,9 @@
 # Native A/B Boot Validation in CI — Design
 
 Date: 2026-07-17
-Status: Implemented (see docs/plans/2026-07-17-native-boot-validation-plan.md)
+
+**Status:** Shipped, partly retired — implemented per [the plan](2026-07-17-native-boot-validation-plan.md); `native-nightly.yml` was retired on 2026-08-28 (see the status update below).  
+**Last verified:** 2026-08-29
 
 > **Status update (2026-08-28):** Tier 1 remains the promotion gate.
 > `native-nightly.yml` was retired; Firn's lab matrix now owns secure native

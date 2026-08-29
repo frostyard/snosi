@@ -1,5 +1,8 @@
 # Package Version Monitoring
 
+**Status:** Shipped — `.github/workflows/check-packages.yml` runs the daily APT poll, `latest-versions.txt` holds the pins, and `test/latest-apt-version-test.sh` guards the format.  
+**Last verified:** 2026-08-29
+
 Monitor external APT packages for updates and trigger rebuilds automatically.
 
 ## Problem

@@ -1,5 +1,8 @@
 # Plan: Flurry — Omarchy v4 replica profile
 
+**Status:** In progress — `mkosi.profiles/flurry.conf` builds and flurry ships as a product; later phases are still open.  
+**Last verified:** 2026-08-29
+
 <!--
 Plans are updated as work lands: check off what shipped, renumber what moved.
 Every phase MUST have a "Done when" — a demonstrable outcome, not an activity.

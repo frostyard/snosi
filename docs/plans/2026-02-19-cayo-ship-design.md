@@ -1,5 +1,8 @@
 # Cayo Ship Design
 
+**Status:** Shipped — `mkosi.profiles/cayo.conf` and `shared/packages/cayo/` are in tree.  
+**Last verified:** 2026-08-29
+
 Ship the cayo server image branch: rebase onto main, audit packages/configs, add cayoloaded, clean up, and squash-merge via PR.
 
 ## Context

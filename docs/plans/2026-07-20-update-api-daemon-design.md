@@ -1,7 +1,9 @@
 # A Snosi Update/Sysext API Daemon — The Daemon Question
 
 Date: 2026-07-20
-Status: Proposed (design only; not scheduled)
+
+**Status:** Proposed — design only; not scheduled.  
+**Last verified:** 2026-08-29
 Related: `docs/integration-contracts.md` (the contract map this design reasons from)
 
 ## Problem

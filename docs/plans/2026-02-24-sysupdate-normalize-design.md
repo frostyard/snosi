@@ -1,5 +1,8 @@
 # Normalize sysupdate transfer and feature files
 
+**Status:** Shipped with a changed layout — every sysext now owns a drop-in directory (`mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/<name>.transfer`) instead of the single shared `sysupdate.d/` this doc assumed.  
+**Last verified:** 2026-08-29
+
 ## Problem
 
 Not all sysexts defined in `mkosi.images/` have corresponding sysupdate `.transfer` and `.feature` files in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`. The `1password-cli` sysext is missing both files entirely, and `dev`/`debdev` share a grouped `devel.feature` rather than having standalone feature files.

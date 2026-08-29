@@ -1,7 +1,8 @@
 # Bootc and Native A/B Coexistence Plan
 
 **Date:** 2026-07-14
-**Status:** Proposed
+**Status:** Proposed  
+**Last verified:** 2026-08-29
 **Scope:** Keep the existing bootc products supported while introducing secure
 native A/B variants of Cayo, Snow, and Snowfield, an R2 publication pipeline,
 and a network installer ISO.

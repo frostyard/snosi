@@ -1,5 +1,8 @@
 # Sysupdate Normalization Implementation Plan
 
+**Status:** Shipped with a changed layout — per-sysext `sysupdate.<name>.d/` drop-in directories replaced the single shared `sysupdate.d/` directory this plan assumed.  
+**Last verified:** 2026-08-29
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Ensure every sysext has a standalone `<name>.transfer` + `<name>.feature` pair in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`.

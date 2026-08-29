@@ -1,5 +1,8 @@
 # Native A/B Production Deployment Checklist
 
+**Status:** In progress — this checklist is the live gate list for native A/B production readiness; boxes are ticked here as gates clear.  
+**Last verified:** 2026-08-29
+
 **Purpose:** the exact, ordered steps required to take the native A/B deployment
 path from "code-complete on `feat/mkosi-ab-root`" to "safe for real users."
 Nothing here is optional hand-waving — every box is a concrete action with the
