@@ -23,40 +23,61 @@ Builds run continuously rather than on a named release cadence: GitHub Releases
 are a human-facing changelog and download index over signed artifacts, not
 milestone gates.
 
-The shipped surface is three image families (`snow`, `snowfield`, `cayo`) and a
-large sysext catalogue, described in [`README.md`](README.md).
+The shipped surface is four image families (`snow`, `snowfield`, `cayo`, and
+`flurry`) and a large sysext catalogue, described in [`README.md`](README.md).
+`flurry` is the newest and is bootc-only by construction
+([`docs/plans/2026-08-25-flurry-omarchy-plan.md`](docs/plans/2026-08-25-flurry-omarchy-plan.md)).
 
-## Position: two transports, one product line
+## Position: bootc is the transport; native A/B is being phased out
 
-snosi ships each image family over two transports, and this is deliberate
-rather than transitional:
+**bootc is the supported transport for snosi, and the native A/B transport is
+transitional.** bootc was always the preferred model; the native A/B work was
+undertaken while bootc did not yet do what snosi needed. bootc now does, so the
+reason for carrying a second transport has expired.
 
-| Transport | What it is | Update origin |
-| --- | --- | --- |
-| **bootc OCI** | `snow`, `snowfield`, `cayo` — OCI images consumed by bootc | GHCR |
-| **native A/B** | `snow-ab`, `snowfield-ab`, `cayo-ab` — GPT disk images, EROFS + dm-verity, Secure Boot + TPM/LUKS `/var` | Cloudflare R2 |
+The phase-out window is **60 days, ending 2026-10-28**. During the window both
+transports keep working: native A/B images continue to build, publish, and
+update, and nothing installed stops receiving updates mid-window. After it,
+native A/B is not a supported way to run snosi.
 
-The coexistence design is
-[`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`](docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md).
-GHCR is authoritative for bootc OCI images; R2 is authoritative for sysexts,
-native A/B update payloads, raw installer images, and the installer ISO.
+| Transport | What it is | Update origin | Status |
+| --- | --- | --- | --- |
+| **bootc OCI** | `snow`, `snowfield`, `cayo`, `flurry` — OCI images consumed by bootc | GHCR | **Supported.** The transport snosi is built around. |
+| **native A/B** | `snow-ab`, `snowfield-ab`, `cayo-ab` — GPT disk images, EROFS + dm-verity, Secure Boot + TPM/LUKS `/var` | Cloudflare R2 | **Phasing out by 2026-10-28.** Builds and updates during the window; not a supported target after it. |
 
-**Neither transport is deprecated, and no deprecation is planned.** Choosing
-between them is a deployment decision, not a bet on which one survives:
+`flurry` has no `-ab` variant and will not gain one.
 
-- Choose **bootc** when the host is managed as a container image — existing
-  registry tooling, `bootc switch`, rollback via the OCI layer store.
-- Choose **native A/B** when the requirement is verified boot end to end —
-  dm-verity-sealed root, Secure Boot chain, TPM-bound LUKS `/var`, and updates
-  that land in an offline slot.
+GHCR is authoritative for bootc OCI images. R2 remains authoritative for
+sysexts, raw installer images, and the installer ISO; it is authoritative for
+native A/B update payloads only for the duration of the window.
 
-Two constraints follow from the native A/B design and are unlikely to change:
-partition labels, sysupdate transfer patterns, the entry-token, and the R2 path
-all carry the channel name on installed disks, so **a native install migrates
-to a different channel by reinstall, never by an update hop**; and installed
-bootc systems enforce the `policy.json` baked into the image they are currently
-running, so **trust changes must be published to installed systems before the
-change that depends on them**.
+**Do not start new work whose value depends on native A/B outliving the
+window.** New capability belongs on the bootc path. Choosing a transport is no
+longer a deployment decision with two defensible answers: choose **bootc**.
+
+Two constraints still govern what the phase-out has to do, and the first is the
+reason this needs a window rather than a switch. Partition labels, sysupdate
+transfer patterns, the entry-token, and the R2 path all carry the channel name
+on installed disks, so **a native install migrates by reinstall, never by an
+update hop** — every existing native A/B install is a machine someone must
+reinstall to reach bootc, and it cannot be moved for them. Separately,
+installed bootc systems enforce the `policy.json` baked into the image they are
+currently running, so **trust changes must be published to installed systems
+before the change that depends on them**.
+
+Those two facts mean the window is not self-executing. Before 2026-10-28 the
+project owes native A/B users, at minimum: a stated end-of-updates date for the
+R2 native payloads, a documented reinstall path from a native install to the
+equivalent bootc image, and a decision on what happens to already-published
+native artifacts (freeze in place, or withdraw). Until those exist and are
+announced, the window is an intent rather than a plan — see **Near term**.
+
+The historical coexistence design is
+[`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`](docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md),
+and [`docs/plans/2026-07-13-mkosi-native-ab-root-design.md`](docs/plans/2026-07-13-mkosi-native-ab-root-design.md)
+still describes replacing bootc with native A/B. Both predate this decision and
+now record superseded direction; reconciling their `Status:` lines is tracked
+in Near term.
 
 See [`docs/installing.md`](docs/installing.md) to choose an image and verify
 media.
@@ -66,20 +87,36 @@ media.
 Work that is designed, has a prerequisite already merged, and is the next thing
 worth a contributor's time.
 
-- **Graphical installer (`snosi-setup`) for the native installer ISO.**
-  A GTK4/libadwaita kiosk first-run experience driving the existing
-  `snosi-install` backend. Phase 1 (installer-owned system settings, deferred
-  first-boot provisioning) is merged and the CLI backend is feature-complete
-  for everything a frontend needs. Decisions are settled; implementation has
-  not started. This is the single largest adoption lever the project has: the
-  native transport is the more defensible one and is currently gated behind a
-  text installer.
-  → [`docs/plans/2026-07-17-graphical-installer-plan.md`](docs/plans/2026-07-17-graphical-installer-plan.md)
+- **Turn the native A/B phase-out into a plan.**
+  The decision is made (see the position above); the obligations it creates are
+  not yet written down or announced. This is the near-term item that gates the
+  others, because every native A/B install is a machine that migrates by
+  reinstall and cannot be moved automatically. It needs: a stated
+  end-of-updates date for the R2 native payloads, a documented reinstall path
+  from each `-ab` variant to its bootc equivalent, a decision on whether
+  already-published native artifacts freeze in place or are withdrawn, and a
+  user-facing announcement in [`README.md`](README.md) and
+  [`docs/installing.md`](docs/installing.md) before anyone installs a native
+  image they will have to replace. Until this lands, 2026-10-28 is a stated
+  intent rather than a commitment anyone can act on.
+
+- **Reconcile the plan record with the transport decision.**
+  [`docs/plans/2026-07-13-mkosi-native-ab-root-design.md`](docs/plans/2026-07-13-mkosi-native-ab-root-design.md)
+  is titled "Replace bootc with mkosi-native A/B root updates" and is still
+  marked **In progress**, with a step 12 reading "Retire bootc only after fleet
+  closure". That is now backwards. It and
+  [`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`](docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md)
+  (still **Proposed**, describing an arrangement that both shipped and is now
+  ending) should be marked `Superseded` with a pointer to this decision. Two
+  live plans arguing for the opposite of current direction is the most
+  expensive kind of stale record: it is the kind a contributor acts on.
 
 - **Close the bootc update-validation prerequisites.**
   The bootc update validation plan is blocked on discrete, small prerequisites
   rather than on design. Landing them converts a proposed harness into running
-  coverage of the update path.
+  coverage of the update path. This is now materially more valuable than it was
+  when snosi had two transports: it is coverage of the *only* supported update
+  path.
   → [`docs/plans/2026-07-03-bootc-update-validation-plan.md`](docs/plans/2026-07-03-bootc-update-validation-plan.md)
 
 - **Guard the plan `Status:` field.**
@@ -92,11 +129,17 @@ worth a contributor's time.
   just gained decays file by file. The remaining work is one fail-closed guard
   in the style of the existing `check-*.sh` scripts, wired into `validate.yml`.
 
-- **Resolve the coexistence plan's status.**
-  The document defining the two-transport arrangement is still **Proposed**
-  even though most of what it describes has shipped. The arrangement is real;
-  the record should say so, and the parts that were not built should be named
-  as dropped rather than left implicitly pending.
+- **Decide the graphical installer's future.**
+  `snosi-setup` — a GTK4/libadwaita kiosk first-run experience — was scoped as
+  a frontend for the `snosi-install` backend behind the **native** installer
+  ISO, and this file previously called it the project's single largest adoption
+  lever on the grounds that "the native transport is the more defensible one".
+  That premise is gone. Phase 1 is merged and the CLI backend is
+  feature-complete, so the question is no longer whether to build it but what
+  it installs: retarget the frontend at a bootc install flow, or drop it with
+  the transport it was built for. This should be answered before any further
+  implementation effort, not after.
+  → [`docs/plans/2026-07-17-graphical-installer-plan.md`](docs/plans/2026-07-17-graphical-installer-plan.md)
 
 ## Mid term
 
@@ -122,9 +165,11 @@ code.
 
 Not designed. Listed so the questions are visible rather than rediscovered.
 
-- **Fleet-scale update orchestration** — the native A/B transport updates a
-  machine well; coordinating a fleet (staged rollout, health-gated promotion,
-  automatic rollback on a failed boot streak) is unaddressed.
+- **Fleet-scale update orchestration** — coordinating a fleet (staged rollout,
+  health-gated promotion, automatic rollback on a failed boot streak) is
+  unaddressed. Previously framed against the native A/B transport; with bootc
+  as the single supported transport, the question is what this looks like over
+  OCI.
 - **Broadening the hardware story** — `snowfield` covers Surface devices via
   the linux-surface kernel. Any further hardware family is a new profile plus a
   validation burden, and the criterion for taking one on is not yet written
@@ -140,7 +185,9 @@ Stating these saves contributors from proposing them:
   [ADR-0003](docs/adr/0003-runtime-etc-mutation-ban.md), and sysexts are
   `/usr`-only overlays by [ADR-0004](docs/adr/0004-sysext-authoring-rules.md).
   Features requiring a writable `/usr` are out of scope by construction.
-- **No dropping a transport to simplify the matrix.** See the position above.
+- **No dropping bootc.** bootc is the transport. The native A/B experiment is
+  ending, not competing (see the position above); proposals premised on native
+  A/B as a long-term target are out of scope.
 
 ## Sysext inclusion
 
