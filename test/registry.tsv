@@ -42,6 +42,7 @@ bootc-secure-static-test.sh	unwired	-
 bootc-secure-update-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
 bootc-update-test.sh	unwired	-
 bootstrap-mkosi-test.sh	unwired	-
+brew-installer-retry-test.sh	unwired	-
 build-workflow-permissions-test.py	ci	validate.yml
 cayo-ab-install-spike.sh	nested	native-ab-secure-boot-test.sh
 check-dependencies-workflow-token-test.sh	ci	validate.yml
