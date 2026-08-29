@@ -1,4 +1,5 @@
 const STABLE_PATH = "/isos/native/v1/snosi-installer-latest-x86-64.iso";
+const HEALTH_PATH = "/isos/native/v1/healthz";
 const INDEX_KEY = "isos/native/v1/SHA256SUMS";
 const ISO_KEY_PREFIX = "isos/native/v1/";
 const PUBLIC_BASE = "https://repository.frostyard.org/isos/native/v1/";
@@ -47,9 +48,54 @@ function plainResponse(request: Request, body: string, status: number, headers: 
   });
 }
 
+function jsonResponse(request: Request, body: unknown, status: number, headers: HeadersInit = {}): Response {
+  return new Response(request.method === "HEAD" ? null : JSON.stringify(body), {
+    status,
+    headers: {
+      ...NO_STORE_HEADERS,
+      "Content-Type": "application/json; charset=utf-8",
+      ...headers,
+    },
+  });
+}
+
+// Resolves the currently-published installer name and confirms the ISO
+// object it names actually exists in R2. This is the one dependency
+// (`env.REPOSITORY`) required to serve the stable redirect, so both the
+// redirect handler and the /healthz probe below share this exact check —
+// health must fail whenever the redirect itself would fail.
+async function resolveInstallerName(env: Env): Promise<string> {
+  const indexObject = await env.REPOSITORY.get(INDEX_KEY);
+  if (!indexObject) throw new ResolutionError("index_missing");
+  if (indexObject.size > MAX_INDEX_BYTES) throw new ResolutionError("index_oversized");
+
+  const name = installerNameFromIndex(await indexObject.text());
+  if (!(await env.REPOSITORY.head(`${ISO_KEY_PREFIX}${name}`))) {
+    throw new ResolutionError("installer_object_missing");
+  }
+  return name;
+}
+
 export default {
   async fetch(request, env): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === HEALTH_PATH) {
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        return plainResponse(request, "Method not allowed\n", 405, { Allow: "GET, HEAD" });
+      }
+
+      try {
+        await resolveInstallerName(env);
+        return jsonResponse(request, { status: "ok" }, 200);
+      } catch (error) {
+        const code = error instanceof ResolutionError ? error.code : "r2_failure";
+        console.error(JSON.stringify({ event: "installer_redirect_unhealthy", code }));
+        return jsonResponse(request, { status: "unhealthy", reason: code }, 503, {
+          "Retry-After": "60",
+        });
+      }
+    }
 
     if (url.pathname !== STABLE_PATH) {
       return plainResponse(request, "Not found\n", 404);
@@ -60,14 +106,7 @@ export default {
     }
 
     try {
-      const indexObject = await env.REPOSITORY.get(INDEX_KEY);
-      if (!indexObject) throw new ResolutionError("index_missing");
-      if (indexObject.size > MAX_INDEX_BYTES) throw new ResolutionError("index_oversized");
-
-      const name = installerNameFromIndex(await indexObject.text());
-      if (!(await env.REPOSITORY.head(`${ISO_KEY_PREFIX}${name}`))) {
-        throw new ResolutionError("installer_object_missing");
-      }
+      const name = await resolveInstallerName(env);
 
       return new Response(null, {
         status: 302,

@@ -7,6 +7,10 @@
     {
       "pattern": "https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso*",
       "zone_name": "frostyard.org"
+    },
+    {
+      "pattern": "https://repository.frostyard.org/isos/native/v1/healthz",
+      "zone_name": "frostyard.org"
     }
   ],
   "r2_buckets": [
