@@ -50,7 +50,10 @@ The project produces:
 | **incus**           | Incus container/VM manager                                      | sysext        |
 | **k3s**             | k3s lightweight Kubernetes node (server or agent)               | sysext        |
 | **lemonade**        | Lemonade local LLM server (GPU/NPU accelerated)                 | sysext        |
+| **localsend**       | LocalSend cross-platform file-transfer desktop application      | sysext        |
+| **moonlight**       | Moonlight game-streaming client                                 | sysext        |
 | **nix**             | Nix package manager                                             | sysext        |
+| **obsidian**        | Obsidian note-taking desktop application                        | sysext        |
 | **paseo**           | Paseo coding agent workspace desktop application                | sysext        |
 | **pilothouse**      | Pilothouse web administration with capability-gated Updex/container backends | sysext        |
 | **podman**          | Podman + Distrobox                                              | sysext        |
@@ -246,8 +249,12 @@ Sysexts are overlay images that extend the base system without modifying it. The
 | **edge**          | Microsoft Edge browser                         | [mkosi.images/edge/mkosi.conf](mkosi.images/edge/mkosi.conf)                   |
 | **github-copilot**| GitHub Copilot agent-native desktop application | [mkosi.images/github-copilot/mkosi.conf](mkosi.images/github-copilot/mkosi.conf) |
 | **incus**         | Incus, QEMU/KVM, OVMF, virt-viewer            | [mkosi.images/incus/mkosi.conf](mkosi.images/incus/mkosi.conf)                 |
+| **k3s**           | k3s lightweight Kubernetes node (server or agent) | [mkosi.images/k3s/mkosi.conf](mkosi.images/k3s/mkosi.conf)                 |
 | **lemonade**      | Lemonade local LLM server (lemond)            | [mkosi.images/lemonade/mkosi.conf](mkosi.images/lemonade/mkosi.conf)           |
+| **localsend**     | LocalSend cross-platform file-transfer desktop app | [mkosi.images/localsend/mkosi.conf](mkosi.images/localsend/mkosi.conf)     |
+| **moonlight**     | Moonlight game-streaming client               | [mkosi.images/moonlight/mkosi.conf](mkosi.images/moonlight/mkosi.conf)         |
 | **nix**           | Nix package manager, systemd integration      | [mkosi.images/nix/mkosi.conf](mkosi.images/nix/mkosi.conf)                     |
+| **obsidian**      | Obsidian note-taking desktop app               | [mkosi.images/obsidian/mkosi.conf](mkosi.images/obsidian/mkosi.conf)           |
 | **paseo**         | Paseo desktop app (Electron)                  | [mkosi.images/paseo/mkosi.conf](mkosi.images/paseo/mkosi.conf)                 |
 | **pilothouse**    | Pilothouse web administration with capability-gated Updex/container backends | [mkosi.images/pilothouse/mkosi.conf](mkosi.images/pilothouse/mkosi.conf)       |
 | **podman**        | Podman, Distrobox, buildah, crun              | [mkosi.images/podman/mkosi.conf](mkosi.images/podman/mkosi.conf)               |
