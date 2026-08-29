@@ -100,16 +100,13 @@ worth a contributor's time.
   image they will have to replace. Until this lands, 2026-10-28 is a stated
   intent rather than a commitment anyone can act on.
 
-- **Reconcile the plan record with the transport decision.**
+- ~~**Reconcile the plan record with the transport decision.**~~ **Done.**
   [`docs/plans/2026-07-13-mkosi-native-ab-root-design.md`](docs/plans/2026-07-13-mkosi-native-ab-root-design.md)
-  is marked **Superseded** as of 2026-08-29 and carries a banner saying so; its
-  step 12 ("Retire bootc only after fleet closure") is historical record, not
-  direction. What remains is
-  [`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`](docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md),
-  still **Proposed**, describing a coexistence arrangement that both shipped
-  and is now ending. It should be marked `Superseded` too. A live plan arguing
-  for the opposite of current direction is the most expensive kind of stale
-  record: it is the kind a contributor acts on.
+  and
+  [`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`](docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md)
+  are both now marked **Superseded** as of 2026-08-29 and carry banners saying
+  so, pointing here and at frostyard/snosi#889 for the obligations that
+  replace them.
 
 - **Close the bootc update-validation prerequisites.**
   The bootc update validation plan is blocked on discrete, small prerequisites
