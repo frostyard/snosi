@@ -46,6 +46,16 @@ else
 fi
 
 reset_buildroot
+mkdir -p "$BUILDROOT/var/log"
+printf 'build log\n' >"$BUILDROOT/var/log/dpkg.log"
+run_finalize
+if [[ $RUN_STATUS -eq 0 && ! -e "$BUILDROOT/var/log/dpkg.log" ]]; then
+    pass "build-only dpkg log is removed before payload validation"
+else
+    fail "build-only dpkg log was not cleaned: $RUN_OUTPUT"
+fi
+
+reset_buildroot
 mkdir -p "$BUILDROOT/var/lib/fixture"
 printf 'state\n' >"$BUILDROOT/var/lib/fixture/state"
 run_finalize
