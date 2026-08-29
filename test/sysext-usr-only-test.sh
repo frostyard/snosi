@@ -46,13 +46,15 @@ else
 fi
 
 reset_buildroot
-mkdir -p "$BUILDROOT/var/log"
+mkdir -p "$BUILDROOT/var/log" "$BUILDROOT/var/cache/dictionaries-common"
 printf 'build log\n' >"$BUILDROOT/var/log/dpkg.log"
+printf 'build cache\n' >"$BUILDROOT/var/cache/dictionaries-common/aspell.db"
 run_finalize
-if [[ $RUN_STATUS -eq 0 && ! -e "$BUILDROOT/var/log/dpkg.log" ]]; then
-    pass "build-only dpkg log is removed before payload validation"
+if [[ $RUN_STATUS -eq 0 && ! -e "$BUILDROOT/var/log" &&
+    ! -e "$BUILDROOT/var/cache" ]]; then
+    pass "build-only package logs and caches are removed before payload validation"
 else
-    fail "build-only dpkg log was not cleaned: $RUN_OUTPUT"
+    fail "build-only package residue was not cleaned: $RUN_OUTPUT"
 fi
 
 reset_buildroot

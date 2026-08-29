@@ -118,8 +118,8 @@ check.
 
 Every sysext also runs
 `shared/sysext/finalize/sysext-usr-only.sh` against that delta. It first removes
-`/var/log/dpkg.log`, a build-only residue produced when a postinstall script
-invokes `dpkg` after mkosi's package cleanup. Empty `/var` and `/opt`
+the build-only `/var/log` and `/var/cache` trees produced when package installs
+or triggers run after mkosi's package cleanup. Empty `/var` and `/opt`
 mountpoint directories are harmless, but any other entry below either
 directory fails the build and names the first offending path. The guard uses
 physical traversal and never follows a symlink into a host path.

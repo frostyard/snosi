@@ -13,10 +13,9 @@ if [[ -z "${IMAGE_ID:-}" ]]; then
     exit 1
 fi
 
-# Direct dpkg installs run after mkosi's package cleanup and update this
-# build-only log in the delta. It is not sysext payload.
-rm -f "$BUILDROOT/var/log/dpkg.log"
-rmdir --ignore-fail-on-non-empty "$BUILDROOT/var/log" 2>/dev/null || true
+# Package installs and triggers can run after mkosi's package cleanup. Their
+# logs and caches are build residue, never sysext payload.
+rm -rf "$BUILDROOT/var/log" "$BUILDROOT/var/cache"
 
 offenders=()
 for top_level in var opt; do
