@@ -123,7 +123,7 @@ jobs:
         run: |
           printf '%s' "$GH_TOKEN" | sudo buildah login -u "$GHCR_USER" --password-stdin ghcr.io
        - name: Log in to ghcr.io
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           password: ${{ secrets.GITHUB_TOKEN }}
        - name: Sign immutable image digest
@@ -285,7 +285,7 @@ move_promotion_early() {
 }
 remove_login() { perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n//' "$1/.github/workflows/build-images.yml"; }
 move_login_after_verification() {
-    perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n//; s/(      - name: Validate policy-copied secure artifact\n)/$1      - name: Log in to ghcr.io\n        uses: docker\/login-action\@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3\n/' "$1/.github/workflows/build-images.yml"
+    perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n//; s/(      - name: Validate policy-copied secure artifact\n)/$1      - name: Log in to ghcr.io\n        uses: docker\/login-action\@dbcb813823bdd20940b903addbd779551569679f # v4.6.0\n/' "$1/.github/workflows/build-images.yml"
 }
 remove_promotion_src_authfile() { perl -0pi -e 's/ --src-authfile "\$AUTH_FILE"//' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
 remove_promotion_dest_authfile() { perl -0pi -e 's/ --dest-authfile "\$AUTH_FILE"//' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
