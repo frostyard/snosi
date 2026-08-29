@@ -609,17 +609,18 @@ wipe_target() { # target
 # decompressed bytes independently via a backgrounded `wc -c`.
 stream_download_verify() { # url expected_sha256 target
     local url="$1" expected_sha256="$2" target="$3"
-    local hash_fifo size_fifo hashfile sizefile hash_pid size_pid
+    local fifo_dir hash_fifo size_fifo hashfile sizefile hash_pid size_pid
 
-    hash_fifo="$(mktemp -u /var/tmp/snosi-install-verify.XXXXXX)"
+    fifo_dir="$(mktemp -d /var/tmp/snosi-install-verify.XXXXXX)"
+    hash_fifo="$fifo_dir/hash.fifo"
     mkfifo -m 600 "$hash_fifo"
-    hashfile="$(mktemp /var/tmp/snosi-install-verify.XXXXXX)"
+    hashfile="$fifo_dir/hash"
     sha256sum "$hash_fifo" >"$hashfile" &
     hash_pid=$!
 
-    size_fifo="$(mktemp -u /var/tmp/snosi-install-verify.XXXXXX)"
+    size_fifo="$fifo_dir/size.fifo"
     mkfifo -m 600 "$size_fifo"
-    sizefile="$(mktemp /var/tmp/snosi-install-verify.XXXXXX)"
+    sizefile="$fifo_dir/size"
     wc -c <"$size_fifo" >"$sizefile" &
     size_pid=$!
 
@@ -635,12 +636,10 @@ stream_download_verify() { # url expected_sha256 target
 
     wait "$hash_pid" || true
     wait "$size_pid" || true
-    rm -f "$hash_fifo" "$size_fifo"
     local actual_sha256
     actual_sha256="$(awk '{print $1}' "$hashfile")"
-    rm -f "$hashfile"
     STREAM_DOWNLOAD_BYTES_WRITTEN="$(awk '{print $1}' "$sizefile")"
-    rm -f "$sizefile"
+    rm -rf "$fifo_dir"
 
     local curl_rc=${pipe_status[0]:-1} xz_rc=${pipe_status[2]:-1} dd_rc=${pipe_status[4]:-1}
     if [[ "$curl_rc" -ne 0 || "$xz_rc" -ne 0 || "$dd_rc" -ne 0 ]]; then
