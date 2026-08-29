@@ -1,5 +1,8 @@
 # Tailscale Sysext Design
 
+**Status:** Shipped — `mkosi.images/tailscale/` and `sysupdate.tailscale.d/tailscale.transfer` are in tree.  
+**Last verified:** 2026-08-29
+
 ## Overview
 
 Add a Tailscale system extension (sysext) to snosi, providing the Tailscale VPN client and daemon as an optional overlay. Follows the established Docker sysext pattern — APT-based package installation with factory defaults for /etc configuration.

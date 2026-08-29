@@ -1,5 +1,8 @@
 # Native A/B Boot Validation Implementation Plan
 
+**Status:** Shipped, partly retired — Tier 1 smoke tests still gate promotion; the `native-nightly.yml` lane this plan created was retired on 2026-08-28 (see the status update below).  
+**Last verified:** 2026-08-29
+
 > **Status update (2026-08-28):** The Tier 1 promotion-gating smoke tests
 > remain active. The non-blocking `native-nightly.yml` created by this
 > historical plan was retired; Firn's lab matrix owns secure native

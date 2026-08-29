@@ -1,6 +1,7 @@
 # Graphical installer (`snosi-setup`) for the native installer ISO — Phase 2 plan
 
-**Status:** planned (decisions settled 2026-07-17; implementation not started)
+**Status:** Planned — decisions settled 2026-07-17; implementation not started.  
+**Last verified:** 2026-08-29
 **Prerequisite:** Phase 1 merged (installer-owned system settings + deferred
 first-boot provisioning, PR #419) — the CLI backend is feature-complete for
 everything a graphical frontend needs to drive.

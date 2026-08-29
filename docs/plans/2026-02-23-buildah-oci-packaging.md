@@ -1,5 +1,8 @@
 # Buildah OCI Packaging Implementation Plan
 
+**Status:** Shipped — `shared/outformat/image/buildah-package.sh` packages the rootfs and `mkosi.images/base/mkosi.conf` sets `Format=directory`.  
+**Last verified:** 2026-08-29
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Replace mkosi's broken OCI tar output with `buildah mount` + `cp -a` + `commit` to produce composefs-rs compatible images that preserve all file metadata (SUID, SGID, xattrs, capabilities).

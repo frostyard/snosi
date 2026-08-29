@@ -1,5 +1,8 @@
 # Cayo Ship Implementation Plan
 
+**Status:** Shipped — `mkosi.profiles/cayo.conf` and `shared/packages/cayo/` are in tree.  
+**Last verified:** 2026-08-29
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Ship the cayo server image and cayoloaded variant by rebasing onto main, auditing packages/configs, and creating a clean PR.

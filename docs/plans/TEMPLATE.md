@@ -1,8 +1,26 @@
 # Plan: Name (e.g. "Roadmap", "Migration to X")
 
+**Status:** Proposed  
+**Last verified:** YYYY-MM-DD
+
 <!--
 Plans are updated as work lands: check off what shipped, renumber what moved.
 Every phase MUST have a "Done when" — a demonstrable outcome, not an activity.
+
+Every file in docs/plans/ MUST carry a `**Status:**` line immediately after the
+H1, using exactly one of these words, optionally followed by " — " and a short
+justification naming the paths that prove it:
+
+  Proposed     Written up, not agreed to schedule it.
+  Planned      Agreed and scheduled; implementation has not started.
+  In progress  Some phases have landed; others are still open.
+  Shipped      Every phase landed. Say where the code lives.
+  Superseded   Replaced by another doc. Link it.
+  Abandoned    Deliberately dropped. Say why.
+
+`**Last verified:**` is the date a human or agent last checked the status
+against the tree. A plan whose status has not been re-verified in a long time
+is a signal, not a fact.
 -->
 
 One paragraph: what this plan delivers and its relationship to other plans.

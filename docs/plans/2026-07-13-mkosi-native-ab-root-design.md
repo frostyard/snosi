@@ -1,5 +1,8 @@
 # Design: Replace bootc with mkosi-native A/B root updates
 
+**Status:** In progress — prototype and acceptance runs pass; bootc removal is still gated on the external deployment and production acceptance steps below.  
+**Last verified:** 2026-08-29
+
 ## Status
 
 Prototype boot path validated in QEMU on 2026-07-14. The isolated `cayo-ab`

@@ -2,7 +2,8 @@
 
 **Goal:** Prove that a sequence of bootc updates works on snosi images — including correct persistence of `/etc` and `/var` — with enough confidence to retire `nbc` (the interim A/B root installer/updater) and rely on bootc alone.
 
-**Status:** Plan. Prereqs in flight: #343 (SSH host key generation — the SSH-based harness depends on it), #344 (CI runs the install test as root), #345 (virtiofsd in base, enables bcvk-based harness).
+**Status:** Planned — prereqs in flight: #343 (SSH host key generation — the SSH-based harness depends on it), #344 (CI runs the install test as root), #345 (virtiofsd in base, enables bcvk-based harness).  
+**Last verified:** 2026-08-29
 
 ## What is already proven (2026-07-03)
 
