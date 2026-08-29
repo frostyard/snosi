@@ -305,6 +305,19 @@ $ shared/native-ab/publish/verify-installer-redirect.sh \
     "$RESTORED_VERSION"
 ```
 
+The Worker also serves `/isos/native/v1/healthz`, a version-agnostic
+readiness endpoint intended for continuous external uptime monitoring
+(unlike `verify-installer-redirect.sh`, which needs the expected version and
+is only run from CI post-promotion/post-withdrawal). It runs the identical
+index-parse-and-`head()` resolution the redirect itself depends on and
+reports `200 {"status":"ok"}` or `503 {"status":"unhealthy","reason":
+"<code>"}`; a monitor alerting on this path is checking the redirect's real
+dependency, not a synthetic stub. No external monitor is currently wired to
+it — recommended as a target for whatever uptime/alerting tool the
+`native-promotion` operators already use, per this repo's operations policy
+of reporting a recommendation rather than adding an unconfirmed backend
+integration.
+
 The Worker deploys independently through
 `.github/workflows/deploy-native-installer-redirect.yml`; ISO promotion never
 redeploys edge code. The workflow runs the local R2 integration suite, generated

@@ -4,6 +4,7 @@ import { installerNameFromIndex } from "../src/index";
 
 const STABLE_URL =
   "https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso";
+const HEALTH_URL = "https://repository.frostyard.org/isos/native/v1/healthz";
 const INDEX_KEY = "isos/native/v1/SHA256SUMS";
 const VERSION = "20260717123456";
 const ISO_NAME = `snosi-installer_${VERSION}_x86-64.iso`;
@@ -144,5 +145,72 @@ describe("native installer redirect", () => {
     const response = await exports.default.fetch(STABLE_URL);
     expect(response.status).toBe(503);
     await expectBodylessHead503();
+  });
+});
+
+describe("/healthz", () => {
+  it("returns 200 ok when the redirect's own dependency resolves", async () => {
+    await putValidPublication();
+
+    const response = await exports.default.fetch(HEALTH_URL);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    expect(response.headers.get("cache-control")).toBe("no-store, max-age=0");
+    expect(await response.json()).toEqual({ status: "ok" });
+  });
+
+  it("supports HEAD with a bodyless 200", async () => {
+    await putValidPublication();
+
+    const response = await exports.default.fetch(HEALTH_URL, { method: "HEAD" });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("");
+  });
+
+  it("returns 503 with a reason when the index is missing", async () => {
+    const response = await exports.default.fetch(HEALTH_URL);
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("retry-after")).toBe("60");
+    expect(await response.json()).toEqual({ status: "unhealthy", reason: "index_missing" });
+  });
+
+  it("returns 503 with a reason when the index is malformed", async () => {
+    await env.REPOSITORY.put(INDEX_KEY, `not-a-hash  ${ISO_NAME}\n`);
+
+    const response = await exports.default.fetch(HEALTH_URL);
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ status: "unhealthy", reason: "malformed_index" });
+  });
+
+  it("returns 503 with a reason when the indexed ISO object is missing", async () => {
+    await env.REPOSITORY.put(INDEX_KEY, `${HASH}  ${ISO_NAME}\n`);
+
+    const response = await exports.default.fetch(HEALTH_URL);
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      status: "unhealthy",
+      reason: "installer_object_missing",
+    });
+  });
+
+  it("rejects unsupported methods", async () => {
+    const response = await exports.default.fetch(HEALTH_URL, { method: "POST" });
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("GET, HEAD");
+  });
+
+  it("never redirects, unlike the stable installer path", async () => {
+    await putValidPublication();
+
+    const response = await exports.default.fetch(HEALTH_URL, { redirect: "manual" });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
   });
 });

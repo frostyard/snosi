@@ -268,6 +268,12 @@ The production binding is the existing `frostyardrepo` bucket. The deploy job
 parses `wrangler.jsonc`, compares it with the repository's `NATIVE_R2_BUCKET`
 secret, and verifies the bucket exists before deployment; this is specifically
 to defeat Wrangler 4's automatic provisioning of typoed/missing resources.
+A sibling route, `/isos/native/v1/healthz`, runs the exact same index-parse
+and target-`head()` resolution the redirect depends on (never a stub check)
+and reports `200 {"status":"ok"}` or `503 {"status":"unhealthy","reason":
+"<code>"}` accordingly, for continuous external uptime/alert monitoring
+independent of a specific expected version.
+
 
 `test/native-ab-publication-test.sh` is the full local end-to-end rehearsal:
 two real `cayo-ab-raw` builds (N, N+1) published under the real `cayo-ab`
