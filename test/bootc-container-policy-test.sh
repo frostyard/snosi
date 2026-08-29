@@ -8,6 +8,8 @@ PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 POLICY="$PROJECT_ROOT/shared/bootc-secure/tree/etc/containers/policy.json"
 SECURE_CONFIG="$PROJECT_ROOT/shared/bootc-secure/mkosi.conf"
 REGISTRIES_CONFIG="$PROJECT_ROOT/shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml"
+USER_POLICY="$PROJECT_ROOT/shared/bootc-secure/tree/usr/share/snosi/containers/user-policy.json"
+USER_TMPFILES="$PROJECT_ROOT/shared/bootc-secure/tree/usr/lib/user-tmpfiles.d/snosi-containers-policy.conf"
 VM_LIB="$PROJECT_ROOT/test/lib/vm.sh"
 UPDATER="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage"
 
@@ -33,6 +35,8 @@ require_file() {
 
 require_file "$POLICY" "secure bootc policy is shipped"
 require_file "$PROJECT_ROOT/cosign.pub" "committed Cosign public key exists"
+require_file "$USER_POLICY" "rootless container policy is shipped"
+require_file "$USER_TMPFILES" "rootless container policy provisioning is shipped"
 
 if [[ -f "$POLICY" ]] && command -v jq >/dev/null; then
     if jq -e '.default == [{"type":"reject"}]' "$POLICY" >/dev/null; then
@@ -113,6 +117,22 @@ if [[ -f "$POLICY" ]] && command -v jq >/dev/null; then
     fi
 else
     fail "policy is valid JSON (jq and the policy are required)"
+fi
+
+if [[ -f "$USER_POLICY" ]] && jq -e '
+    . == {"default": [{"type": "insecureAcceptAnything"}]}
+' "$USER_POLICY" >/dev/null; then
+    pass "rootless users may pull arbitrary workload images"
+else
+    fail "rootless users may pull arbitrary workload images"
+fi
+
+if [[ -f "$USER_TMPFILES" ]] && \
+        grep -Fqx 'd %h/.config/containers 0700 - - -' "$USER_TMPFILES" && \
+        grep -Fqx 'C %h/.config/containers/policy.json 0600 - - - /usr/share/snosi/containers/user-policy.json' "$USER_TMPFILES"; then
+    pass "rootless policy is provisioned without replacing user configuration"
+else
+    fail "rootless policy is provisioned without replacing user configuration"
 fi
 
 if grep -Fqx 'ExtraTrees=%D/cosign.pub:/usr/lib/snosi/cosign.pub' "$SECURE_CONFIG"; then
