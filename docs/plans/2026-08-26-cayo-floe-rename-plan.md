@@ -155,6 +155,16 @@ the load-bearing groups:
       (installed cayo systems still running pre-switch must keep updating…
       they won't get new cayo builds, but keeping the scope one release
       longer is free and removes a failure mode during the switch window).
+- [ ] Pin the temporary live-compatibility inventory through Phase 5. Outside
+      historical files, `cayo` is allowed in exactly these active places:
+      the single `"ghcr.io/frostyard/cayo"` key in
+      `shared/bootc-secure/tree/etc/containers/policy.json`, and exactly three
+      matching tokens in `test/bootc-container-policy-test.sh` — the supported-
+      scope loop, the wrong-repository rejection loop, and the exact sorted
+      trusted-key assertion. Each test list also includes floe. Every other
+      test fixture, live-test default, image ref, and payload identity moves to
+      floe in this phase. Phase 5 removes this whole temporary allowlist; do
+      not remove it sooner and strand a late cayo host.
 - [ ] `shared/firn-installer/catalog.json`: replace the bootc `cayo` entry
       with `floe` (`ghcr.io/frostyard/floe:latest`) and `cayo-ab` with
       `floe-ab`; same server `default_groups`. The ISO picker is driven by
@@ -241,8 +251,9 @@ the load-bearing groups:
 - [ ] Local `just floe` build; full `validate.yml` suite green; fixture
       suites for every touched test.
 - [ ] Re-run both inventories. Every remaining content or path hit is listed
-      in the historical exclusions above (including this rename plan and the
-      old ship plans); no active build, test, installer, or payload path
+      in either the historical exclusions above (including this rename plan
+      and the old ship plans) or the exact temporary policy/policy-test
+      allowlist above. No other active build, test, installer, or payload path
       retains cayo.
 
 **Post-merge, first main-branch run**
@@ -378,34 +389,62 @@ because they are absent from this snapshot.
       tracked path hits are the `_index.md` files under
       `content/docs/images/server/cayo/` and its `cayo-loaded/` child. Move
       the living server page to floe and retire the obsolete loaded-variant
-      page per the current sysext model (preserve an old-URL redirect).
+      page per the current sysext model. Preserve redirects from exactly the
+      old routes `/docs/images/server/cayo/` and
+      `/docs/images/server/cayo/cayo-loaded/`; after the move, those redirect
+      source strings in the redirect definitions are the only permitted live
+      `cayo` occurrences in this repository outside the historical files
+      classified below.
       Update `content/docs/{status.md,images/_index.md,images/server/_index.md}`
       and `templates/pages/home.templ`; retain the two dated site plan files
       as history. Run `just test` and `just build`. Verify the deployed
       `/docs/images/server/cayo/` URL redirects to
-      `/docs/images/server/floe/` and the destination returns 200.
+      `/docs/images/server/floe/`, the retired loaded route redirects to its
+      selected living floe destination, and both destinations return 200.
 - [ ] **frostyard-org**: the content inventory has three files and the only
       filename hit is `src/pages/cayo.astro`. Rename it to `floe.astro`,
       update `src/pages/index.astro` and `README.md`, and add an explicit
-      `/cayo` → `/floe` redirect. Run `npm ci && npm run ci`. Verify the
-      deployed `/cayo` URL redirects to `/floe` and the destination returns
-      200.
+      `/cayo` → `/floe` redirect. The redirect definition's source string
+      `/cayo` is the only permitted live `cayo` occurrence in this repository
+      after the rename. Run `npm ci && npm run ci`. Verify the deployed
+      `/cayo` URL redirects to `/floe` and the destination returns 200.
 - [ ] **fisherman / bootc-installer / dakota-iso**: dormant, inactive,
       superseded (confirmed 2026-08-26) — no rename work. Their stale cayo
       references are historical record, like the archived `frostyard/cayo`
       repo.
 - [ ] **Done when:** lab's floe poll + install lanes are green against
       published floe artifacts; every downstream repository's test/build
-      gate above passes; both old website URLs redirect to their floe URLs
-      with a 200 destination; and both content and filename inventories in
+      gate above passes; all three old website routes redirect to living floe
+      destinations that return 200; and both content and filename inventories in
       all five repositories return only the explicitly historical records
-      classified above.
+      classified above plus the three exact permanent website redirect-source
+      strings (`/docs/images/server/cayo/`,
+      `/docs/images/server/cayo/cayo-loaded/`, and `/cayo`) in their redirect
+      definitions. No other live downstream occurrence is allowed.
 
 ## Phase 5 — Retirement (small, after Phase 3 sign-off)
 
 - [ ] snosi PR: remove the `ghcr.io/frostyard/cayo` scope from
-      `policy.json` + policy test (floe/snow/snowfield/flurry remain).
-- [ ] Reconcile the Phase 1 escape hatch on **both** migrated hosts. First run
+      `policy.json` and remove all three cayo compatibility tokens from the
+      policy test (floe/snow/snowfield/flurry remain).
+- [ ] Merge that PR and let the protected `secure-build` publish the signed
+      **retirement release** (call it R) before changing either host's
+      persistent `/etc`. Record R's 14-digit image version and immutable
+      digest from the successful run; verify `floe:latest` resolves to that
+      digest. A merged source change or a published artifact alone is not
+      enough — the running deployment supplies `snosi-etc-diff`'s pristine
+      policy source.
+- [ ] Stage and boot R on **both** migrated hosts through the normal floe
+      update path. On each host require `outcome=staged`,
+      `remote_version=<R>`, and R's host-local containers-storage digest in
+      `/run/snosi/update-staged`; capture the digest before reboot. After
+      reboot, require `snosi-update-status` to report running version R and
+      `bootc status` to report the captured digest as booted. Do not run
+      `snosi-etc-diff --restore` before these checks: floe N+1's pristine
+      image policy still contains the cayo scope and would copy that scope
+      back into the persistent overlay.
+- [ ] Only after both hosts are verified booted on R, reconcile the Phase 1
+      escape hatch on **both** migrated hosts. First run
       `snosi-etc-diff /etc/containers/policy.json`; if the operator installed
       the manual whole-file override, restore the current image copy with
       `sudo snosi-etc-diff --restore /etc/containers/policy.json` rather than
@@ -425,8 +464,9 @@ because they are absent from this snapshot.
       issue with links to the ADR.
 - [ ] **Done when:** a fresh floe install and both migrated hosts' effective
       policies no longer trust the cayo repository, the two migrated hosts
-      have no policy-file drift, and both operators have confirmed a full
-      update cycle on floe with cayo nowhere in `bootc status`.
+      are verified booted on retirement release R with no policy-file drift,
+      and both operators have confirmed a full update cycle on floe with cayo
+      nowhere in `bootc status`.
 
 ## Open questions
 
