@@ -10,6 +10,12 @@ Docs are split by the question they answer (the shape defined by
 | [specs/](specs/) | **What exactly** is the contract? | Precise, testable interface definitions, changed only alongside implementing code |
 | [plans/](plans/) | **When/in what order** do we build? | Phased plans and their paired designs; updated as work lands |
 
+One layer sits above all four and lives at the repository root:
+[`ROADMAP.md`](../ROADMAP.md) answers **which of these matter next, and why** —
+committed direction, near/mid/long-term horizons, what the project is
+explicitly not doing, and the bar a new sysext must clear. Read it before
+proposing work; read the categories above before building it.
+
 ## Index
 
 ### Decisions (ADRs)
