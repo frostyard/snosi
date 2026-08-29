@@ -830,11 +830,29 @@ copies the QEMU serial log out on both pass and fail so CI can upload it as
 an artifact; `SSH_TIMEOUT` (default 600s) accounts for a true systemd first
 boot applying presets before sshd even has host keys. It asserts, in order:
 `systemctl is-system-running --wait` equals `running` (dumping `systemctl
---failed` on any other value), `multi-user.target` is `active`, `/etc/
+--failed` on any other value, plus `systemctl status` and the last 100
+`journalctl` lines for each failed unit -- see below), `multi-user.target`
+is `active`, `/etc/
 os-release`'s `IMAGE_ID`/`IMAGE_VERSION` match the candidate's own product/
 version, `/usr/lib/snosi/native-ab` is present (booted the right artifact
 class), and a `systemctl poweroff` completes within 120s. Root and verity
 partitions boot byte-pristine -- nothing is written to them.
+
+**Failed-unit diagnostics (`dump_failed_unit_diagnostics`):** a degraded
+system state fails the promotion gate, but `systemctl --failed` names the
+unit without saying why, and the serial console tail the `die()` path prints
+is capped at 60 lines of early-boot noise that predate the failure. That
+combination made run `33230153367` (main, `test-public-origin (snow)`)
+undiagnosable from CI artifacts: `plymouth-start.service` degraded the snow
+candidate, `native-verified-snow` was never produced, `promote-snow` skipped,
+and the only way to learn the cause was to rebuild the candidate and boot it
+by hand. The state check now dumps `systemctl status --full` and
+`journalctl --lines=100 -u <unit>` for every failed unit before dying. It is
+diagnostics only and never changes the pass/fail decision: every command is
+best-effort, an empty failed-unit list is a no-op, and the caller still dies
+on the same state comparison. Unit names are collected up front (`vm_ssh`
+runs `ssh`, which would otherwise consume a loop's stdin) and only
+well-formed names are interpolated into the remote command.
 
 **SSH-seeding mechanism (and why it has to be this way):** the script
 loop-mounts the disk's `var` partition (by `PARTLABEL=var`, found via
