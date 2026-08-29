@@ -231,6 +231,28 @@ The `base` image ([mkosi.images/base/mkosi.conf](mkosi.images/base/mkosi.conf)) 
 - Firmware packages for common hardware
 - Core utilities (fish, zsh, vim, git) and host hardware diagnostics (`lspci`, `lsusb`)
 
+### GUI Base Image
+
+Desktop-app sysexts (1password, azurevpn, bitwarden, chatgpt,
+claude-desktop, edge, github-copilot, localsend, moonlight, obsidian,
+sunshine, voxtype, vscode) build against `gui-base`
+([mkosi.images/gui-base/mkosi.conf](mkosi.images/gui-base/mkosi.conf))
+instead of `base`. `gui-base` is an internal, never-published image (base
++ the common GUI library closure) used only via `Dependencies=gui-base` +
+`BaseTrees=%O/gui-base`.
+
+Since sysexts are `Overlay=yes` deltas, apt omits from each delta exactly
+the packages the build base already has. Building desktop apps against
+the server-ish `base` let an Electron/GTK app's delta carry its whole GUI
+lib closure, including libraries some products pin from other suites
+(e.g. flurry's trixie-backports libxkbcommon/pipewire/mesa) — the merged
+delta's plain-trixie copy then shadow-downgraded the product's pinned
+version for the entire `/usr` overlay. `gui-base` fixes this by supplying
+the common GUI closure at the build-base layer, so those packages are
+omitted from every desktop sysext's delta and each product's own version
+wins at merge time. See docs/design/sysexts.md ("Desktop-App Sysexts
+Build Against gui-base") for the full package contract and rationale.
+
 ### System Extensions (sysexts)
 
 Sysexts are overlay images that extend the base system without modifying it. They're built with `Format=sysext` and `Overlay=yes`:
