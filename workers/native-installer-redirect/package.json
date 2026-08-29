@@ -7,6 +7,7 @@
     "deploy": "wrangler deploy",
     "deploy:dry-run": "wrangler deploy --dry-run",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "types": "wrangler types worker-configuration.d.ts --include-runtime false",
     "types:check": "wrangler types --include-runtime false --check"
@@ -14,6 +15,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260823.1",
+    "@vitest/coverage-istanbul": "^4.1.11",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11",
     "wrangler": "^4.125.0"
