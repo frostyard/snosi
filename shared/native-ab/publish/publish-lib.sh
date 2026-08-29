@@ -261,16 +261,51 @@ http_get_to_file() { # url outfile
 }
 
 # http_range_sha256 url start end -- GETs byte range [start,end] (inclusive,
-# HTTP Range semantics) and prints its sha256sum. Requires the server to
-# actually honor Range (asserted by the caller via the response, since curl
-# --fail treats a non-206/200 as an error only when -f catches non-2xx; a
-# server that silently ignores Range and returns 200+full-body would still
-# "succeed" here, so callers must additionally confirm the returned length).
+# HTTP Range semantics) and prints its sha256sum. Requires HTTP 206, the exact
+# Content-Range, and the requested byte count. The transfer is capped at that
+# count so an origin that ignores Range cannot download the full object.
 http_range_sha256() { # url start end
-    local tmp
+    local url="$1" start="$2" end="$3"
+    local tmp headers curl_rc=0 http_code content_length content_range actual_size
+    local expected_size=$(( end - start + 1 ))
     tmp="$(mktemp /var/tmp/publish-lib-http.XXXXXX)"
     register_cleanup "rm -f '$tmp'"
-    curl -fsSL --connect-timeout 10 --max-time 60 -r "$2-$3" "$1" -o "$tmp"
+    headers="$(mktemp /var/tmp/publish-lib-http-headers.XXXXXX)"
+    register_cleanup "rm -f '$headers'"
+
+    curl -fsSL --connect-timeout 10 --max-time 60 \
+        --max-filesize "$expected_size" -r "$start-$end" \
+        -D "$headers" "$url" -o "$tmp" || curl_rc=$?
+
+    http_code="$(tr -d '\r' <"$headers" |
+        awk '/^HTTP\// {code=$2} END {print code}')"
+    content_length="$(tr -d '\r' <"$headers" |
+        awk '/^HTTP\// {value=""} tolower($1) == "content-length:" {value=$2} END {print value}')"
+    content_range="$(tr -d '\r' <"$headers" |
+        awk '/^HTTP\// {value=""} tolower($1) == "content-range:" {$1=""; sub(/^ /, ""); value=$0} END {print value}')"
+    actual_size="$(stat -c %s "$tmp")"
+
+    if [[ "$http_code" == "200" ]]; then
+        echo "http_range_sha256: server ignored Range $start-$end: HTTP 200, Content-Length ${content_length:-unknown}" >&2
+        return 1
+    fi
+    if [[ "$curl_rc" -ne 0 ]]; then
+        echo "http_range_sha256: range GET $start-$end failed: curl rc=$curl_rc, HTTP ${http_code:-unknown}" >&2
+        return 1
+    fi
+    if [[ "$http_code" != "206" ]]; then
+        echo "http_range_sha256: range GET $start-$end returned HTTP ${http_code:-unknown}, expected 206" >&2
+        return 1
+    fi
+    if [[ "$content_range" != "bytes $start-$end/"* ]]; then
+        echo "http_range_sha256: range GET $start-$end returned invalid Content-Range '${content_range:-missing}'" >&2
+        return 1
+    fi
+    if [[ "$actual_size" -ne "$expected_size" ]]; then
+        echo "http_range_sha256: range GET $start-$end returned $actual_size byte(s), expected $expected_size" >&2
+        return 1
+    fi
+
     sha256sum "$tmp" | cut -d' ' -f1
 }
 
