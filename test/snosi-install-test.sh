@@ -743,6 +743,9 @@ unset SNOSI_INSTALL_PUBRING
 # ===========================================================================
 echo "=== streamed-verify mismatch handling ==="
 
+assert_false "stream_download_verify: reserves FIFO paths atomically" \
+    grep -q 'mktemp -u' "$INSTALLER"
+
 PLAIN="$WORK_DIR/plain-payload.bin"
 head -c 65536 /dev/urandom >"$PLAIN"
 COMPRESSED="$PRODUCT_DIR/tiny.raw.xz"
