@@ -12,9 +12,13 @@
 #
 # For each path found under $BUILDROOT/var, this script:
 #   - classifies it against the product's outcome map
-#     (shared/composition/<cayo|snow>/var-outcomes.txt), selected by
+#     (shared/composition/<cayo|snow|flurry>/var-outcomes.txt), selected by
 #     $IMAGE_ID (snow and snowfield share the snow map: same payload
-#     composition, see shared/composition/snow/mkosi.conf),
+#     composition, see shared/composition/snow/mkosi.conf; flurry has its
+#     own map because it installs a different desktop payload, see
+#     shared/composition/flurry/mkosi.conf). Adding a product means adding
+#     a case arm below AND its map — there is no default map, an unknown
+#     $IMAGE_ID fails the build.
 #   - FAILS the build listing every path that matched no glob (an
 #     unclassified path must be triaged: is it real image-metadata that
 #     needs relocating like dpkg, is it tmpfiles-recreatable, is it

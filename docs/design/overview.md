@@ -570,9 +570,10 @@ with no `.chroot` suffix — it deliberately runs OUTSIDE the chroot, on the
 host, so it can just `find $BUILDROOT/var` directly instead of needing
 `mkosi-chroot` machinery for what's fundamentally a host-side inventory
 task. It's wired as the LAST `FinalizeScripts=` entry in `shared/
-composition/cayo/mkosi.conf` and `shared/composition/snow/mkosi.conf` —
-those two fragments are shared between bootc profiles (`cayo`, `snow`,
-`snowfield`) and native ones (`cayo-ab-raw`, `cayo-ab`, `snow-ab`,
+composition/cayo/mkosi.conf`, `shared/composition/snow/mkosi.conf`, and
+`shared/composition/flurry/mkosi.conf` —
+those fragments are shared between bootc profiles (`cayo`, `snow`,
+`snowfield`, `flurry`) and native ones (`cayo-ab-raw`, `cayo-ab`, `snow-ab`,
 `snowfield-ab`), so the SAME
 audit and the SAME per-product map run for both output formats. This
 mattered concretely for one thing: the dpkg database. Native relocates it
@@ -585,7 +586,8 @@ build ("stale") — two separate globs (one for the symlink shape, one for
 the real-directory shape) would make whichever shape didn't occur in a
 given build spuriously flag the other glob as stale. The same dual-shape
 trick shows up a few more times in the actual maps (`shared/composition/
-cayo/var-outcomes.txt`, `shared/composition/snow/var-outcomes.txt`) for
+cayo/var-outcomes.txt`, `shared/composition/snow/var-outcomes.txt`,
+`shared/composition/flurry/var-outcomes.txt`) for
 paths that are sometimes an empty tmpfiles-managed directory and sometimes
 hold real generated content (GNOME's `lib/xkb`/`lib/xfonts`, dpkg's own
 `lib/AccountsService/users`).
@@ -606,8 +608,11 @@ newline after each file before concatenating; (2) once a map has real
 content, the FAST way to validate a change without a 20-40 min real build
 is a synthetic scratch buildroot (`mkdir` + `touch` every path from a
 saved real unclassified-paths dump) and invoking the script directly:
-`BUILDROOT=<scratch> SRCDIR=<repo> IMAGE_ID=<cayo|snow> bash
-shared/composition/var-audit.finalize`.
+`BUILDROOT=<scratch> SRCDIR=<repo> IMAGE_ID=<cayo|snow|flurry> bash
+shared/composition/var-audit.finalize`. (flurry's map was populated exactly
+this way in 2026-08, derived from snow's minus the packages flurry does not
+install, then corrected against the audit's own unclassified/stale listings
+from the first real `mkosi --profile flurry build`.)
 
 One real gap the audit surfaced and correctly refused to paper over
 (flagged during phase 2, fixed since): `/var/lib/aspell/*.rws` (compiled

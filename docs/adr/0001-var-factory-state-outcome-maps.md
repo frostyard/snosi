@@ -17,7 +17,8 @@ makes this worse — upstream Debian freely adds, removes, and renames its
 
 Every product carries an outcome map, `shared/composition/<product>/
 var-outcomes.txt` (`cayo/var-outcomes.txt` for cayo; `snow/var-outcomes.txt`
-shared by snow and snowfield), that classifies every path present under the
+shared by snow and snowfield; `flurry/var-outcomes.txt` for flurry), that
+classifies every path present under the
 buildroot's `/var` into exactly one of four outcomes:
 
 - `image-metadata` — kept in the image's factory state
@@ -71,10 +72,12 @@ On success the audit writes the classified inventory to
 - **Allowlist only unexpected paths (no full classification):** rejected —
   the value is the forced *decision* per path; an allowlist records
   exceptions without recording intent for the other four hundred paths.
-- **One shared map for all products:** rejected — cayo (server) and
-  snow/snowfield (desktop) legitimately differ (e.g. cayo builds no man-db
-  index); a shared map would need per-product escapes that reintroduce
-  ambiguity.
+- **One shared map for all products:** rejected — cayo (server),
+  snow/snowfield (desktop), and flurry (Omarchy desktop) legitimately differ
+  (e.g. cayo builds no man-db index; flurry installs none of gdm3, tuned,
+  geoclue, gnome-remote-desktop); a shared map would need per-product escapes
+  that reintroduce ambiguity. Adding flurry in 2026-08 exercised this: it took
+  a new map, not an escape hatch in an existing one.
 - **Pathname-expansion globbing (`*` stops at `/`):** rejected — maps would
   need an entry per directory level; string globbing keeps maps short at the
   cost of the documented "`*` crosses `/`" gotcha.
@@ -85,8 +88,12 @@ On success the audit writes the classified inventory to
   Factory State), [design/testing.md](../design/testing.md)
 - Implemented by: `shared/composition/var-audit.finalize`,
   `shared/composition/cayo/var-outcomes.txt`,
-  `shared/composition/snow/var-outcomes.txt`
-- Guarded by: the build itself (finalize failure);
-  `test/native-ab-components-test.sh` (guest-side inventory)
+  `shared/composition/snow/var-outcomes.txt`,
+  `shared/composition/flurry/var-outcomes.txt`
+- Guarded by: the build itself (finalize failure — this is the only
+  enforcement that actually runs today);
+  `test/native-ab-components-test.sh` (guest-side inventory) is classed
+  `unwired` in `test/registry.tsv` and is executed by no workflow, so it
+  guards nothing until it is wired (frostyard/snosi#851, #898)
 - Builds on: [core ADR-0004 — product-namespaced filesystem tiers](https://github.com/frostyard/core/blob/main/docs/adr/0004-product-namespaced-filesystem-tiers.md)
   (`/usr/share/snosi/var-inventory.txt` lives in the image-lifetime tier)
