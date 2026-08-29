@@ -82,6 +82,16 @@ worth a contributor's time.
   coverage of the update path.
   → [`docs/plans/2026-07-03-bootc-update-validation-plan.md`](docs/plans/2026-07-03-bootc-update-validation-plan.md)
 
+- **Guard the plan `Status:` field.**
+  Every file in [`docs/plans/`](docs/plans/) now carries a `**Status:**` line
+  and a `**Last verified:**` date, and
+  [`docs/plans/TEMPLATE.md`](docs/plans/TEMPLATE.md) fixes the vocabulary to
+  `Proposed | Planned | In progress | Shipped | Superseded | Abandoned`. That
+  `MUST` is documentation only: no `check-*.sh` script and no workflow
+  validates it, so the next plan added can silently omit it and the legibility
+  just gained decays file by file. The remaining work is one fail-closed guard
+  in the style of the existing `check-*.sh` scripts, wired into `validate.yml`.
+
 - **Resolve the coexistence plan's status.**
   The document defining the two-transport arrangement is still **Proposed**
   even though most of what it describes has shipped. The arrangement is real;
@@ -107,12 +117,6 @@ code.
   shrinks to empty. Several contract documents currently sit outside
   `docs/specs/` and therefore outside that discipline by default rather than by
   decision.
-
-- **Make plan lifecycle legible.**
-  Most plan documents carry no status field, so shipped work and unstarted work
-  are indistinguishable without reading `git log`. A required, closed-vocabulary
-  `Status:` plus a fail-closed guard in the style of the existing `check-*.sh`
-  scripts would fix this permanently.
 
 ## Long term / exploratory
 
