@@ -24,6 +24,8 @@ snosi_bootc_secure_load_compatibility() { # contract
         return 1
     fi
 
+    # shellcheck disable=SC2034 # Outputs consumed by scripts sourcing this helper.
     BOOTC_SECURE_VERSION=$version
+    # shellcheck disable=SC2034 # Outputs consumed by scripts sourcing this helper.
     BOOTC_SECURE_ASSEMBLY_COMPATIBILITY=$compatibility
 }

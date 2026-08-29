@@ -20,7 +20,8 @@ valid_digest() { [[ ${1:-} =~ ^[[:xdigit:]]{128}$ ]]; }
 source "$(dirname "${BASH_SOURCE[0]}")/storage-digest-probe.sh"
 # shellcheck source=shared/bootc-secure/compatibility.sh
 source "$(dirname "${BASH_SOURCE[0]}")/compatibility.sh"
-readonly BOOTC_SECURE_CANONICAL_CONTRACT="$(dirname "${BASH_SOURCE[0]}")/tree/usr/lib/snosi/bootc-secure.json"
+BOOTC_SECURE_CANONICAL_CONTRACT="$(dirname "${BASH_SOURCE[0]}")/tree/usr/lib/snosi/bootc-secure.json"
+readonly BOOTC_SECURE_CANONICAL_CONTRACT
 snosi_bootc_secure_load_compatibility "$BOOTC_SECURE_CANONICAL_CONTRACT"
 
 discover_kernel() { # rootfs
@@ -764,9 +765,7 @@ self_test() {
     work=$(mktemp -d); trap 'rm -rf -- "$work"' RETURN
     mkdir -p "$work/root/boot/EFI/Linux" "$work/root/usr/lib/modules/one"
     mkdir -p "$work/root/usr/lib/snosi"
-    cat >"$work/root/usr/lib/snosi/bootc-secure.json" <<'EOF'
-{"schema":1,"mok_certificate":"/usr/lib/snosi/mok.crt","pcr_public_key":"/usr/lib/snosi/pcr-signing.pub","encrypted_root_mapper":"root","systemd_suite":"forky"}
-EOF
+    cp "$BOOTC_SECURE_CANONICAL_CONTRACT" "$work/root/usr/lib/snosi/bootc-secure.json"
     validate_root_contract "$work/root"
     touch "$work/root/boot/EFI/Linux/old.efi"
     if (refuse_existing_uki "$work/root") >/dev/null 2>&1; then rc=1; fi
