@@ -42,6 +42,7 @@ DEV_PUBRING="$ROOT_DIR/shared/native-ab/keys/import-pubring.gpg"
 
 WORK_DIR=""
 HTTP_PID=""
+IGNORE_RANGE_PID=""
 S3_PID=""
 PORT=0
 PASS=0
@@ -102,6 +103,7 @@ print_summary() {
 
 cleanup() {
     [[ -z "$HTTP_PID" ]] || kill "$HTTP_PID" 2>/dev/null || true
+    [[ -z "$IGNORE_RANGE_PID" ]] || kill "$IGNORE_RANGE_PID" 2>/dev/null || true
     [[ -z "$S3_PID" ]] || kill "$S3_PID" 2>/dev/null || true
     [[ -z "$WORK_DIR" || ! -d "$WORK_DIR" ]] || rm -rf "$WORK_DIR"
 }
@@ -228,6 +230,27 @@ assert_false "verify-remote.sh fails closed on a corrupted candidate byte" \
     "$PUBLISH_DIR/verify-remote.sh" "$PREPARED1" "$BASE_URL"
 "$PUBLISH_DIR/publish-candidate.sh" "$PREPARED1" "$DEST" >/dev/null
 assert_true "verify-remote.sh clean pass" "$PUBLISH_DIR/verify-remote.sh" "$PREPARED1" "$BASE_URL"
+
+echo "=== verify-remote.sh: ignored Range diagnostics ==="
+IGNORE_RANGE_PORT=$((PORT + 1))
+python3 "$ROOT_DIR/test/lib/range-http-server.py" "$IGNORE_RANGE_PORT" "$DEST" --ignore-ranges \
+    >"$WORK_DIR/ignore-range-http.log" 2>&1 &
+IGNORE_RANGE_PID=$!
+sleep 1
+kill -0 "$IGNORE_RANGE_PID" 2>/dev/null || {
+    echo "Error: ignored-Range HTTP server failed to start" >&2
+    cat "$WORK_DIR/ignore-range-http.log" >&2
+    exit 1
+}
+set +e
+ignored_range_out="$("$PUBLISH_DIR/verify-remote.sh" "$PREPARED1" \
+    "http://127.0.0.1:${IGNORE_RANGE_PORT}/os/native/v1/${PRODUCT}/x86-64" 2>&1)"
+ignored_range_rc=$?
+set -e
+assert_true "verify-remote.sh fails when origin returns HTTP 200 for Range" \
+    bash -c "[[ $ignored_range_rc -ne 0 ]]"
+assert_contains "ignored Range failure names HTTP 200 instead of a hash mismatch" \
+    "$ignored_range_out" "server ignored Range 0-4095: HTTP 200"
 
 echo "=== promote.sh: ordering, sidecars, gpgv ==="
 promote1_out="$("$PUBLISH_DIR/promote.sh" "${PROMOTE_KEY_ARGS[@]}" --pubring "$PUBRING" "$PREPARED1" "$BASE_URL" "$DEST")"

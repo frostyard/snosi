@@ -15,7 +15,7 @@ The pipeline scripts live in `shared/native-ab/publish/`:
 | `prepare-iso-publication.sh` | Sibling of the above for the network-installer ISO (Task 8.2): stages `shared/firn-installer/tools/build-iso.sh`'s already-version-stamped-and-named output plus an unsigned `SHA256SUMS` + `publication-info.json` whose `dest_path` is the flat `isos/native/v1` namespace (no per-product/x86-64 subpath). |
 | `generate-sbom.sh` | Generates `<channel>_<version>.sbom.spdx.json` directly from the mkosi package manifest. Called by `prepare-native-publication.sh`; not normally invoked standalone. |
 | `publish-candidate.sh` | Uploads immutable versioned objects to a per-version candidate staging path. |
-| `verify-remote.sh` | Independently re-verifies every candidate object over HTTP (size, full SHA-256, range GETs) before anything is promoted. |
+| `verify-remote.sh` | Independently re-verifies every candidate object over HTTP (size, full SHA-256, strict HTTP 206 range GETs) before anything is promoted. Range bodies are capped at the requested byte count, so an origin that ignores `Range` fails explicitly without downloading the full artifact. |
 | `promote.sh` | Copies verified candidates to their final public names, regenerates and signs `SHA256SUMS`, publishes signature-first/manifest-last. |
 | `withdraw.sh` | Restores a previously-archived signed index pair (incident response / bad-release rollback of the *index*, not the bits). |
 | `verify-installer-redirect.sh` | Confirms the stable installer URL redirects without caching to the expected promoted ISO and that the target is present in `SHA256SUMS`. Run only after `verify-published-index.sh` has authenticated that index. |

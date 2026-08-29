@@ -102,7 +102,9 @@ hardware soak remain; the publication/signing pipeline itself
 (`shared/native-ab/publish/{publish-candidate,verify-remote,promote,
 withdraw}.sh`) is built and rehearsed end to end locally — see that same
 runbook doc for the candidate/verify/promote/withdraw procedure and
-`test/native-ab-publication-test.sh` for the local rehearsal. It does not
+`test/native-ab-publication-test.sh` for the local rehearsal. Candidate range
+checks require HTTP 206 and cap each response at the requested byte count, so
+an origin that ignores `Range` fails without downloading the full artifact. It does not
 replace the supported bootc images. See
 `docs/plans/2026-07-13-mkosi-native-ab-root-design.md`; the destructive raw-disk
 installer spike lives at `test/cayo-ab-install-spike.sh`. Its UKI uses the

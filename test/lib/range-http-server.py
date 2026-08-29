@@ -19,7 +19,7 @@
 # only the requested bytes so it stays cheap against multi-gigabyte
 # artifacts.
 #
-# Usage: range-http-server.py <port> <directory>
+# Usage: range-http-server.py <port> <directory> [--ignore-ranges]
 # Binds 127.0.0.1 only.
 import http.server
 import os
@@ -32,6 +32,7 @@ RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
 class RangeRequestHandler(http.server.SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    ignore_ranges = False
 
     def send_head(self):
         path = self.translate_path(self.path)
@@ -40,7 +41,7 @@ class RangeRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         file_size = os.path.getsize(path)
         range_header = self.headers.get("Range")
-        if not range_header:
+        if not range_header or self.ignore_ranges:
             f = open(path, "rb")
             self.send_response(200)
             self.send_header("Content-Type", self.guess_type(path))
@@ -101,15 +102,17 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 
 def main():
-    if len(sys.argv) != 3:
-        print(f"Usage: {sys.argv[0]} <port> <directory>", file=sys.stderr)
+    if len(sys.argv) not in (3, 4) or (len(sys.argv) == 4 and sys.argv[3] != "--ignore-ranges"):
+        print(f"Usage: {sys.argv[0]} <port> <directory> [--ignore-ranges]", file=sys.stderr)
         return 2
     port = int(sys.argv[1])
     directory = sys.argv[2]
+    RangeRequestHandler.ignore_ranges = len(sys.argv) == 4
 
     handler = lambda *a, **kw: RangeRequestHandler(*a, directory=directory, **kw)  # noqa: E731
     with ThreadingHTTPServer(("127.0.0.1", port), handler) as httpd:
-        print(f"Serving {directory} on http://127.0.0.1:{port}/ (Range-capable)")
+        mode = "ignoring Range" if RangeRequestHandler.ignore_ranges else "Range-capable"
+        print(f"Serving {directory} on http://127.0.0.1:{port}/ ({mode})")
         httpd.serve_forever()
     return 0
 
