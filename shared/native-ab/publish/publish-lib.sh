@@ -260,11 +260,30 @@ http_get_to_file() { # url outfile
     curl -fsSL --connect-timeout 10 --max-time 600 "$1" -o "$2"
 }
 
-# http_range_sha256 url start end -- GETs byte range [start,end] (inclusive,
-# HTTP Range semantics) and prints its sha256sum. Requires HTTP 206, the exact
-# Content-Range, and the requested byte count. The transfer is capped at that
-# count so an origin that ignores Range cannot download the full object.
-http_range_sha256() { # url start end
+# Retry budget for the range GETs below. A cold (uncached) object on the
+# public origin is served by Cloudflare with cf-cache-status BYPASS/DYNAMIC,
+# and in that state the edge answers the FIRST Range request with a full
+# HTTP 200 body -- the very "origin ignores Range" shape this check exists to
+# catch -- while every subsequent request for the same object correctly
+# returns 206. Reproduced 2026-08-29 against a promoted 749 MiB installer ISO:
+# attempt 1 HTTP 200 (curl rc=63, --max-filesize tripped), attempts 2-4 HTTP
+# 206 with the exact Content-Range. One attempt therefore cannot distinguish
+# "this origin is broken" from "this object had not been fetched through the
+# edge yet", and the single-shot check failed a genuine publication
+# (build-installer-iso.yml run 33199899342).
+#
+# Retrying is not a weakening of the contract: the check still fails closed,
+# with the identical diagnostic, when the origin ignores Range on EVERY
+# attempt. Only a transient first-fetch artifact is absorbed.
+PUBLISH_HTTP_RANGE_ATTEMPTS="${PUBLISH_HTTP_RANGE_ATTEMPTS:-4}"
+PUBLISH_HTTP_RANGE_RETRY_DELAY="${PUBLISH_HTTP_RANGE_RETRY_DELAY:-2}"
+
+# _http_range_sha256_once url start end -- one range GET attempt. Prints the
+# sha256 of the returned bytes on success. Returns 0 on success, 2 when the
+# failure is transient (worth another attempt), 1 when it is permanent.
+# Diagnostics go to stderr in both failure cases so the final attempt's
+# message is what the caller reports.
+_http_range_sha256_once() { # url start end
     local url="$1" start="$2" end="$3"
     local tmp headers curl_rc=0 http_code content_length content_range actual_size
     local expected_size=$(( end - start + 1 ))
@@ -283,18 +302,23 @@ http_range_sha256() { # url start end
         awk '/^HTTP\// {value=""} tolower($1) == "content-length:" {value=$2} END {print value}')"
     content_range="$(tr -d '\r' <"$headers" |
         awk '/^HTTP\// {value=""} tolower($1) == "content-range:" {$1=""; sub(/^ /, ""); value=$0} END {print value}')"
-    actual_size="$(stat -c %s "$tmp")"
+    actual_size="$(stat -c %s "$tmp" 2>/dev/null || echo 0)"
 
     if [[ "$http_code" == "200" ]]; then
         echo "http_range_sha256: server ignored Range $start-$end: HTTP 200, Content-Length ${content_length:-unknown}" >&2
-        return 1
+        return 2
     fi
     if [[ "$curl_rc" -ne 0 ]]; then
         echo "http_range_sha256: range GET $start-$end failed: curl rc=$curl_rc, HTTP ${http_code:-unknown}" >&2
-        return 1
+        return 2
     fi
     if [[ "$http_code" != "206" ]]; then
         echo "http_range_sha256: range GET $start-$end returned HTTP ${http_code:-unknown}, expected 206" >&2
+        # 5xx and 429 are the origin/edge being unwell, not a Range-capability
+        # verdict; every other non-206 is a deterministic answer.
+        if [[ "$http_code" =~ ^(5[0-9][0-9]|429)$ ]]; then
+            return 2
+        fi
         return 1
     fi
     if [[ "$content_range" != "bytes $start-$end/"* ]]; then
@@ -302,11 +326,42 @@ http_range_sha256() { # url start end
         return 1
     fi
     if [[ "$actual_size" -ne "$expected_size" ]]; then
+        # A 206 that is short is a truncated transfer, not a Range verdict.
         echo "http_range_sha256: range GET $start-$end returned $actual_size byte(s), expected $expected_size" >&2
-        return 1
+        return 2
     fi
 
     sha256sum "$tmp" | cut -d' ' -f1
+}
+
+# http_range_sha256 url start end -- GETs byte range [start,end] (inclusive,
+# HTTP Range semantics) and prints its sha256sum. Requires HTTP 206, the exact
+# Content-Range, and the requested byte count. The transfer is capped at that
+# count so an origin that ignores Range cannot download the full object.
+#
+# Transient failures (see PUBLISH_HTTP_RANGE_ATTEMPTS above) are retried; a
+# permanent one aborts immediately. Either way an unsuccessful call returns 1
+# after emitting the last attempt's diagnostic, so callers keep failing closed.
+http_range_sha256() { # url start end
+    local url="$1" start="$2" end="$3"
+    local attempt=1 rc=0 result delay="$PUBLISH_HTTP_RANGE_RETRY_DELAY"
+
+    while :; do
+        rc=0
+        result="$(_http_range_sha256_once "$url" "$start" "$end")" || rc=$?
+        if [[ "$rc" -eq 0 ]]; then
+            [[ "$attempt" -eq 1 ]] || echo "http_range_sha256: range GET $start-$end succeeded on attempt $attempt" >&2
+            printf '%s\n' "$result"
+            return 0
+        fi
+        if [[ "$rc" -ne 2 || "$attempt" -ge "$PUBLISH_HTTP_RANGE_ATTEMPTS" ]]; then
+            return 1
+        fi
+        echo "http_range_sha256: retrying range GET $start-$end in ${delay}s (attempt $attempt/$PUBLISH_HTTP_RANGE_ATTEMPTS)" >&2
+        [[ "$delay" -le 0 ]] || sleep "$delay"
+        delay=$(( delay * 2 ))
+        attempt=$(( attempt + 1 ))
+    done
 }
 
 # local_range_sha256 file start end -- sha256 of the same inclusive byte

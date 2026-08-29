@@ -20,12 +20,24 @@
 # artifacts.
 #
 # Usage: range-http-server.py <port> <directory> [--ignore-ranges]
+#                                                [--ignore-first-ranges N]
+#
+# --ignore-ranges        every Range request is answered with a full 200 body
+#                        (a permanently Range-incapable origin).
+# --ignore-first-ranges  only the first N Range requests are answered that
+#                        way, then Range is honored normally. This models the
+#                        real Cloudflare-in-front-of-R2 behavior that broke
+#                        build-installer-iso.yml run 33199899342: a cold
+#                        (cf-cache-status BYPASS/DYNAMIC) object answers its
+#                        first Range request with a full 200 and serves
+#                        correct 206s from then on.
 # Binds 127.0.0.1 only.
 import http.server
 import os
 import re
 import socketserver
 import sys
+import threading
 
 RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
@@ -33,6 +45,18 @@ RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
 class RangeRequestHandler(http.server.SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     ignore_ranges = False
+    ignore_first_ranges = 0
+    _ignore_lock = threading.Lock()
+
+    @classmethod
+    def _should_ignore_range(cls):
+        if cls.ignore_ranges:
+            return True
+        with cls._ignore_lock:
+            if cls.ignore_first_ranges > 0:
+                cls.ignore_first_ranges -= 1
+                return True
+        return False
 
     def send_head(self):
         path = self.translate_path(self.path)
@@ -41,7 +65,7 @@ class RangeRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         file_size = os.path.getsize(path)
         range_header = self.headers.get("Range")
-        if not range_header or self.ignore_ranges:
+        if not range_header or self._should_ignore_range():
             f = open(path, "rb")
             self.send_response(200)
             self.send_header("Content-Type", self.guess_type(path))
@@ -102,16 +126,38 @@ class ThreadingHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 
 def main():
-    if len(sys.argv) not in (3, 4) or (len(sys.argv) == 4 and sys.argv[3] != "--ignore-ranges"):
-        print(f"Usage: {sys.argv[0]} <port> <directory> [--ignore-ranges]", file=sys.stderr)
+    args = sys.argv[1:]
+    if len(args) < 2:
+        print(
+            f"Usage: {sys.argv[0]} <port> <directory> "
+            "[--ignore-ranges] [--ignore-first-ranges N]",
+            file=sys.stderr,
+        )
         return 2
-    port = int(sys.argv[1])
-    directory = sys.argv[2]
-    RangeRequestHandler.ignore_ranges = len(sys.argv) == 4
+    port = int(args[0])
+    directory = args[1]
+    rest = args[2:]
+    while rest:
+        option = rest.pop(0)
+        if option == "--ignore-ranges":
+            RangeRequestHandler.ignore_ranges = True
+        elif option == "--ignore-first-ranges":
+            if not rest:
+                print("--ignore-first-ranges requires a count", file=sys.stderr)
+                return 2
+            RangeRequestHandler.ignore_first_ranges = int(rest.pop(0))
+        else:
+            print(f"Unknown option: {option}", file=sys.stderr)
+            return 2
 
     handler = lambda *a, **kw: RangeRequestHandler(*a, directory=directory, **kw)  # noqa: E731
     with ThreadingHTTPServer(("127.0.0.1", port), handler) as httpd:
-        mode = "ignoring Range" if RangeRequestHandler.ignore_ranges else "Range-capable"
+        if RangeRequestHandler.ignore_ranges:
+            mode = "ignoring Range"
+        elif RangeRequestHandler.ignore_first_ranges:
+            mode = f"ignoring first {RangeRequestHandler.ignore_first_ranges} Range request(s)"
+        else:
+            mode = "Range-capable"
         print(f"Serving {directory} on http://127.0.0.1:{port}/ ({mode})")
         httpd.serve_forever()
     return 0
