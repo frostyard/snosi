@@ -65,7 +65,7 @@ Format=sysext
 Bootable=no
 BaseTrees=%O/base
 PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh
-FinalizeScripts=%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh
+FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh
 
 Packages=<package-list>
 
@@ -115,6 +115,29 @@ default scripts compose with explicit `FinalizeScripts=` entries.
 Entries may contain internal spaces. The parser trims only surrounding
 whitespace and comments, preserving the path itself for the required-path
 check.
+
+Every sysext also runs
+`shared/sysext/finalize/sysext-usr-only.sh` against that delta. It rejects any
+entry below `/opt` (or `/opt` itself being a file or symlink), naming the first
+offending path; the empty `/opt` mountpoint directory is harmless. The guard
+uses physical traversal (`find -P`) and never follows a symlink into a host
+path.
+
+**Why only `/opt`:** mkosi's sysext output is produced by systemd-repart from
+`sysext.repart.d/10-root.conf`, which copies exactly `CopyFiles=/usr/` and
+`CopyFiles=/opt/` from the buildroot. Nothing else in the delta ships, so
+buildroot `/var` is inert build residue — `/var/log/dpkg.log`, package caches,
+and dpkg-trigger state such as `/var/lib/emacsen-common/...` or
+`/var/lib/dictionaries-common/...` written by postinsts that run after mkosi's
+package-manager cleanup — and inspecting it only produces a per-package
+allowlist that grows one CI failure at a time (the first draft of this guard
+did exactly that). `/opt` is the one non-`/usr` tree that does ship, and at
+runtime it is a bind mount to `/var/opt` that sysext overlays shadow, so a
+sysext `/opt` payload is both published and unusable: relocate it to
+`/usr/lib/<package>` with `/usr/bin` symlinks (see Package Relocation).
+`test/sysext-usr-only-test.sh` pins the `CopyFiles=` set when the `.mkosi`
+checkout is present, so a mkosi bump that starts packing more of the buildroot
+re-opens the guard's scope explicitly.
 
 **Delta semantics:** for `Overlay=yes` images the finalize `$BUILDROOT` is the
 sysext DELTA (the overlay upper layer — exactly what ships), not the merged
@@ -637,7 +660,7 @@ without changing its KEYPACKAGE version, so each moved sysext carries a
 
 1. Create `mkosi.images/<name>/mkosi.conf` following the pattern above
 2. Set `KEYPACKAGE` to the primary package name
-3. Create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in); the shared finalize check fails the build without it
+3. Wire `sysext-usr-only.sh`, `sysext-required-paths.sh`, and `sysext-strip-icon-cache.sh` through `FinalizeScripts=`, then create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in); the shared checks fail the build on `/opt` payload or a missing manifest path
 4. Add any extra files in `mkosi.images/<name>/mkosi.extra/`
 5. If configs needed in `/etc`: create `mkosi.finalize` to capture ONLY the needed paths to `/usr/share/factory/etc/` (never all of `/etc` — see Constraints), add tmpfiles.d rules
 6. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/` (its own component directory — do not add to the shared `sysupdate.d/`)
@@ -650,7 +673,7 @@ without changing its KEYPACKAGE version, so each moved sysext carries a
 repository inventory from tracked `mkosi.images/*/mkosi.conf` files containing
 `Overlay=yes`; do not add a separate component list. It fails closed unless
 every discovered sysext has a nonempty tracked `required-paths.txt`, exactly one
-nonempty `KEYPACKAGE`, both shared finalizers, and one same-named
+nonempty `KEYPACKAGE`, all three shared finalizers, and one same-named
 component-scoped `.transfer`/`.feature` pair whose transfer selects the
 component and sets `Verify=true`. It also rejects component-scoped sysupdate
 metadata that has no matching tracked sysext config. The test uses synthetic

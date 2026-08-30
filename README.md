@@ -256,6 +256,11 @@ Build Against gui-base") for the full package contract and rationale.
 ### System Extensions (sysexts)
 
 Sysexts are overlay images that extend the base system without modifying it. They're built with `Format=sysext` and `Overlay=yes`:
+Every sysext build runs a shared finalize guard
+(`shared/sysext/finalize/sysext-usr-only.sh`) that rejects any payload below
+`/opt`, enforcing the `/usr`-only runtime overlay contract. `/opt` is the only
+tree besides `/usr` that mkosi copies into a sysext image; buildroot `/var` never
+ships and is not inspected.
 
 | Sysext            | Contents                                      | Config                                                                         |
 | ----------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
