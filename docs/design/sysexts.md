@@ -117,13 +117,27 @@ whitespace and comments, preserving the path itself for the required-path
 check.
 
 Every sysext also runs
-`shared/sysext/finalize/sysext-usr-only.sh` against that delta. It first removes
-the build-only `/var/log` and `/var/cache` trees produced when package installs
-or triggers run after mkosi's package cleanup, plus dictionaries-common's
-generated `/var/lib/dictionaries-common` state. Empty `/var` and `/opt`
-mountpoint directories are harmless, but any other entry below either directory
-fails the build and names the first offending path. The guard uses physical
-traversal and never follows a symlink into a host path.
+`shared/sysext/finalize/sysext-usr-only.sh` against that delta. It rejects any
+entry below `/opt` (or `/opt` itself being a file or symlink), naming the first
+offending path; the empty `/opt` mountpoint directory is harmless. The guard
+uses physical traversal (`find -P`) and never follows a symlink into a host
+path.
+
+**Why only `/opt`:** mkosi's sysext output is produced by systemd-repart from
+`sysext.repart.d/10-root.conf`, which copies exactly `CopyFiles=/usr/` and
+`CopyFiles=/opt/` from the buildroot. Nothing else in the delta ships, so
+buildroot `/var` is inert build residue — `/var/log/dpkg.log`, package caches,
+and dpkg-trigger state such as `/var/lib/emacsen-common/...` or
+`/var/lib/dictionaries-common/...` written by postinsts that run after mkosi's
+package-manager cleanup — and inspecting it only produces a per-package
+allowlist that grows one CI failure at a time (the first draft of this guard
+did exactly that). `/opt` is the one non-`/usr` tree that does ship, and at
+runtime it is a bind mount to `/var/opt` that sysext overlays shadow, so a
+sysext `/opt` payload is both published and unusable: relocate it to
+`/usr/lib/<package>` with `/usr/bin` symlinks (see Package Relocation).
+`test/sysext-usr-only-test.sh` pins the `CopyFiles=` set when the `.mkosi`
+checkout is present, so a mkosi bump that starts packing more of the buildroot
+re-opens the guard's scope explicitly.
 
 **Delta semantics:** for `Overlay=yes` images the finalize `$BUILDROOT` is the
 sysext DELTA (the overlay upper layer — exactly what ships), not the merged
@@ -192,7 +206,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 
 ### coder
 - `mkosi.postinst.chroot` — Downloads the coder .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Single static binary + two units, all natively under `/usr`; no relocation
-- `mkosi.finalize` — Captures `/etc/coder.d/` to factory defaults and removes the package preinst's build-time `/var/home/coder` skeleton; `coder.service` is gated on `ConditionFileNotEmpty=/etc/coder.d/coder.env`, so the enabled+upheld unit stays inert until an admin fills in `CODER_ACCESS_URL` etc.
+- `mkosi.finalize` — Captures `/etc/coder.d/` to factory defaults; `coder.service` is gated on `ConditionFileNotEmpty=/etc/coder.d/coder.env`, so the enabled+upheld unit stays inert until an admin fills in `CODER_ACCESS_URL` etc.
 - `usr/lib/sysusers.d/coder.conf` — Recreates the `coder` system user at boot (the deb preinst's `useradd` lands in the buildroot `/etc/passwd`, stripped from the delta) with membership in `docker` (mirrors preinst) and `incus-admin` (Incus-template provisioning); `m` lines implicitly create those groups when the owning sysext isn't merged
 - `usr/lib/tmpfiles.d/coder.conf` — Factory config injection + `/home/coder` creation
 - `usr/lib/systemd/system-preset/40-coder.preset` — Enables `coder.service`, explicitly disables `coder-workspace-proxy.service` (separate opt-in role, needs its own env file)
@@ -646,7 +660,7 @@ without changing its KEYPACKAGE version, so each moved sysext carries a
 
 1. Create `mkosi.images/<name>/mkosi.conf` following the pattern above
 2. Set `KEYPACKAGE` to the primary package name
-3. Wire `sysext-usr-only.sh`, `sysext-required-paths.sh`, and `sysext-strip-icon-cache.sh` through `FinalizeScripts=`, then create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in); the shared checks fail the build on non-`/usr` payload or a missing manifest path
+3. Wire `sysext-usr-only.sh`, `sysext-required-paths.sh`, and `sysext-strip-icon-cache.sh` through `FinalizeScripts=`, then create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in); the shared checks fail the build on `/opt` payload or a missing manifest path
 4. Add any extra files in `mkosi.images/<name>/mkosi.extra/`
 5. If configs needed in `/etc`: create `mkosi.finalize` to capture ONLY the needed paths to `/usr/share/factory/etc/` (never all of `/etc` — see Constraints), add tmpfiles.d rules
 6. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/` (its own component directory — do not add to the shared `sysupdate.d/`)

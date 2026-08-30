@@ -47,10 +47,15 @@ Sysexts follow five authoring rules:
    the build, and any listed path missing from the output fails the build
    ("refusing to produce a broken extension"). Because `Overlay=yes` makes
    `$BUILDROOT` the *delta*, base-image paths must not be listed.
-5. **Every sysext delta is checked for `/var` and `/opt` payloads** by
-   `shared/sysext/finalize/sysext-usr-only.sh`. Empty root mountpoint
-   directories are permitted, but any entry below them fails the build with
-   the offending path. The check never follows symlinks outside the delta.
+5. **Every sysext delta is checked for `/opt` payload** by
+   `shared/sysext/finalize/sysext-usr-only.sh`. The empty `/opt` mountpoint
+   directory is permitted, but any entry below it — or `/opt` itself being a
+   file or symlink — fails the build naming the offending path. Symlinks are
+   reported, never followed. `/var` is deliberately not inspected: mkosi's
+   sysext repart definition copies exactly `/usr/` and `/opt/` into the
+   published image, so buildroot `/var` is inert build residue (dpkg logs,
+   caches, postinst trigger state); `/opt` ships and is shadowed at runtime by
+   the `/var/opt` bind mount, which is why it is the tree that matters.
 
 ## Consequences
 
@@ -66,9 +71,11 @@ Sysexts follow five authoring rules:
   sees exactly which `/etc` bytes ship; scoped subtrees owned by the package
   (e.g. `/etc/1password`, `/etc/nix`) are acceptable, whole-`/etc` capture
   never is.
-- `/usr`-only is enforced before artifact production: stray `/var` or `/opt`
-  entries fail the shared finalize guard, while required-paths manifests prove
-  that each sysext's expected `/usr` payload is present.
+- `/usr`-only is enforced before artifact production: stray `/opt` entries
+  fail the shared finalize guard, mkosi's packing keeps `/var` out of the
+  artifact by construction (pinned by `test/sysext-usr-only-test.sh` against
+  the `.mkosi` checkout), and required-paths manifests prove that each
+  sysext's expected `/usr` payload is present.
 
 ## Alternatives considered
 

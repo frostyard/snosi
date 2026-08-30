@@ -232,10 +232,11 @@ The `base` image ([mkosi.images/base/mkosi.conf](mkosi.images/base/mkosi.conf)) 
 ### System Extensions (sysexts)
 
 Sysexts are overlay images that extend the base system without modifying it. They're built with `Format=sysext` and `Overlay=yes`:
-Every sysext build runs a shared finalize guard that discards the build-only
-`/var/log`, `/var/cache`, and dictionaries-common generated-state trees, then
-rejects other payload entries below `/var` or `/opt`,
-enforcing the `/usr`-only runtime overlay contract.
+Every sysext build runs a shared finalize guard
+(`shared/sysext/finalize/sysext-usr-only.sh`) that rejects any payload below
+`/opt`, enforcing the `/usr`-only runtime overlay contract. `/opt` is the only
+tree besides `/usr` that mkosi copies into a sysext image; buildroot `/var` never
+ships and is not inspected.
 
 | Sysext            | Contents                                      | Config                                                                         |
 | ----------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
