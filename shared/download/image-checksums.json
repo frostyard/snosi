@@ -5,9 +5,9 @@
     "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
   },
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/b9990527570f/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/2c31714faddf/install.sh",
     "sha256": "12479a24be3f5307eecac7cde670fad7118640f031229e964f544b1367b52a41",
-    "version": "b9990527570f"
+    "version": "2c31714faddf"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
@@ -25,9 +25,9 @@
     "version": "3bb9134985343ffd1993520eb37c90e113bfb09b"
   },
   "omarchy": {
-    "url": "https://codeload.github.com/basecamp/omarchy/tar.gz/93010924047d09f62f702bf8b5c07d0149c11943",
-    "sha256": "f18622a2dc563e756853d33ef171fa61ea28416b780df6382af22d9cc2c141fd",
-    "version": "93010924047d09f62f702bf8b5c07d0149c11943"
+    "url": "https://codeload.github.com/basecamp/omarchy/tar.gz/346e69e1cec6c4e8924531874af6ba010a1bc99e",
+    "sha256": "f8fe9d0ca01226112a144d1961831ce3f27fddfa66e0f9f44b67c375a372b9f1",
+    "version": "346e69e1cec6c4e8924531874af6ba010a1bc99e"
   },
   "jetbrains-mono-nerd": {
     "url": "https://github.com/ryanoasis/nerd-fonts/releases/download/v3.5.1/JetBrainsMono.zip",
@@ -35,9 +35,9 @@
     "version": "3.5.1"
   },
   "mise": {
-    "url": "https://github.com/jdx/mise/releases/download/v2026.8.12/mise-v2026.8.12-linux-x64",
-    "sha256": "f2092b1e67f0abc8803d3be120dd2bc5b656dd99680ba3159f710e149da10d05",
-    "version": "2026.8.12"
+    "url": "https://github.com/jdx/mise/releases/download/v2026.8.16/mise-v2026.8.16-linux-x64",
+    "sha256": "cff4832ded79af2951e800bddcb5a22acac58630d765a2d062c1180680a0bb35",
+    "version": "2026.8.16"
   },
   "xdg-terminal-exec": {
     "url": "https://github.com/Vladimir-csp/xdg-terminal-exec/archive/refs/tags/v0.14.3.tar.gz",
