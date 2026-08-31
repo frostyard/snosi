@@ -57,6 +57,7 @@ firn-installer-iso-test.sh	unwired	-
 flurry-keyring-test.sh	unwired	-
 generate-sbom-test.sh	unwired	-
 latest-apt-version-test.sh	ci	validate.yml
+lemonade-sysext-test.sh	ci	validate.yml
 native-ab-components-test.sh	unwired	-
 native-ab-contracts-test.sh	ci	nightly-compliance.yml,validate.yml
 native-ab-include-order-test.sh	unwired	-

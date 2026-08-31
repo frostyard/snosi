@@ -5,8 +5,8 @@
 /usr/lib/sysusers.d/lemonade.conf
 # Sole backports dependency, pulled via Packages= (not present in base)
 /usr/lib/x86_64-linux-gnu/libcpp-httplib.so.0.41
-# Factory copy of /etc/lemonade (injected at boot by tmpfiles)
-/usr/share/factory/etc/lemonade/conf.d/zz-secrets.conf
+# Factory copy of /etc/default/lemond (injected at boot by tmpfiles)
+/usr/share/factory/etc/default/lemond
 # Boot-time group memberships, config injection, and activation
 /usr/lib/sysusers.d/lemonade-groups.conf
 /usr/lib/tmpfiles.d/lemonade.conf

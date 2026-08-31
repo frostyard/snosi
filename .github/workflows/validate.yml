@@ -240,6 +240,11 @@ jobs:
         # required-paths.txt entries. No root, network, or image build.
         run: ./test/sysext-required-paths-test.sh
 
+      - name: Validate Lemonade sysext integration
+        # Lemonade 11.8 moved its environment template to /etc/default/lemond;
+        # exercise the sysext's factory relocation and tmpfiles wiring.
+        run: ./test/lemonade-sysext-test.sh
+
       - name: Validate Pilothouse sysext integration
         # Structural service/drop-in and direct-DEB dependency fixtures. No root,
         # network, live endpoints, or image build.

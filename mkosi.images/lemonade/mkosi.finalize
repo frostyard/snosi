@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 set -euo pipefail
 
-# Capture /etc/lemonade to factory defaults for tmpfiles.d to restore at
-# boot. lemond.service reads EnvironmentFile=-/etc/lemonade/conf.d/*.conf
-# (HF_TOKEN, LEMONADE_API_KEY, …); the deb ships only the commented
-# zz-secrets.conf template, so the factory copy carries no real secrets.
-mkdir -p "$BUILDROOT/usr/share/factory/etc"
+# Capture /etc/default/lemond to factory defaults for tmpfiles.d to restore at
+# boot. Lemonade 11.8 moved its EnvironmentFile from the former
+# /etc/lemonade/conf.d/*.conf drop-ins to this single file. The deb ships only
+# a commented template, so the factory copy carries no real secrets.
+mkdir -p "$BUILDROOT/usr/share/factory/etc/default"
 
-if [ -d "$BUILDROOT/etc/lemonade" ]; then
-    cp --archive --update=none "$BUILDROOT/etc/lemonade" \
-       "$BUILDROOT/usr/share/factory/etc/"
+if [ -e "$BUILDROOT/etc/default/lemond" ]; then
+    cp --archive --update=none "$BUILDROOT/etc/default/lemond" \
+       "$BUILDROOT/usr/share/factory/etc/default/"
 fi
