@@ -32,15 +32,6 @@
             "type": "matchRepository"
           }
         }
-      ],
-      "ghcr.io/frostyard/flurry": [
-        {
-          "type": "sigstoreSigned",
-          "keyPath": "/usr/lib/snosi/cosign.pub",
-          "signedIdentity": {
-            "type": "matchRepository"
-          }
-        }
       ]
     },
     "containers-storage": {

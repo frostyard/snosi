@@ -23,10 +23,8 @@ Builds run continuously rather than on a named release cadence: GitHub Releases
 are a human-facing changelog and download index over signed artifacts, not
 milestone gates.
 
-The shipped surface is four image families (`snow`, `snowfield`, `cayo`, and
-`flurry`) and a large sysext catalogue, described in [`README.md`](README.md).
-`flurry` is the newest and is bootc-only by construction
-([`docs/plans/2026-08-25-flurry-omarchy-plan.md`](docs/plans/2026-08-25-flurry-omarchy-plan.md)).
+The shipped surface is three image families (`snow`, `snowfield`, and
+`cayo`) and a large sysext catalogue, described in [`README.md`](README.md).
 
 ## Position: bootc is the transport; native A/B is being phased out
 
@@ -42,10 +40,8 @@ native A/B is not a supported way to run snosi.
 
 | Transport | What it is | Update origin | Status |
 | --- | --- | --- | --- |
-| **bootc OCI** | `snow`, `snowfield`, `cayo`, `flurry` — OCI images consumed by bootc | GHCR | **Supported.** The transport snosi is built around. |
+| **bootc OCI** | `snow`, `snowfield`, `cayo` — OCI images consumed by bootc | GHCR | **Supported.** The transport snosi is built around. |
 | **native A/B** | `snow-ab`, `snowfield-ab`, `cayo-ab` — GPT disk images, EROFS + dm-verity, Secure Boot + TPM/LUKS `/var` | Cloudflare R2 | **Phasing out by 2026-10-28.** Builds and updates during the window; not a supported target after it. |
-
-`flurry` has no `-ab` variant and will not gain one.
 
 GHCR is authoritative for bootc OCI images. R2 remains authoritative for
 sysexts, raw installer images, and the installer ISO; it is authoritative for

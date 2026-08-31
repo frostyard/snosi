@@ -114,8 +114,8 @@ if [[ -f "$serial" ]] && grep -q '^DirectoryNotEmpty=' "$serial"; then
 fi
 
 # --- notify script: ack only after a successful send ----------------------
-# The login-time run races the session's notification daemon (Quickshell
-# starts in parallel with graphical-session.target on flurry). The script
+# The login-time run races the session's notification daemon (some shells
+# start in parallel with graphical-session.target). The script
 # must retry notify-send, write the ack ONLY on success, and exit 0 when
 # every attempt fails (so the unit never shows failed and a later trigger
 # still notifies).

@@ -29,10 +29,10 @@ Frostyard workspace root (the parent of `snosi/`).
 |---|---|---|---|
 | nbc | `frostyard-nbc` | `snosi/mkosi.images/base/mkosi.conf:50` | all images (legacy updater) |
 | updex | `frostyard-updex` | `snosi/mkosi.images/base/mkosi.conf:51` | all images (sysext feature/update manager) |
-| chairlift | `frostyard-chairlift` | `snosi/shared/packages/snow/mkosi.conf:6`; `snosi/shared/packages/flurry/mkosi.conf:8` | snow, snowfield (+ `-ab`), flurry |
+| chairlift | `frostyard-chairlift` | `snosi/shared/packages/snow/mkosi.conf:6` | snow, snowfield (+ `-ab`) |
 | snow-first-setup | `snow-first-setup` | `snosi/shared/packages/snow/mkosi.conf:7` | snow, snowfield (+ `-ab`) |
-| intuneme | `frostyard-intuneme` | `snosi/shared/packages/snow/mkosi.conf:79`; `snosi/shared/packages/flurry/mkosi.conf:9` | snow, snowfield (+ `-ab`), flurry |
-| bootc | `bootc` | `snosi/shared/packages/bootc/mkosi.conf:5` | bootc profiles (cayo, snow, snowfield, flurry) |
+| intuneme | `frostyard-intuneme` | `snosi/shared/packages/snow/mkosi.conf:79` | snow, snowfield (+ `-ab`) |
+| bootc | `bootc` | `snosi/shared/packages/bootc/mkosi.conf:5` | bootc profiles (cayo, snow, snowfield) |
 | ostree | `libostree-1-1` | `snosi/shared/packages/bootc/mkosi.conf:6` | bootc profiles |
 | pilothouse | `frostyard-pilothouse` | `snosi/mkosi.images/pilothouse/mkosi.conf:23` (sysext) | opt-in sysext, all products |
 

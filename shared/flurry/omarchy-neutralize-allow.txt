@@ -1,8 +1,0 @@
-# Allowlist for the system-scope systemctl enablement guard in
-# shared/flurry/scripts/build/omarchy.chroot. One fixed substring per line,
-# matched against grep's file:line:content output. Only user-INVOKED admin
-# actions belong here (equivalent to the admin typing the command; safe
-# under the enablement-manifest mechanism) -- never unit- or
-# automation-driven enablement.
-bin/omarchy-setup-security-sshd
-bin/omarchy-remove-security-sshd

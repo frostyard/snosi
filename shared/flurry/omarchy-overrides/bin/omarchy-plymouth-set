@@ -1,8 +1,0 @@
-#!/bin/bash
-
-# omarchy:summary=Recolor the Plymouth theme (snosi: baked into the image)
-
-# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
-source /usr/share/omarchy/bin/omarchy-snosi-lib
-snosi_immutable "The boot splash is baked into the image initrd and cannot be recolored at runtime."
-exit 1

@@ -37,24 +37,6 @@
   },
   {
     "family": "bootc",
-    "name": "flurry",
-    "description": "Hyprland desktop (Omarchy replica) with backports kernel",
-    "ref": "ghcr.io/frostyard/flurry:latest",
-    "cosign_pub_key": "/usr/lib/snosi/cosign.pub",
-    "default_groups": [
-      "sudo",
-      "adm",
-      "video",
-      "input",
-      "render",
-      "plugdev",
-      "netdev",
-      "lpadmin",
-      "scanner"
-    ]
-  },
-  {
-    "family": "bootc",
     "name": "cayo",
     "description": "Headless server with podman and backports kernel",
     "ref": "ghcr.io/frostyard/cayo:latest",

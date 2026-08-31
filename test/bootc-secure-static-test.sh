@@ -216,7 +216,7 @@ grep -Fq '/usr/lib/snosi/esp.sh' "$reconciler"
 
 # Only OCI bootc profiles consume the fragment. Native A/B, including the raw
 # fixture, must remain entirely independent of its packages and trust files.
-for profile in cayo snow snowfield flurry; do
+for profile in cayo snow snowfield; do
     grep -q '^Include=%D/shared/bootc-secure/mkosi.conf$' \
         "$root/mkosi.profiles/$profile/mkosi.conf"
 done

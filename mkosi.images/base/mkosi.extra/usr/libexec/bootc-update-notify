@@ -40,13 +40,14 @@ fi
 # The login-time run (static graphical-session.target.wants/ link on the
 # service) races the session's notification daemon: graphical-session.target
 # can be reached before the shell's org.freedesktop.Notifications provider is
-# up (observed live on flurry, where Quickshell starts in parallel), and a
+# up (observed live on a desktop product whose shell starts in parallel
+# with the session target), and a
 # failed notify-send here would strand the whole session unnotified -- the
 # path unit is edge-triggered (PathModified= only, see its header), so
 # nothing retries until the semaphore is next rewritten. Bounded retry
 # covers daemon startup; if every attempt fails, exit 0 WITHOUT writing the
 # ack (a later trigger or the next login retries; a nonzero exit would only
-# add a spurious failed-unit toast via fumon on flurry).
+# add a spurious failed-unit toast on a session that surfaces those).
 sent=0
 for _ in 1 2 3 4 5 6; do
     if notify-send --app-name="Snow Linux" --icon=software-update-available \

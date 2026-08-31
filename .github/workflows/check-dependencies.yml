@@ -506,55 +506,6 @@ jobs:
             echo "bazaar_commit=$LATEST_BZ" >> $GITHUB_OUTPUT
           fi
 
-          # Check omarchy (vendored into the flurry image). Follows tagged
-          # releases, not HEAD: every re-pin needs override-layer triage
-          # (see shared/flurry/scripts/build/omarchy.chroot), so weekly HEAD
-          # churn would be noise.
-          CURRENT_OM=$(jq -r '.omarchy.version' "$CHECKSUMS")
-          LATEST_OM_TAG=$(gh_api https://api.github.com/repos/basecamp/omarchy/releases/latest | jq -r '.tag_name')
-          LATEST_OM=""
-          if [[ -n "$LATEST_OM_TAG" && "$LATEST_OM_TAG" != "null" ]]; then
-            LATEST_OM=$(gh_api "https://api.github.com/repos/basecamp/omarchy/commits/${LATEST_OM_TAG}" | jq -r '.sha')
-          fi
-          if [[ -n "$LATEST_OM" && "$LATEST_OM" != "null" && "$LATEST_OM" != "$CURRENT_OM" ]]; then
-            UPDATES="${UPDATES}omarchy: ${CURRENT_OM:0:12} -> ${LATEST_OM:0:12} (${LATEST_OM_TAG})\n"
-            echo "omarchy_update=true" >> $GITHUB_OUTPUT
-            echo "omarchy_commit=$LATEST_OM" >> $GITHUB_OUTPUT
-          fi
-
-          # Check JetBrainsMono Nerd Font (vendored into the flurry image)
-          CURRENT_JBM=$(jq -r '.["jetbrains-mono-nerd"].version' "$CHECKSUMS")
-          LATEST_JBM=$(gh_api https://api.github.com/repos/ryanoasis/nerd-fonts/releases/latest | jq -r '.tag_name')
-          if [[ "$LATEST_JBM" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
-             ver_gt "${LATEST_JBM#v}" "$CURRENT_JBM"; then
-            UPDATES="${UPDATES}jetbrains-mono-nerd: $CURRENT_JBM -> ${LATEST_JBM#v}\n"
-            echo "jbm_update=true" >> $GITHUB_OUTPUT
-            echo "jbm_version=${LATEST_JBM#v}" >> $GITHUB_OUTPUT
-          fi
-
-          # Check mise (vendored into the flurry image)
-          CURRENT_MISE=$(jq -r '.mise.version' "$CHECKSUMS")
-          LATEST_MISE=$(gh_api https://api.github.com/repos/jdx/mise/releases/latest | jq -r '.tag_name')
-          if [[ "$LATEST_MISE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
-             ver_gt "${LATEST_MISE#v}" "$CURRENT_MISE"; then
-            UPDATES="${UPDATES}mise: $CURRENT_MISE -> ${LATEST_MISE#v}\n"
-            echo "mise_update=true" >> $GITHUB_OUTPUT
-            echo "mise_version=${LATEST_MISE#v}" >> $GITHUB_OUTPUT
-          fi
-
-          # Check xdg-terminal-exec (vendored into the flurry image over
-          # Debian's 0.12.3, which predates --print-id; the flurry build
-          # fails closed when Debian reaches 0.13, retiring this entry)
-          CURRENT_XTE=$(jq -r '.["xdg-terminal-exec"].version' "$CHECKSUMS")
-          LATEST_XTE=$(gh_api 'https://api.github.com/repos/Vladimir-csp/xdg-terminal-exec/tags?per_page=100' |
-            jq -r '.[].name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))' | sort -V | tail -n1)
-          if [[ "$LATEST_XTE" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
-             ver_gt "${LATEST_XTE#v}" "$CURRENT_XTE"; then
-            UPDATES="${UPDATES}xdg-terminal-exec: $CURRENT_XTE -> ${LATEST_XTE#v}\n"
-            echo "xte_update=true" >> $GITHUB_OUTPUT
-            echo "xte_version=${LATEST_XTE#v}" >> $GITHUB_OUTPUT
-          fi
-
           # Check Syft CLI used for SBOM generation
           CURRENT_SYFT=$(awk '$1 == "syft-version:" { print $2; exit }' .github/workflows/build-images.yml)
           LATEST_SYFT=$(gh_api https://api.github.com/repos/anchore/syft/releases/latest | jq -r '.tag_name')
@@ -633,14 +584,6 @@ jobs:
           LOGOMENU_COMMIT: ${{ steps.check.outputs.logomenu_commit }}
           BAZAAR_UPDATE: ${{ steps.check.outputs.bazaar_update }}
           BAZAAR_COMMIT: ${{ steps.check.outputs.bazaar_commit }}
-          OMARCHY_UPDATE: ${{ steps.check.outputs.omarchy_update }}
-          OMARCHY_COMMIT: ${{ steps.check.outputs.omarchy_commit }}
-          JBM_UPDATE: ${{ steps.check.outputs.jbm_update }}
-          JBM_VERSION: ${{ steps.check.outputs.jbm_version }}
-          MISE_UPDATE: ${{ steps.check.outputs.mise_update }}
-          MISE_VERSION: ${{ steps.check.outputs.mise_version }}
-          XTE_UPDATE: ${{ steps.check.outputs.xte_update }}
-          XTE_VERSION: ${{ steps.check.outputs.xte_version }}
           SYFT_UPDATE: ${{ steps.check.outputs.syft_update }}
           SYFT_VERSION: ${{ steps.check.outputs.syft_version }}
           COSIGN_UPDATE: ${{ steps.check.outputs.cosign_update }}
@@ -725,58 +668,6 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
               '.bazaar.url=$u | .bazaar.sha256=$s | .bazaar.version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-          if [[ "$OMARCHY_UPDATE" == "true" ]]; then
-            COMMIT="$OMARCHY_COMMIT"
-            validate_update_value "omarchy" "$COMMIT" '^[a-f0-9]{40}$'
-            URL="https://codeload.github.com/basecamp/omarchy/tar.gz/${COMMIT}"
-            TMP=$(mktemp)
-            curl -fsSL --max-time 120 -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
-              '.omarchy.url=$u | .omarchy.sha256=$s | .omarchy.version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-          if [[ "$JBM_UPDATE" == "true" ]]; then
-            VERSION="$JBM_VERSION"
-            validate_update_value "jetbrains-mono-nerd" "$VERSION" '^[0-9]+\.[0-9]+\.[0-9]+$'
-            URL="https://github.com/ryanoasis/nerd-fonts/releases/download/v${VERSION}/JetBrainsMono.zip"
-            TMP=$(mktemp)
-            curl -fsSL --max-time 300 -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$VERSION" \
-              '.["jetbrains-mono-nerd"].url=$u | .["jetbrains-mono-nerd"].sha256=$s | .["jetbrains-mono-nerd"].version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-          if [[ "$MISE_UPDATE" == "true" ]]; then
-            VERSION="$MISE_VERSION"
-            validate_update_value "mise" "$VERSION" '^[0-9]+\.[0-9]+\.[0-9]+$'
-            URL="https://github.com/jdx/mise/releases/download/v${VERSION}/mise-v${VERSION}-linux-x64"
-            TMP=$(mktemp)
-            curl -fsSL --max-time 300 -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$VERSION" \
-              '.mise.url=$u | .mise.sha256=$s | .mise.version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-          if [[ "$XTE_UPDATE" == "true" ]]; then
-            VERSION="$XTE_VERSION"
-            validate_update_value "xdg-terminal-exec" "$VERSION" '^[0-9]+\.[0-9]+\.[0-9]+$'
-            URL="https://github.com/Vladimir-csp/xdg-terminal-exec/archive/refs/tags/v${VERSION}.tar.gz"
-            TMP=$(mktemp)
-            curl -fsSL --max-time 120 -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$VERSION" \
-              '.["xdg-terminal-exec"].url=$u | .["xdg-terminal-exec"].sha256=$s | .["xdg-terminal-exec"].version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi

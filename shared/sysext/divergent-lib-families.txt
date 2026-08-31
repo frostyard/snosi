@@ -1,7 +1,8 @@
 # Shared-library families that at least one desktop product ships from a
 # non-trixie suite (backports/forky), so a sysext delta copy would
 # shadow-DOWNGRADE the product's version for the whole merged /usr
-# (issue #781; root-caused live 2026-08-25 on flurry).
+# (issue #781; root-caused live 2026-08-25 on a since-retired Hyprland
+# desktop product that pinned much of its GUI stack from trixie-backports).
 #
 # Format: one shell glob per line, matched against paths RELATIVE to the
 # delta's /usr (e.g. lib/x86_64-linux-gnu/libxkbcommon.so.0.0.0).
@@ -13,18 +14,22 @@
 # the app now needs a newer version than gui-base carries -- both need
 # re-triage, never normalization.
 
-# xkbcommon (flurry: trixie-backports 1.13 vs trixie 1.7 -- the original
-# Hyprland-killing case)
+# xkbcommon (the original case: trixie-backports 1.13 vs trixie 1.7 on the
+# retired product. Kept as defence in depth -- gui-base carries
+# libxkbcommon0, so a match here means gui-base lost it or apt upgraded the
+# lib into a delta)
 lib/*/libxkbcommon*.so*
 lib/*/libxkbregistry*.so*
 
-# pipewire family (flurry: trixie-backports 1.4.9 vs trixie 1.4.2)
+# pipewire family (trixie-backports 1.4.9 vs trixie 1.4.2 on the retired
+# product; same defence-in-depth reasoning as xkbcommon)
 lib/*/libpipewire*.so*
 lib/*/pipewire-0.3/*
 lib/*/spa-0.2/*
 lib/*/libwireplumber*.so*
 
-# mesa userspace (flurry: trixie-backports 26.x via the hyprland closure).
+# mesa userspace -- LIVE today: snowfield pins mesa from trixie-backports
+# through shared/kernel/surface/mkosi.conf while snow tracks trixie.
 # Includes the mesa-vulkan-drivers ICDs and layers -- chatgpt's deb
 # hard-depends on that package, which is why gui-base and
 # shared/packages/snow both carry it.
@@ -37,16 +42,9 @@ lib/*/gbm/*
 lib/*/libvulkan_*.so*
 lib/*/libVkLayer_*.so*
 
-# alsa (flurry: trixie-backports 1.2.16 vs trixie 1.2.14)
+# alsa (trixie-backports 1.2.16 vs trixie 1.2.14 on the retired product;
+# same defence-in-depth reasoning as xkbcommon)
 lib/*/libasound.so*
-
-# hyprland closure (flurry-only, all trixie-backports; no app sysext should
-# ever carry these, so any match is a hard recipe error)
-lib/*/libhyprutils*.so*
-lib/*/libhyprlang*.so*
-lib/*/libhyprcursor*.so*
-lib/*/libhyprgraphics*.so*
-lib/*/libaquamarine*.so*
 
 # systemd libraries (secure bootc products ship the forky systemd family;
 # theoretical member of the class -- no sysext ships these today)

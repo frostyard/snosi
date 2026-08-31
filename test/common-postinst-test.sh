@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # Fixture regression test for shared/scripts/common-postinst.sh, the common
-# post-installation logic sourced by all three image profiles
-# (shared/{snow,cayo,flurry}/scripts/postinstall/*.postinst.chroot). That
+# post-installation logic sourced by the image profiles
+# (shared/{snow,cayo}/scripts/postinstall/*.postinst.chroot). That
 # script rewrites /usr/lib/os-release (NAME/PRETTY_NAME/ID and the sysext
 # matching fields) and generates the /usr/share/frostyard package manifest,
 # so it hard-requires OS_PRETTY_NAME and OS_NAME to be set before it is

@@ -54,7 +54,6 @@ duplicate-packages-test.sh	ci	validate.yml
 etc-overlay-prune-test.sh	ci	validate.yml
 firn-catalog-test.sh	ci	validate.yml
 firn-installer-iso-test.sh	unwired	-
-flurry-keyring-test.sh	unwired	-
 generate-sbom-test.sh	unwired	-
 latest-apt-version-test.sh	ci	validate.yml
 lemonade-sysext-test.sh	ci	validate.yml

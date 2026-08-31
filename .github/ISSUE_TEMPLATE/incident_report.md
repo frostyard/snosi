@@ -13,7 +13,7 @@ One or two sentences: what broke, what is user-visible, and current status
 
 ## Impact
 
-- **Affected profiles/images:** (e.g. `cayo`, `snow`, `snowfield`, `flurry`)
+- **Affected profiles/images:** (e.g. `cayo`, `snow`, `snowfield`)
 - **Affected tags:** (`latest`, a specific version tag, or both)
 - **User-facing effect:** (stale image, failed pull, wrong image promoted,
   broken install/update path)

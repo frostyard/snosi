@@ -6,7 +6,7 @@
 # because the semaphore persists until the applying reboot BY DESIGN, that
 # loops service starts until systemd's path trigger limit (200 in 2s) kills
 # this unit with 'trigger-limit-hit' (root-caused live 2026-08-26 on a
-# flurry install; the earlier StartLimitIntervalSec=0 fix had only unmasked
+# desktop install; the earlier StartLimitIntervalSec=0 fix had only unmasked
 # this second limiter). The login-while-pending case PathExists= used to
 # cover is handled by the static graphical-session.target.wants/ link on
 # bootc-update-notify.service itself (condition-gated, ack-gated).

@@ -1,4 +1,0 @@
-disable ModemManager.service
-disable cni-dhcp.service
-disable rsync.service
-disable wpa_supplicant.service

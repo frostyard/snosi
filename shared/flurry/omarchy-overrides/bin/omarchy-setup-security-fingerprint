@@ -1,8 +1,0 @@
-#!/bin/bash
-
-# omarchy:summary=Set up fingerprint login (snosi: not supported yet)
-
-# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
-source /usr/share/omarchy/bin/omarchy-snosi-lib
-snosi_immutable "fprintd is not shipped on Flurry yet."
-exit 1
