@@ -50,9 +50,9 @@
     "version": "1.36.3+k3s1"
   },
   "lemonade": {
-    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.7.0/lemonade-server_11.7.0-debian13_amd64.deb",
-    "sha256": "68bbb117c4f6a87aa9b21dabadb553423baae3175c2daeed0bfd3985f1440857",
-    "version": "11.7.0"
+    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.8.1/lemonade-server_11.8.1-debian13_amd64.deb",
+    "sha256": "faf3ab2a3366a5e07471b372c546461f660f174fcaf63c6e61fbbe39b8aa1c86",
+    "version": "11.8.1"
   },
   "paseo": {
     "url": "https://github.com/getpaseo/paseo/releases/download/v0.5.1/Paseo-0.5.1-amd64.deb",
