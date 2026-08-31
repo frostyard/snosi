@@ -1,8 +1,8 @@
 {
   "1password": {
-    "url": "https://downloads.1password.com/linux/debian/amd64/pool/main/1/1password/1password-8.12.32.amd64.deb",
-    "sha256": "9105a3052730eb327791e69ebe916575d2f5113c3d1df9f6c71f307d2c90994e",
-    "version": "8.12.32"
+    "url": "https://downloads.1password.com/linux/debian/amd64/pool/main/1/1password/1password-8.12.34.amd64.deb",
+    "sha256": "25609b8b9e2d684d487c10957c0c012addc177d293dfc5a09469f7879afcefad",
+    "version": "8.12.34"
   },
   "bitwarden": {
     "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.8.0/Bitwarden-2026.8.0-amd64.deb",
@@ -25,29 +25,29 @@
     "version": "3.1.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_151.0.4129.107-1_amd64.deb",
-    "sha256": "1193e2de1588c14aff86704cb479f512955cfd6c5f2d5c2bb54ff536a77f624c",
-    "version": "151.0.4129.107-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_152.0.4191.53-1_amd64.deb",
+    "sha256": "b3322445fbe6ce1e0bcff84ebbe0edea365e0eaf498b1ef6136dda52dea6e3a7",
+    "version": "152.0.4191.53-1"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.133.0/code-server_4.133.0_amd64.deb",
-    "sha256": "241feb9fcbd96b1e2caa2e16ecafa67a70d6f7f60659058ddc9a8ba51d366d7e",
-    "version": "4.133.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.135.0/code-server_4.135.0_amd64.deb",
+    "sha256": "f87d0d49c6c0a59d41214c9510f506e4123991f2d27b41f6d56f3f5c96458d3e",
+    "version": "4.135.0"
   },
   "coder": {
-    "url": "https://github.com/coder/coder/releases/download/v2.35.4/coder_2.35.4_linux_amd64.deb",
-    "sha256": "d3f50f9aad0373d68aefd55341fb55cf750ba959fbd912ea55511e466765ec57",
-    "version": "2.35.4"
+    "url": "https://github.com/coder/coder/releases/download/v2.35.6/coder_2.35.6_linux_amd64.deb",
+    "sha256": "afd7dcc896d9ac255cf526410632a5a225a2b9c37f8914749b1f1be995861d56",
+    "version": "2.35.6"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.12/GitHub-Copilot-linux-x64.deb",
-    "sha256": "813f02cca6a8c8d872903b4d197403a98734c8146f368b63c044f123d5673e80",
-    "version": "1.1.12"
+    "url": "https://github.com/github/app/releases/download/v1.1.14/GitHub-Copilot-linux-x64.deb",
+    "sha256": "d2ac25b55363278c7e4b50536676da827e33623123317dcc5e7e956f87e002d0",
+    "version": "1.1.14"
   },
   "k3s": {
-    "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.3%2Bk3s1/k3s",
-    "sha256": "2f98a9f8fe5782479ee2d54e70a1b10a7f6fd4cae8d38ed3098452dc6eed76b5",
-    "version": "1.36.3+k3s1"
+    "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.4%2Bk3s1/k3s",
+    "sha256": "835873f37245fc615f547a2fe2af9402a347875f13fa64a1f136de644955ea3f",
+    "version": "1.36.4+k3s1"
   },
   "lemonade": {
     "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.8.1/lemonade-server_11.8.1-debian13_amd64.deb",
@@ -55,9 +55,9 @@
     "version": "11.8.1"
   },
   "paseo": {
-    "url": "https://github.com/getpaseo/paseo/releases/download/v0.5.1/Paseo-0.5.1-amd64.deb",
-    "sha256": "eed54db0bfd3f3ac6fc47ebdd04de2430ac1e7ccafd43b49644ef23bfb00821e",
-    "version": "0.5.1"
+    "url": "https://github.com/getpaseo/paseo/releases/download/v0.7.0/Paseo-0.7.0-amd64.deb",
+    "sha256": "2199c58b6294895b2cb606a543b158877f4c541307041c7c09f4661c2258c42e",
+    "version": "0.7.0"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.9.0/frostyard-pilothouse_0.9.0_amd64.deb",
