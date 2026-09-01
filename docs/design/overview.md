@@ -1250,8 +1250,10 @@ about the pre-existing copy at plymouth's install, and mkosi's
 non-interactive stdin turns that into "end of file on stdin at conffile
 prompt" (build failure, proven live).
 
-**Why the native splash needed three kargs/mechanisms** (all root-caused
-live with `plymouth.debug=file:/dev/ttyS1` on a second QEMU serial):
+**Why the native splash needed four kargs/mechanisms** (1–3 root-caused
+live with `plymouth.debug=file:/dev/ttyS1` on a second QEMU serial; 4
+root-caused from in-guest kernel/journal timing on the published
+candidates):
 
 1. `splash plymouth.ignore-serial-consoles` (composition/snow): with
    `console=ttyS0` configured (ab-root fragment), plymouthd logs "serial
@@ -1281,6 +1283,33 @@ live with `plymouth.debug=file:/dev/ttyS1` on a second QEMU serial):
    VM: QEMU adds a default bochs VGA unless `-vga none`, and hours of
    confusing crash/no-crash results traced to that hidden second GPU —
    always pass `-vga none` when hand-testing (the harness already does).
+4. `plymouth-start.service.d/10-wait-drm.conf` (snow tree) holds plymouthd
+   behind TWO bounded `udevadm wait`s, both `-`-prefixed: `/dev/dri/card0`
+   (DRM enumeration barrier, mechanism 2's real-root analogue) and
+   `/dev/fb0` (**console-handoff barrier**). card0 appears when the DRM
+   device registers, which is before the kernel rebinds the VT layer from
+   the dummy console to fbcon ("Console: switching to colour frame buffer
+   device", emitted immediately before the driver's `fb0: <drv>drmfb`
+   line). plymouthd started inside that window sets up its VT while the
+   console is rebound underneath it and dies with SIGSEGV — the same
+   unguarded 24.004.60 terminal path as mechanism 3. It is snow-only in
+   practice and kernel-config-derived: `linux-image-amd64/trixie-backports`
+   (7.1.8+deb13-amd64) sets `CONFIG_FRAMEBUFFER_CONSOLE=y` WITHOUT
+   `CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER`, so fbcon binds as soon
+   as virtio_gpu's fbdev registers — measured in the smoke-test VM at
+   t+4.95s, inside plymouth-start's 4.69–5.44s window and ~40 ms after
+   card0 (virtio_gpu's whole probe spans 140 ms there). `linux-image-surface`
+   (6.19.8-surface-3, snowfield) sets `DEFERRED_TAKEOVER=y`, never binds
+   fbcon during boot (`/sys/class/vtconsole` holds only vtcon0 dummy at
+   multi-user) and its probe spans 21 ms, so snowfield never enters the
+   window; cayo installs no plymouth (`Packages=plymouth` lives only in
+   `shared/packages/snow/`). Symptom when it loses the race: `plymouth-start.service`
+   `killed, signal=SEGV` → `is-system-running` = `degraded` →
+   `test-public-origin`'s boot smoke gate fails → no `native-verified-snow`
+   artifact → `promote-snow` skips. Observed on main in runs
+   `33230153367` (2026-08-29) and `33465852243` (2026-09-01); issue #850.
+   Intermittent by construction — the window is tens of ms wide, so it is
+   host-speed dependent and PR builds never run the gate.
 
 **Serial passphrase preserved:** `console=tty0` moves
 `systemd-ask-password-console`'s prompt off ttyS0, which the secure-boot

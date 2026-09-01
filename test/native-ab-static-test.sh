@@ -370,8 +370,13 @@ if grep -q 'console=tty0' "$root/shared/native-ab/channels/cayo/mkosi.conf"; the
     echo "cayo channel must not carry console=tty0" >&2
     exit 1
 fi
-grep -q 'udevadm wait /dev/dri/card0' \
-    "$root/shared/snow/tree/usr/lib/systemd/system/plymouth-start.service.d/10-wait-drm.conf"
+# Both plymouth-start waits are load-bearing: card0 bounds the DRM
+# enumeration race, /dev/fb0 bounds the fbcon console handoff (the
+# backports kernel has no CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER, so
+# fbcon binds mid-plymouthd-startup and 24.004.60 SEGVs -- issue #850).
+plymouth_dropin="$root/shared/snow/tree/usr/lib/systemd/system/plymouth-start.service.d/10-wait-drm.conf"
+grep -q 'udevadm wait /dev/dri/card0' "$plymouth_dropin"
+grep -q 'udevadm wait /dev/fb0' "$plymouth_dropin"
 [[ -f "$ab/tree/usr/lib/systemd/system/snosi-ask-password-serial.service" ]]
 [[ -f "$ab/tree/usr/lib/systemd/system/snosi-ask-password-serial.path" ]]
 [[ -L "$ab/tree/usr/lib/systemd/system/sysinit.target.wants/snosi-ask-password-serial.path" ]]
