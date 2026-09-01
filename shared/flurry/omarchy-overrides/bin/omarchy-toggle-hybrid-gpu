@@ -1,8 +1,0 @@
-#!/bin/bash
-
-# omarchy:summary=Toggle hybrid GPU mode (snosi: not supported)
-
-# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
-source /usr/share/omarchy/bin/omarchy-snosi-lib
-snosi_immutable "supergfxctl is not shipped on Flurry."
-exit 1

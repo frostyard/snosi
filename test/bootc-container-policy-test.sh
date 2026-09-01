@@ -45,7 +45,7 @@ if [[ -f "$POLICY" ]] && command -v jq >/dev/null; then
         fail "unlisted images are rejected"
     fi
 
-    for image in cayo snow snowfield flurry; do
+    for image in cayo snow snowfield; do
         scope="ghcr.io/frostyard/$image"
         if jq -e --arg scope "$scope" '
             .transports.docker[$scope] == [{
@@ -66,7 +66,7 @@ if [[ -f "$POLICY" ]] && command -v jq >/dev/null; then
         fail "previously policy-verified local storage images are accepted"
     fi
 
-    for image in cayo snow snowfield flurry; do
+    for image in cayo snow snowfield; do
         scope="ghcr.io/frostyard/${image}-wrong-repository"
         if jq -e --arg scope "$scope" '.transports.docker[$scope] == null' "$POLICY" >/dev/null; then
             pass "wrong repository $scope is rejected"
@@ -75,10 +75,10 @@ if [[ -f "$POLICY" ]] && command -v jq >/dev/null; then
         fi
     done
 
-    if jq -e '[.transports.docker | keys[] | select(startswith("ghcr.io/frostyard/"))] == ["ghcr.io/frostyard/cayo", "ghcr.io/frostyard/flurry", "ghcr.io/frostyard/snow", "ghcr.io/frostyard/snowfield"]' "$POLICY" >/dev/null; then
-        pass "only the four supported GHCR repositories are trusted"
+    if jq -e '[.transports.docker | keys[] | select(startswith("ghcr.io/frostyard/"))] == ["ghcr.io/frostyard/cayo", "ghcr.io/frostyard/snow", "ghcr.io/frostyard/snowfield"]' "$POLICY" >/dev/null; then
+        pass "only the three supported GHCR repositories are trusted"
     else
-        fail "only the four supported GHCR repositories are trusted"
+        fail "only the three supported GHCR repositories are trusted"
     fi
 
     # LOCAL file transports are accepted so an operator can actually do image
@@ -365,7 +365,7 @@ run_live_policy_proof() {
     IFS=, read -r -a live_images <<<"${LIVE_IMAGES:-cayo}"
     for image in "${live_images[@]}"; do
         case "$image" in
-            cayo|snow|snowfield|flurry) ;;
+            cayo|snow|snowfield) ;;
             *) printf 'BLOCKED: LIVE_IMAGES contains unsupported product %s\n' "$image" >&2; return 2 ;;
         esac
         if HOME="$live_home" podman pull "ghcr.io/frostyard/$image:latest" >/dev/null 2>&1; then

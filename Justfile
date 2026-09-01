@@ -25,9 +25,6 @@ snow: ensure-mkosi
 snowfield: ensure-mkosi
     sudo PATH="$PATH" {{just}} _snowfield
 
-flurry: ensure-mkosi
-    sudo PATH="$PATH" {{just}} _flurry
-
 cayo: ensure-mkosi
     sudo PATH="$PATH" {{just}} _cayo
 
@@ -163,10 +160,6 @@ _snow: _clean
 [private]
 _snowfield: _clean
     {{mkosi}} --profile snowfield build
-
-[private]
-_flurry: _clean
-    {{mkosi}} --profile flurry build
 
 [private]
 _cayo: _clean

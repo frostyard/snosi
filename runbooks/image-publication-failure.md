@@ -89,7 +89,7 @@ listing as a fallback; that reintroduces the original incident class.
 
 - If root cause is unclear after Steps 1–4, or the guard (Step 2) is
   green but the failure recurs across profiles (`cayo`, `snow`,
-  `snowfield`, `flurry`), open an incident using
+  `snowfield`), open an incident using
   [.github/ISSUE_TEMPLATE/incident_report.md](../.github/ISSUE_TEMPLATE/incident_report.md).
 - Once resolved, write up a postmortem using
   [docs/postmortem-template.md](../docs/postmortem-template.md),

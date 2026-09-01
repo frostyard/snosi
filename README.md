@@ -245,7 +245,7 @@ Since sysexts are `Overlay=yes` deltas, apt omits from each delta exactly
 the packages the build base already has. Building desktop apps against
 the server-ish `base` let an Electron/GTK app's delta carry its whole GUI
 lib closure, including libraries some products pin from other suites
-(e.g. flurry's trixie-backports libxkbcommon/pipewire/mesa) — the merged
+(e.g. snowfield's trixie-backports mesa) — the merged
 delta's plain-trixie copy then shadow-downgraded the product's pinned
 version for the entire `/usr` overlay. `gui-base` fixes this by supplying
 the common GUI closure at the build-base layer, so those packages are
@@ -436,9 +436,6 @@ just snow
 
 # Build snowfield (Surface devices)
 just snowfield
-
-# Build flurry (Hyprland/Omarchy-replica desktop)
-just flurry
 
 # Build cayo server image
 just cayo

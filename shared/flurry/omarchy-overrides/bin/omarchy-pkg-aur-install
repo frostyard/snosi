@@ -1,8 +1,0 @@
-#!/bin/bash
-
-# omarchy:summary=Install AUR packages via picker (snosi: not available)
-
-# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
-source /usr/share/omarchy/bin/omarchy-snosi-lib
-snosi_immutable "AUR packages are not available on Flurry."
-exit 1

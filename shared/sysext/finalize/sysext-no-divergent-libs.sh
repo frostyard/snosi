@@ -8,8 +8,9 @@
 # already has. A delta copy of a lib that a desktop product ships from a
 # different suite shadow-downgrades the product's version for the whole
 # merged /usr — chatgpt/claude-desktop deltas built against `base` shipped
-# trixie libxkbcommon 1.7 over flurry's backports 1.13 and killed Hyprland
-# (root-caused live 2026-08-25). gui-base keeps those families out of the
+# trixie libxkbcommon 1.7 over the backports 1.13 of a since-retired
+# Hyprland desktop product and killed its compositor (root-caused live
+# 2026-08-25). gui-base keeps those families out of the
 # delta by construction; this tripwire catches the two ways the
 # construction can silently rot: gui-base losing a package, or apt
 # UPGRADING a lib into the delta because the app began requiring a newer

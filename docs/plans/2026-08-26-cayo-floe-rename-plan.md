@@ -26,7 +26,7 @@ host needs to be. One-liner: *"Snow falls, Floe holds you up."*
 1. **Signature policy is enforced by the *running* image.** Installed bootc
    systems update by `podman pull` (which enforces the shipped
    `/etc/containers/policy.json`) followed by `bootc switch/upgrade`. The
-   current policy accepts exactly `ghcr.io/frostyard/{cayo,snow,snowfield,flurry}`
+   current policy accepts exactly `ghcr.io/frostyard/{cayo,snow,snowfield}`
    with `default: reject`. A cayo install therefore **cannot pull a floe image
    until it is first updated to a cayo build whose policy includes the floe
    scope**. So trust pre-staging (Phase 1) must publish *as cayo* and land on
@@ -75,12 +75,13 @@ and never needs the pre-staged scope.
 
 - [ ] Add `ghcr.io/frostyard/floe` as a `sigstoreSigned`/`matchRepository`
       scope in `shared/bootc-secure/tree/etc/containers/policy.json`
-      (exactly the flurry precedent). Keep the cayo scope. Do not touch
+      (exactly the precedent set when a fourth product was added). Keep the
+      cayo scope. Do not touch
       `default: reject` or any transport stanza.
 - [ ] Update `test/bootc-container-policy-test.sh` expectations for the new
       scope; run it (fixtures) locally.
 - [ ] Merge; let `build-images.yml` `secure-build` publish new
-      cayo/snow/snowfield/flurry `latest` (shared file — all four get the
+      cayo/snow/snowfield `latest` (shared file — all three get the
       scope, which floe itself also needs later or floe installs could never
       take their own updates).
 - [ ] The bootc operator updates and reboots (hourly `bootc-update-stage` +
@@ -135,7 +136,7 @@ the load-bearing groups:
       `usr/lib/systemd/system/brew-setup.service`,
       `usr/lib/systemd/system/incus.socket.d/override.conf`,
       `usr/lib/systemd/system/docker.socket.d/override.conf`. The karg
-      follows the `<ImageId>-linux.live=1` convention snow/flurry use
+      follows the `<ImageId>-linux.live=1` convention snow uses
       (`snow-linux.live=1`); nothing in-tree sets it, so the condition
       strings are the only thing to rename — and grep confirms it, since
       a `cayo-linux.live` left behind would silently never match a
@@ -232,8 +233,7 @@ the load-bearing groups:
       `docs/bootc-secure-*.md` (the install contract's
       `PROFILE=cayo|snow|snowfield` grammar), `docs/snosi-kargs.md`,
       `docs/integration-contracts.md`, `.github/prompts/native-ab-change.md`,
-      PR template, `skills/flurry/SKILL.md`, `docs/README.md` index (add this
-      plan).
+      PR template, `docs/README.md` index (add this plan).
 - [ ] Do **not** rewrite ADRs, `docs/plans/2026-02-19-cayo-ship-*`,
       `docs/native-ab-prototype-history.md`, superpowers specs/plans, or
       `.memory/` history — they are historical record; the org ADR is the
@@ -426,7 +426,7 @@ because they are absent from this snapshot.
 
 - [ ] snosi PR: remove the `ghcr.io/frostyard/cayo` scope from
       `policy.json` and remove all three cayo compatibility tokens from the
-      policy test (floe/snow/snowfield/flurry remain).
+      policy test (floe/snow/snowfield remain).
 - [ ] Merge that PR and let the protected `secure-build` publish the signed
       **retirement release** (call it R) before changing either host's
       persistent `/etc`. Record R's 14-digit image version and immutable
@@ -480,5 +480,5 @@ None — the install-inventory and dormant-repo questions were resolved
   [native-ab-publication.md](../native-ab-publication.md),
   [bootc-secure-install-contract.md](../bootc-secure-install-contract.md)
 - Guard design: [ADR-0006 name-triggered publication guards](../adr/0006-name-triggered-publication-guards.md)
-- Precedent for adding a policy scope + new product end-to-end: the flurry
-  work, [2026-08-25-flurry-omarchy-plan.md](2026-08-25-flurry-omarchy-plan.md)
+- Precedent for adding a policy scope + new product end-to-end: the
+  fourth-product work of 2026-08 (plan since removed with the product)

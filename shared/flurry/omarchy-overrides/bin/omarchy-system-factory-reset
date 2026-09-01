@@ -1,8 +1,0 @@
-#!/bin/bash
-
-# omarchy:summary=Factory reset (snosi: reinstall instead)
-
-# snosi override: see shared/flurry/omarchy-overrides/ in the snosi repo.
-source /usr/share/omarchy/bin/omarchy-snosi-lib
-snosi_immutable "Factory reset is not supported; reinstall Flurry with the snosi installer."
-exit 1
