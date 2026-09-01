@@ -557,6 +557,21 @@ succeeds the moment the cache is stale or absent.
    applies equally to sysexts built in other repositories: never
    ship `usr/share/icons/**/icon-theme.cache` in a sysext.
 
+`/usr/lib/<triplet>/gdk-pixbuf-2.0/<abi>/loaders.cache` is another singleton,
+but it cannot always be stripped: a base-built extension can introduce
+GdkPixbuf on cayo, whose base has no graphical stack or fallback loader cache.
+Any sysext that ships `loaders.cache` must therefore also ship
+`libpixbufloader_svg.so` and register its installed path in that cache. The
+shared cache finalizer fails the build otherwise. This is the minimum cache
+baseline needed when the same extension is merged on Snow: an incomplete
+extension cache shadows Snow's complete cache for all of `/usr`. This happened
+live on 2026-09-01 after the rebuilt `dev` and `incus` extensions and Paseo
+0.7.0 each published a 2,582-byte cache without SVG. GNOME Shell logged
+`Could not load a pixbuf from icon theme` and most of its Adwaita SVG icons
+rendered blank even though Snow itself shipped `librsvg2-common` and a correct
+cache. Base-built graphical extensions must list `librsvg2-common` explicitly;
+it is only a Recommends of GTK/Adwaita and mkosi builds recommends-off.
+
 **Icon placement notes:**
 
 - `/usr/share/icons/hicolor/<size>/apps/<icon>.png` (or `scalable/apps/*.svg`)
