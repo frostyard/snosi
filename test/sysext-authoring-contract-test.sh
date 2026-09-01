@@ -237,6 +237,47 @@ run_negative_fixture mismatched-feature "transfer must select Features=fixture"
 run_negative_fixture unsigned-transfer "transfer must set Verify=true"
 run_negative_fixture orphan-metadata "orphan component-scoped sysext metadata"
 
+# A GdkPixbuf loaders.cache is authoritative for the whole merged /usr. Prove
+# the shared finalizer accepts a cache that registers SVG and rejects both
+# ways the live 2026-09-01 GNOME icon regression could recur.
+cache_root="$work_dir/gdk-pixbuf-cache"
+cache_dir="$cache_root/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0"
+loader_path=/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader_svg.so
+cache_finalizer="$repo_root/shared/sysext/finalize/sysext-strip-icon-cache.sh"
+mkdir -p "$cache_dir/loaders" "$cache_root/usr/share/icons/hicolor" \
+    "$cache_root/usr/share/glib-2.0/schemas"
+touch "$cache_root$loader_path"
+printf '"%s"\n' "$loader_path" >"$cache_dir/loaders.cache"
+touch "$cache_root/usr/share/icons/hicolor/icon-theme.cache" \
+    "$cache_root/usr/share/glib-2.0/schemas/gschemas.compiled"
+if BUILDROOT="$cache_root" IMAGE_ID=fixture "$cache_finalizer" >/dev/null 2>&1 &&
+    [[ -f "$cache_dir/loaders.cache" ]] &&
+    [[ ! -e "$cache_root/usr/share/icons/hicolor/icon-theme.cache" ]] &&
+    [[ ! -e "$cache_root/usr/share/glib-2.0/schemas/gschemas.compiled" ]]; then
+    fixture_pass "complete GdkPixbuf SVG cache is accepted while disposable caches are stripped"
+else
+    fixture_fail "complete GdkPixbuf SVG cache was not handled correctly"
+fi
+
+rm -f "$cache_root$loader_path"
+if output=$(BUILDROOT="$cache_root" IMAGE_ID=fixture "$cache_finalizer" 2>&1); then
+    fixture_fail "GdkPixbuf cache without an SVG loader was accepted"
+elif [[ $output == *"has no SVG loader"* ]]; then
+    fixture_pass "GdkPixbuf cache without an SVG loader is rejected"
+else
+    fixture_fail "missing SVG loader produced the wrong diagnostic: $output"
+fi
+
+touch "$cache_root$loader_path"
+printf '"/usr/lib/example/libpixbufloader-bmp.so"\n' >"$cache_dir/loaders.cache"
+if output=$(BUILDROOT="$cache_root" IMAGE_ID=fixture "$cache_finalizer" 2>&1); then
+    fixture_fail "GdkPixbuf cache with an unregistered SVG loader was accepted"
+elif [[ $output == *"does not register $loader_path"* ]]; then
+    fixture_pass "GdkPixbuf cache with an unregistered SVG loader is rejected"
+else
+    fixture_fail "unregistered SVG loader produced the wrong diagnostic: $output"
+fi
+
 if ! validate_inventory "$repo_root"; then
     test_failures=$((test_failures + 1))
 fi
