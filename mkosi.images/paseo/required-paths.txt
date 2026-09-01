@@ -8,3 +8,8 @@
 # "Desktop Applications in Sysexts")
 /usr/share/applications/Paseo.desktop
 /usr/share/icons/hicolor/128x128/apps/Paseo.png
+# GdkPixbuf's singleton cache from this base-built graphical sysext must not
+# mask Snow's SVG loader registration. The shared cache finalizer also checks
+# that the cache names this exact module.
+/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader_svg.so
+/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache

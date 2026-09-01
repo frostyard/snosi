@@ -22,3 +22,8 @@
 /usr/lib/x86_64-linux-gnu/libgdk_pixbuf-2.0.so.0
 /usr/lib/x86_64-linux-gnu/libgstreamer-1.0.so.0
 /usr/lib/x86_64-linux-gnu/libpango-1.0.so.0
+# GdkPixbuf's singleton cache from this base-built graphical sysext must not
+# mask Snow's SVG loader registration. The shared cache finalizer also checks
+# that the cache names this exact module.
+/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader_svg.so
+/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache
