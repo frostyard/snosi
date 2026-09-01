@@ -599,6 +599,40 @@ require a `SYSEXT_REVISION` bump or the republish silently skips. Full
 pattern: `docs/design/sysexts.md` "Desktop-App Sysexts Build Against
 gui-base".
 
+**A published sysext delta is frozen against the base it was built on
+(2026-09-01):** an `Overlay=yes` delta omits every package its BUILD BASE
+already had, so the `.raw` is an assertion about base's transitive closure at
+build time that nothing revalidates later. Removing a package from base
+therefore breaks every sysext published before that removal, and
+`skip-duplicates` means an unchanged KEYPACKAGE version never republishes on
+its own. Root-caused on incus/cayo: until 33455fc (2026-08-25, #771) base
+transitively pulled a whole desktop through `network-manager-applet`'s
+`policykit-1-gnome | polkit-1-auth-agent` virtual, so the 2026-08-04 incus
+delta shipped `qemu-system-gui`, `libsdl2-2.0-0`, `libvte-2.91-0`,
+`libgtk-vnc-2.0-0` and `virt-viewer` with NONE of their GTK3/media deps. After
+#771 cayo has 24 unresolved sonames in that payload; the incus deb's bundled
+`/usr/incus/bin/qemu-system-x86_64` (`DT_NEEDED: libepoxy.so.0`, and incusd's
+`/usr/incus/lib/systemd/incusd` wrapper puts `/usr/incus/bin` first on `PATH`,
+so it — not Debian's working `/usr/bin/qemu-system-x86_64` — is what gets
+probed) could not load, incusd registered only the `lxc` driver, and every
+`incus launch --vm` failed with `Instance type "virtual-machine" is not
+supported on this server: Failed getting QEMU version`. Snow was unaffected
+because GNOME supplies the same libs, which is why it reached a server product
+undetected. **Bump `SYSEXT_REVISION` on affected sysexts in the same change
+that shrinks base**, and pin load-bearing library paths in
+`required-paths.txt` (the check runs against the delta, so a pinned
+`/usr/lib/x86_64-linux-gnu/libepoxy.so.0` asserts the delta ships it — adding
+the package to `Packages=` does NOT help, because omission is decided by
+presence in base, not by how the package was requested). Diagnose with `ldd`
+over `/usr/bin`, `/usr/sbin`, `/usr/libexec` (plus
+`LD_LIBRARY_PATH=/usr/incus/lib/` for the bundled incus payload), never by
+reading the package list. Blast radius for a base removal is bounded by
+intersecting the set the old base supplied (one pre-change sysext's new
+manifest minus its published `.raw`) with every other pre-change sysext's
+current manifest; for #771 that was exactly `incus` and `dev`. Full pattern
+and the procedure: `docs/design/sysexts.md` "A Sysext Delta Is Only Valid
+Against the Base It Was Built On".
+
 Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var` at runtime. Configs needed in `/etc` must be:
 
 1. Captured to `/usr/share/factory/etc` during build (via `mkosi.finalize`) — capture ONLY the specific paths the sysext's tmpfiles rules reference, never all of `/etc` (the buildroot `/etc` is the merged base view; a full capture ships `/etc/shadow` and SSH host keys in the published sysext)

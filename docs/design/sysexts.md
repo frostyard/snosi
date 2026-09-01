@@ -240,6 +240,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/incus/incus-sysext-setup` — The setup script the service runs
 - `usr/lib/sysusers.d/{dnsmasq,rdma}.conf` — User/group definitions
 - `usr/lib/tmpfiles.d/incus.conf` — Factory config injection + runtime dirs + xz alternatives links
+- `required-paths.txt` pins `libepoxy.so.0`, `libopus.so.0`, `libgstreamer-1.0.so.0` and `libgtk-3.so.0` in addition to the incus payload: the deb bundles its own `/usr/incus/bin/qemu-system-x86_64` (incusd's wrapper puts `/usr/incus/bin` first on `PATH`, so it, not Debian's qemu, is what gets probed) and the delta must carry that binary's GTK3/media closure itself — see "A Sysext Delta Is Only Valid Against the Base It Was Built On"
 
 ### k3s
 - `mkosi.postinst.chroot` — Downloads the pinned k3s static binary (bare binary on k3s-io/k3s GitHub releases, no deb/apt repo) via `verified_download()`, then builds a minimal stub deb around it (`dpkg-deb -Znone`, version read from the same `sysext-checksums.json` entry) and installs with `dpkg -i` so the shared postoutput script can resolve `KEYPACKAGE=k3s` from the merged dpkg database like every other sysext. The pinned sha256 is upstream's own published `sha256sum-amd64.txt` value, and the URL percent-encodes the `+` in the release tag (`v1.36.2%2Bk3s1`)
@@ -657,6 +658,90 @@ merge-time shadow check is the possible future defense for those
 without changing its KEYPACKAGE version, so each moved sysext carries a
 `SYSEXT_REVISION` bump — without it the republish is silently skipped
 (`skip-duplicates`) and installs keep the shadowing deltas forever.
+
+## A Sysext Delta Is Only Valid Against the Base It Was Built On
+
+An `Overlay=yes` sysext ships the *difference* between its buildroot and
+its base tree. Every package the base already had is omitted at apt level.
+That makes the published `.raw` a **frozen assertion about the base's
+transitive closure at build time** — and nothing re-validates it when the
+base later changes.
+
+This bit incus on cayo (root-caused 2026-09-01). Until
+33455fc (2026-08-25, #771) the base image transitively pulled an entire
+desktop, because `network-manager-applet` depends on the
+`policykit-1-gnome | polkit-1-auth-agent` virtual and apt satisfied it with
+an arbitrary desktop provider. So base carried GTK3, `libepoxy0`,
+`libgstreamer1.0-0`, `libopus0`, pango, cairo and gdk-pixbuf. The incus
+sysext built 2026-08-04 against that fat base therefore shipped
+`qemu-system-gui`, `libsdl2-2.0-0`, `libvte-2.91-0`, `libgtk-vnc-2.0-0`,
+`libspice-client-gtk-3.0-5` and `virt-viewer` **without a single one of
+their GTK3/media dependencies** — all correctly omitted as "already in the
+base".
+
+#771 removed `network-manager-applet`. Cayo images built after it have none
+of those libs, and the incus sysext was never rebuilt (its KEYPACKAGE
+version had not moved, so `skip-duplicates` skipped every republish). The
+merged result on cayo had 24 unresolved sonames. The user-visible symptom
+was total loss of VM support:
+
+```
+Error: Failed instance creation: Failed creating instance record:
+Instance type "virtual-machine" is not supported on this server:
+Failed getting QEMU version
+```
+
+The chain: the incus deb bundles its own `/usr/incus/bin/qemu-system-x86_64`
+and `/usr/incus/lib/systemd/incusd` prepends `/usr/incus/bin` to `PATH`, so
+that binary — not Debian's `/usr/bin/qemu-system-x86_64`, which was present
+and working — is what incusd probes. It has `libepoxy.so.0` in its
+`DT_NEEDED`, failed with `error while loading shared libraries`, and incusd
+silently registered only the `lxc` driver (`incus info` showed
+`driver: lxc`, never `lxc | qemu`). `virt-viewer`, `remote-viewer` and
+qemu's `ui-gtk.so` were broken the same way. **Snow was unaffected** —
+GNOME supplies the identical libs — which is exactly why this reached a
+server product undetected.
+
+Rules that follow:
+
+- **A base package removal invalidates every sysext published before it.**
+  Deltas do not self-heal; `skip-duplicates` means an unchanged KEYPACKAGE
+  version never republishes. Bump `SYSEXT_REVISION` on the affected sysexts
+  in the same change that shrinks the base.
+- **Pin load-bearing library paths in `required-paths.txt`.** The check runs
+  against the delta, so listing `/usr/lib/x86_64-linux-gnu/libepoxy.so.0`
+  asserts "the delta ships it" — precisely the invariant that broke. Adding
+  the package to `Packages=` does *not* help: delta omission is decided by
+  presence in the base, not by how the package got requested. incus pins
+  `libepoxy.so.0`, `libopus.so.0`, `libgstreamer-1.0.so.0` and
+  `libgtk-3.so.0` for this reason.
+- **Diagnose with `ldd`, not with the package list.** On a merged system,
+  `for f in /usr/bin/* /usr/sbin/* /usr/libexec/*; do ldd "$f" 2>/dev/null |
+  grep -q 'not found' && echo "$f"; done` finds this class in seconds; the
+  bundled `/usr/incus/bin` payload needs
+  `LD_LIBRARY_PATH=/usr/incus/lib/` to be checked correctly.
+
+**Determining the blast radius of a base removal.** Two facts bound it: which
+sysexts were published *before* the base change, and which of them actually
+used anything the base stopped supplying.
+
+1. Newest published build per sysext — `curl
+   https://repository.frostyard.org/ext/<name>/SHA256SUMS` lists every
+   published file (not newest-first; take the max `Last-Modified`).
+2. What the old base supplied — for one sysext that was published before the
+   change and rebuilt after it, `comm -23` its new manifest package set against
+   the old published `.raw`'s (`systemd-dissect --list ... |` the
+   `usr/share/doc/<pkg>/` entries). The difference is exactly the set the old
+   base had been providing.
+3. Intersect that set with every other pre-change sysext's *current* manifest.
+   A non-empty intersection means its published delta is missing those packages.
+
+For #771 this gave: incus (88 packages: the whole GTK3/mesa/pulse/gstreamer
+closure) and dev (81 of the same). `debdev`, `podman`, `nix`, `pilothouse`,
+`1password-cli` and `tailscale` also predated the change but intersected
+empty — they link nothing the accidental desktop had supplied. `paseo` looked
+suspect but had already been republished at 0.7.0 after the base change, so it
+self-healed through an ordinary version bump.
 
 ## Adding a New Sysext
 
