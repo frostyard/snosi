@@ -25,9 +25,9 @@
     "version": "3.1.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_152.0.4191.53-1_amd64.deb",
-    "sha256": "b3322445fbe6ce1e0bcff84ebbe0edea365e0eaf498b1ef6136dda52dea6e3a7",
-    "version": "152.0.4191.53-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_152.0.4191.62-1_amd64.deb",
+    "sha256": "4b352cb0d81b151c10719519a1415efd92570a1c9d57f055e5e5d80f6c99ba0d",
+    "version": "152.0.4191.62-1"
   },
   "code-server": {
     "url": "https://github.com/coder/code-server/releases/download/v4.135.0/code-server_4.135.0_amd64.deb",
@@ -35,9 +35,9 @@
     "version": "4.135.0"
   },
   "coder": {
-    "url": "https://github.com/coder/coder/releases/download/v2.35.6/coder_2.35.6_linux_amd64.deb",
-    "sha256": "afd7dcc896d9ac255cf526410632a5a225a2b9c37f8914749b1f1be995861d56",
-    "version": "2.35.6"
+    "url": "https://github.com/coder/coder/releases/download/v2.36.4/coder_2.36.4_linux_amd64.deb",
+    "sha256": "dd342deb35be5ba117d86e25bfe520f0e17e72bf499882779c60f90f11554c5c",
+    "version": "2.36.4"
   },
   "github-copilot": {
     "url": "https://github.com/github/app/releases/download/v1.1.14/GitHub-Copilot-linux-x64.deb",
@@ -55,9 +55,9 @@
     "version": "11.8.1"
   },
   "paseo": {
-    "url": "https://github.com/getpaseo/paseo/releases/download/v0.7.0/Paseo-0.7.0-amd64.deb",
-    "sha256": "2199c58b6294895b2cb606a543b158877f4c541307041c7c09f4661c2258c42e",
-    "version": "0.7.0"
+    "url": "https://github.com/getpaseo/paseo/releases/download/v0.7.2/Paseo-0.7.2-amd64.deb",
+    "sha256": "5d2bc42c179bec63d752d602de7e731c9c33f9050a7a503b08cd8f50f523350d",
+    "version": "0.7.2"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.9.0/frostyard-pilothouse_0.9.0_amd64.deb",
