@@ -58,8 +58,8 @@ if (( ${#offenders[@]} > 0 )); then
     echo "sysext-no-divergent-libs: ${IMAGE_ID:-sysext} delta ships product-divergent library files:" >&2
     printf '  %s\n' "${offenders[@]}" >&2
     cat >&2 <<'EOF'
-These families are pinned from backports/forky by at least one desktop
-product; a delta copy shadow-downgrades the product's version for the whole
+These families have been pinned from a non-base suite by at least one
+desktop product; a delta copy shadow-downgrades the product's version for the whole
 merged /usr (issue #781). Either gui-base lost the owning package, or apt
 pulled a newer version into the delta because this app now requires more
 than gui-base carries. Fix gui-base (mkosi.images/gui-base/mkosi.conf) or

@@ -1,6 +1,6 @@
 Types: deb
 URIs: https://pkgs.tailscale.com/stable/debian
-Suites: trixie
+Suites: forky
 Components: main
 Architectures: amd64
 Enabled: yes

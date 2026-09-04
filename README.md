@@ -21,18 +21,18 @@ public issue.
 
 ## What This Project Does
 
-snosi builds immutable, bootable OCI container images based on Debian Trixie. These images are designed for use with [bootc](https://bootc-dev.github.io/bootc/) / systemd-boot and can be deployed as atomic, updateable operating system images.
+snosi builds immutable, bootable OCI container images based on Debian Forky (testing; moved from Trixie in 2026-09, see [docs/adr/0014](docs/adr/0014-move-base-release-to-forky.md)). These images are designed for use with [bootc](https://bootc-dev.github.io/bootc/) / systemd-boot and can be deployed as atomic, updateable operating system images.
 
 The project produces:
 
 | Image               | Description                                                     | Output Format |
 | ------------------- | --------------------------------------------------------------- | ------------- |
-| **snow**            | GNOME desktop with backports kernel                             | directory → OCI (buildah/chunkah) |
+| **snow**            | GNOME desktop with the generic amd64 kernel                     | directory → OCI (buildah/chunkah) |
 | **snowfield**       | snow with linux-surface kernel for Surface devices              | directory → OCI (buildah/chunkah) |
-| **cayo**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
+| **cayo**            | Headless server with podman + generic amd64 kernel              | directory → OCI (buildah/chunkah) |
 | **cayo-ab-raw**     | Experimental native A/B server image (dev fixture, never published) | GPT disk (EROFS + dm-verity) |
 | **cayo-ab**         | Production native A/B server image (Secure Boot + TPM/LUKS `/var`) | GPT disk (EROFS + dm-verity) |
-| **snow-ab**          | Production native A/B GNOME desktop, backports kernel           | GPT disk (EROFS + dm-verity) |
+| **snow-ab**          | Production native A/B GNOME desktop, generic amd64 kernel       | GPT disk (EROFS + dm-verity) |
 | **snowfield-ab**     | Production native A/B GNOME desktop, linux-surface kernel       | GPT disk (EROFS + dm-verity) |
 | **1password**       | 1Password desktop application                                   | sysext        |
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
@@ -140,9 +140,8 @@ make the new key active, and opt into a transition build with
 `PCR_SIGNING_KEY_PREVIOUS=<old-key-filename>`. The UKI keeps the new key in
 `.pcrpkey` and carries each PCR 11 policy signed by both keys. Retain the old
 token until every supported rollback UKI contains the new signature. Each production native
-profile carries a coherent Forky 261+ systemd family through the shared
-fragment's isolated,
-low-priority APT source; normal Trixie profiles remain unchanged. Validate a
+profile lists the coherent systemd 261+ family explicitly through the shared
+fragment (all of it now simply the forky base release's own). Validate a
 transition artifact with (`OUTPUT_NAME` selects `cayo-ab`/`snow-ab`/
 `snowfield-ab`; defaults to `cayo-ab`):
 
@@ -207,7 +206,7 @@ sudo test/native-ab-update-test.sh \
 ```
 
 ```
-                              base                ← Debian Trixie + bootc foundation
+                              base                ← Debian Forky + bootc foundation
                                 │
                 ┌───────────────┴───────────────┐
                 │                               │
@@ -224,7 +223,7 @@ sudo test/native-ab-update-test.sh \
 
 The `base` image ([mkosi.images/base/mkosi.conf](mkosi.images/base/mkosi.conf)) provides the foundation for all derivatives:
 
-- Debian Trixie (testing) with main, contrib, non-free, and non-free-firmware repositories
+- Debian Forky (testing) with main, contrib, non-free, and non-free-firmware repositories; the image's `os-release` pins `VERSION_ID=14`, which testing's `base-files` omits (sysext filenames, `%w` in sysupdate transfers, and extension-release matching all key off it)
 - systemd, systemd-boot, and boot infrastructure
 - Network management (NetworkManager, wpasupplicant)
 - Container tooling prerequisites (erofs-utils, skopeo)
@@ -244,9 +243,9 @@ instead of `base`. `gui-base` is an internal, never-published image (base
 Since sysexts are `Overlay=yes` deltas, apt omits from each delta exactly
 the packages the build base already has. Building desktop apps against
 the server-ish `base` let an Electron/GTK app's delta carry its whole GUI
-lib closure, including libraries some products pin from other suites
-(e.g. snowfield's trixie-backports mesa) — the merged
-delta's plain-trixie copy then shadow-downgraded the product's pinned
+lib closure, including libraries some products pinned from other suites
+(on the trixie base, snowfield's trixie-backports mesa) — the merged
+delta's base-suite copy then shadow-downgraded the product's pinned
 version for the entire `/usr` overlay. `gui-base` fixes this by supplying
 the common GUI closure at the build-base layer, so those packages are
 omitted from every desktop sysext's delta and each product's own version
@@ -305,7 +304,7 @@ Profiles in `mkosi.profiles/` define complete image variants by composing shared
 ```
 mkosi.profiles/
 ├── cayo/           ← Headless server + podman
-├── snow/           ← GNOME desktop + backports kernel
+├── snow/           ← GNOME desktop + generic amd64 kernel
 └── snowfield/      ← GNOME desktop + Surface kernel
 ```
 
@@ -315,19 +314,14 @@ The `shared/` directory contains reusable configuration fragments that profiles 
 
 ```
 shared/
-├── kernel/
-│   ├── backports/mkosi.conf   ← Trixie backports kernel + firmware
-│   ├── surface/mkosi.conf     ← linux-surface kernel + iptsd
-│   └── scripts/               ← dracut postinst scripts
 ├── download/
 │   ├── sysext-checksums.json ← Pinned direct downloads consumed by sysext builds
 │   ├── image-checksums.json  ← Pinned direct downloads consumed by OCI profile builds
 │   ├── package-versions.json ← External APT package version sentinels for sysexts
 │   └── verified-download.sh  ← verified_download() helper
 ├── kernel/
-│   ├── backports/mkosi.conf   ← Trixie backports kernel + firmware
+│   ├── stock/mkosi.conf       ← Generic amd64 kernel + firmware + mesa (forky)
 │   ├── surface/mkosi.conf     ← linux-surface kernel + iptsd
-│   ├── stock/mkosi.conf       ← Stock Trixie kernel
 │   └── scripts/               ← dracut postinst scripts
 ├── manifest/postoutput/       ← Manifest annotation postoutput script
 ├── outformat/
@@ -396,7 +390,7 @@ PostOutputScripts=%D/shared/manifest/postoutput/mkosi.postoutput
 [Include]
 # Package sets
 Include=%D/shared/packages/snow/mkosi.conf    # GNOME desktop
-Include=%D/shared/kernel/backports/mkosi.conf # Backports kernel
+Include=%D/shared/kernel/stock/mkosi.conf     # Generic amd64 kernel
 Include=%D/shared/outformat/image/mkosi.conf    # OCI output format
 ```
 
@@ -404,9 +398,9 @@ Include=%D/shared/outformat/image/mkosi.conf    # OCI output format
 
 | Profile             | Kernel    | Extra Packages                 | Include Path                                                                |
 | ------------------- | --------- | ------------------------------ | --------------------------------------------------------------------------- |
-| **snow**            | backports | —                              | `kernel/backports`, `packages/snow`, `outformat/image`                        |
+| **snow**            | stock     | —                              | `kernel/stock`, `packages/snow`, `outformat/image`                            |
 | **snowfield**       | surface   | —                              | `kernel/surface`, `packages/snow`, `outformat/image`                          |
-| **cayo**            | backports | —                              | `kernel/backports`, `packages/cayo`, `outformat/image`                        |
+| **cayo**            | stock     | —                              | `kernel/stock`, `packages/cayo`, `outformat/image`                            |
 
 ## Building Images
 
@@ -617,7 +611,7 @@ output/
 External repositories are configured in `mkosi.sandbox/etc/apt/` for packages not in Debian:
 
 - **Docker**: docker.com official repository
-- **Incus**: Debian trixie (no external repo)
+- **Incus**: Frostyard repository (built for trixie; its `incus-base` still depends on trixie's `libgpgme11t64`, so the incus sysext cannot build on forky until it is rebuilt — see [docs/adr/0014](docs/adr/0014-move-base-release-to-forky.md))
 - **linux-surface**: Surface kernel packages
 - **Frostyard**: Custom packages (nbc, chairlift, updex)
 
