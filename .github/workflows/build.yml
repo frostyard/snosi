@@ -182,7 +182,7 @@ jobs:
         run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
 
       - name: setup-mkosi
-        uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf
+        uses: systemd/mkosi@0f2b7e06564feaa74b3cc14167d89673264d09fe
 
       - name: Build main and sysexts
         env:
