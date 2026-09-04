@@ -8,7 +8,7 @@ Decision records shaping this document: [ADR-0001](../adr/0001-var-factory-state
 
 ## Purpose
 
-snosi is a bootable container image build system that uses [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). It outputs OCI desktop/server images deployed via bootc/systemd-boot with atomic updates, plus EROFS sysext overlays distributed through systemd-sysupdate.
+snosi is a bootable container image build system that uses [mkosi](https://github.com/systemd/mkosi) to produce Debian Forky-based immutable OS images (testing; moved from Trixie in 2026-09, [ADR-0014](../adr/0014-move-base-release-to-forky.md)) and system extensions (sysexts). It outputs OCI desktop/server images deployed via bootc/systemd-boot with atomic updates, plus EROFS sysext overlays distributed through systemd-sysupdate.
 
 ## Cross-tool integration contracts
 
@@ -291,7 +291,8 @@ touching `/etc/systemd/import-pubring.gpg` exercises the
 without paying for OVMF Secure Boot + MOK enrollment (orthogonal Phase 6
 machinery). CAVEAT (learned from the 2026-07-17 `.pgp` outage, commit
 91718d7): this is NOT byte-identical to a production profile's trust path —
-`cayo-ab-raw` runs Trixie's systemd 257, whose vendor keyring is the OLD
+`cayo-ab-raw` ran Trixie's systemd 257 (until the 2026-09 forky move; it
+now gets the same 261 as everything else), whose vendor keyring is the OLD
 `/usr/lib/systemd/import-pubring.gpg` name, while the production profiles'
 Forky systemd 261 reads `/usr/lib/systemd/import-pubring.pgp` with no
 `/usr` `.gpg` fallback. This leg therefore proves the promotion-signature
@@ -538,10 +539,14 @@ script masks all packaged NvPCR definitions and the product/login writers while
 retaining SRK setup and signed-PCR LUKS unlock. A fresh new-only build and sole
 fresh-key TPM token booted without those failures.
 
-The shared `shared/native-ab-secure/mkosi.conf` fragment upgrades the complete exact-version systemd family to Forky
-261+ using its own `SandboxTrees=` APT source pinned at priority 50. The
-base, `cayo-ab-raw`, and the normal bootc profiles remain on Trixie; only the
-three production native profiles that `Include=` the fragment run Forky.
+The shared `shared/native-ab-secure/mkosi.conf` fragment lists the complete
+systemd family explicitly (unsuffixed). Until 2026-09 it upgraded that family
+to Forky 261+ through its own `SandboxTrees=` APT source pinned at priority 50
+while base, `cayo-ab-raw`, and the bootc profiles stayed on Trixie; since
+[ADR-0014](../adr/0014-move-base-release-to-forky.md) the whole tree builds
+from `Release=forky`, the sandbox tree is gone, and
+`test/native-ab-static-test.sh` fails any mkosi config that pins a package to
+a suite by name.
 
 ### Native `/var` Factory State (phase 2)
 
@@ -780,11 +785,10 @@ signs): `shim-signed`, `grub-efi-amd64-signed`, `shim-helpers-amd64-signed`
 (ships MokManager `mmx64.efi` -- NOT shipped by `shim-signed` itself), and
 `linux-image-amd64` (confirmed genuinely Debian-signed via `sbverify`, not
 just conventionally named -- "Debian Secure Boot Signer 2022 - linux" /
-"Debian Secure Boot CA"). These stay on the trixie release; only the
-cryptsetup/TPM/systemd family is pinned `/forky` (reusing
-`shared/native-ab-secure/package-manager`'s `SandboxTrees=` verbatim, per
-contract §8's "coherent Forky systemd 261" requirement even though the boot
-KERNEL is stock trixie).
+"Debian Secure Boot CA"). These and the cryptsetup/TPM/systemd family all come from the forky base
+release (contract §8's "coherent Forky systemd 261" requirement is now
+simply the archive's own systemd; the former `/forky` pins and shared
+`SandboxTrees=` were removed in the 2026-09 forky move).
 
 The frontend is the packaged `frostyard-firn` TUI, configured by
 `shared/firn-installer/catalog.json`; Snosi owns the media payload and Firn
@@ -1130,7 +1134,7 @@ Root `mkosi.conf` lists `base` plus all in-repo sysexts for the sysext publishin
 Profile (e.g., snow/mkosi.conf)                     # transport+kernel selector only
 ├── Include: shared/packages/bootc/mkosi.conf       # bootc/ostree runtime deps
 ├── Include: shared/composition/snow/mkosi.conf     # snow payload (see below)
-├── Include: shared/kernel/backports/mkosi.conf     # Kernel variant
+├── Include: shared/kernel/stock/mkosi.conf         # Kernel variant
 ├── Include: shared/outformat/image/mkosi.conf      # Output format (directory)
 └── Dependencies: base                              # Requires base image
 
@@ -1293,8 +1297,9 @@ candidates):
    line). plymouthd started inside that window sets up its VT while the
    console is rebound underneath it and dies with SIGSEGV — the same
    unguarded 24.004.60 terminal path as mechanism 3. It is snow-only in
-   practice and kernel-config-derived: `linux-image-amd64/trixie-backports`
-   (7.1.8+deb13-amd64) sets `CONFIG_FRAMEBUFFER_CONSOLE=y` WITHOUT
+   practice and kernel-config-derived: Debian's generic `linux-image-amd64`
+   (7.1.8+deb13 on trixie-backports, and forky's 7.1.12-1 alike, checked in
+   `linux-config-7.1` 2026-09-04) sets `CONFIG_FRAMEBUFFER_CONSOLE=y` WITHOUT
    `CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER`, so fbcon binds as soon
    as virtio_gpu's fbdev registers — measured in the smoke-test VM at
    t+4.95s, inside plymouth-start's 4.69–5.44s window and ~40 ms after

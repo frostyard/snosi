@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-snosi is a bootable container image build system using [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). Images are deployed via bootc/systemd-boot with atomic updates.
+snosi is a bootable container image build system using [mkosi](https://github.com/systemd/mkosi) to produce Debian Forky-based immutable OS images and system extensions (sysexts).
+
+**Base release: Debian Forky (testing) since 2026-09** (`docs/adr/0014-move-base-release-to-forky.md`): `mkosi.conf` `Release=forky`, every profile and sysext builds from that one release, and NO mkosi config may pin a package to a suite by name (`pkg/forky`, `pkg/trixie-backports`, …) — `test/native-ab-static-test.sh` fails the tree if one appears, and `test/bootc-secure-static-test.sh` fails if the retired per-fragment forky APT sandbox returns. Testing's `base-files` ships no `VERSION_ID`, so `mkosi.images/base/mkosi.postinst.chroot` appends `VERSION_ID="14"` (Debian's number for forky) to `/usr/lib/os-release`; that single value drives the `_14_` in every published sysext filename (`sysext-postoutput.sh`), the `%w` in every sysupdate `.transfer` MatchPattern, and the `VERSION_ID` mkosi copies into each sysext's extension-release — installs still running a trixie image (`%w`=13) keep matching the `_13_` artifacts and never see forky-built sysexts, so the last trixie sysext set must stay published until those installs have taken a forky base. Two Frostyard-built debs still hard-depend on trixie's `libgpgme11t64` (forky ships `libgpgme45`): `libostree-1-1` (blocks the three OCI bootc profiles `cayo`/`snow`/`snowfield`) and `incus-base` (blocks the `incus` sysext, which also needs `libnet1` → forky's `libnet9`); both need rebuilds in frostyard/bootc-debian and the Frostyard incus packaging before those targets build again (proven 2026-09-04: base, gui-base, and every base-built sysext up to incus built; incus failed at apt on exactly that dependency). Docker publishes no forky suite, so `docker.sources` deliberately stays on `trixie` (static Go binaries; Depends verified against forky). Sunshine uses LizardByte's `ubuntu-26.04` deb because its sonames (libicu78, libminiupnpc21, glibc 2.43) are forky's. Never list a virtual package name that has more than one provider on forky: `libasound2` is provided by both `libasound2t64` and `liboss4-salsa-asound2` there, so apt reports "no installation candidate" (1password/edge now say `libasound2t64`); single-provider virtuals (`libgtk-3-0`, `libcurl4`, `qemu-kvm`) still resolve. `shared/kernel/backports` was folded into `shared/kernel/stock` (forky's own 7.1.12 kernel and mesa 26.1 are newer than trixie-backports had; `forky-backports` exists but is empty). The `/var` outcome maps changed too (python3.14; `log/{wtmp,lastlog,btmp}` and `log/README` no longer land at build time) — the audit fails closed in both directions, so a release bump is expected to surface there first. Images are deployed via bootc/systemd-boot with atomic updates.
 
 **Outputs:** 2 OCI desktop images (snow, snowfield), 1 OCI server image (cayo), and 27 sysext overlay images (1password, 1password-cli, azurevpn, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode).
 
@@ -38,8 +40,9 @@ established bootc installation/testing path because of it.
 
 **Bootc secure composition (Task 4, 2026-07-28):** `cayo`, `snow`, and
 `snowfield` include `shared/bootc-secure/mkosi.conf`; native A/B profiles never
-include it. The fragment uses an isolated low-priority Forky APT sandbox and
-explicitly selects its coherent systemd family, adds `lockdown=integrity` via
+include it. The fragment lists its coherent systemd family explicitly (all
+from the forky base since 2026-09; until then an isolated low-priority Forky
+APT sandbox pinned it on top of Trixie), adds `lockdown=integrity` via
 `/usr/lib/bootc/kargs.d/10-lockdown.toml` (the only effective immutable-karg
 mechanism for the directory-format bootc profiles; do not use mkosi
 `KernelCommandLine=` here), and ships only the existing native public MOK
@@ -55,12 +58,14 @@ Type #2-only bootc options, MOK/TPM/recovery policy, provenance, restage, and
 ESP repair. `/usr/lib/snosi/bootc-secure.json` is the machine-readable
 installer contract; `docs/bootc-secure-install-contract.md` retains the retired
 Task 9 adapter protocol for compatibility and fixture history.
-The Forky systemd family is a deliberate cross-suite compatibility risk with
-Frostyard's bootc/libostree debs, not an inferred package guarantee. Task 4
+Frostyard's bootc/libostree debs are built for trixie and are a deliberate
+cross-suite compatibility risk, not an inferred package guarantee. Task 4
 validated one real cayo build with bootc 1.16.3, libostree 2026.2, and systemd
 261.1-3, then ran `bootc --version` and `bootc container --help` in a bwrap
 root containing only that output. Repeat that build/root check when either the
-Frostyard debs or the selected systemd family changes.
+Frostyard debs or the base release changes — on the forky base the current
+`libostree-1-1` deb is unresolvable (`libgpgme11t64`), so that check is the
+first gate for the rebuilt debs.
 **Issue 517 (2026-08-06) — Forky udev moved the gpt-auto symlink rules out of
 dracut's reach:** systemd 257 shipped the udev rules creating
 `/dev/gpt-auto-root[-luks]` in `99-systemd.rules` (which dracut installs by
@@ -80,9 +85,15 @@ initramfs validation now fails any UKI whose unpacked initramfs has no udev
 rule creating `gpt-auto-root-luks`, and `test/bootc-secure-static-test.sh`
 pins the drop-in. Native A/B profiles are unaffected (verity root via UKI
 `roothash=`, explicit `systemd-cryptsetup attach` for `var` — no gpt-auto
-dependency). Upstream dracut-ng (as of 2026-08) still lacks
-`90-image-dissect.rules` in `01systemd-udevd`; re-check this drop-in when
-dracut or the Forky systemd family changes.
+dependency). Upstream dracut-ng (as of 2026-08) still lacked
+`90-image-dissect.rules` in `01systemd-udevd`; forky's dracut 112
+(`11systemd-udevd`, checked 2026-09-04) lists it natively, so on the forky
+base the drop-in is redundant but kept — the artifact test, not the dracut
+version, is the proof. dracut 112 also renamed `01systemd-pcrphase` to
+`11systemd-pcrextend` (the base/cayo/snow `20-tpm-luks.conf` drop-ins name
+the new module) and systemd 261 moved `systemd-pcrextend` into
+`systemd-tpm`, which base now installs explicitly; without both, every
+dracut run fails with `Module 'systemd-pcrphase' cannot be found`.
 
 **Bootc UKI assembly (Task 5, 2026-07-28):**
 `shared/bootc-secure/assemble-uki.sh` and the secure branch of
@@ -434,7 +445,7 @@ Each profile composes: package sets + kernel variant + output format + build/pos
 
 **Payload composition (`shared/composition/`):** `shared/composition/cayo/mkosi.conf` and `shared/composition/snow/mkosi.conf` are the single per-product definitions of ExtraTrees, PostInstallationScripts (dracut postinst, then the product postinst.chroot), BuildScripts (brew, plus snow's hotedge/logomenu/bazaar/surface-cert), the manifest PostOutputScript, the image FinalizeScript, and an `[Include]` of the product's package set. Every profile that ships that product's payload — bootc (`cayo`/`snow`/`snowfield`) and native (`cayo-ab-raw`, `cayo-ab`, `snow-ab`, `snowfield-ab`) alike — `Include=`s the fragment instead of restating it, so the two transports cannot drift apart. Profiles themselves reduce to transport+kernel selectors: bootc profiles add `Include=shared/packages/bootc/mkosi.conf` (before the composition include, so `Packages=` accumulates in the same order as before the refactor) and `Include=shared/outformat/image/mkosi.conf`; native profiles never include the bootc packages fragment and instead include `shared/outformat/ab-root/mkosi.conf`. The three production native profiles (`cayo-ab`, `snow-ab`, `snowfield-ab`) reduce to `[Config]`/`[Output]`/`[Include]` only (Phase 3) — every setting, including the secure posture, lives in `[Include]`d fragments: `Include=%D/shared/native-ab-secure/mkosi.conf` is listed FIRST, before the composition include, so its `FinalizeScripts=disable-nvpcr.chroot` resolves before the composition fragment's image finalize (mkosi accumulates list settings in `Include=` encounter order across the whole resolved config) — the resolved FinalizeScripts order stays disable-nvpcr -> image finalize -> var-audit.finalize -> ab-root finalize, verified via `mkosi --profile <p> summary`.
 
-**Plymouth splash + Snow theme (2026-07-17):** all snow/snowfield images ship a Snow-branded plymouth theme in `shared/snow/tree` (two-step `snow.plymouth` with bgrt-style cross-theme `ImageDir=` reusing Debian's spinner assets; the flower `watermark.png` injected into the spinner dir — the deb-unowned path two-step loads watermarks from; `Theme=snow` in `etc/plymouth/plymouthd.conf`). Ship the conffile via ExtraTrees ONLY — a SkeletonTrees copy of a dpkg conffile makes dpkg prompt at install and the build dies at EOF on non-interactive stdin (proven live). The theme reaches initrds because the FINAL initrd is generated by the dracut PostInstallationScript, which runs after ExtraTrees. Making the splash actually RENDER on native A/B took four stacked root-caused mechanisms (bootc needs none of this — bootc injects `rhgb quiet` and has no serial console): (1) `KernelCommandLine=splash plymouth.ignore-serial-consoles` in `shared/composition/snow` — a configured serial console (`console=ttyS0`, from the ab-root fragment) otherwise makes plymouthd force details mode globally and skip DRM probing entirely; (2) native initrds omit the plymouth dracut module (`omit_dracutmodules` in the ab-root `30-bootc-standard.conf` override; cayo no-op) — initrd plymouth loses a premature-udev-change-event race against DRM device creation (Debian's kernel has no simpledrm) and falls back to text splash permanently; the real root's statically-wanted `plymouth-start.service` starts after DRM is up and shows the graphical theme deterministically; (3) desktop channels (`shared/native-ab/channels/{snow,snowfield}`) append `KernelCommandLine=console=tty0` — the channel is the only desktop fragment included AFTER ab-root, so tty0 lands last and wins `/dev/console`; with a serial `/dev/console`, plymouthd's local terminal is NULL and the un-backported upstream segfault (LP#2103533; fixed in plymouth 26.134.222, absent from all Debian suites incl. sid) kills it — the same bug also fires on ANY multi-GPU VM (QEMU default VGA + virtio = 2 GPUs; always pass `-vga none` in test VMs). (4) `plymouth-start.service.d/10-wait-drm.conf` (snow tree) holds plymouthd behind a second bounded `udevadm wait /dev/fb0` **console-handoff barrier** on top of the `/dev/dri/card0` DRM one: card0 appears before the kernel rebinds the VT layer from the dummy console to fbcon (`Console: switching to colour frame buffer device`, printed just before `fb0: <drv>drmfb`), and plymouthd started inside that window dies with SIGSEGV in the same unguarded 24.004.60 terminal path. This is snow-only and kernel-config-derived — `linux-image-amd64/trixie-backports` (7.1.8) has `CONFIG_FRAMEBUFFER_CONSOLE=y` WITHOUT `CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER`, so fbcon binds the moment virtio_gpu's fbdev registers (measured t+4.95s, inside plymouth-start's 4.69–5.44s window, ~40ms after card0), while `linux-image-surface` (6.19.8) sets `DEFERRED_TAKEOVER=y` and never binds fbcon during boot, and cayo installs no plymouth at all. Symptom when it loses the race: `plymouth-start.service` `signal=SEGV` → `degraded` → `test-public-origin`'s boot smoke gate fails → `promote-snow` skips (main runs 33230153367, 33465852243; issue #850). PR builds never run that gate. Because `console=tty0` moves `systemd-ask-password-console`'s LUKS prompt off serial, `snosi-ask-password-serial.{service,path}` (ab-root tree, static sysinit wants, `install_items` into the native initrd) runs `systemd-tty-ask-password-agent --watch --console=/dev/ttyS0`, Condition-gated to desktop natives — this is what the QEMU harnesses' console pump now types the first-boot recovery passphrase into (raw-agent prompt shape, already matched). Validated: 71/71 secure-boot harness (snow-ab), QMP-screendump visual proof (flower at ~14s, GDM at 30s, no crash), bootc snow artifact check. Servers stay text: no splash karg reaches cayo (static-test-enforced). Kernel messages are now visible on the hardware screen pre-splash (no `quiet`) — deliberate open follow-up, not an accident.
+**Plymouth splash + Snow theme (2026-07-17):** all snow/snowfield images ship a Snow-branded plymouth theme in `shared/snow/tree` (two-step `snow.plymouth` with bgrt-style cross-theme `ImageDir=` reusing Debian's spinner assets; the flower `watermark.png` injected into the spinner dir — the deb-unowned path two-step loads watermarks from; `Theme=snow` in `etc/plymouth/plymouthd.conf`). Ship the conffile via ExtraTrees ONLY — a SkeletonTrees copy of a dpkg conffile makes dpkg prompt at install and the build dies at EOF on non-interactive stdin (proven live). The theme reaches initrds because the FINAL initrd is generated by the dracut PostInstallationScript, which runs after ExtraTrees. Making the splash actually RENDER on native A/B took four stacked root-caused mechanisms (bootc needs none of this — bootc injects `rhgb quiet` and has no serial console): (1) `KernelCommandLine=splash plymouth.ignore-serial-consoles` in `shared/composition/snow` — a configured serial console (`console=ttyS0`, from the ab-root fragment) otherwise makes plymouthd force details mode globally and skip DRM probing entirely; (2) native initrds omit the plymouth dracut module (`omit_dracutmodules` in the ab-root `30-bootc-standard.conf` override; cayo no-op) — initrd plymouth loses a premature-udev-change-event race against DRM device creation (Debian's kernel has no simpledrm) and falls back to text splash permanently; the real root's statically-wanted `plymouth-start.service` starts after DRM is up and shows the graphical theme deterministically; (3) desktop channels (`shared/native-ab/channels/{snow,snowfield}`) append `KernelCommandLine=console=tty0` — the channel is the only desktop fragment included AFTER ab-root, so tty0 lands last and wins `/dev/console`; with a serial `/dev/console`, plymouthd's local terminal is NULL and the un-backported upstream segfault (LP#2103533; fixed in plymouth 26.134.222, absent from all Debian suites incl. sid) kills it — the same bug also fires on ANY multi-GPU VM (QEMU default VGA + virtio = 2 GPUs; always pass `-vga none` in test VMs). (4) `plymouth-start.service.d/10-wait-drm.conf` (snow tree) holds plymouthd behind a second bounded `udevadm wait /dev/fb0` **console-handoff barrier** on top of the `/dev/dri/card0` DRM one: card0 appears before the kernel rebinds the VT layer from the dummy console to fbcon (`Console: switching to colour frame buffer device`, printed just before `fb0: <drv>drmfb`), and plymouthd started inside that window dies with SIGSEGV in the same unguarded 24.004.60 terminal path. This is snow-only and kernel-config-derived — Debian's generic `linux-image-amd64` (7.1.8 on trixie-backports, forky's 7.1.12-1 alike per `linux-config-7.1`) has `CONFIG_FRAMEBUFFER_CONSOLE=y` WITHOUT `CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER`, so fbcon binds the moment virtio_gpu's fbdev registers (measured t+4.95s, inside plymouth-start's 4.69–5.44s window, ~40ms after card0), while `linux-image-surface` (6.19.8) sets `DEFERRED_TAKEOVER=y` and never binds fbcon during boot, and cayo installs no plymouth at all. Symptom when it loses the race: `plymouth-start.service` `signal=SEGV` → `degraded` → `test-public-origin`'s boot smoke gate fails → `promote-snow` skips (main runs 33230153367, 33465852243; issue #850). PR builds never run that gate. Because `console=tty0` moves `systemd-ask-password-console`'s LUKS prompt off serial, `snosi-ask-password-serial.{service,path}` (ab-root tree, static sysinit wants, `install_items` into the native initrd) runs `systemd-tty-ask-password-agent --watch --console=/dev/ttyS0`, Condition-gated to desktop natives — this is what the QEMU harnesses' console pump now types the first-boot recovery passphrase into (raw-agent prompt shape, already matched). Validated: 71/71 secure-boot harness (snow-ab), QMP-screendump visual proof (flower at ~14s, GDM at 30s, no crash), bootc snow artifact check. Servers stay text: no splash karg reaches cayo (static-test-enforced). Kernel messages are now visible on the hardware screen pre-splash (no `quiet`) — deliberate open follow-up, not an accident.
 
 **mkosi Include ordering matters for list settings:** mkosi accumulates list-valued settings (`Packages=`, `FinalizeScripts=`, `BuildScripts=`, etc.) across the whole resolved config in the order each `Include=` is textually encountered (recursing into included files at that point), not grouped by which file declared them. When refactoring composition, the arbiter is a byte-level diff of `mkosi cat-config`/`summary` output before and after — not a read of the source files. Two gotchas hit doing this: (1) `History=yes` (base `mkosi.conf`) caches the last-used `--profile` in `.mkosi-private/history/latest.json` (root-owned) and silently overrides `--profile` on every later invocation of read-only verbs like `cat-config` (prints "Ignoring --profile from the CLI"); `summary` has an explicit bypass for `-f`, but `cat-config` does not — `sudo rm -f .mkosi-private/history/latest.json` before capturing config snapshots. (2) `summary` output has three fields that are non-deterministic per invocation and must be normalized out of any diff: `Seed:` (fresh random UUID per run), `Prepare Scripts: /tmp/tmpXXXXXXXX/...mkosi-tools/mkosi.prepare` (random tools-tree extraction tmpdir), and `Image Version:` (defaults to the current wall-clock timestamp when unset) — none are derived from config content.
 
@@ -494,7 +505,7 @@ The base package set explicitly includes `pciutils` and `usbutils`, so every
 product provides host PCI and USB diagnostics without relying on transitive
 dependencies.
 
-bootc and ostree install as regular APT packages (`bootc`, `libostree-1-1` — the latter ships the library AND the ostree CLI) from the Frostyard repository, built and published by [frostyard/bootc-debian](https://github.com/frostyard/bootc-debian). Debian Trixie ships no bootc package and only ostree 2025.2 (too old for current bootc), hence the external packaging.
+bootc and ostree install as regular APT packages (`bootc`, `libostree-1-1` — the latter ships the library AND the ostree CLI) from the Frostyard repository, built and published by [frostyard/bootc-debian](https://github.com/frostyard/bootc-debian). Debian Trixie shipped no bootc package and only ostree 2025.2 (too old for current bootc), hence the external packaging; the current debs are built against trixie's `libgpgme11t64`, so they need a forky rebuild before the OCI profiles build on the forky base (ADR-0014).
 
 - **Versions:** pinned in bootc-debian's `download/checksums.json`, tracked weekly by that repo's own `check-dependencies.yml` — snosi's dependency check does NOT cover them. Deb versions carry a `-frostyard<timestamp>` suffix so rebuilds of the same upstream version still sort newer in apt.
 - **Build parity:** bootc-debian's `build.sh` mirrors the former in-tree mkosi BuildScript (same pinned tarballs, same checksums, same pinned Rust toolchain — Debian's rustc 1.85 is too old to build bootc 1.16.x). Its Build workflow publishes the debs and then dispatches a snosi image build.
@@ -551,8 +562,10 @@ fail-closed behavior and enforces wiring parity from a DERIVED consumer set
 be inert for every consumer — `ExtraTrees=` takes the whole tree.
 
 **Sunshine sysext:** Sunshine is a desktop-only, self-hosted game-streaming
-host for Moonlight installed from its official pinned Trixie deb through
-`verified_download()`. Its native `/usr` layout retains the package's
+host for Moonlight installed from its official pinned deb (the
+`ubuntu-26.04` build — LizardByte publishes no forky/testing deb, and that
+build's libicu78/libminiupnpc21/glibc 2.43 Depends are exactly forky's
+sonames) through `verified_download()`. Its native `/usr` layout retains the package's
 `cap_sys_admin,cap_sys_nice` capability, `uhid` modules-load entry, and udev
 access rules; those last two reach udev only through the post-merge reload
 above. Its upstream user service is available for manual user startup; do not
@@ -560,8 +573,9 @@ add a preset or `Upholds=` activation for Sunshine itself.
 
 **Voxtype sysext:** AI voice dictation for Wayland from the Frostyard APT
 repository, bundling its own text-output chain (`wtype` for wlroots/Hyprland,
-`ydotool` from trixie-backports for GNOME/mutter — the only driver mutter
-supports — and `wl-clipboard` for the fallback). It ships
+`ydotool` for GNOME/mutter — the only driver mutter supports; in forky
+main, trixie only had it in backports — and `wl-clipboard` for the
+fallback). It ships
 `modules-load.d/60-voxtype.conf` for `uinput` and depends on the post-merge
 udev reload above; without it dictation transcribes but inserts no text. Its
 `ydotool.service.d/10-voxtype.conf` sets `RestartSec=5s` because the deb's
@@ -578,9 +592,10 @@ runtime packages through `Packages=` rather than installing them implicitly.
 
 **Desktop-app sysexts build against `gui-base`, not `base` (issue #781):**
 app sysext deltas omit only packages their BUILD BASE has, so base-built
-Electron/GTK deltas carried the whole GUI closure — and products that pin
-those libs from other suites (snowfield pins mesa from backports via the
-Surface kernel fragment) got shadow-DOWNGRADED for all of `/usr` on merge
+Electron/GTK deltas carried the whole GUI closure — and products that pinned
+those libs from other suites (on the trixie base, snowfield pinned mesa from
+backports via the Surface kernel fragment) got shadow-DOWNGRADED for all of
+`/usr` on merge
 (root-caused live 2026-08-25 on a since-retired Hyprland product, which
 pinned xkbcommon/pipewire/alsa/mesa from backports). `mkosi.images/gui-base` is an
 internal never-published directory image (base + common GUI lib closure);

@@ -104,20 +104,33 @@ if sed 's/#.*//' "$nvpcr_finalize" | grep -Fq 'systemd-tpm2-setup'; then
 fi
 
 [[ -f "$secure" ]]
-[[ -f "$package_manager/etc/apt/sources.list.d/forky.sources" ]]
-[[ -f "$package_manager/etc/apt/preferences.d/forky" ]]
-grep -q '^Suites: forky$' "$package_manager/etc/apt/sources.list.d/forky.sources"
-grep -q '^Pin: release n=forky$' "$package_manager/etc/apt/preferences.d/forky"
-grep -q '^Pin-Priority: 50$' "$package_manager/etc/apt/preferences.d/forky"
+# The base release IS forky (mkosi.conf Release=forky, since 2026-09; see
+# docs/adr/0014). The former isolated low-priority forky APT sandbox and its
+# per-package /forky suffixes are gone: a suffix would now be a no-op at best
+# and a silent cross-suite pin at worst, and a leftover sandbox tree would
+# duplicate the archive's own forky source.
+grep -q '^Release=forky$' "$root/mkosi.conf"
+if [[ -e "$package_manager" ]]; then
+    echo "bootc secure fragment must not carry a forky sandbox tree; forky is the base release" >&2
+    exit 1
+fi
+if grep -q '^SandboxTrees=' "$secure"; then
+    echo "bootc secure fragment must not add sandbox trees; forky is the base release" >&2
+    exit 1
+fi
+if grep -qE '^(Packages=|[[:space:]]*)[a-z0-9.+-]+/(forky|trixie)' "$secure"; then
+    echo "bootc secure fragment must not pin packages to a suite" >&2
+    exit 1
+fi
 
-# The selected systemd family must come from one suite, including every ABI
+# The whole systemd family stays listed explicitly, including every ABI
 # companion that bootc, cryptsetup, and the bootloader use.
 for package in libnss-myhostname libnss-mymachines libnss-systemd \
     libpam-systemd libsystemd-shared libsystemd0 libudev1 systemd \
     systemd-boot systemd-boot-efi systemd-boot-tools systemd-container \
     systemd-cryptsetup systemd-repart systemd-resolved systemd-sysv \
     systemd-timesyncd systemd-tpm systemd-ukify udev; do
-    grep -qE "^(Packages=|[[:space:]]*)$package/forky$" "$secure"
+    grep -qE "^(Packages=|[[:space:]]*)$package$" "$secure"
 done
 
 # shim-signed is already supplied by the shared base image. Keeping it out of

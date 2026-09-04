@@ -280,7 +280,9 @@ jobs:
 
           if [[ "$SUNSHINE_UPDATE" == "true" ]]; then
             VER="$SUNSHINE_VERSION"
-            URL="https://github.com/LizardByte/Sunshine/releases/download/v${VER}/sunshine-debian-trixie-amd64.deb"
+            # ubuntu-26.04 build: its libicu78/libminiupnpc21/glibc 2.43 Depends are
+            # the forky sonames; LizardByte publishes no forky/testing deb.
+            URL="https://github.com/LizardByte/Sunshine/releases/download/v${VER}/sunshine-ubuntu-26.04-amd64.deb"
             TMP=$(mktemp)
             curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)

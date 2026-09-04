@@ -98,7 +98,6 @@ lock	tmpfiles
 log/apt	tmpfiles
 log/journal	tmpfiles
 log/private	tmpfiles
-log/README	tmpfiles
 mail	tmpfiles
 mnt	tmpfiles
 opt	tmpfiles
@@ -166,7 +165,7 @@ lib/pam/**	discard
 # systemd-portabled image storage; empty until an admin attaches a portable
 # service image, which is not part of this product.
 lib/portables	discard
-lib/python/python3.13_installed	discard
+lib/python/python3.14_installed	discard
 lib/saned	discard
 lib/sgml-base/**	discard
 lib/shells.state	discard
@@ -184,12 +183,13 @@ lib/tuned	discard
 lib/ucf/**	discard
 lib/vim/addons	discard
 # Login history (wtmp/lastlog/btmp) and equivalent modern (wtmpdb) forms —
-# machine state/logs are the plan's canonical discard example.
+# machine state/logs are the plan's canonical discard example. The legacy
+# log/{wtmp,lastlog,btmp} files (and log/README) stopped landing at build
+# time with the 2026-09 forky base (util-linux/base-files no longer create
+# them; wtmpdb is the only form left) — the audit's stale-glob check
+# reported all four, so they are gone from this map.
 lib/wtmpdb/wtmp.db	discard
 lib/xml-core/**	discard
 log/alternatives.log	discard
-log/btmp	discard
-log/lastlog	discard
 log/runit/**	discard
 log/tuned	discard
-log/wtmp	discard

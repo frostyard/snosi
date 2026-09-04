@@ -37,12 +37,12 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **github-copilot** | github | GitHub Copilot desktop app (official pinned .deb via verified_download; Tauri; native /usr layout) |
 | **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF, virt-viewer |
 | **k3s** | k3s | k3s lightweight Kubernetes node — pinned static binary via `verified_download()` from k3s-io/k3s GitHub releases, dpkg-registered through a build-local stub deb |
-| **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
+| **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from forky main |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
 | **paseo** | paseo | Paseo coding agent workspace desktop app (pinned .deb via verified_download from getpaseo/paseo GitHub releases, relocated from /opt) |
 | **pilothouse** | frostyard-pilothouse | Pilothouse web administration with capability-gated Updex/container backends (web UI + root broker) — downloaded via `verified_download()` from frostyard/pilothouse GitHub releases |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
-| **sunshine** | sunshine | Sunshine self-hosted game streaming host (official pinned Trixie .deb via verified_download) |
+| **sunshine** | sunshine | Sunshine self-hosted game streaming host (official pinned `ubuntu-26.04` .deb via verified_download — the build whose sonames match forky) |
 | **tailscale** | tailscale | Tailscale VPN client |
 | **vscode** | code | Visual Studio Code desktop application (from packages.microsoft.com) |
 
@@ -182,7 +182,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in; ships hicolor icons → `sysext-strip-icon-cache.sh` required
 
 ### sunshine
-- `mkosi.postinst.chroot` downloads Sunshine's official pinned Trixie `.deb` with `verified_download()` and installs it with `dpkg -i`; its payload already uses the native `/usr` layout, so no relocation is needed
+- `mkosi.postinst.chroot` downloads Sunshine's official pinned `.deb` (the `ubuntu-26.04` build: LizardByte publishes no testing/forky deb, and its libicu78/libminiupnpc21/glibc 2.43 Depends are exactly forky's sonames, unlike the trixie build's libicu76/libminiupnpc18) with `verified_download()` and installs it with `dpkg -i`; its payload already uses the native `/usr` layout, so no relocation is needed
 - Desktop-only self-hosted game streaming host for Moonlight; retain the package's `cap_sys_admin,cap_sys_nice` file capability on `/usr/bin/sunshine`, `uhid` modules-load entry, and udev access rules
 - The `uhid` modules-load entry and virtual-input udev rules reach udev only via `snosi-sysext-udev-reload.service` (`ExtraTrees=%D/shared/sysext/tree` + the `Upholds=` drop-in). udev parses its rules before `systemd-sysext.service` merges the overlay, so without that reload they were applied on *no* boot, not merely a delayed one — see [udev Rules and Kernel Modules in Sysexts](#udev-rules-and-kernel-modules-in-sysexts)
 - The upstream `app-dev.lizardbyte.app.Sunshine.service` user unit is available for manual user startup only: no user preset and no `Upholds=` drop-in provide automatic activation
@@ -251,7 +251,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 
 ### lemonade
 - `mkosi.postinst.chroot` — Downloads the lemonade-server .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Everything ships natively under `/usr`; no relocation
-- `Packages=` carries the deb's runtime Depends (`dpkg -i` can't resolve them; the chroot has no apt), including `libcpp-httplib0.41` which exists only in trixie-backports — the sandbox's low backports pin still selects it as the sole candidate
+- `Packages=` carries the deb's runtime Depends (`dpkg -i` can't resolve them; the chroot has no apt), including `libcpp-httplib0.41` (in forky main; on the trixie base it existed only in trixie-backports and reached the build through the sandbox's low backports pin)
 - `mkosi.finalize` — Captures `/etc/lemonade/` to factory defaults; `lemond.service` reads `EnvironmentFile=-/etc/lemonade/conf.d/*.conf` (HF_TOKEN, LEMONADE_API_KEY — the deb ships only a commented template, no real secrets)
 - `usr/lib/sysusers.d/lemonade-groups.conf` — Adds the `lemonade` user (created at boot by the deb's own sysusers fragment) to `systemd-journal` and `render` (GPU access), mirroring the deb postinst's build-time-only `usermod` calls
 - `usr/lib/tmpfiles.d/lemonade.conf` — Factory config injection
@@ -284,7 +284,7 @@ Some sysexts include extra files via `mkosi.extra/`:
 
 ### voxtype
 - No postinst — `voxtype` comes from the Frostyard APT repository (built by frostyard/omarchy-apps) and apt resolves its runtime dependencies; the text-output chain (`wtype`, `ydotool`, `wl-clipboard`) is bundled so the sysext is self-contained on every desktop product
-- `ydotool` has no Trixie candidate, so apt takes the sandbox's trixie-backports one (same pattern as lemonade's `libcpp-httplib0.41`)
+- `ydotool` is in forky main (on the trixie base it had no candidate and apt took the sandbox's trixie-backports one)
 - Its deb ships `80-uinput.rules` and the `ydotool.service` **user** unit. The rule only reaches udev via `snosi-sysext-udev-reload.service` — see [udev Rules and Kernel Modules in Sysexts](#udev-rules-and-kernel-modules-in-sysexts); without it `/dev/uinput` stays `root:root 0600`, `ydotoold` cannot start, and voxtype falls through to its clipboard fallback (transcribes, types nothing)
 - `usr/lib/modules-load.d/60-voxtype.conf` — loads `uinput`, whose node otherwise exists only as a kmod static node
 - `usr/lib/systemd/system/multi-user.target.d/10-voxtype.conf` — `Upholds=snosi-sysext-udev-reload.service`
@@ -611,10 +611,11 @@ it is only a Recommends of GTK/Adwaita and mkosi builds recommends-off.
 App sysexts are `Overlay=yes` deltas: apt omits from the delta exactly the
 packages the *build base* already has. Built against the server-ish `base`,
 an Electron/GTK app's delta carried its whole GUI closure — including
-libraries desktop products pin from **other suites** — snowfield pins
-mesa from trixie-backports via the Surface kernel fragment, and a
-since-retired Hyprland product pinned libxkbcommon/pipewire/alsa/mesa
-there too. The merged delta's trixie copy shadow-**downgrades** the
+libraries desktop products pinned from **other suites** — on the trixie
+base snowfield pinned mesa from trixie-backports via the Surface kernel
+fragment, and a since-retired Hyprland product pinned
+libxkbcommon/pipewire/alsa/mesa there too. The merged delta's base-suite
+copy shadow-**downgrades** the
 product's version for the entire `/usr` overlay (root-caused live
 2026-08-25: chatgpt + claude-desktop deltas shipped libxkbcommon 1.7 over
 that product's 1.13 and killed its compositor at the next greeter start
@@ -633,8 +634,9 @@ and each product supplies its own suite's version at merge time.
 **The contract** (stated in gui-base's own conf): every package in
 gui-base must be in the installed closure of EVERY desktop product.
 Package *presence* is what drives delta omission — versions are
-irrelevant, so gui-base installs plain trixie even where products use
-backports. A package some desktop product lacks must stay OUT (it would
+irrelevant, so gui-base installs the plain base release even where a
+product pins another suite (none does since the 2026-09 forky move, but
+the mechanism is unchanged). A package some desktop product lacks must stay OUT (it would
 strip that lib from deltas and break the app on that product): today
 libxss1 and xdg-utils (absent from snow), zenity / fonts-liberation /
 the ayatana-appindicator+dbusmenu stack and gnupg2 / libminiupnpc18
@@ -647,7 +649,7 @@ divergent mesa family's Vulkan ICDs), which snow never pulled — so
 with gui-base by comments on both sides). Verification procedure for additions
 (run 2026-08-26): a product's closure = `output/base.manifest` ∪ that
 profile's manifest; snow closure = base ∪ `apt-get install --simulate` of
-`shared/packages/snow/mkosi.conf` in a podman trixie container using the
+`shared/packages/snow/mkosi.conf` in a podman container of the base release (trixie at the time) using the
 repo's `mkosi.sandbox/etc/apt` config and base's dpkg status.
 
 **The tripwire**: every gui-base sysext also lists
