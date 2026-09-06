@@ -29,9 +29,9 @@ The project produces:
 | ------------------- | --------------------------------------------------------------- | ------------- |
 | **snow**            | GNOME desktop with backports kernel                             | directory → OCI (buildah/chunkah) |
 | **snowfield**       | snow with linux-surface kernel for Surface devices              | directory → OCI (buildah/chunkah) |
-| **cayo**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
-| **cayo-ab-raw**     | Experimental native A/B server image (dev fixture, never published) | GPT disk (EROFS + dm-verity) |
-| **cayo-ab**         | Production native A/B server image (Secure Boot + TPM/LUKS `/var`) | GPT disk (EROFS + dm-verity) |
+| **floe**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
+| **floe-ab-raw**     | Experimental native A/B server image (dev fixture, never published) | GPT disk (EROFS + dm-verity) |
+| **floe-ab**         | Production native A/B server image (Secure Boot + TPM/LUKS `/var`) | GPT disk (EROFS + dm-verity) |
 | **snow-ab**          | Production native A/B GNOME desktop, backports kernel           | GPT disk (EROFS + dm-verity) |
 | **snowfield-ab**     | Production native A/B GNOME desktop, linux-surface kernel       | GPT disk (EROFS + dm-verity) |
 | **1password**       | 1Password desktop application                                   | sysext        |
@@ -78,15 +78,15 @@ assembly never runs a post-assembly chunk pass.
 ## Architecture
 
 Naming, path, and policy contracts for the production native A/B products
-(`cayo-ab`, `snow-ab`, `snowfield-ab`) are frozen in
+(`floe-ab`, `snow-ab`, `snowfield-ab`) are frozen in
 [`docs/native-ab-contracts.md`](docs/native-ab-contracts.md) and validated
 statically by `test/native-ab-contracts-test.sh`; see
 `docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md` for the coexistence
 plan that freeze unblocks.
 
-The isolated `cayo-ab-raw` profile (renamed from `cayo-ab` in Phase 1; `cayo-ab`
-now names the production secure posture — see below — and
-`check-native-publication-guard.sh` hard-fails if `cayo-ab-raw` ever picks up a
+The isolated `floe-ab-raw` profile is the permanent raw development fixture;
+`floe-ab` names the production secure posture, and
+`check-native-publication-guard.sh` hard-fails if `floe-ab-raw` ever picks up a
 publication marker) is an experimental development spike for native
 systemd-repart/systemd-sysupdate A/B roots. Its raw image and installer boot in
 QEMU, and `test/native-ab-update-test.sh` validates signed three-hop updates,
@@ -107,16 +107,16 @@ checks require HTTP 206 and cap each response at the requested byte count, so
 an origin that ignores `Range` fails without downloading the full artifact. It does not
 replace the supported bootc images. See
 `docs/plans/2026-07-13-mkosi-native-ab-root-design.md`; the destructive raw-disk
-installer spike lives at `test/cayo-ab-install-spike.sh`. Its UKI uses the
+installer spike lives at `test/floe-ab-install-spike.sh`. Its UKI uses the
 profile's dracut archive rather than mkosi's independently generated default
 initrd so the pre-pivot persistent `/etc` service is present at boot.
 
 The shared `shared/native-ab-secure/mkosi.conf` fragment extends the raw spike
 with standard Secure Boot through Debian's
 Microsoft-signed shim and MOK-signed systemd-boot; it is `Include=`d by the three
-production profiles (`cayo-ab`, `snow-ab`, `snowfield-ab` — the former
-standalone `cayo-ab-secure` spike profile was retired once this fragment
-generalized its content). Snosi UKIs are locally signed, so
+production profiles (`floe-ab`, `snow-ab`, `snowfield-ab`). The former
+standalone secure server spike was retired once this fragment generalized its
+content. Snosi UKIs are locally signed, so
 their certificate must be enrolled once through shim's MokManager; this does
 not require UEFI setup mode or custom firmware keys. The installer can replace
 the image's disposable ext4 `/var` with per-machine LUKS2, retain an external
@@ -143,12 +143,12 @@ token until every supported rollback UKI contains the new signature. Each produc
 profile carries a coherent Forky 261+ systemd family through the shared
 fragment's isolated,
 low-priority APT source; normal Trixie profiles remain unchanged. Validate a
-transition artifact with (`OUTPUT_NAME` selects `cayo-ab`/`snow-ab`/
-`snowfield-ab`; defaults to `cayo-ab`):
+transition artifact with (`OUTPUT_NAME` selects `floe-ab`/`snow-ab`/
+`snowfield-ab`; defaults to `floe-ab`):
 
 ```bash
-OUTPUT_NAME=cayo-ab test/native-ab-secure-artifact-test.sh \
-  output/cayo-ab.manifest output/cayo-ab.efi \
+OUTPUT_NAME=floe-ab test/native-ab-secure-artifact-test.sh \
+  output/floe-ab.manifest output/floe-ab.efi \
   .snosi-private/history/<old-key-certificate> \
   .snosi-private/pcr-signing.pub
 ```
@@ -160,7 +160,7 @@ key and run:
 
 ```bash
 test/native-ab-secure-rotation-test.sh --yes \
-  output/cayo-ab \
+  output/floe-ab \
   .snosi-private/history/<old-key-certificate> \
   .snosi-private/pcr-signing.pub /path/to/recovery.key \
   root@<vm-address> /path/to/ssh-key <expected-machine-id>
@@ -182,9 +182,9 @@ same disposable Incus VM with three preserved builds:
 
 ```bash
 test/native-ab-secure-update-test.sh --yes \
-  /path/to/N+1/cayo-ab \
-  /path/to/N+2/cayo-ab \
-  /path/to/N+3/cayo-ab \
+  /path/to/N+1/floe-ab \
+  /path/to/N+2/floe-ab \
+  /path/to/N+3/floe-ab \
   .snosi-private/history/<old-key-certificate> \
   .snosi-private/pcr-signing.pub /path/to/recovery.key \
   root@<vm-address> /path/to/ssh-key <expected-machine-id> <incus-instance>
@@ -200,10 +200,10 @@ then pass each update artifact prefix:
 
 ```bash
 sudo test/native-ab-update-test.sh \
-  /path/to/cayo-ab-raw-N.raw \
-  /path/to/N+1/cayo-ab-raw \
-  /path/to/N+2/cayo-ab-raw \
-  /path/to/N+3/cayo-ab-raw
+  /path/to/floe-ab-raw-N.raw \
+  /path/to/N+1/floe-ab-raw \
+  /path/to/N+2/floe-ab-raw \
+  /path/to/N+3/floe-ab-raw
 ```
 
 ```
@@ -215,7 +215,7 @@ sudo test/native-ab-update-test.sh \
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
   1password 1password-cli azurevpn bitwarden chatgpt claude-desktop code-server coder debdev dev docker edge github-copilot incus k3s lemonade localsend moonlight nix obsidian paseo pilothouse podman sunshine tailscale voxtype vscode
-                                     snow            cayo
+                                     snow            floe
                                       │
                                   snowfield
 ```
@@ -304,7 +304,7 @@ Profiles in `mkosi.profiles/` define complete image variants by composing shared
 
 ```
 mkosi.profiles/
-├── cayo/           ← Headless server + podman
+├── floe/           ← Headless server + podman
 ├── snow/           ← GNOME desktop + backports kernel
 └── snowfield/      ← GNOME desktop + Surface kernel
 ```
@@ -337,7 +337,7 @@ shared/
 │       ├── buildah-package.sh ← Packages rootfs dir into an OCI image
 │       └── chunkah-package.sh ← Chunks OCI candidates for efficient updates
 ├── packages/
-│   ├── cayo/mkosi.conf        ← Server packages + podman
+│   ├── floe/mkosi.conf        ← Server packages + podman
 │   ├── snow/mkosi.conf        ← GNOME desktop packages
 │   ├── edge/mkosi.conf        ← Microsoft Edge browser
 │   ├── azurevpn/mkosi.conf    ← Azure VPN Client
@@ -351,8 +351,8 @@ shared/
 │   ├── build/                 ← Shared build-time scripts (brew.chroot)
 │   └── common-postinst.sh     ← Shared postinstall logic (os-release, manifest)
 ├── sysext/postoutput/         ← Shared sysext versioning/naming postoutput
-├── cayo/
-│   ├── tree/                  ← Extra files overlaid into cayo image
+├── floe/
+│   ├── tree/                  ← Extra files overlaid into floe image
 │   └── scripts/
 │       └── postinstall/       ← Post-installation customizations
 ├── snow/
@@ -406,7 +406,7 @@ Include=%D/shared/outformat/image/mkosi.conf    # OCI output format
 | ------------------- | --------- | ------------------------------ | --------------------------------------------------------------------------- |
 | **snow**            | backports | —                              | `kernel/backports`, `packages/snow`, `outformat/image`                        |
 | **snowfield**       | surface   | —                              | `kernel/surface`, `packages/snow`, `outformat/image`                          |
-| **cayo**            | backports | —                              | `kernel/backports`, `packages/cayo`, `outformat/image`                        |
+| **floe**            | backports | —                              | `kernel/backports`, `packages/floe`, `outformat/image`                        |
 
 ## Building Images
 
@@ -437,8 +437,8 @@ just snow
 # Build snowfield (Surface devices)
 just snowfield
 
-# Build cayo server image
-just cayo
+# Build floe server image
+just floe
 
 # Clean build artifacts
 just clean
@@ -459,13 +459,13 @@ pull images itself, so pull the image into the same user's Podman storage
 first:
 
 ```bash
-podman pull ghcr.io/frostyard/cayo:latest
-bcvk libvirt run --name test-cayo \
+podman pull ghcr.io/frostyard/floe:latest
+bcvk libvirt run --name test-floe \
   --detach --ssh-wait \
   --firmware uefi-insecure \
   --composefs-backend --filesystem btrfs \
-  ghcr.io/frostyard/cayo:latest
-bcvk libvirt ssh test-cayo
+  ghcr.io/frostyard/floe:latest
+bcvk libvirt ssh test-floe
 ```
 
 The OCI profiles ship `bubblewrap` for bcvk and already ship `virtiofsd`.
@@ -484,7 +484,7 @@ return the same digest; protected assembly never chunks after that overlay. The 
 reconciler activates after local filesystems without writing `/etc`, verifies
 the MOK signer before atomically replacing only shim's `grubx64.efi`, and allows
 valid rollback deployments to restore their own stage. It never remounts an
-already-mounted read-only ESP. The real cayo proof validates immutable-source
+already-mounted read-only ESP. The pre-rename server proof validates immutable-source
 assembly only; FAT-ESP reconciler execution is deferred to Task 9 secure-install
 runtime coverage. Secure and insecure images carry explicit
 `io.snosi.bootc.secureboot-capable=true|false` labels. This is a maintained,
@@ -663,10 +663,11 @@ gh attestation verify oci://ghcr.io/frostyard/snow:latest --owner frostyard
 
 The `test-install.yml` workflow verifies the signature before every installation test.
 Secure bootc OCI images additionally enforce this key at pull/install/update time
-through containers/image policy. The only accepted repositories are
-`ghcr.io/frostyard/cayo`, `ghcr.io/frostyard/floe`, `ghcr.io/frostyard/snow`, and
-`ghcr.io/frostyard/snowfield`; other images, keys, and repository identities are
-rejected. Floe trust is pre-staged for the ordered cayo rename. Cosign v2.6.1
+through containers/image policy. The only accepted repositories are the
+temporary legacy server scope, `ghcr.io/frostyard/floe`,
+`ghcr.io/frostyard/snow`, and `ghcr.io/frostyard/snowfield`; other images,
+keys, and repository identities are rejected. The legacy scope remains only
+for the migration window. Cosign v2.6.1
 signs repository identities, so the policy uses
 repository matching rather than tag matching and enables GHCR Sigstore
 attachments explicitly.
@@ -1030,7 +1031,7 @@ Use the target-specific file:
 | Dependency kind | Metadata file | Rebuild workflow |
 |-----------------|---------------|------------------|
 | Direct download used by a sysext (`mkosi.images/<name>/...` or `shared/packages/<app>/...` consumed only by sysexts) | `shared/download/sysext-checksums.json` | `build.yml` |
-| Direct download used by profile/image build scripts (`shared/scripts/build/`, `shared/snow/scripts/build/`, `shared/cayo/...`) | `shared/download/image-checksums.json` | `build-images.yml` |
+| Direct download used by profile/image build scripts (`shared/scripts/build/`, `shared/snow/scripts/build/`, `shared/floe/...`) | `shared/download/image-checksums.json` | `build-images.yml` |
 | External APT package installed by a sysext through `Packages=` | `shared/download/package-versions.json` | `build.yml` |
 
 This routing keeps sysext-only dependency updates from spending the larger OCI

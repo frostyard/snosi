@@ -80,10 +80,12 @@ and never needs the pre-staged scope.
       `default: reject` or any transport stanza.
 - [x] Update `test/bootc-container-policy-test.sh` expectations for the new
       scope; run it (fixtures) locally.
-- [ ] Merge; let `build-images.yml` `secure-build` publish new
+- [x] Merge ([#926](https://github.com/frostyard/snosi/pull/926));
+      `build-images.yml` `secure-build` published new
       cayo/snow/snowfield `latest` (shared file — all three get the
       scope, which floe itself also needs later or floe installs could never
-      take their own updates).
+      take their own updates). Confirmed on `bgs-trashcan`, booted from cayo
+      version `20260906134245` with the floe scope in its installed policy.
 - [ ] The bootc operator updates and reboots (hourly `bootc-update-stage` +
       natural reboot, or manually), then confirms
       `grep floe /etc/containers/policy.json`.
@@ -108,12 +110,12 @@ product name. Classify every result as living (rename below) or historical
 the load-bearing groups:
 
 **Profiles and composition**
-- [ ] `mkosi.profiles/cayo` → `floe`, `cayo-ab` → `floe-ab`,
+- [x] `mkosi.profiles/cayo` → `floe`, `cayo-ab` → `floe-ab`,
       `cayo-ab-raw` → `floe-ab-raw`; inside each: `ImageId=floe`,
       `Output=floe`/`floe-ab`, include paths.
-- [ ] `shared/composition/cayo/` → `floe/` (mkosi.conf, `var-outcomes.txt`,
+- [x] `shared/composition/cayo/` → `floe/` (mkosi.conf, `var-outcomes.txt`,
       references in `var-audit.finalize`).
-- [ ] `shared/packages/cayo/` → `shared/packages/floe/`, and the include
+- [x] `shared/packages/cayo/` → `shared/packages/floe/`, and the include
       that consumes it: `shared/composition/cayo/mkosi.conf` line
       `Include=%D/shared/packages/cayo/mkosi.conf` becomes
       `%D/shared/packages/floe/mkosi.conf` in the renamed composition
@@ -123,14 +125,14 @@ the load-bearing groups:
       update the two comments that cite it as the firmware precedent
       (`shared/firn-installer/mkosi.conf`, `shared/native-installer/mkosi.conf`)
       and the README composition table row.
-- [ ] `shared/cayo/` → `shared/floe/` (postinst.chroot, tree — including
+- [x] `shared/cayo/` → `shared/floe/` (postinst.chroot, tree — including
       `usr/share/cayo/bundles` → `usr/share/floe/bundles` and anything in
       `shared/scripts/common-postinst.sh` that names the path). The filename-
       only inventory must also rename
       `tree/usr/lib/systemd/system/journald.conf.d/10-cayo-bootc-persistent.conf`
       → `10-floe-bootc-persistent.conf`; the file itself contains no `cayo`
       string, so content search cannot find it.
-- [ ] Inside that tree, rename the live-media kernel-argument conditions
+- [x] Inside that tree, rename the live-media kernel-argument conditions
       `ConditionKernelCommandLine=!cayo-linux.live=1` →
       `!floe-linux.live=1` in all three units that carry it:
       `usr/lib/systemd/system/brew-setup.service`,
@@ -141,22 +143,22 @@ the load-bearing groups:
       strings are the only thing to rename — and grep confirms it, since
       a `cayo-linux.live` left behind would silently never match a
       floe-identified live image.
-- [ ] `shared/native-ab/channels/cayo/` → `floe/`: repart labels
+- [x] `shared/native-ab/channels/cayo/` → `floe/`: repart labels
       `floe_%A_r` (+ verity partition config), `SplitName=floe_@v.root.raw`,
       and the three transfers — `Source Path=…/os/native/v1/floe/x86-64/`,
       `MatchPattern=floe-ab_@v…` / `Target MatchPattern=floe_@v_r`.
       Slot sizes are unchanged (same payload); update the name in
       `docs/native-ab-capacities.md`, not the numbers.
-- [ ] Root `mkosi.conf` / `mkosi.images/{base,gui-base}` references
+- [x] Root `mkosi.conf` / `mkosi.images/{base,gui-base}` references
       (comments and any Dependencies mentions).
 
 **Trust and installer catalog**
-- [ ] `shared/bootc-secure/tree/etc/containers/policy.json`: floe scope is
+- [x] `shared/bootc-secure/tree/etc/containers/policy.json`: floe scope is
       already present from Phase 1; **keep the cayo scope until Phase 5**
       (installed cayo systems still running pre-switch must keep updating…
       they won't get new cayo builds, but keeping the scope one release
       longer is free and removes a failure mode during the switch window).
-- [ ] Pin the temporary live-compatibility inventory through Phase 5. Outside
+- [x] Pin the temporary live-compatibility inventory through Phase 5. Outside
       historical files, `cayo` is allowed in exactly these active places:
       the single `"ghcr.io/frostyard/cayo"` key in
       `shared/bootc-secure/tree/etc/containers/policy.json`, and the single
@@ -166,7 +168,7 @@ the load-bearing groups:
       test fixture, live-test default, image ref, and payload identity moves to
       floe in this phase. Phase 5 removes this whole temporary allowlist; do
       not remove it sooner and strand a late cayo host.
-- [ ] `shared/firn-installer/catalog.json`: replace the bootc `cayo` entry
+- [x] `shared/firn-installer/catalog.json`: replace the bootc `cayo` entry
       with `floe` (`ghcr.io/frostyard/floe:latest`) and `cayo-ab` with
       `floe-ab`; same server `default_groups`. The ISO picker is driven by
       this snosi-owned file, not by a firn release, so the ISO republishes
@@ -175,7 +177,7 @@ the load-bearing groups:
       `test/firn-catalog-test.sh`, including its `^cayo` server-product
       classifier; otherwise the renamed entry takes the desktop assertion
       branch and the test no longer validates the server groups.
-- [ ] Resolve the superseded-but-still-executable native installer in this
+- [x] Resolve the superseded-but-still-executable native installer in this
       repository. It is distinct from the dormant external
       fisherman/bootc-installer/dakota-iso projects: `just
       native-installer-iso` still builds it and `validate.yml` still tests
@@ -193,64 +195,70 @@ the load-bearing groups:
       cayo identities.
 
 **CI, guards, Justfile**
-- [ ] `build-images.yml`: both matrix entries `profile: cayo` → `floe`.
-- [ ] `build-native-images.yml`: PR matrix entry, `build-cayo` →
+- [x] `build-images.yml`: both matrix entries `profile: cayo` → `floe`.
+- [x] `build-native-images.yml`: PR matrix entry, `build-cayo` →
       `build-floe` (env `PROFILE: floe-ab`, `PRODUCT: floe`), artifact names
       (`native-prepared-cayo` etc.), `promote-cayo` → `promote-floe`, the R2
       URL `os/native/v1/floe/x86-64`, the verify/summary loops' product
       lists. GitHub environments (`native-build`, `native-promotion`) are
       product-agnostic — no settings change.
-- [ ] `native-nightly.yml`: rotation (`Tue/Thu/Sat cayo-ab` → `floe-ab`) and
-      the dispatch options list.
-- [ ] `bootc-secure-nightly.yml` / `test-bootc-secure.yml` /
+- [x] `native-nightly.yml`: rotation (`Tue/Thu/Sat cayo-ab` → `floe-ab`) and
+      the dispatch options list. The workflow was retired on 2026-08-28, so
+      there is no live file to rename.
+- [x] `bootc-secure-nightly.yml` / `test-bootc-secure.yml` /
       `build-mechanics.yml`: `PROFILE=cayo` defaults and any job matrices.
-- [ ] Guards: `check-bootc-publication-guard.sh` `profiles=(… floe …)`,
+- [x] Guards: `check-bootc-publication-guard.sh` `profiles=(… floe …)`,
       `check-native-publication-guard.sh` `production_names=(floe-ab …)` and
       its `cayo-ab-raw` special-case path, `check-profile-dependencies.sh`.
       These must move in the same commit as the directory renames.
-- [ ] `Justfile`: `cayo`/`cayo-ab`/`_cayo`/`_cayo-ab` targets and any
+- [x] `Justfile`: `cayo`/`cayo-ab`/`_cayo`/`_cayo-ab` targets and any
       test-install/run-qemu defaults.
 
 **Tests**
-- [ ] `test/native-ab-contracts-test.sh` + `test/native-ab-contracts-allow.txt`
+- [x] `test/native-ab-contracts-test.sh` + `test/native-ab-contracts-allow.txt`
       and the normative `docs/native-ab-contracts.md` (the naming contract
       itself changes: `floe`, `floe-ab`, `floe_<version>_r`,
       `floe-ab_<version>` entry-token, `os/native/v1/floe`).
-- [ ] The bootc-secure suites' `PROFILE=cayo|snow|snowfield` acceptance
+- [x] The bootc-secure suites' `PROFILE=cayo|snow|snowfield` acceptance
       lists and defaults (`bootc-secure-spike/install/update/artifact/static`,
       `native-ab-secure-boot-test.sh`, `native-boot-smoke-test.sh`, etc.).
-- [ ] `test/workflow-path-filter-test.sh` and any other test pinning
+- [x] `test/workflow-path-filter-test.sh` and any other test pinning
       workflow content that names cayo jobs.
-- [ ] The filename inventory explicitly classifies
+- [x] The filename inventory explicitly classifies
       `test/cayo-ab-install-spike.sh` as living and renames it as specified
       above. The old cayo ship-plan filenames under `docs/plans/` are
       historical and remain unchanged.
 
 **Docs — living only**
-- [ ] Update: `CLAUDE.md`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`,
+- [x] Update: `CLAUDE.md`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`,
       `docs/installing.md`, `docs/design/*`, `docs/native-ab-contracts.md`,
       `docs/native-ab-publication.md`, `docs/native-ab-capacities.md`,
       `docs/bootc-secure-*.md` (the install contract's
       `PROFILE=cayo|snow|snowfield` grammar), `docs/snosi-kargs.md`,
       `docs/integration-contracts.md`, `.github/prompts/native-ab-change.md`,
       PR template, `docs/README.md` index (add this plan).
-- [ ] Do **not** rewrite ADRs, `docs/plans/2026-02-19-cayo-ship-*`,
+- [x] Do **not** rewrite ADRs, `docs/plans/2026-02-19-cayo-ship-*`,
       `docs/native-ab-prototype-history.md`, superpowers specs/plans, or
       `.memory/` history — they are historical record; the org ADR is the
       pointer from old name to new.
-- [ ] Append a `.memory/corrections.jsonl`-adjacent note only if something
+- [x] Append a `.memory/corrections.jsonl`-adjacent note only if something
       believed here turns out wrong; otherwise nothing (the repo records the
       rename itself).
 
 **Verification before merge**
-- [ ] `mkosi --profile floe summary` and `--profile floe-ab summary` diff
+- [x] `mkosi --profile floe summary` and `--profile floe-ab summary` diff
       byte-clean (modulo Seed/tmpdir/Image Version) against pre-rename cayo
       captures — same composition, only names changed. Remember the
       `History=yes` gotcha: `sudo rm -f .mkosi-private/history/latest.json`
       before capturing.
-- [ ] Local `just floe` build; full `validate.yml` suite green; fixture
-      suites for every touched test.
-- [ ] Re-run both inventories. Every remaining content or path hit is listed
+- [x] Local `just floe` build; full `validate.yml` suite green; fixture
+      suites for every touched test. Bare-metal evidence on 2026-09-06 used
+      Cayo host `bgs-trashcan`: because `just` was not installed, it ran the
+      exact `_floe` recipe (`mkosi clean -ff`, then
+      `mkosi --profile floe build`) with the repository-pinned mkosi. The
+      resulting rootfs and locally packaged mechanics OCI image both passed
+      the Floe identity, target `bootc`, and signature-policy checks.
+- [x] Re-run both inventories. Every remaining content or path hit is listed
       in either the historical exclusions above (including this rename plan
       and the old ship plans) or the exact temporary policy/policy-test
       allowlist above. No other active build, test, installer, or payload path

@@ -22,10 +22,10 @@ Each image build runs four phases of scripts sequentially:
 Download and install items not available as Debian packages. These run inside the chroot with network access.
 
 Per-product BuildScripts/PostInstallationScripts/FinalizeScripts/PostOutputScripts
-live in `shared/composition/<product>/mkosi.conf` (`shared/composition/cayo`,
+live in `shared/composition/<product>/mkosi.conf` (`shared/composition/floe`,
 `shared/composition/snow`) and are `Include=`d by every profile that ships that
-product's payload — the bootc profile (`cayo`/`snow`/`snowfield`) and the native
-A/B profiles (`cayo-ab-raw`, `cayo-ab`, `snow-ab`, `snowfield-ab`) alike — so the two transports
+product's payload — the bootc profile (`floe`/`snow`/`snowfield`) and the native
+A/B profiles (`floe-ab-raw`, `floe-ab`, `snow-ab`, `snowfield-ab`) alike — so the two transports
 cannot drift apart. See CLAUDE.md "Configuration Composition" for the ordering
 rules that apply when editing these fragments.
 
@@ -132,7 +132,7 @@ options, and the signed-PCR recovery policy. The normative cross-repository
 consumer contract is `docs/bootc-secure-install-contract.md`; it does not
 implement Fisherman, bootc-installer, or Dakota in this repository.
 An existing `ro` ESP mount is refused before any remount or write. The real
-cayo Buildah proof validates immutable-source assembly/retention and signer
+floe Buildah proof validates immutable-source assembly/retention and signer
 binding, not runtime reconciliation on an installed FAT ESP; that execution is
 deferred to the Task 9 secure-install runtime harness.
 
@@ -190,8 +190,9 @@ document; the normative operational recovery and evidence rules are in
 **OCI signature policy (Task 6):** the secure bootc tree supplies
 `/etc/containers/policy.json`, which defaults to `reject` and has one
 `sigstoreSigned` rule, using `/usr/lib/snosi/cosign.pub`, for each exact
-`ghcr.io/frostyard/{cayo,floe,snow,snowfield}` repository. The floe scope is
-pre-staged for the ordered cayo rename. Cosign v2.6.1 signatures
+the temporary legacy server repository and each current
+`ghcr.io/frostyard/{floe,snow,snowfield}` repository. The legacy scope remains
+for the migration window. Cosign v2.6.1 signatures
 record only the repository identity, so `matchRepository` is required; using
 tag-exact identity would reject valid published images. The accompanying
 `registries.d/frostyard.yaml` enables Sigstore attachments for GHCR, without
@@ -209,16 +210,16 @@ semaphore and its existing EXIT trap records `outcome=failed`.
 **Forky compatibility evidence and limit:** Frostyard's `bootc` and
 `libostree-1-1` debs are built independently of the Forky systemd family, so
 their coexistence is a compatibility risk, not a package-manager proof. Task 4
-ran a full `just cayo` build resolving bootc `1.16.3-frostyard202607061837`,
+ran a full `just floe` build resolving bootc `1.16.3-frostyard202607061837`,
 libostree `2026.2-frostyard202607061837`, and the selected systemd family at
 `261.1-3`; it then ran `bootc --version` and `bootc container --help` under
-`bwrap --ro-bind output/cayo /`, preventing host libraries from satisfying the
+`bwrap --ro-bind output/floe /`, preventing host libraries from satisfying the
 commands. This is evidence for that exact combination only. Re-run the build
 and isolated-root command check whenever bootc-debian, libostree, or the Forky
 selection changes; do not treat the low APT pin or a host-side `ldd` result as
 runtime compatibility validation.
 
-**Server payload (cayo, cayo-ab-raw, cayo-ab):** Only `brew.chroot` (no desktop build scripts) — all three consume it via `shared/composition/cayo/mkosi.conf`.
+**Server payload (floe, floe-ab-raw, floe-ab):** Only `brew.chroot` (no desktop build scripts) — all three consume it via `shared/composition/floe/mkosi.conf`.
 
 ### 2. PostInstallationScripts (after packages)
 
@@ -274,7 +275,7 @@ digest continuity: the pulled `.Digest` equals bootc's booted or staged
 
 Consumers of the update state:
 - `/etc/update-motd.d/86-bootc-update-staged` — SSH/console logins (all
-  images, including headless cayo). Staged semaphore wins; otherwise it
+  images, including headless floe). Staged semaphore wins; otherwise it
   prints one line per check outcome ("snosi VERSION is up to date
   (checked TIME)", a FAILED warning pointing at the journal, or the
   held-rollback note). Silent when no check has run this boot.
@@ -325,7 +326,7 @@ Runtime units shipped in `mkosi.extra/` must not self-disable, call `systemctl p
 
 **Common postinstall logic** (`shared/scripts/common-postinst.sh`):
 
-Both snow and cayo postinstall scripts source this shared script after setting `OS_PRETTY_NAME` and `OS_NAME`. It handles:
+Both snow and floe postinstall scripts source this shared script after setting `OS_PRETTY_NAME` and `OS_NAME`. It handles:
 - Updates `/usr/lib/os-release` (PRETTY_NAME, NAME, ID, ID_LIKE, VERSION_ID, SYSEXT_LEVEL, BUILD_ID)
 - Generates package list to `/usr/share/frostyard/`
 - Writes build date
@@ -336,7 +337,7 @@ Both snow and cayo postinstall scripts source this shared script after setting `
 - `shared/snow/scripts/postinstall/snow.postinst.chroot` — Sources `common-postinst.sh` with OS_PRETTY_NAME="Snow Linux", enables GDM, creates user service symlinks for gnome-remote-desktop and gnome-remote-desktop-handover (explicitly removes gnome-remote-desktop-headless due to `Conflicts=` with the non-headless variant), removes fish desktop entry
 
 **Server postinstall:**
-- `shared/cayo/scripts/postinstall/cayo.postinst.chroot` — Sources `common-postinst.sh` with OS_PRETTY_NAME="Cayo Linux" (no additional steps beyond common logic)
+- `shared/floe/scripts/postinstall/floe.postinst.chroot` — Sources `common-postinst.sh` with OS_PRETTY_NAME="Floe Linux" (no additional steps beyond common logic)
 
 **App package-set postinstall scripts (now consumed only by the app sysext builds — the loaded variants that used them were retired 2026-07):**
 
@@ -413,7 +414,7 @@ Runtime payload guard used by `validate.yml`. It scans tracked files in `mkosi.e
 
 ### check-native-publication-guard.sh
 
-Static publication guard used by `validate.yml`, enforcing `docs/native-ab-contracts.md` §15. For every `mkosi.profiles/<name>` directory literally named `cayo-ab`, `snow-ab`, or `snowfield-ab` (the production native profile names), it requires the profile's `mkosi.conf` (plus `shared/native-ab-secure/**` content, if the conf references that path) to carry `ShimBootloader=signed`, `SecureBoot=yes`, `SignExpectedPcr=yes`, a reference to the NvPCR-disable finalize script, an include of the ab-root outformat fragment, and the committed update pubring at `shared/native-ab/keys/import-pubring.gpg`; it also requires the profile's own conf to carry no `KernelModules=` final-root filter. All three production profiles (`cayo-ab`, `snow-ab`, `snowfield-ab`) exist as of Task 3.2 and pass this guard. Independently, it hard-fails if `mkosi.profiles/cayo-ab-raw` — the permanent, never-published raw dev fixture — ever picks up any of the Shim/SecureBoot/SignExpectedPcr markers, since that would make it indistinguishable from a production profile.
+Static publication guard used by `validate.yml`, enforcing `docs/native-ab-contracts.md` §15. For every `mkosi.profiles/<name>` directory literally named `floe-ab`, `snow-ab`, or `snowfield-ab` (the production native profile names), it requires the profile's `mkosi.conf` (plus `shared/native-ab-secure/**` content, if the conf references that path) to carry `ShimBootloader=signed`, `SecureBoot=yes`, `SignExpectedPcr=yes`, a reference to the NvPCR-disable finalize script, an include of the ab-root outformat fragment, and the committed update pubring at `shared/native-ab/keys/import-pubring.gpg`; it also requires the profile's own conf to carry no `KernelModules=` final-root filter. All three production profiles (`floe-ab`, `snow-ab`, `snowfield-ab`) exist as of Task 3.2 and pass this guard. Independently, it hard-fails if `mkosi.profiles/floe-ab-raw` — the permanent, never-published raw dev fixture — ever picks up any of the Shim/SecureBoot/SignExpectedPcr markers, since that would make it indistinguishable from a production profile.
 
 **CI usage in build.yml:**
 ```bash
@@ -572,13 +573,13 @@ Desktop configuration overlay:
 - tmpfiles.d and sysusers.d definitions
 - Flatpak sandbox overrides
 
-### shared/cayo/tree/
+### shared/floe/tree/
 
 Server configuration overlay:
 - APT sources for Docker
-- NetworkManager: no Wi-Fi backend override — cayo uses NetworkManager's
+- NetworkManager: no Wi-Fi backend override — floe uses NetworkManager's
   default `wpa_supplicant` backend, matching the `wpasupplicant` package that
-  base installs. An early cayo overlay shipped
+  base installs. An early floe overlay shipped
   `etc/NetworkManager/conf.d/iwd.conf` with `wifi.backend=iwd` while no product
   installs `iwd`, pointing NetworkManager at an absent backend (frostyard/snosi#805,
   removed 2026-08). `test/wifi-backend-test.sh` (validate.yml) fails the build

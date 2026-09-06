@@ -559,7 +559,7 @@ succeeds the moment the cache is stale or absent.
 
 `/usr/lib/<triplet>/gdk-pixbuf-2.0/<abi>/loaders.cache` is another singleton,
 but it cannot always be stripped: a base-built extension can introduce
-GdkPixbuf on cayo, whose base has no graphical stack or fallback loader cache.
+GdkPixbuf on floe, whose base has no graphical stack or fallback loader cache.
 Any sysext that ships `loaders.cache` must therefore also ship
 `libpixbufloader_svg.so` and register its installed path in that cache. The
 shared cache finalizer fails the build otherwise. This is the minimum cache
@@ -662,7 +662,7 @@ script's behavior plus the wiring parity: BaseTrees=gui-base ⇔ tripwire
 present, in both directions.
 
 **Deliberately still base-built**: server/CLI sysexts, including incus —
-it carries qemu's GUI libs precisely because cayo (no GUI closure) needs
+it carries qemu's GUI libs precisely because floe (no GUI closure) needs
 them in the delta. Consequence: enabling lib-heavy *server* sysexts on a
 desktop product remains cautioned, and sysexts built in
 **other repositories** are outside this guarantee entirely — an updex-side
@@ -682,7 +682,7 @@ That makes the published `.raw` a **frozen assertion about the base's
 transitive closure at build time** — and nothing re-validates it when the
 base later changes.
 
-This bit incus on cayo (root-caused 2026-09-01). Until
+This bit incus on the pre-rename server image (root-caused 2026-09-01). Until
 33455fc (2026-08-25, #771) the base image transitively pulled an entire
 desktop, because `network-manager-applet` depends on the
 `policykit-1-gnome | polkit-1-auth-agent` virtual and apt satisfied it with
@@ -694,10 +694,10 @@ sysext built 2026-08-04 against that fat base therefore shipped
 their GTK3/media dependencies** — all correctly omitted as "already in the
 base".
 
-#771 removed `network-manager-applet`. Cayo images built after it have none
+#771 removed `network-manager-applet`. Floe images built after it have none
 of those libs, and the incus sysext was never rebuilt (its KEYPACKAGE
 version had not moved, so `skip-duplicates` skipped every republish). The
-merged result on cayo had 24 unresolved sonames. The user-visible symptom
+merged result on floe had 24 unresolved sonames. The user-visible symptom
 was total loss of VM support:
 
 ```

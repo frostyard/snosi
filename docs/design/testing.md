@@ -78,7 +78,7 @@ test/
 ├── registry.tsv               # Declarative inventory; guarded by test-registry-test.sh
 ├── bootc-install-test.sh      # Orchestrator script (headless, for CI)
 ├── bootc-update-test.sh       # Update/rollback orchestrator (headless)
-├── bootc-container-policy-test.sh # OCI policy contract; RUN_LIVE=1 proves signed Cayo pull then containers-storage consumption
+├── bootc-container-policy-test.sh # OCI policy contract; RUN_LIVE=1 proves signed Floe pull then containers-storage consumption
 ├── native-ab-update-test.sh   # Native A/B N through N+3 QEMU test
 ├── native-boot-smoke-test.sh  # boot-validation smoke gate: disk artifact boots to multi-user.target (build-native-images.yml promotion gate)
 ├── native-iso-boot-smoke-test.sh # boot-validation smoke gate: installer ISO reaches a serial login prompt (same promotion gate)
@@ -90,9 +90,9 @@ test/
 ├── native-ab-secure-artifact-negative-test.sh # Rejection mutations
 ├── native-ab-secure-rotation-test.sh # Destructive enrolled-VM rotation proof
 ├── native-ab-secure-update-test.sh # Destructive secure rollback/fallback proof
-├── cayo-ab-install-spike.sh   # Guarded native A/B disk installer (GPT/var-grow/LUKS spike, unchanged since Task 8.2)
+├── floe-ab-install-spike.sh   # Guarded native A/B disk installer (GPT/var-grow/LUKS spike, unchanged since Task 8.2)
 ├── native-installer-iso-test.sh # Installer ISO boot-chain validation (structural + QEMU positive/negative Secure Boot proof)
-├── native-installer-e2e-test.sh # Phase 8 exit: real ISO install of cayo-ab + snow-ab end to end (build/publish -> boot ISO -> non-interactive encrypted install -> MOK enroll -> enforced unattended boot)
+├── native-installer-e2e-test.sh # Phase 8 exit: real ISO install of floe-ab + snow-ab end to end (build/publish -> boot ISO -> non-interactive encrypted install -> MOK enroll -> enforced unattended boot)
 ├── native-publication-pipeline-test.sh # Phase 7 candidate/verify/promote/withdraw pipeline self-test (OS + ISO fixture legs)
 ├── snosi-install-test.sh      # snosi-install CLI unit tests (index verification, disk refusal, arg validation, streamed-verify, restage-mok)
 ├── run-qemu.sh                # Interactive QEMU runner (GTK display)
@@ -161,7 +161,7 @@ regression (after installing `cryptsetup`), and
 `python3 test/task3-console-pump-test.py`. They intentionally do not invoke
 the default live QEMU/OVMF/swtpm proof.
 
-The default mode additionally requires a built `output/cayo`, `bootc`, `ukify`,
+The default mode additionally requires a built `output/floe`, `bootc`, `ukify`,
 `sbverify`, Buildah, and disposable credentials in `BOOTC_SECURE_MOK_KEY`,
 `BOOTC_SECURE_MOK_CERT`, and `BOOTC_SECURE_PCR_KEY`. Missing inputs print
 `BLOCKED:` and exit 2; this is intentionally not a passing security result.
@@ -170,7 +170,7 @@ Source inspection of pinned bootc 1.16.3 identifies `bootc container ukify
 --rootfs ROOT -- <ukify-options>` as the interface that discovers the kernel,
 initramfs, command line, and os-release, computes the composefs SHA-512 image
 ID, and forwards trailing arguments to ukify. The live pinned-stack gate
-observed that interface against the cayo rootfs. The spike independently calls
+observed that interface against the floe rootfs. The spike independently calls
 `bootc container
 compute-composefs-digest ROOT`, creates the UKI outside `/boot`, then copies it
 to `/boot/EFI/Linux` and requires the recomputed digest to remain byte-identical
@@ -206,7 +206,7 @@ assembly require a supported upstream/bootc-debian interface or an explicit
 maintained compatibility contract before Task 5 can claim support. The
 installer never rewrites the UKI or adds machine-specific kernel arguments.
 Both the storage-digest container invocation and `to-filesystem` execute the
-bootc binary from the temporary cayo OCI image (observed 1.16.3). Current bootc
+bootc binary from the temporary floe OCI image (observed 1.16.3). Current bootc
 writes a BLS `efi=` entry naming
 `/EFI/Linux/bootc/bootc_composefs-<deployment-id>.efi`; the harness intentionally
 pins and validates this feasibility shape, including the absence of raw
@@ -408,16 +408,16 @@ The production base image uses the same containers-storage staging strategy in `
 
 `native-ab-update-test.sh` and `native-ab-components-test.sh` are parameterized
 by product (Phase 3, docs/native-ab-contracts.md §1): `PROFILE` (default
-`cayo-ab-raw`) selects the `mkosi --profile` value; `IMAGE_ID` defaults to
-`PROFILE` with a trailing `-ab-raw` or `-ab` stripped (`cayo`); `CHANNEL`
-defaults to `${IMAGE_ID}-ab` (`cayo-ab`). Partition labels and
+`floe-ab-raw`) selects the `mkosi --profile` value; `IMAGE_ID` defaults to
+`PROFILE` with a trailing `-ab-raw` or `-ab` stripped (`floe`); `CHANNEL`
+defaults to `${IMAGE_ID}-ab` (`floe-ab`). Partition labels and
 `MatchPartitionType=partition` transfer targets are always `IMAGE_ID`-based
 (GPT labels are never channel-based, §3); OS transfer `Source` blob names and
 the UKI's `Target` names are always `CHANNEL`-based, matching the real shipped
 transfers (`shared/native-ab/channels/<product>/tree/usr/lib/sysupdate.d/`) —
-this mirrors production even for the default `cayo-ab-raw` dev fixture, whose
-build output is never itself named `cayo-ab`. Both scripts default to
-byte-equivalent behavior against `cayo`/`cayo-ab-raw`/`cayo-ab` when run with
+this mirrors production even for the default `floe-ab-raw` dev fixture, whose
+build output is never itself named `floe-ab`. Both scripts default to
+byte-equivalent behavior against `floe`/`floe-ab-raw`/`floe-ab` when run with
 no overrides.
 
 Every harness that runs build outputs through
@@ -436,17 +436,17 @@ publish-staging step links it into the stage as
 exception: its build dir doubles as the publisher source dir, so
 `copy_build_artifacts` keeps the `<image_id>.features.json` name as-is).
 
-`native-ab-update-test.sh` uses four real `cayo-ab-raw` builds to exercise signed
+`native-ab-update-test.sh` uses four real `floe-ab-raw` builds to exercise signed
 manifest rejection, N through N+3 updates, slot reuse, rollback, and boot-count
 fallback in QEMU.
 
 `native-ab-components-test.sh` is the Phase 1 exit-criterion QEMU test
 (`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`, "Phase 1: Fix
 Current Prototype Safety"). It is self-contained: it builds two real
-`cayo-ab-raw` versions itself (mirroring the Justfile's `ensure-mkosi`
-bootstrap plus `mkosi clean -ff` + `mkosi --profile cayo-ab-raw build` --
+`floe-ab-raw` versions itself (mirroring the Justfile's `ensure-mkosi`
+bootstrap plus `mkosi clean -ff` + `mkosi --profile floe-ab-raw build` --
 `SKIP_BUILD=1 BUILD_N_DIR=... BUILD_N1_DIR=...` lets it reuse two already-built
-`cayo-ab-raw` output directories for fast iteration instead of paying the
+`floe-ab-raw` output directories for fast iteration instead of paying the
 ~15-25 min clean-build cost, which includes a full mkosi ToolsTree rebuild,
 twice per run), boots N, and asserts in order: (1) no failed systemd units and
 bootc/nbc/systemd-sysupdate auto-update timers and services report `masked`,
@@ -476,7 +476,7 @@ fixture names; (5) `snosi-etc-diff` and
 `/etc/issue` modification against the native A/B `/.etc.lower` tree, and leave
 no bind mounts behind. It found and fixed a real bug: the `KernelModules=`
 allowlist (at the time in the shared ab-root fragment; Phase 3 moved it to
-`mkosi.profiles/cayo-ab-raw/mkosi.conf` and removed it from
+`mkosi.profiles/floe-ab-raw/mkosi.conf` and removed it from
 `shared/outformat/ab-root/mkosi.conf` entirely, since release channels ship
 the full module set unconditionally) excluded `nf_tables`/`nfnetlink`, so
 `nftables.service` (shipped and preset-enabled unconditionally by the base
@@ -537,7 +537,7 @@ N=20260715003309 -> N+1=20260715003624).
 `native-publish-test.sh` is a static, non-root regression test for
 `shared/native-ab/publish/prepare-native-publication.sh` (Phase 3), the script
 that turns mkosi's internal split outputs (double-`.raw` filenames with a
-literal, un-substituted `@v`, e.g. `cayo-ab.cayo_@v.root.raw.raw`) into the
+literal, un-substituted `@v`, e.g. `floe-ab.floe_@v.root.raw.raw`) into the
 frozen `docs/native-ab-contracts.md` §4 public names. It derives
 product/channel/version from the built artifacts themselves (never from
 command-line arguments): product + version come from the mkosi JSON
@@ -613,10 +613,10 @@ remain enabled.
 
 `native-ab-secure-boot-test.sh` (Phase 5) is a FULLY AUTOMATED end-to-end QEMU
 harness for a production native profile (`PROFILE`, default `snow-ab`; also
-accepts `cayo-ab`) — no MokManager interaction, no manual boot-time input. It
+accepts `floe-ab`) — no MokManager interaction, no manual boot-time input. It
 builds two real versions (N, N+1) itself (same `SKIP_BUILD=1
 BUILD_N_DIR=...  BUILD_N1_DIR=...` fast-iteration knobs as the other native-ab
-QEMU tests), installs N to a raw disk FILE via `cayo-ab-install-spike.sh
+QEMU tests), installs N to a raw disk FILE via `floe-ab-install-spike.sh
 --allow-file --yes --encrypt-var --recovery-key-file` (deliberately no
 `--mok-certificate`: that talks to the HOST's live EFI variable store, wrong
 for a loopback install, and the spike script itself refuses the combination),
@@ -698,7 +698,7 @@ order, so the ephemeral pair wins; the committed file is never modified).
 This is the ONLY harness that can exercise the `.pgp` vendor path that
 commit 91718d7's outage proved untested: systemd 261 (production profiles)
 reads `/usr/lib/systemd/import-pubring.pgp` with no `/usr` `.gpg` fallback,
-while Trixie's systemd 257 (`cayo-ab-raw`, i.e. every other update harness
+while Trixie's systemd 257 (`floe-ab-raw`, i.e. every other update harness
 including `native-ab-publication-test.sh`'s no-override leg) still reads
 the old `.gpg` name (verified via `strings` on `systemd-pull`). Before
 staging, the harness asserts no `/etc` override exists, both `/usr` names
@@ -821,14 +821,14 @@ network-installer ISO and reach a running, Secure-Boot-enforced, TPM-unlocked
 native A/B system with no keyring injection and no hand-editing — the whole
 trust chain on stock artifacts. Per run it (1) builds the ISO fresh (so the
 own-boot-medium fix from commit 99f4921 is exercised in the REAL initramfs, not a
-fixture) and builds+publishes `cayo-ab` and `snow-ab` through the actual
+fixture) and builds+publishes `floe-ab` and `snow-ab` through the actual
 `prepare -> publish-candidate -> verify-remote -> promote` pipeline with the DEV
 signing key to a local origin served by `test/lib/range-http-server.py`; trust leg
 is the stock shipped `import-pubring.gpg` everywhere. Then per product it boots a
 VM with a VIRGIN Secure-Boot varstore (`OVMF_VARS_4M.ms.fd`, no MOK) and
 persistent swtpm against a blank disk sized to the product's documented minimum
 plus a 3 GiB margin (so the grow-to-end path runs), and drives the seven-step
-sequence: (2) ISO boots to the installer with SB enabled; (3, cayo-ab only)
+sequence: (2) ISO boots to the installer with SB enabled; (3, floe-ab only)
 own-boot-medium install is refused in the real initramfs, before any write to the
 ISO device; (4) non-interactive encrypted-`/var` install with a recovery key, TPM
 enrollment, and a MOK password file — first proving a world/group-readable
@@ -836,19 +836,19 @@ password file is refused — then asserting exactly one `systemd-tpm2` LUKS toke
 a recovery keyslot, a grown `var`, and that the recovery passphrase opens the
 volume (`--test-passphrase`); (5) pre-enrollment boot fails with shim's Security
 Violation because the MOK is not yet enrolled; (6) `--restage-mok` succeeds
-(cayo-ab gets a dedicated fresh-ISO-boot restage; snow-ab skips it); (7)
+(floe-ab gets a dedicated fresh-ISO-boot restage; snow-ab skips it); (7)
 host-side `virt-fw-vars --add-mok` into the SAME varstore simulates the MokManager
 one-time approval, then the installed system boots fully enforced and fully
 unattended, verifying SB enforced, kernel lockdown, `/var` on the LUKS mapper via
 unattended TPM unlock, the `/etc` overlay, correct `IMAGE_ID`/`IMAGE_VERSION`, all
 `install-info.json` fields, a clean `snosi-update-status`, no failed units, and
-that the recovery passphrase still opens `/var`. cayo-ab runs the full sequence;
+that the recovery passphrase still opens `/var`. floe-ab runs the full sequence;
 snow-ab runs steps 2, 4, 5, 7 only; `snowfield-ab` is behind `--with-snowfield`
 (off by default — QEMU cannot represent Surface hardware, same rationale as Phase
-6). `SKIP_ISO_BUILD` / `SKIP_CAYO_BUILD` / `SKIP_SNOW_BUILD` with
-`BUILD_CAYO_DIR` / `BUILD_SNOW_DIR` skip the multi-GiB rebuilds during iteration.
-First full run: 75/75 assertions passed (2026-07-15, cayo-ab full + snow-ab
-partial, ISO `snosi-native-installer_20260716003626_x86-64.iso` (cayo-ab image 20260715203830, snow-ab 20260715204023), wall time ~17 min). It also fixed real product
+6). `SKIP_ISO_BUILD` / `SKIP_FLOE_BUILD` / `SKIP_SNOW_BUILD` with
+`BUILD_FLOE_DIR` / `BUILD_SNOW_DIR` skip the multi-GiB rebuilds during iteration.
+First full run: 75/75 assertions passed (2026-07-15, server profile + snow-ab
+partial, ISO `snosi-native-installer_20260716003626_x86-64.iso` (server image 20260715203830, snow-ab 20260715204023), wall time ~17 min). It also fixed real product
 bugs along the way — the installer ISO was missing `fdisk` (sfdisk), `binutils`
 (objcopy for `.pcrpkey` extraction), and `openssl`, and `snosi-install` wrote
 several tool-diagnostic streams to stdout instead of stderr, dumped a UKI section
@@ -945,12 +945,12 @@ serial console log within `ISO_BOOT_TIMEOUT` (default 420s). `SMOKE_CONSOLE_
 COPY` behaves identically to the disk test.
 
 **Local-proof recipe** (both scripts, verified live 2026-07-17): build the
-product (`just cayo-ab`, `mkosi --profile native-installer build` +
+product (`just floe-ab`, `mkosi --profile native-installer build` +
 `build-iso.sh` for the ISO), run it through `prepare-native-publication.sh`
 (no `--xz` -- the fast local-iteration path, unsuffixed filenames) or
 `prepare-iso-publication.sh`, then point the smoke script straight at that
 output dir with no `base-url`. Positive runs passed clean on the first try
-for both scripts (`cayo` `20260717160535` for the disk test; installer ISO
+for both scripts (`floe` `20260717160535` for the disk test; installer ISO
 `20260717230838` for the ISO test, observed login line `snosi-installer
 login:`), and the download-path leg (metadata-only dir + `test/lib/
 range-http-server.py <port> <directory>` -- note the two POSITIONAL args,

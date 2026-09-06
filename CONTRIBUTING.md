@@ -33,7 +33,7 @@ just
 just sysexts
 just snow
 just snowfield
-just cayo
+just floe
 ```
 
 Validation scripts used by CI are in `test/` and `.github/workflows/validate.yml`.

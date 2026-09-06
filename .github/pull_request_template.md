@@ -6,7 +6,7 @@ Closes #
 
 ## Type of change
 
-- [ ] Image or profile change (`cayo`, `snow`, `snowfield`, native A/B profiles)
+- [ ] Image or profile change (`floe`, `snow`, `snowfield`, native A/B profiles)
 - [ ] Sysext change
 - [ ] Build pipeline / CI change
 - [ ] Documentation only

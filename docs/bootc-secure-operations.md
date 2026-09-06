@@ -8,7 +8,7 @@
 > Fixture success is not live lifecycle evidence.
 
 This is the normative operator entry point for the secure bootc path. It applies
-only to fresh `cayo`, `snow`, and `snowfield` installs. The frozen legacy
+only to fresh `floe`, `snow`, and `snowfield` installs. The frozen legacy
 adapter contract is [docs/bootc-secure-install-contract.md](bootc-secure-install-contract.md),
 the assembly compatibility contract is [docs/bootc-secure-assembly-compatibility.md](bootc-secure-assembly-compatibility.md),
 and the image schema source is

@@ -1,6 +1,6 @@
 # Native A/B Publication Runbook
 
-Operational procedure for publishing native A/B (`cayo-ab`, `snow-ab`,
+Operational procedure for publishing native A/B (`floe-ab`, `snow-ab`,
 `snowfield-ab`) images to production. This is the human-facing companion to
 `docs/native-ab-contracts.md` (frozen names/paths/policy) and the plan's
 "Atomic Publication Procedure" / "R2 Publication Contract" / "R2 Retention
@@ -50,7 +50,7 @@ substitute for the OpenPGP signature.
 
 `verify-remote.sh` and `promote.sh` additionally take a `base-url`: the
 HTTP(S) URL of the product's `os/native/v1/<product>/x86-64` directory (the
-public read path, e.g. `https://repository.frostyard.org/os/native/v1/cayo/
+public read path, e.g. `https://repository.frostyard.org/os/native/v1/floe/
 x86-64` in production, or a local rehearsal origin's equivalent path). This
 is deliberately separate from `dest` (the write path): candidate/promote
 writes go through the storage API (`rclone`), but verification and the
@@ -116,27 +116,27 @@ extend the committed DEV key for anything published to
 ## Candidate -> verify -> promote -> purge procedure (production)
 
 Given a fresh build's mkosi output directory `output/` and profile
-`cayo-ab` (real production profile names only -- `prepare-native-
-publication.sh` refuses `cayo-ab-raw` and anything else not literally
+`floe-ab` (real production profile names only -- `prepare-native-
+publication.sh` refuses `floe-ab-raw` and anything else not literally
 `<ImageId>-ab`):
 
 ```console
 # 1-4: build, name, compress, locally verify (plan steps 1-4)
 $ shared/native-ab/publish/prepare-native-publication.sh --xz \
-    output cayo-ab /var/tmp/publish-out
-# -> /var/tmp/publish-out/cayo/x86-64/{*.root.raw.xz,*.root-verity.raw.xz,
+    output floe-ab /var/tmp/publish-out
+# -> /var/tmp/publish-out/floe/x86-64/{*.root.raw.xz,*.root-verity.raw.xz,
 #    *.disk.raw.xz,*.efi,*.manifest.json,*.sbom.spdx.json,SHA256SUMS,
 #    publication-info.json}
 
 # 5-6: upload to the R2 candidate prefix, Cache-Control: public/immutable
 # on payloads (plan steps 5-6)
 $ shared/native-ab/publish/publish-candidate.sh \
-    /var/tmp/publish-out/cayo/x86-64 rclone:r2:frostyardrepo
+    /var/tmp/publish-out/floe/x86-64 rclone:r2:frostyardrepo
 
 # 7: independently re-verify every candidate object over HTTP (plan step 7)
 $ shared/native-ab/publish/verify-remote.sh \
-    /var/tmp/publish-out/cayo/x86-64 \
-    https://repository.frostyard.org/os/native/v1/cayo/x86-64
+    /var/tmp/publish-out/floe/x86-64 \
+    https://repository.frostyard.org/os/native/v1/floe/x86-64
 
 # 8-13: promote to final names, regenerate+sign SHA256SUMS over the exact
 # served bytes, signature-first/manifest-last, both no-store (plan steps
@@ -145,8 +145,8 @@ $ shared/native-ab/publish/verify-remote.sh \
 $ shared/native-ab/publish/promote.sh \
     --signing-key /path/to/protected/os-update-signing.key \
     --purge-hook /path/to/cloudflare-purge.sh \
-    /var/tmp/publish-out/cayo/x86-64 \
-    https://repository.frostyard.org/os/native/v1/cayo/x86-64 \
+    /var/tmp/publish-out/floe/x86-64 \
+    https://repository.frostyard.org/os/native/v1/floe/x86-64 \
     rclone:r2:frostyardrepo
 ```
 
@@ -203,7 +203,7 @@ already on disk, and systems that already installed the bad version need a
 **new, higher-versioned repair release** -- never a server-side downgrade.
 
 ```console
-$ shared/native-ab/publish/withdraw.sh cayo 20260714150036 rclone:r2:frostyardrepo
+$ shared/native-ab/publish/withdraw.sh floe 20260714150036 rclone:r2:frostyardrepo
 ```
 
 This only works if `promote.sh` archived that version's signed index pair
@@ -414,7 +414,7 @@ Native product builds run on **every relevant push and PR to `main`**, plus
 `workflow_dispatch` and `repository_dispatch`. Protected production assembly
 and PR validation are separated:
 
-- **PR builds** run one non-publishing `build-pr` matrix across cayo, snow,
+- **PR builds** run one non-publishing `build-pr` matrix across floe, snow,
   and snowfield. It generates a per-run RSA-4096 MOK and RSA-2048 PCR signing
   identity, builds with `SNOSI_NATIVE_AUTOSTAGE=1`, validates the resulting
   artifact, and removes the private keys and certificates. It has no GitHub
@@ -454,10 +454,10 @@ index.
 |---|---|---|
 | `pin-check` | `shared/native-ab/ci/check-mkosi-pin.sh` (no build) | -- |
 | `prepare` | Assigns one version/revision shared by every product this run | -- |
-| `build-pr` | PR-only cayo/snow/snowfield matrix with disposable MOK/PCR credentials, artifact validation, and no publication | Pull request; no environment or secrets |
-| `build-cayo` / `build-snow` / `build-snowfield` | Bootstraps pinned mkosi, builds the profile, runs the static artifact test(s), `prepare-native-publication.sh --xz`, `publish-candidate.sh` | `native-build` environment; not pull requests |
+| `build-pr` | PR-only floe/snow/snowfield matrix with disposable MOK/PCR credentials, artifact validation, and no publication | Pull request; no environment or secrets |
+| `build-floe` / `build-snow` / `build-snowfield` | Bootstraps pinned mkosi, builds the profile, runs the static artifact test(s), `prepare-native-publication.sh --xz`, `publish-candidate.sh` | `native-build` environment; not pull requests |
 | `test-public-origin` | `verify-remote.sh` against the real public URL, one matrix leg per product | -- (read-only, no secrets) |
-| `promote-cayo` / `promote-snow` / `promote-snowfield` | `promote.sh` | `native-promotion` environment |
+| `promote-floe` / `promote-snow` / `promote-snowfield` | `promote.sh` | `native-promotion` environment |
 | `release-notes` | Non-blocking GitHub Release summarizing whichever products actually promoted | -- |
 
 `build-installer-iso.yml` has its own `pin-check` and `prepare` jobs, followed
@@ -551,7 +551,7 @@ real `repository.frostyard.org` origin:
    `NATIVE_UPDATE_SIGNING_KEY` secret in the `native-promotion` GitHub
    environment -- never anywhere else.
 2. **Secure Boot/MOK and PCR signing keys.** Generate (or carry over from an
-   already-validated `cayo-ab-secure`-style spike) production Secure
+   already-validated secure-server spike) production Secure
    Boot/MOK and PCR signing key pairs. Store them as the `native-build`
    environment's `NATIVE_SECURE_BOOT_KEY`/`NATIVE_SECURE_BOOT_CERTIFICATE`/
    `NATIVE_PCR_SIGNING_KEY`/`NATIVE_PCR_SIGNING_CERTIFICATE` secrets. Confirm
@@ -611,13 +611,13 @@ trust path as the ceremony above, just pointed at a fake origin. It also
 proves three fail-closed tamper cases (payload corrupted after signing,
 partial publication, wrong signing key) and a withdrawal round-trip. Run it
 with `sudo ./test/native-ab-publication-test.sh` (tens of minutes; builds
-two real `cayo-ab-raw` images unless `SKIP_BUILD=1 BUILD_N_DIR=... BUILD_N1_DIR=...`
+two real `floe-ab-raw` images unless `SKIP_BUILD=1 BUILD_N_DIR=... BUILD_N1_DIR=...`
 point at already-built output dirs). See that script's own header for the
-full sequence and why `cayo-ab-raw` (not `cayo-ab`) is used as the build
-target while still publishing under the real `cayo-ab` channel name.
+full sequence and why `floe-ab-raw` (not `floe-ab`) is used as the build
+target while still publishing under the real `floe-ab` channel name.
 
 `test/native-installer-e2e-test.sh` (Phase 8 exit) drives this same local
-rehearsal origin one step further: it publishes real `cayo-ab` and `snow-ab`
+rehearsal origin one step further: it publishes real `floe-ab` and `snow-ab`
 through the full `prepare -> publish-candidate -> verify-remote -> promote`
 pipeline to a `range-http-server.py` origin, then boots the shipped
 network-installer ISO in QEMU and runs a real non-interactive encrypted install

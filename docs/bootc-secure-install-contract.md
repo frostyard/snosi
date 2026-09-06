@@ -13,7 +13,7 @@
 This is the contract between Snosi secure OCI images and the external
 `frostyard/fisherman`, `frostyard/bootc-installer`, and
 `frostyard/dakota-iso` repositories. It applies only to fresh installs of
-`cayo`, `snow`, and `snowfield`. It does not authorize an in-place conversion
+`floe`, `snow`, and `snowfield`. It does not authorize an in-place conversion
 of existing bootc or nbc installations.
 
 The machine-readable source is
@@ -197,7 +197,7 @@ it names must both be regular files with mode `0600`; it has the Task 9
 path-only schema and must not contain secret-bearing fields. The old,
 transition, and new references must be distinct immutable
 `ghcr.io/frostyard/<profile>@sha256:<digest>` references for the manifest's
-`cayo`, `snow`, or `snowfield` profile repository. Old and new public MOK and
+`floe`, `snow`, or `snowfield` profile repository. Old and new public MOK and
 PCR identity files must exist.
 
 The harness invokes `BOOTC_SECURE_ROTATION_COMMAND` exactly once for each phase,
@@ -329,7 +329,7 @@ what stops that recurring.
 | key | meaning |
 |---|---|
 | `schema` | integer `1` |
-| `profile` | `cayo`, `snow`, or `snowfield` |
+| `profile` | `floe`, `snow`, or `snowfield` |
 | `tracking_ref` | the same-repository tag being followed |
 | `accepted_oci_ref` | the immutable `…@sha256:…` reference installed |
 | `target_disk` | path to the installed disk image or block device |
