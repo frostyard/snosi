@@ -52,19 +52,19 @@ mechanically once these two are sequenced correctly.
       it leaves the native channel entirely. The other is bootc
       (minisnow, fresh 1.16.7). Remaining per-host check before Phase 3:
       `snosi-update-status` version and `snosi-etc-diff` drift worth keeping.
-- [ ] Record the rename as an org ADR in **frostyard/core** (it binds snosi,
+- [x] Record the rename as an org ADR in **frostyard/core** (it binds snosi,
       firn, lab, pilothouse, and the websites — per CLAUDE.md, decisions
       binding more than this repo go to core), including the name rationale
       above and the artifact-retirement decisions from Phase 5. Add the line
       to snosi's [docs/org-adrs.md](../org-adrs.md).
-- [ ] Decide and record in that ADR: old artifacts are **frozen, not
+- [x] Decide and record in that ADR: old artifacts are **frozen, not
       deleted** — the archived pre-snosi `frostyard/cayo` repo stays archived
       and untouched; the GHCR `cayo` package keeps its digests (installed
       systems' rollback deployments reference them); `os/native/v1/cayo/` on
       R2 stays readable but stops receiving updates. Also record (resolved
       2026-08-26): fisherman, bootc-installer, and dakota-iso are dormant,
       inactive, and superseded — they get no rename work.
-- [ ] **Done when:** the org ADR is merged in core.
+- [x] **Done when:** the org ADR is merged in core.
 
 ## Phase 1 — Trust pre-staging (publish as cayo, one small snosi PR)
 
@@ -73,12 +73,12 @@ With the inventory resolved, this phase gates exactly **one** host: the bootc
 install (minisnow). The native cayo-ab machine reinstalls fresh in Phase 3
 and never needs the pre-staged scope.
 
-- [ ] Add `ghcr.io/frostyard/floe` as a `sigstoreSigned`/`matchRepository`
+- [x] Add `ghcr.io/frostyard/floe` as a `sigstoreSigned`/`matchRepository`
       scope in `shared/bootc-secure/tree/etc/containers/policy.json`
       (exactly the precedent set when a fourth product was added). Keep the
       cayo scope. Do not touch
       `default: reject` or any transport stanza.
-- [ ] Update `test/bootc-container-policy-test.sh` expectations for the new
+- [x] Update `test/bootc-container-policy-test.sh` expectations for the new
       scope; run it (fixtures) locally.
 - [ ] Merge; let `build-images.yml` `secure-build` publish new
       cayo/snow/snowfield `latest` (shared file — all three get the
@@ -159,10 +159,10 @@ the load-bearing groups:
 - [ ] Pin the temporary live-compatibility inventory through Phase 5. Outside
       historical files, `cayo` is allowed in exactly these active places:
       the single `"ghcr.io/frostyard/cayo"` key in
-      `shared/bootc-secure/tree/etc/containers/policy.json`, and exactly three
-      matching tokens in `test/bootc-container-policy-test.sh` — the supported-
-      scope loop, the wrong-repository rejection loop, and the exact sorted
-      trusted-key assertion. Each test list also includes floe. Every other
+      `shared/bootc-secure/tree/etc/containers/policy.json`, and the single
+      `cayo` entry in `test/bootc-container-policy-test.sh`'s
+      `SECURE_IMAGES` array. That array also includes floe and drives both
+      loops plus the exact trusted-key assertion. Every other
       test fixture, live-test default, image ref, and payload identity moves to
       floe in this phase. Phase 5 removes this whole temporary allowlist; do
       not remove it sooner and strand a late cayo host.
@@ -425,8 +425,8 @@ because they are absent from this snapshot.
 ## Phase 5 — Retirement (small, after Phase 3 sign-off)
 
 - [ ] snosi PR: remove the `ghcr.io/frostyard/cayo` scope from
-      `policy.json` and remove all three cayo compatibility tokens from the
-      policy test (floe/snow/snowfield remain).
+      `policy.json` and remove cayo from the policy test's `SECURE_IMAGES`
+      array (floe/snow/snowfield remain).
 - [ ] Merge that PR and let the protected `secure-build` publish the signed
       **retirement release** (call it R) before changing either host's
       persistent `/etc`. Record R's 14-digit image version and immutable

@@ -293,8 +293,9 @@ claimed from fixture or native evidence. User and recovery guidance lives in
 
 **Bootc OCI signature policy (Task 6, 2026-07-28):** secure bootc profiles ship
 `/etc/containers/policy.json` with global `reject` and exact
-`sigstoreSigned` scopes only for `ghcr.io/frostyard/cayo`, `snow`, and
-`snowfield`; each uses the committed public-only `cosign.pub` copied to
+`sigstoreSigned` scopes only for `ghcr.io/frostyard/cayo`, `floe`, `snow`, and
+`snowfield`; the floe scope is pre-staged for the ordered cayo rename, and each
+uses the committed public-only `cosign.pub` copied to
 `/usr/lib/snosi/cosign.pub`. Cosign v2.6.1 signatures record repository rather
 than tag identities, so this MUST use `signedIdentity: matchRepository` and
 the GHCR `registries.d` entry MUST retain `use-sigstore-attachments: true`.
@@ -324,6 +325,8 @@ staged storage-digest check; a failed pull, including policy rejection, clears
 `outcome=failed`. Run `test/bootc-container-policy-test.sh`; set `RUN_LIVE=1`
 (and optionally `LIVE_IMAGES=cayo,snow,snowfield`) to verify published
 signatures, wrong key, unsigned, and wrong-repository rejection through Podman.
+Floe deliberately stays out of `LIVE_IMAGES` until Phase 2 publishes its signed
+image.
 
 **Bootc sealed-UKI feasibility gate (Tasks 1-2, 2026-07-28):**
 `test/bootc-secure-spike-test.sh --fixtures` is the non-root fixture layer for
