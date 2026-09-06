@@ -152,7 +152,7 @@ assert_contains "unknown flag error names it" "$noargs_out" "unknown option"
 # ===========================================================================
 echo "=== argument validation matrix ==="
 
-BASE_ARGS=(--non-interactive --product cayo-ab --disk /dev/fake-disk-for-test
+BASE_ARGS=(--non-interactive --product floe-ab --disk /dev/fake-disk-for-test
     --confirm fake-serial --recovery-key-file "$WORK_DIR/recovery.key"
     --acknowledge-recovery-saved --mok-password-file "$WORK_DIR/mok-password.txt")
 echo hunter2 >"$WORK_DIR/mok-password.txt"
@@ -264,8 +264,8 @@ run_installer "${BASE_ARGS[@]}" --enable-feature 'bad/feature'
 assert_contains "invalid --enable-feature rejected" "$RUN_OUT" "invalid --enable-feature"
 
 run_installer "${BASE_ARGS[@]}" --core-flatpaks
-assert_true "--core-flatpaks on cayo-ab: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
-assert_contains "--core-flatpaks on cayo-ab: clear error" "$RUN_OUT" "cayo-ab has no desktop"
+assert_true "--core-flatpaks on floe-ab: exits non-zero" bash -c "[[ $RUN_RC -ne 0 ]]"
+assert_contains "--core-flatpaks on floe-ab: clear error" "$RUN_OUT" "floe-ab has no desktop"
 
 run_installer "${BASE_ARGS[@]}" --hostname myhost --locale en_US.UTF-8 \
     --timezone America/New_York --keyboard 'us:intl' --enable-feature docker \
@@ -279,8 +279,8 @@ PD_JSON="$RUN_OUT"
 assert_true "--print-defaults emits valid JSON" bash -c 'jq -e . >/dev/null <<<"$1"' _ "$PD_JSON"
 assert_eq "--print-defaults proto is 1" "$(jq -r .proto <<<"$PD_JSON")" "1"
 assert_eq "--print-defaults lists 3 products" "$(jq '.products | length' <<<"$PD_JSON")" "3"
-assert_eq "--print-defaults: cayo core flatpaks not allowed" \
-    "$(jq -r '.products[] | select(.name == "cayo-ab") | .core_flatpaks_allowed' <<<"$PD_JSON")" "false"
+assert_eq "--print-defaults: floe core flatpaks not allowed" \
+    "$(jq -r '.products[] | select(.name == "floe-ab") | .core_flatpaks_allowed' <<<"$PD_JSON")" "false"
 assert_eq "--print-defaults: snow core flatpaks default on" \
     "$(jq -r '.products[] | select(.name == "snow-ab") | .core_flatpaks_default' <<<"$PD_JSON")" "true"
 assert_eq "--print-defaults: snow minimum disk matches minimum_disk_bytes" \
@@ -314,7 +314,7 @@ cat >"$WORK_DIR/ldj-lsblk.json" <<'LDJEOF'
 ]}
 LDJEOF
 set +e
-LDJ_OUT="$(SNOSI_INSTALL_LSBLK_JSON="$WORK_DIR/ldj-lsblk.json" "$INSTALLER" --list-disks-json --product cayo-ab 2>/dev/null)"
+LDJ_OUT="$(SNOSI_INSTALL_LSBLK_JSON="$WORK_DIR/ldj-lsblk.json" "$INSTALLER" --list-disks-json --product floe-ab 2>/dev/null)"
 LDJ_RC=$?
 set -e
 assert_eq "--list-disks-json (fixture) exits 0" "$LDJ_RC" "0"
@@ -431,7 +431,7 @@ assert_false "check_secret_file_perms: a missing file fails closed" \
 # ===========================================================================
 echo "=== name derivation ==="
 
-assert_eq "minimum_disk_bytes cayo" "$(call_fn minimum_disk_bytes cayo)" "16642998272"
+assert_eq "minimum_disk_bytes floe" "$(call_fn minimum_disk_bytes floe)" "16642998272"
 assert_eq "minimum_disk_bytes snow" "$(call_fn minimum_disk_bytes snow)" "23085449216"
 assert_eq "minimum_disk_bytes snowfield" "$(call_fn minimum_disk_bytes snowfield)" "23085449216"
 assert_false "minimum_disk_bytes rejects an unknown product" call_fn minimum_disk_bytes bogus
@@ -662,17 +662,17 @@ TEST_PUBRING="$WORK_DIR/pubring.gpg"
 GNUPGHOME="$GNUPGHOME_DIR" gpg --batch --export -o "$TEST_PUBRING"
 
 ORIGIN_ROOT="$WORK_DIR/origin"
-PRODUCT_DIR="$ORIGIN_ROOT/os/native/v1/cayo/x86-64"
+PRODUCT_DIR="$ORIGIN_ROOT/os/native/v1/floe/x86-64"
 mkdir -p "$PRODUCT_DIR"
-printf 'fake disk payload for index test\n' >"$PRODUCT_DIR/cayo-ab_20260101000000.disk.raw.xz"
-printf '{"config":{"architecture":"x86-64"}}\n' >"$PRODUCT_DIR/cayo-ab_20260101000000.manifest.json"
-printf 'fake newer disk payload\n' >"$PRODUCT_DIR/cayo-ab_20260201000000.disk.raw.xz"
-printf '{"config":{"architecture":"x86-64"}}\n' >"$PRODUCT_DIR/cayo-ab_20260201000000.manifest.json"
+printf 'fake disk payload for index test\n' >"$PRODUCT_DIR/floe-ab_20260101000000.disk.raw.xz"
+printf '{"config":{"architecture":"x86-64"}}\n' >"$PRODUCT_DIR/floe-ab_20260101000000.manifest.json"
+printf 'fake newer disk payload\n' >"$PRODUCT_DIR/floe-ab_20260201000000.disk.raw.xz"
+printf '{"config":{"architecture":"x86-64"}}\n' >"$PRODUCT_DIR/floe-ab_20260201000000.manifest.json"
 (
     cd "$PRODUCT_DIR"
     : >SHA256SUMS
-    for f in cayo-ab_20260101000000.disk.raw.xz cayo-ab_20260101000000.manifest.json \
-             cayo-ab_20260201000000.disk.raw.xz cayo-ab_20260201000000.manifest.json; do
+    for f in floe-ab_20260101000000.disk.raw.xz floe-ab_20260101000000.manifest.json \
+             floe-ab_20260201000000.disk.raw.xz floe-ab_20260201000000.manifest.json; do
         sha256sum "$f" >>SHA256SUMS
     done
 )
@@ -690,18 +690,18 @@ done
 FETCH_WORKDIR="$WORK_DIR/fetch1"
 mkdir -p "$FETCH_WORKDIR"
 export SNOSI_INSTALL_PUBRING="$TEST_PUBRING"
-fetch_result="$(call_fn t_fetch_verified_index "http://127.0.0.1:$PORT" cayo-ab "$FETCH_WORKDIR")"
+fetch_result="$(call_fn t_fetch_verified_index "http://127.0.0.1:$PORT" floe-ab "$FETCH_WORKDIR")"
 index_file="${fetch_result%%|*}"
 index_base_url="${fetch_result#*|}"
 assert_true "fetch_verified_index: good signature produces an index file" test -s "$index_file"
 assert_eq "fetch_verified_index: base URL is the product's os/native/v1 path" \
-    "$index_base_url" "http://127.0.0.1:$PORT/os/native/v1/cayo/x86-64"
+    "$index_base_url" "http://127.0.0.1:$PORT/os/native/v1/floe/x86-64"
 
-latest="$(call_fn latest_channel_version "$index_file" cayo-ab)"
+latest="$(call_fn latest_channel_version "$index_file" floe-ab)"
 assert_eq "latest_channel_version picks the numeric MAXIMUM, not first-listed" "$latest" "20260201000000"
 
-expected_hash="$(awk '$2=="cayo-ab_20260201000000.disk.raw.xz"{print $1}' "$index_file")"
-got_hash="$(call_fn index_object_sha256 "$index_file" cayo-ab_20260201000000.disk.raw.xz)"
+expected_hash="$(awk '$2=="floe-ab_20260201000000.disk.raw.xz"{print $1}' "$index_file")"
+got_hash="$(call_fn index_object_sha256 "$index_file" floe-ab_20260201000000.disk.raw.xz)"
 assert_eq "index_object_sha256 returns the correct hash" "$got_hash" "$expected_hash"
 assert_eq "index_object_sha256 is empty for an unknown name" \
     "$(call_fn index_object_sha256 "$index_file" nonexistent.disk.raw.xz)" ""
@@ -710,14 +710,14 @@ assert_eq "index_object_sha256 is empty for an unknown name" \
 cp "$PRODUCT_DIR/SHA256SUMS.gpg" "$WORK_DIR/sig.bak"
 printf 'X' | dd of="$PRODUCT_DIR/SHA256SUMS.gpg" bs=1 seek=0 count=1 conv=notrunc status=none
 assert_false "fetch_verified_index rejects a tampered signature" \
-    call_fn t_fetch_verified_index "http://127.0.0.1:$PORT" cayo-ab "$WORK_DIR/fetch2"
+    call_fn t_fetch_verified_index "http://127.0.0.1:$PORT" floe-ab "$WORK_DIR/fetch2"
 cp "$WORK_DIR/sig.bak" "$PRODUCT_DIR/SHA256SUMS.gpg"
 
 # Tampered manifest content (signature no longer matches the bytes).
 cp "$PRODUCT_DIR/SHA256SUMS" "$WORK_DIR/sums.bak"
 printf '\n' >>"$PRODUCT_DIR/SHA256SUMS"
 assert_false "fetch_verified_index rejects a tampered SHA256SUMS body" \
-    call_fn t_fetch_verified_index "http://127.0.0.1:$PORT" cayo-ab "$WORK_DIR/fetch3"
+    call_fn t_fetch_verified_index "http://127.0.0.1:$PORT" floe-ab "$WORK_DIR/fetch3"
 cp "$WORK_DIR/sums.bak" "$PRODUCT_DIR/SHA256SUMS"
 
 # Wrong pubring (untrusted key) must also fail closed.
@@ -731,7 +731,7 @@ GNUPGHOME="$OTHER_GNUPGHOME" gpg --batch --export -o "$WRONG_PUBRING"
 SNOSI_INSTALL_PUBRING="$WRONG_PUBRING" bash -c '
     set -euo pipefail
     source "$1"; source "$2"
-    t_fetch_verified_index "$3" cayo-ab "$4"
+    t_fetch_verified_index "$3" floe-ab "$4"
 ' _ "$INSTALLER" "$HELPERS" "http://127.0.0.1:$PORT" "$WORK_DIR/fetch4" >/dev/null 2>&1 \
     && fail "fetch_verified_index rejects a signature from an untrusted key" \
     || pass "fetch_verified_index rejects a signature from an untrusted key"
@@ -754,7 +754,7 @@ GOOD_SHA256="$(sha256sum "$COMPRESSED" | cut -d' ' -f1)"
 
 TARGET_OK="$WORK_DIR/target-ok.raw"
 : >"$TARGET_OK"
-stream_ok_bytes="$(call_fn t_stream_download_verify "http://127.0.0.1:$PORT/os/native/v1/cayo/x86-64/tiny.raw.xz" "$GOOD_SHA256" "$TARGET_OK")"
+stream_ok_bytes="$(call_fn t_stream_download_verify "http://127.0.0.1:$PORT/os/native/v1/floe/x86-64/tiny.raw.xz" "$GOOD_SHA256" "$TARGET_OK")"
 assert_true "stream_download_verify: matching checksum succeeds" test -n "$stream_ok_bytes"
 assert_eq "stream_download_verify: target has the decompressed bytes" \
     "$(sha256sum "$TARGET_OK" | cut -d' ' -f1)" "$(sha256sum "$PLAIN" | cut -d' ' -f1)"
@@ -766,14 +766,14 @@ printf 'PRE-EXISTING-DATA-THAT-MUST-NOT-SURVIVE-A-MISMATCH' >"$TARGET_BAD"
 BAD_SHA256="0000000000000000000000000000000000000000000000000000000000000000"
 BAD_SHA256="${BAD_SHA256:0:64}"
 assert_false "stream_download_verify: wrong checksum fails" \
-    call_fn stream_download_verify "http://127.0.0.1:$PORT/os/native/v1/cayo/x86-64/tiny.raw.xz" "$BAD_SHA256" "$TARGET_BAD"
+    call_fn stream_download_verify "http://127.0.0.1:$PORT/os/native/v1/floe/x86-64/tiny.raw.xz" "$BAD_SHA256" "$TARGET_BAD"
 assert_eq "stream_download_verify: mismatch wipes the target (regular-file mode truncates)" \
     "$(stat -c %s "$TARGET_BAD")" "0"
 
 TARGET_404="$WORK_DIR/target-404.raw"
 printf 'PRE-EXISTING-DATA-THAT-MUST-NOT-SURVIVE-A-FAILED-FETCH' >"$TARGET_404"
 assert_false "stream_download_verify: a failed fetch (404) fails" \
-    call_fn stream_download_verify "http://127.0.0.1:$PORT/os/native/v1/cayo/x86-64/does-not-exist.xz" "$GOOD_SHA256" "$TARGET_404"
+    call_fn stream_download_verify "http://127.0.0.1:$PORT/os/native/v1/floe/x86-64/does-not-exist.xz" "$GOOD_SHA256" "$TARGET_404"
 assert_eq "stream_download_verify: failed-fetch also wipes the target" \
     "$(stat -c %s "$TARGET_404")" "0"
 

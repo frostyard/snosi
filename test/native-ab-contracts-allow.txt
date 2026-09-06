@@ -9,7 +9,7 @@
 # silently.
 #
 # reason-tag: legacy-url -- OS transfer Path= still points at the pre-freeze
-#                            https://.../os/cayo/%a/ URL instead of the
+#                            https://.../os/<product>/%a/ URL instead of the
 #                            frozen os/native/v1/<product>/x86-64/ prefix.
 #                            Removed in Phase 3: every shipped transfer now
 #                            conforms (shared/native-ab/channels/<product>/).

@@ -127,8 +127,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - profile: cayo
-            description: "Cayo Linux Server Image"
+          - profile: floe
+            description: "Floe Linux Server Image"
           - profile: snow
             description: "Snow Linux OS Image"
           - profile: snowfield
@@ -459,7 +459,7 @@ jobs:
         # The provenance attestation attaches a certificate-based referrer to
         # the digest, and cosign >= 2.6.3 then fails `verify --key` with "no
         # matching attestations: expected key signature, not certificate"
-        # (bisected 2026-08-26 against ghcr.io/frostyard/cayo: 2.6.2 OK,
+        # (bisected 2026-08-26 against the pre-rename server image: 2.6.2 OK,
         # 2.6.3/2.6.4/2.6.5 fail). The earlier "Verify pushed secure image"
         # step runs BEFORE this referrer exists, so it can never catch a
         # cosign version whose verification breaks only on attested images --
@@ -517,8 +517,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - profile: cayo
-            description: "Cayo Linux Server Image"
+          - profile: floe
+            description: "Floe Linux Server Image"
           - profile: snow
             description: "Snow Linux OS Image"
           - profile: snowfield

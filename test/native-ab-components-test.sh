@@ -9,7 +9,7 @@
 #   secure profile" (the publication-guard half is covered statically by
 #   check-native-publication-guard.sh; this test covers the runtime half).
 #
-# Builds two real versions (N, N+1) of profile $PROFILE (default cayo-ab-raw)
+# Builds two real versions (N, N+1) of profile $PROFILE (default floe-ab-raw)
 # via the pinned .mkosi checkout (mirrors the Justfile's ensure-mkosi
 # bootstrap + `mkosi clean -ff` + `mkosi --profile $PROFILE build`), boots N
 # in QEMU, and validates in order:
@@ -32,7 +32,7 @@
 #
 # Usage: sudo ./test/native-ab-components-test.sh
 # Env overrides (docs/native-ab-contracts.md §1): PROFILE (default
-# cayo-ab-raw), IMAGE_ID (derived from PROFILE by default), CHANNEL
+# floe-ab-raw), IMAGE_ID (derived from PROFILE by default), CHANNEL
 # (derived as <IMAGE_ID>-ab by default).
 set -euo pipefail
 
@@ -53,9 +53,9 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # (<ImageId>-ab, §1) used for the OS transfer's Source/UKI names regardless
 # of which profile actually built the bits under test -- the shipped
 # transfers (shared/native-ab/channels/<product>/tree/usr/lib/sysupdate.d/)
-# always fetch channel-named blobs, so the CHANNEL default is "cayo-ab" even
-# though the default PROFILE is the never-published "cayo-ab-raw" fixture.
-: "${PROFILE:=cayo-ab-raw}"
+# always fetch channel-named blobs, so the CHANNEL default is "floe-ab" even
+# though the default PROFILE is the never-published "floe-ab-raw" fixture.
+: "${PROFILE:=floe-ab-raw}"
 if [[ -z "${IMAGE_ID:-}" ]]; then
     IMAGE_ID="${PROFILE%-ab-raw}"
     IMAGE_ID="${IMAGE_ID%-ab}"
@@ -482,7 +482,7 @@ dpkg_link_target="$(vm_ssh 'readlink /var/lib/dpkg' || true)"
 assert_eq "/var/lib/dpkg is a symlink with the exact relative relocation target" \
     "$dpkg_link_target" "../../usr/lib/sysimage/dpkg"
 
-# aspell dictionary relocation: same shape as dpkg. cayo carries no
+# aspell dictionary relocation: same shape as dpkg. floe carries no
 # dictionaries (aspell/aspell-en are snow-only packages), so this verifies
 # the structural half — the relocation symlink, its target existing in the
 # immutable root, and the audit classifying it as image-metadata — which

@@ -129,7 +129,7 @@ assert_eq "empty catalog: feature still enabled (pre-check disabled)" \
     "$(grep -c '^updex --silent features enable docker --now$' "$WORK_DIR/calls.log")" "1"
 rm -f "$WORK_DIR/updex-empty" "$WORK_DIR/done"
 
-echo "=== features-only seed (cayo shape) ==="
+echo "=== features-only seed (floe shape) ==="
 cat >"$WORK_DIR/seed2.json" <<'EOF'
 {"features": ["incus"]}
 EOF

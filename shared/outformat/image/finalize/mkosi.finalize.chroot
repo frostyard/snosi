@@ -77,7 +77,7 @@ fi
 # 00-snosi-aspell.conf (ab-root tree) recreates the /var/lib/aspell symlink
 # on a fresh /var. Every image has the directory (base ships the aspell.conf
 # tmpfiles rule) but only images with aspell-en installed (snow/snowfield)
-# have content in it; relocating cayo's empty directory too keeps one shape
+# have content in it; relocating floe's empty directory too keeps one shape
 # per output format across all products, so the shared tmpfiles rule never
 # dangles and each map classifies one shape per format.
 if [[ -e /usr/lib/snosi/native-ab ]]; then

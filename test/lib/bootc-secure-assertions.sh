@@ -53,10 +53,10 @@ type2_only() { # path; materialize once because callers may provide a FIFO.
     # `uki` OR `efi`. bootc writes `uki` -- verified from a real installed
     # target, whose only BLS entry is:
     #
-    #     title Cayo Linux 13
+    #     title Floe Linux 13
     #     version 13
     #     uki /EFI/Linux/bootc/bootc_composefs-<128 hex>.efi
-    #     sort-key bootc-cayo-0
+    #     sort-key bootc-floe-0
     #
     # Requiring `efi` rejected every genuine install. Both spell a Type #2
     # entry; what makes it Type #2 is a single bundled EFI image and the

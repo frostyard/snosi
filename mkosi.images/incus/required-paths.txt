@@ -9,12 +9,12 @@
 /usr/lib/systemd/system/incus-startup.service
 /usr/lib/systemd/system/multi-user.target.d/10-incus.conf
 
-# Runtime libraries the sysext's own payload links but that cayo's base does
+# Runtime libraries the sysext's own payload links but that floe's base does
 # NOT provide. These are declared dependencies of packages listed in
 # mkosi.conf, so apt installs them -- but a sysext delta omits anything the
 # BUILD BASE already has, and until #771 (2026-08-25) base transitively
 # carried a whole desktop. The r1 delta built against that fat base shipped
-# without them and every `incus launch --vm` on cayo failed with "Failed
+# without them and every `incus launch --vm` on floe failed with "Failed
 # getting QEMU version": the incus deb's bundled
 # /usr/incus/bin/qemu-system-x86_64 (which incusd's wrapper puts first on
 # PATH) needs libepoxy.so.0 directly, libspice-server.so.1 needs libopus.so.0,

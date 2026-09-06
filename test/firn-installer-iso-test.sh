@@ -27,7 +27,7 @@
 #      is native-installer-iso-test.sh's domain), ISO, blank 30G virtio
 #      target, vTPM, hostfwd SSH.
 #   3. Over SSH: verify the firn kiosk came up on the serial console,
-#      then run a headless `firn install` (product cayo-ab,
+#      then run a headless `firn install` (product floe-ab,
 #      encryption tpm2-luks) against /dev/vda using the medium's own
 #      binary, pubring, and tools.
 #   4. Power off; boot QEMU #2 from the INSTALLED disk with the same
@@ -52,7 +52,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 : "${VM_CPUS:=2}"
 : "${SKIP_BUILD:=0}"
 : "${KEEP_VM:=0}"
-# Default flow installs cayo-ab (server, fast, no flatpaks) and proves
+# Default flow installs floe-ab (server, fast, no flatpaks) and proves
 # the encrypted-boot + TPM story. FIRN_ISO_FLATPAK=1 instead installs a
 # DESKTOP image with core_flatpaks and proves the OFFLINE medium-copy
 # path: firn provisions the ISO-seeded flatpaks with the guest network
@@ -61,7 +61,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 : "${FIRN_ISO_PRODUCT:=}"
 if [[ -n $FIRN_ISO_PRODUCT ]]; then product=$FIRN_ISO_PRODUCT
 elif [[ $FIRN_ISO_FLATPAK == 1 ]]; then product=snow-ab
-else product=cayo-ab; fi
+else product=floe-ab; fi
 
 [[ $EUID -eq 0 ]] || { echo "must run as root" >&2; exit 1; }
 for cmd in qemu-system-x86_64 swtpm xorriso ssh-keygen; do

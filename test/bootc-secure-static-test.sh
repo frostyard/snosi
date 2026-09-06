@@ -216,11 +216,11 @@ grep -Fq '/usr/lib/snosi/esp.sh' "$reconciler"
 
 # Only OCI bootc profiles consume the fragment. Native A/B, including the raw
 # fixture, must remain entirely independent of its packages and trust files.
-for profile in cayo snow snowfield; do
+for profile in floe snow snowfield; do
     grep -q '^Include=%D/shared/bootc-secure/mkosi.conf$' \
         "$root/mkosi.profiles/$profile/mkosi.conf"
 done
-for profile in cayo-ab-raw cayo-ab snow-ab snowfield-ab; do
+for profile in floe-ab-raw floe-ab snow-ab snowfield-ab; do
     if grep -q 'shared/bootc-secure' "$root/mkosi.profiles/$profile/mkosi.conf"; then
         echo "native profile $profile must not include the bootc secure fragment" >&2
         exit 1

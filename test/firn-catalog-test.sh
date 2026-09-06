@@ -43,9 +43,9 @@ jq -e 'all(.[]; (.default_groups | type == "array" and length > 0 and .[0] == "s
 desktop='["sudo","adm","video","input","render","plugdev","netdev","lpadmin","scanner"]'
 server='["sudo","adm","netdev"]'
 jq -e --argjson d "$desktop" --argjson s "$server" '
-    all(.[]; if (.name | test("^cayo")) then .default_groups == $s else .default_groups == $d end)' "$catalog" >/dev/null &&
-    ok "desktop entries carry the device/admin set, cayo entries the server set" ||
-    fail "desktop entries carry the device/admin set, cayo entries the server set"
+    all(.[]; if (.name | test("^floe")) then .default_groups == $s else .default_groups == $d end)' "$catalog" >/dev/null &&
+    ok "desktop entries carry the device/admin set, floe entries the server set" ||
+    fail "desktop entries carry the device/admin set, floe entries the server set"
 
 # Every preselected group must exist in the images (join-where-exists would
 # silently drop it): pinned against base's group sources plus the shared

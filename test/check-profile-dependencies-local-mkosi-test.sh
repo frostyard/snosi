@@ -12,17 +12,17 @@ cp "$repo_root/check-profile-dependencies.sh" "$scratch/"
 # profile (composes shared/bootc-secure/mkosi.conf, so it is discovered) plus a
 # native A/B profile that must NOT be discovered, and two sysext images plus the
 # base OS image that must NOT be treated as a sysext.
-mkdir -p "$scratch/mkosi.profiles/cayo" \
-         "$scratch/mkosi.profiles/cayo-ab" \
+mkdir -p "$scratch/mkosi.profiles/floe" \
+         "$scratch/mkosi.profiles/floe-ab" \
          "$scratch/mkosi.images/base" \
          "$scratch/mkosi.images/dev" \
          "$scratch/mkosi.images/chatgpt"
 
-cat >"$scratch/mkosi.profiles/cayo/mkosi.conf" <<'EOF'
+cat >"$scratch/mkosi.profiles/floe/mkosi.conf" <<'EOF'
 [Include]
 Include=%D/shared/bootc-secure/mkosi.conf
 EOF
-cat >"$scratch/mkosi.profiles/cayo-ab/mkosi.conf" <<'EOF'
+cat >"$scratch/mkosi.profiles/floe-ab/mkosi.conf" <<'EOF'
 [Include]
 Include=%D/shared/native-ab-secure/mkosi.conf
 EOF
@@ -40,7 +40,7 @@ chmod +x "$scratch/path/mkosi"
 
 # Positive case: every discovered profile depends only on base, so the guard
 # must succeed. The stub also asserts it is only ever invoked for the discovered
-# bootc image profile (cayo) and never for the excluded native A/B profile.
+# bootc image profile (floe) and never for the excluded native A/B profile.
 cat >"$scratch/.mkosi/bin/mkosi" <<'EOF'
 #!/bin/bash
 prev=""
@@ -49,7 +49,7 @@ for arg in "$@"; do
     if [[ "$prev" == "--profile" ]]; then profile="$arg"; fi
     prev="$arg"
 done
-if [[ "$profile" == "cayo-ab" ]]; then
+if [[ "$profile" == "floe-ab" ]]; then
     echo "guard discovered an excluded native A/B profile: $profile" >&2
     exit 1
 fi

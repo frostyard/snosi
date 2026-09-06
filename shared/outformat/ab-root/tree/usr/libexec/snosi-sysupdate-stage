@@ -15,7 +15,7 @@
 # without caring which transport is running.
 #
 # /run/snosi/update-staged fields (extends the bootc-only "digest=" shape):
-#   image=<channel>       e.g. "cayo-ab" (docs/native-ab-contracts.md §1)
+#   image=<channel>       e.g. "floe-ab" (docs/native-ab-contracts.md §1)
 #   version=<14-digit>    the staged version (native only; bootc writes
 #                          digest= instead -- consumers key off whichever of
 #                          the two is present)

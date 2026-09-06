@@ -25,7 +25,7 @@
 # shipped-image trust leg (a real client trusting the committed pubring),
 # which is covered instead by the QEMU rehearsal below.
 #
-# The full real-build QEMU rehearsal (real cayo-ab-raw images, a live
+# The full real-build QEMU rehearsal (real floe-ab-raw images, a live
 # guest verifying against the stock shipped pubring, tamper cases at the
 # systemd-sysupdate layer) is test/native-ab-publication-test.sh; that one
 # needs root/KVM/tens of minutes and is intentionally NOT wired into
@@ -191,8 +191,8 @@ EOF
     sfdisk "$dir/$profile_output_name.raw" <"$dir/sfdisk-script.txt" >/dev/null
 }
 
-PRODUCT=cayo
-CHANNEL=cayo-ab
+PRODUCT=floe
+CHANNEL=floe-ab
 VERSION1=20260101000000
 VERSION2=20260102000000
 
@@ -525,7 +525,9 @@ if command -v rclone >/dev/null; then
     S3_ROOT="$WORK_DIR/backend-s3-root"
     mkdir -p "$S3_ROOT/bucket/sub"
     printf 'present\n' >"$S3_ROOT/bucket/sub/present.txt"
-    S3_PORT=18924
+    # PORT+1 and PORT+2 remain occupied by the Range-behaviour fixtures
+    # until the EXIT trap runs.
+    S3_PORT=$((PORT + 3))
     rclone serve s3 --auth-key testkey,testsecret --addr "127.0.0.1:$S3_PORT" \
         "$S3_ROOT" >"$WORK_DIR/rclone-s3.log" 2>&1 &
     S3_PID=$!

@@ -13,7 +13,7 @@
 # Runtime libraries the GTK4/WebKitGTK dev stack links but that base does NOT
 # provide. Until #771 (2026-08-25) base transitively carried a whole desktop,
 # so the delta published 2026-08-07 omitted these as "already in the base" and
-# they vanished from cayo when the base shrank. A sysext delta omits anything
+# they vanished from floe when the base shrank. A sysext delta omits anything
 # its BUILD BASE has, so listing them in Packages= would not help — only this
 # check, which runs against the delta, can assert they ship. See
 # docs/design/sysexts.md "A Sysext Delta Is Only Valid Against the Base It Was

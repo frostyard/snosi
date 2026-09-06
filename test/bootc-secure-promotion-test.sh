@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 HELPER="$ROOT_DIR/shared/bootc-secure/ci/promote-published-image.sh"
 DIGEST="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-IMAGE="ghcr.io/frostyard/cayo"
+IMAGE="ghcr.io/frostyard/floe"
 WORK=""
 AUTH_FILE=""
 PASS=0
@@ -56,13 +56,13 @@ case "$1" in
         [[ " $* " == *" --all "* ]]
         [[ " $* " == *" --src-authfile $EXPECTED_AUTH_FILE "* ]]
         [[ " $* " == *" --dest-authfile $EXPECTED_AUTH_FILE "* ]]
-        [[ " $* " == *" docker://ghcr.io/frostyard/cayo@$EXPECTED_DIGEST docker://ghcr.io/frostyard/cayo:latest "* ]]
+        [[ " $* " == *" docker://ghcr.io/frostyard/floe@$EXPECTED_DIGEST docker://ghcr.io/frostyard/floe:latest "* ]]
         [[ ${SKOPEO_COPY_FAIL:-0} != 1 ]]
         ;;
     inspect)
         [[ " $* " == *" --authfile $EXPECTED_AUTH_FILE "* ]]
         [[ " $* " == *" --format {{.Digest}} "* ]]
-        [[ " $* " == *" docker://ghcr.io/frostyard/cayo:latest "* ]]
+        [[ " $* " == *" docker://ghcr.io/frostyard/floe:latest "* ]]
         [[ ${SKOPEO_INSPECT_FAIL:-0} != 1 ]]
         printf '%s\n' "${LATEST_DIGEST:-$EXPECTED_DIGEST}"
         ;;

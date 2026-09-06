@@ -1,6 +1,6 @@
 name: Build Native Images
 
-# Native A/B (cayo-ab, snow-ab, snowfield-ab) build/publish pipeline
+# Native A/B (floe-ab, snow-ab, snowfield-ab) build/publish pipeline
 # (docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md "Native Build
 # Workflow", docs/native-ab-publication.md, docs/native-ab-contracts.md).
 #
@@ -214,8 +214,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - profile: cayo-ab
-            product: cayo
+          - profile: floe-ab
+            product: floe
           - profile: snow-ab
             product: snow
           - profile: snowfield-ab
@@ -307,7 +307,7 @@ jobs:
         run: sudo -E .mkosi/bin/mkosi clean
 
   # ===========================================================================
-  # build-cayo / build-snow / build-snowfield
+  # build-floe / build-snow / build-snowfield
   #
   # Independent jobs (not a matrix) so each gets its own protected-
   # environment approval and one product's build failure never blocks
@@ -316,7 +316,7 @@ jobs:
   # Surface artifact check.
   # ===========================================================================
 
-  build-cayo:
+  build-floe:
     needs: prepare
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -325,8 +325,8 @@ jobs:
     permissions:
       contents: read
     env:
-      PROFILE: cayo-ab
-      PRODUCT: cayo
+      PROFILE: floe-ab
+      PRODUCT: floe
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
       - name: Show disk space (before)
@@ -468,10 +468,10 @@ jobs:
         # the actual candidate/final bytes over HTTP.
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: native-prepared-cayo
+          name: native-prepared-floe
           path: |
-            /var/tmp/native-publish/cayo/x86-64/publication-info.json
-            /var/tmp/native-publish/cayo/x86-64/SHA256SUMS
+            /var/tmp/native-publish/floe/x86-64/publication-info.json
+            /var/tmp/native-publish/floe/x86-64/SHA256SUMS
           retention-days: 3
           if-no-files-found: error
 
@@ -776,13 +776,13 @@ jobs:
   # failure never blocks the others' verification.
   # ===========================================================================
   test-public-origin:
-    needs: [build-cayo, build-snow, build-snowfield]
+    needs: [build-floe, build-snow, build-snowfield]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        product: [cayo, snow, snowfield]
+        product: [floe, snow, snowfield]
     permissions:
       contents: read
     steps:
@@ -868,7 +868,7 @@ jobs:
           if-no-files-found: error
 
   # ===========================================================================
-  # promote-cayo / promote-snow / promote-snowfield
+  # promote-floe / promote-snow / promote-snowfield
   #
   # Each gated on the native-promotion protected environment, which holds
   # the OpenPGP update-signing private key as an environment secret. Runs
@@ -878,7 +878,7 @@ jobs:
   # that product never got that far this run.
   # ===========================================================================
 
-  promote-cayo:
+  promote-floe:
     needs: test-public-origin
     if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
@@ -902,7 +902,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: native-verified-cayo
+          name: native-verified-floe
           path: /var/tmp/native-verified
 
       - name: Download prepared publication metadata
@@ -911,13 +911,13 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: native-prepared-cayo
-          path: /var/tmp/native-publish/cayo/x86-64
+          name: native-prepared-floe
+          path: /var/tmp/native-publish/floe/x86-64
 
-      - name: Skip (cayo did not pass public-origin verification this run)
+      - name: Skip (floe did not pass public-origin verification this run)
         if: steps.marker.outcome != 'success' || steps.prepared.outcome != 'success'
         run: |
-          echo "::notice::cayo has no verified candidate this run -- skipping promotion."
+          echo "::notice::floe has no verified candidate this run -- skipping promotion."
 
       - name: Install rclone
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
@@ -945,7 +945,7 @@ jobs:
             chmod 600 /var/tmp/native-promote-secrets/passphrase
           fi
 
-      - name: Promote cayo
+      - name: Promote floe
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
         env:
           RCLONE_CONFIG_R2_TYPE: s3
@@ -970,18 +970,18 @@ jobs:
             args+=(--purge-hook "$PWD/shared/native-ab/publish/cloudflare-purge.sh")
           fi
           ./shared/native-ab/publish/promote.sh "${args[@]}" \
-            /var/tmp/native-publish/cayo/x86-64 \
-            https://repository.frostyard.org/os/native/v1/cayo/x86-64 \
+            /var/tmp/native-publish/floe/x86-64 \
+            https://repository.frostyard.org/os/native/v1/floe/x86-64 \
             "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
 
-      - name: Verify cayo published index (served bytes, not just purge API 200)
+      - name: Verify floe published index (served bytes, not just purge API 200)
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
         run: |
           set -euo pipefail
-          ver="$(jq -r .version /var/tmp/native-publish/cayo/x86-64/publication-info.json)"
+          ver="$(jq -r .version /var/tmp/native-publish/floe/x86-64/publication-info.json)"
           ./shared/native-ab/publish/verify-published-index.sh \
             --expect-version "$ver" \
-            https://repository.frostyard.org/os/native/v1/cayo/x86-64
+            https://repository.frostyard.org/os/native/v1/floe/x86-64
 
       - name: Remove OpenPGP update-signing key
         if: always()
@@ -991,14 +991,14 @@ jobs:
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
         run: |
           mkdir -p /var/tmp/native-promoted
-          echo "cayo promoted $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/tmp/native-promoted/cayo
+          echo "floe promoted $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/tmp/native-promoted/floe
 
       - name: Upload promoted marker
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: native-promoted-cayo
-          path: /var/tmp/native-promoted/cayo
+          name: native-promoted-floe
+          path: /var/tmp/native-promoted/floe
           retention-days: 90
           if-no-files-found: error
 
@@ -1255,7 +1255,7 @@ jobs:
   # products actually promoted this run (plan "GitHub Releases").
   # ---------------------------------------------------------------------
   release-notes:
-    needs: [prepare, promote-cayo, promote-snow, promote-snowfield]
+    needs: [prepare, promote-floe, promote-snow, promote-snowfield]
     if: github.ref == 'refs/heads/main' && !cancelled()
     runs-on: ubuntu-latest
     permissions:
@@ -1284,7 +1284,7 @@ jobs:
         run: |
           set -euo pipefail
           promoted=()
-          for product in cayo snow snowfield; do
+          for product in floe snow snowfield; do
             [[ -f "/var/tmp/native-promoted/$product" ]] && promoted+=("$product")
           done
           if [[ ${#promoted[@]} -eq 0 ]]; then

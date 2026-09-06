@@ -6,11 +6,12 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 HELPER="$ROOT_DIR/shared/bootc-secure/ci/verify-published-image.sh"
 CONTRACT="$ROOT_DIR/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
+POLICY="$ROOT_DIR/shared/bootc-secure/tree/etc/containers/policy.json"
 ASSEMBLY_COMPATIBILITY=$(jq -er '.assembly.compatibility' "$CONTRACT")
 DIGEST="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-IMAGE="ghcr.io/frostyard/cayo"
+IMAGE="ghcr.io/frostyard/floe"
 VERSION="20260729010101"
-LOCAL_REF="localhost/snosi-verified-cayo:$VERSION"
+LOCAL_REF="localhost/snosi-verified-floe:$VERSION"
 WORK=""
 AUTH_FILE=""
 PASS=0
@@ -115,8 +116,9 @@ grep -Fqx "skopeo inspect --authfile $AUTH_FILE --format {{.Digest}} docker://$I
 grep -Fqx "DOCKER_CONFIG=$(dirname -- "$AUTH_FILE") cosign verify --key $ROOT_DIR/cosign.pub $IMAGE@$DIGEST" "$WORK/commands" && pass "Cosign verifies the immutable image with the command-scoped auth config" || fail "Cosign verifies the immutable image with the command-scoped auth config"
 grep -Fq "skopeo copy --src-authfile $AUTH_FILE --policy " "$WORK/commands" && grep -Fq -- "--registries.d " "$WORK/commands" && grep -Fq "docker://$IMAGE@$DIGEST containers-storage:$LOCAL_REF" "$WORK/commands" && pass "policy copy uses immutable source and root containers storage" || fail "policy copy uses immutable source and root containers storage"
 if jq -e '.default == [{"type":"reject"}]' "$WORK/copied-policy.json" >/dev/null; then pass "copied policy retains global reject"; else fail "copied policy retains global reject"; fi
-if jq -e --arg key "$ROOT_DIR/cosign.pub" '
-    (.transports.docker | keys) == ["ghcr.io/frostyard/cayo", "ghcr.io/frostyard/floe", "ghcr.io/frostyard/snow", "ghcr.io/frostyard/snowfield"] and
+expected_policy_scopes=$(jq -c '.transports.docker | keys' "$POLICY")
+if jq -e --arg key "$ROOT_DIR/cosign.pub" --argjson expected "$expected_policy_scopes" '
+    (.transports.docker | keys) == $expected and
     all(.transports.docker[]; . == [{"type":"sigstoreSigned", "keyPath":$key, "signedIdentity":{"type":"matchRepository"}}])
 ' "$WORK/copied-policy.json" >/dev/null; then pass "copied policy retains one scoped Cosign rule per supported repository"; else fail "copied policy retains one scoped Cosign rule per supported repository"; fi
 if jq -e '.transports["containers-storage"][""] == [{"type":"insecureAcceptAnything"}]' "$WORK/copied-policy.json" >/dev/null; then pass "copied policy retains the containers-storage exception"; else fail "copied policy retains the containers-storage exception"; fi

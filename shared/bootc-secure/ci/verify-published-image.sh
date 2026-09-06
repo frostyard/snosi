@@ -31,7 +31,7 @@ if [[ ${AUTH_FILE##*/} != config.json ]]; then
     exit 2
 fi
 
-if [[ ! $IMAGE =~ ^ghcr\.io/frostyard/(cayo|snow|snowfield)$ ]]; then
+if [[ ! $IMAGE =~ ^ghcr\.io/frostyard/(floe|snow|snowfield)$ ]]; then
     printf 'invalid secure image reference\n' >&2
     exit 2
 fi

@@ -25,11 +25,11 @@ snow: ensure-mkosi
 snowfield: ensure-mkosi
     sudo PATH="$PATH" {{just}} _snowfield
 
-cayo: ensure-mkosi
-    sudo PATH="$PATH" {{just}} _cayo
+floe: ensure-mkosi
+    sudo PATH="$PATH" {{just}} _floe
 
-cayo-ab: ensure-mkosi
-    sudo PATH="$PATH" {{just}} _cayo-ab
+floe-ab: ensure-mkosi
+    sudo PATH="$PATH" {{just}} _floe-ab
 
 snow-ab: ensure-mkosi
     sudo PATH="$PATH" {{just}} _snow-ab
@@ -162,12 +162,12 @@ _snowfield: _clean
     {{mkosi}} --profile snowfield build
 
 [private]
-_cayo: _clean
-    {{mkosi}} --profile cayo build
+_floe: _clean
+    {{mkosi}} --profile floe build
 
 [private]
-_cayo-ab: _clean
-    {{mkosi}} --profile cayo-ab build
+_floe-ab: _clean
+    {{mkosi}} --profile floe-ab build
 
 [private]
 _snow-ab: _clean

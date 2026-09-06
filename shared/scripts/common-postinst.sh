@@ -1,5 +1,5 @@
 #!/bin/bash
-# Common post-installation logic shared between snow and cayo profiles.
+# Common post-installation logic shared between snow and floe profiles.
 # Source this script after setting OS_PRETTY_NAME and OS_NAME.
 # Requires IMAGE_ID to be set in the environment (from mkosi config).
 

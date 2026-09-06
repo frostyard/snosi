@@ -383,7 +383,7 @@ local_range_sha256() { # file start end
 # disable directive immediately below).
 #
 # PUB_DEST_PATH is the DEST-relative directory this publication run belongs
-# under (e.g. "os/native/v1/cayo/x86-64" or "isos/native/v1", docs/native-ab-
+# under (e.g. "os/native/v1/floe/x86-64" or "isos/native/v1", docs/native-ab-
 # contracts.md §5) -- both prepare-native-publication.sh (OS artifacts) and
 # prepare-iso-publication.sh (installer ISO) write it explicitly, so
 # publish-candidate.sh/promote.sh never have to special-case which kind of

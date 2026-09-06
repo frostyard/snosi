@@ -35,14 +35,14 @@ fail_check() { # message
 # Frozen constants (docs/native-ab-contracts.md)
 # ---------------------------------------------------------------------------
 
-products=(cayo snow snowfield)
+products=(floe snow snowfield)
 version_regex='^[0-9]{14}$'
 max_version_len=14
 label_ceiling=30
 sample_version="20260714150036"
 os_url_prefix="https://repository.frostyard.org/os/native/v1"
 
-channel_alt='(cayo|snow|snowfield)-ab'
+channel_alt='(floe|snow|snowfield)-ab'
 version_re='[0-9]{14}'
 uuid_re='[0-9a-fA-F-]+'
 root_raw_re="^${channel_alt}_${version_re}_${uuid_re}\\.root\\.raw\\.xz\$"
@@ -113,7 +113,7 @@ sample_uuid="1e2d3c4b-0001-4a2b-8c3d-000000000000"
 
 assert_matches "snow-ab_${sample_version}_${sample_uuid}.root.raw.xz" "$root_raw_re" "root.raw.xz good"
 assert_no_match "snow-ab_${sample_version}_${sample_uuid}.root-verity.raw.xz" "$root_raw_re" "root.raw.xz rejects verity name"
-assert_no_match "cayo_${sample_version}_${sample_uuid}.root.raw.xz" "$root_raw_re" "root.raw.xz rejects missing -ab"
+assert_no_match "floe_${sample_version}_${sample_uuid}.root.raw.xz" "$root_raw_re" "root.raw.xz rejects missing -ab"
 assert_no_match "snow-ab_2026071415_${sample_uuid}.root.raw.xz" "$root_raw_re" "root.raw.xz rejects short version"
 
 assert_matches "snow-ab_${sample_version}_${sample_uuid}.root-verity.raw.xz" "$root_verity_raw_re" "root-verity.raw.xz good"
@@ -123,14 +123,14 @@ assert_matches "snowfield-ab_${sample_version}.efi" "$efi_re" "efi good"
 assert_no_match "snowfield-ab_${sample_version}.efi.xz" "$efi_re" "efi rejects trailing extension"
 assert_no_match "snowfield-ab_${sample_version}+r1.efi" "$efi_re" "efi rejects suffixed version"
 
-assert_matches "cayo-ab_${sample_version}.disk.raw.xz" "$disk_raw_re" "disk.raw.xz good"
-assert_no_match "cayo-ab_${sample_version}.disk.raw" "$disk_raw_re" "disk.raw.xz rejects missing .xz"
+assert_matches "floe-ab_${sample_version}.disk.raw.xz" "$disk_raw_re" "disk.raw.xz good"
+assert_no_match "floe-ab_${sample_version}.disk.raw" "$disk_raw_re" "disk.raw.xz rejects missing .xz"
 
-assert_matches "cayo-ab_${sample_version}.manifest.json" "$manifest_re" "manifest.json good"
-assert_no_match "cayo-ab_${sample_version}.manifest.yaml" "$manifest_re" "manifest.json rejects wrong extension"
+assert_matches "floe-ab_${sample_version}.manifest.json" "$manifest_re" "manifest.json good"
+assert_no_match "floe-ab_${sample_version}.manifest.yaml" "$manifest_re" "manifest.json rejects wrong extension"
 
-assert_matches "cayo-ab_${sample_version}.sbom.spdx.json" "$sbom_re" "sbom.spdx.json good"
-assert_no_match "cayo-ab_${sample_version}.sbom.json" "$sbom_re" "sbom.spdx.json rejects missing .spdx"
+assert_matches "floe-ab_${sample_version}.sbom.spdx.json" "$sbom_re" "sbom.spdx.json good"
+assert_no_match "floe-ab_${sample_version}.sbom.json" "$sbom_re" "sbom.spdx.json rejects missing .spdx"
 
 # ---------------------------------------------------------------------------
 # Allowlist plumbing
@@ -284,7 +284,7 @@ done
 # 5. Profile-name publishability check
 # ---------------------------------------------------------------------------
 
-for name in cayo-ab snow-ab snowfield-ab; do
+for name in floe-ab snow-ab snowfield-ab; do
     conf="mkosi.profiles/$name/mkosi.conf"
     [[ -f "$conf" ]] || continue
     # Phase 3: the config markers live in the shared, includable

@@ -24,7 +24,7 @@ fi
 # included). The one remaining KernelModules= filter is the QEMU-only dev
 # fixture's own -- verify it still includes dm_crypt so LUKS /var unlock
 # keeps working there too.
-grep -q '^[[:space:]]*dm_crypt$' "$root/mkosi.profiles/cayo-ab-raw/mkosi.conf"
+grep -q '^[[:space:]]*dm_crypt$' "$root/mkosi.profiles/floe-ab-raw/mkosi.conf"
 
 # The runtime ring combines the native OS-update key with the repository key
 # used for signed sysext manifests. Native publication verification keeps using
@@ -111,10 +111,10 @@ grep -q 'blkid -p -s TYPE -o value' \
 grep -q '^After=sysroot.mount cryptsetup.target$' \
     "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/snosi-etc-overlay-initrd.service"
 
-# Phase 3: the security posture that used to live directly in the
-# cayo-ab-secure spike profile is now a shared, includable fragment
+# Phase 3: the security posture that used to live directly in a standalone
+# secure-server spike profile is now a shared, includable fragment
 # (shared/native-ab-secure/mkosi.conf), consumed by the three production
-# profiles (cayo-ab, snow-ab, snowfield-ab). Assert the markers on the
+# profiles (floe-ab, snow-ab, snowfield-ab). Assert the markers on the
 # fragment itself, then assert each production profile actually reaches it
 # via [Include] (and does not restate the markers itself -- restating them
 # would let a profile drift from the shared fragment undetected).
@@ -154,10 +154,10 @@ done
 # outside its own tree, the three production profiles' OWN mkosi.conf (they
 # must reach forky only through the [Include], never restate it), the base
 # tree, mkosi.images, the raw dev fixture, or the sandbox may reference it.
-declare -A production_composition=([cayo-ab]=cayo [snow-ab]=snow [snowfield-ab]=snow)
-declare -A production_kernel=([cayo-ab]=backports [snow-ab]=backports [snowfield-ab]=surface)
-declare -A production_imageid=([cayo-ab]=cayo [snow-ab]=snow [snowfield-ab]=snowfield)
-production_profiles=(cayo-ab snow-ab snowfield-ab)
+declare -A production_composition=([floe-ab]=floe [snow-ab]=snow [snowfield-ab]=snow)
+declare -A production_kernel=([floe-ab]=backports [snow-ab]=backports [snowfield-ab]=surface)
+declare -A production_imageid=([floe-ab]=floe [snow-ab]=snow [snowfield-ab]=snowfield)
+production_profiles=(floe-ab snow-ab snowfield-ab)
 for name in "${production_profiles[@]}"; do
     conf="$root/mkosi.profiles/$name/mkosi.conf"
     [[ -f "$conf" ]] || { echo "Missing production profile: $conf" >&2; exit 1; }
@@ -182,12 +182,12 @@ for name in "${production_profiles[@]}"; do
     fi
 done
 if grep -Rqi forky "$root/mkosi.conf" "$root/mkosi.images" \
-    "$root/mkosi.profiles/cayo-ab-raw" "$root/mkosi.sandbox"; then
+    "$root/mkosi.profiles/floe-ab-raw" "$root/mkosi.sandbox"; then
     echo "Forky must remain isolated to shared/native-ab-secure and its production consumers" >&2
     exit 1
 fi
 
-installer="$root/test/cayo-ab-install-spike.sh"
+installer="$root/test/floe-ab-install-spike.sh"
 grep -q -- '--encrypt-var' "$installer"
 grep -qF -- "--tpm2-pcrs= \\" "$installer"
 grep -qF -- "--tpm2-pcrlock= \\" "$installer"
@@ -255,9 +255,9 @@ grep -q -- '--update-section.*\.pcrpkey' "$negative_test"
 
 # The 3 OS transfers moved from the generic ab-root tree to the per-product
 # channel fragment (Phase 3, docs/native-ab-contracts.md §5). Task 3.2 gave
-# every channel a real consuming profile (cayo-ab-raw + cayo-ab both use
-# cayo; snow-ab uses snow; snowfield-ab uses snowfield), so check all three.
-for product in cayo snow snowfield; do
+# every channel a real consuming profile (floe-ab-raw + floe-ab both use
+# floe; snow-ab uses snow; snowfield-ab uses snowfield), so check all three.
+for product in floe snow snowfield; do
     channel="$root/shared/native-ab/channels/$product"
     for transfer in 10-root-verity 20-root 90-uki; do
         file="$channel/tree/usr/lib/sysupdate.d/$transfer.transfer"
@@ -276,7 +276,7 @@ for product in cayo snow snowfield; do
     grep -q '^TriesLeft=3$' "$channel/tree/usr/lib/sysupdate.d/90-uki.transfer"
     grep -q '^Path=/EFI/Linux$' "$channel/tree/usr/lib/sysupdate.d/90-uki.transfer"
 done
-channel="$root/shared/native-ab/channels/cayo"
+channel="$root/shared/native-ab/channels/floe"
 grep -q '^disable systemd-sysupdate.timer$' \
     "$ab/tree/usr/lib/systemd/system-preset/00-native-ab.preset"
 grep -q '^disable systemd-sysupdate-reboot.timer$' \
@@ -360,14 +360,14 @@ fi
 # /dev/console on the VT keeps plymouthd's local terminal non-NULL (avoids
 # the 24.004.60 DRM-input-path segfault under
 # plymouth.ignore-serial-consoles) and is what makes the graphical splash
-# actually render. cayo's channel must NOT have it (server /dev/console
+# actually render. floe's channel must NOT have it (server /dev/console
 # stays serial). The serial LUKS prompt that console=tty0 would otherwise
 # remove is restored by snosi-ask-password-serial.* -- units, static wants
 # link, and their install_items ride into the native initrd.
 grep -q '^KernelCommandLine=console=tty0$' "$root/shared/native-ab/channels/snow/mkosi.conf"
 grep -q '^KernelCommandLine=console=tty0$' "$root/shared/native-ab/channels/snowfield/mkosi.conf"
-if grep -q 'console=tty0' "$root/shared/native-ab/channels/cayo/mkosi.conf"; then
-    echo "cayo channel must not carry console=tty0" >&2
+if grep -q 'console=tty0' "$root/shared/native-ab/channels/floe/mkosi.conf"; then
+    echo "floe channel must not carry console=tty0" >&2
     exit 1
 fi
 # Both plymouth-start waits are load-bearing: card0 bounds the DRM
@@ -393,11 +393,11 @@ snowtree="$root/shared/snow/tree"
 grep -q '^ModuleName=two-step$' "$snowtree/usr/share/plymouth/themes/snow/snow.plymouth"
 grep -q '^ImageDir=/usr/share/plymouth/themes/spinner$' "$snowtree/usr/share/plymouth/themes/snow/snow.plymouth"
 grep -q '^Theme=snow$' "$snowtree/etc/plymouth/plymouthd.conf"
-# Servers stay text-mode: no splash may reach cayo through its fragments.
-if grep -q 'splash' "$root/shared/composition/cayo/mkosi.conf" \
+# Servers stay text-mode: no splash may reach floe through its fragments.
+if grep -q 'splash' "$root/shared/composition/floe/mkosi.conf" \
     "$root/shared/outformat/ab-root/mkosi.conf" \
     "$root/shared/native-ab-secure/mkosi.conf"; then
-    echo "splash karg leaked into a cayo-reachable fragment" >&2
+    echo "splash karg leaked into a floe-reachable fragment" >&2
     exit 1
 fi
 echo "ok - plymouth splash + Snow theme wiring"

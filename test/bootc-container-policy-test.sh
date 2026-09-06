@@ -225,9 +225,9 @@ exit 1
 EOF
     chmod +x "$work/bin/bootc" "$work/bin/podman"
     if [[ -n "$staged" ]]; then
-        status=$(jq -nc --arg staged "$staged" '{spec:{image:{image:"ghcr.io/frostyard/cayo:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:"sha256:booted"}},staged:{image:{imageDigest:$staged}},rollback:{image:{}}}}')
+        status=$(jq -nc --arg staged "$staged" '{spec:{image:{image:"ghcr.io/frostyard/floe:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:"sha256:booted"}},staged:{image:{imageDigest:$staged}},rollback:{image:{}}}}')
     else
-        status=$(jq -nc '{spec:{image:{image:"ghcr.io/frostyard/cayo:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:"sha256:booted"}},staged:{},rollback:{image:{}}}}')
+        status=$(jq -nc '{spec:{image:{image:"ghcr.io/frostyard/floe:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:"sha256:booted"}},staged:{},rollback:{image:{}}}}')
     fi
     printf 'stale=yes\n' >"$work/run/update-staged"
     set +e
@@ -375,7 +375,7 @@ run_live_policy_proof() {
         {default: [{type: "reject"}], transports: {docker: {"docker.io/library/busybox": [{type: "sigstoreSigned", keyPath: $key, signedIdentity: {type: "matchRepository"}}]}}}
     ' "$POLICY" >"$unsigned_policy"
     jq --arg key "$PROJECT_ROOT/cosign.pub" '
-        {default: [{type: "reject"}], transports: {docker: {"ghcr.io/frostyard/cayo": [{type: "sigstoreSigned", keyPath: $key, signedIdentity: {type: "exactRepository", dockerRepository: "ghcr.io/frostyard/snow"}}]}}}
+        {default: [{type: "reject"}], transports: {docker: {"ghcr.io/frostyard/floe": [{type: "sigstoreSigned", keyPath: $key, signedIdentity: {type: "exactRepository", dockerRepository: "ghcr.io/frostyard/snow"}}]}}}
     ' "$POLICY" >"$wrong_identity_policy"
 
     expect_policy_rejection() { # description policy image
@@ -389,12 +389,12 @@ run_live_policy_proof() {
         fi
     }
 
-    IFS=, read -r -a live_images <<<"${LIVE_IMAGES:-cayo}"
+    IFS=, read -r -a live_images <<<"${LIVE_IMAGES:-floe}"
     for image in "${live_images[@]}"; do
         # Floe joins this live allowlist in Phase 2, after its signed image is
         # published. Accepting it during Phase 1 would turn absence into FAIL.
         case "$image" in
-            cayo|snow|snowfield) ;;
+            floe|snow|snowfield) ;;
             *) printf 'BLOCKED: LIVE_IMAGES contains unsupported product %s\n' "$image" >&2; return 2 ;;
         esac
         if HOME="$live_home" podman pull "ghcr.io/frostyard/$image:latest" >/dev/null 2>&1; then
@@ -410,8 +410,8 @@ run_live_policy_proof() {
     done
 
     expect_policy_rejection "scoped unsigned image is rejected" "$unsigned_policy" docker.io/library/busybox:latest
-    expect_policy_rejection "wrong Cosign key is rejected" "$wrong_key_policy" ghcr.io/frostyard/cayo:latest
-    expect_policy_rejection "signature repository identity mismatch is rejected" "$wrong_identity_policy" ghcr.io/frostyard/cayo:latest
+    expect_policy_rejection "wrong Cosign key is rejected" "$wrong_key_policy" ghcr.io/frostyard/floe:latest
+    expect_policy_rejection "signature repository identity mismatch is rejected" "$wrong_identity_policy" ghcr.io/frostyard/floe:latest
 }
 
 if [[ "${RUN_LIVE:-0}" == "1" ]]; then

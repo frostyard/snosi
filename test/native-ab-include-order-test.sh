@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # Enforce the secure-before-composition Include= ordering contract for the
-# three production native A/B profiles (cayo-ab, snow-ab, snowfield-ab).
+# three production native A/B profiles (floe-ab, snow-ab, snowfield-ab).
 #
 # ADR-0005 (docs/adr/0005-profiles-as-transport-kernel-selectors.md) makes the
 # Include= order load-bearing: the secure posture fragment
@@ -32,7 +32,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 secure_marker="shared/native-ab-secure/finalize/disable-nvpcr.chroot"
 composition_marker="shared/outformat/image/finalize/mkosi.finalize.chroot"
 
-production_profiles=(cayo-ab snow-ab snowfield-ab)
+production_profiles=(floe-ab snow-ab snowfield-ab)
 
 mkosi=""
 if [[ -x "$root/.mkosi/bin/mkosi" ]]; then

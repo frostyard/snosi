@@ -12,11 +12,11 @@
 # Usage: prepare-native-publication.sh [--xz] <mkosi-output-dir> <profile-output-name> <dest-dir>
 #
 #   mkosi-output-dir     mkosi's OutputDirectory (e.g. "output")
-#   profile-output-name  the built profile's Output= value (e.g. "cayo-ab");
+#   profile-output-name  the built profile's Output= value (e.g. "floe-ab");
 #                         this is also expected to equal the channel name
 #                         (<ImageId>-ab, §1) -- see the validation below,
 #                         which is what makes this refuse to "publish" the
-#                         cayo-ab-raw dev fixture.
+#                         floe-ab-raw dev fixture.
 #   dest-dir              directory to write <product>/x86-64/<files> into
 #
 # Product, channel, and version are derived from the artifacts themselves,
@@ -64,8 +64,8 @@
 # -----------------------------------------------
 # docs/native-ab-contracts.md's own compression/copy step is meant to run
 # once per PUBLICATION, not once per BUILD. PostOutputScripts= runs on every
-# single `mkosi build` invocation -- every local dev iteration on cayo-ab,
-# and every profile in the build-images.yml matrix (cayo-ab, snow-ab,
+# single `mkosi build` invocation -- every local dev iteration on floe-ab,
+# and every profile in the build-images.yml matrix (floe-ab, snow-ab,
 # snowfield-ab back to back on one runner). This script's job is to copy the
 # multi-gigabyte root/root-verity/disk artifacts (5-23 GiB per product, see
 # docs/native-ab-capacities.md) into a second location under $OUTPUTDIR
@@ -169,7 +169,7 @@ channel="$PROFILE_OUTPUT_NAME"
 expected_channel="${product}-ab"
 [[ "$channel" == "$expected_channel" ]] || {
     echo "Error: profile-output-name '$channel' is not a publishable channel name; expected '$expected_channel' (<ImageId>-ab, docs/native-ab-contracts.md §1)." >&2
-    echo "       Refusing to publish (this correctly rejects e.g. the cayo-ab-raw dev fixture, which must never be published)." >&2
+    echo "       Refusing to publish (this correctly rejects e.g. the floe-ab-raw dev fixture, which must never be published)." >&2
     exit 1
 }
 

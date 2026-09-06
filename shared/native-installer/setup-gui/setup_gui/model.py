@@ -204,7 +204,7 @@ _ALL_PAGES = [
 def page_sequence(product=None):
     """The wizard page order. The core-flatpaks page is dropped entirely for
     products where core_flatpaks_allowed is false (the CLI dies on
-    --core-flatpaks for cayo-ab; the GUI never shows the choice)."""
+    --core-flatpaks for floe-ab; the GUI never shows the choice)."""
     pages = list(_ALL_PAGES)
     if product is not None and not product.core_flatpaks_allowed:
         pages.remove(PAGE_FLATPAKS)
@@ -344,7 +344,7 @@ def build_install_argv(state, defaults, user_password_file, mok_password_file,
             argv += ["--no-core-flatpaks"]
         # None: let the CLI apply its own default (currently: enabled).
     else:
-        # Explicit is better: cayo-ab dies on --core-flatpaks, accepts
+        # Explicit is better: floe-ab dies on --core-flatpaks, accepts
         # --no-core-flatpaks as a no-op restatement of its forced policy.
         argv += ["--no-core-flatpaks"]
 

@@ -59,20 +59,20 @@ ok "manifestmv: removes the manifest from the OUTPUTDIR root" \
 # IMAGE_ID is the text before the FIRST dot, so a dotted version stays grouped
 # under the image id, not the version.
 out=$(fresh_out)
-: >"$out/cayo.1.2.3.manifest.json"
+: >"$out/floe.1.2.3.manifest.json"
 OUTPUTDIR="$out" "$manifestmv" >/dev/null
 ok "manifestmv: IMAGE_ID is the prefix before the first dot" \
-    is_file "$out/manifests/cayo/cayo.1.2.3.manifest.json"
+    is_file "$out/manifests/floe/floe.1.2.3.manifest.json"
 
 # Distinct image ids get distinct subdirectories.
 out=$(fresh_out)
 : >"$out/snow.manifest.json"
-: >"$out/cayo.manifest.json"
+: >"$out/floe.manifest.json"
 OUTPUTDIR="$out" "$manifestmv" >/dev/null
 ok "manifestmv: groups snow manifest under manifests/snow/" \
     is_file "$out/manifests/snow/snow.manifest.json"
-ok "manifestmv: groups cayo manifest under manifests/cayo/" \
-    is_file "$out/manifests/cayo/cayo.manifest.json"
+ok "manifestmv: groups floe manifest under manifests/floe/" \
+    is_file "$out/manifests/floe/floe.manifest.json"
 
 # Non-manifest artifacts are left untouched.
 out=$(fresh_out)

@@ -14,7 +14,7 @@ usage() {
     cat >&2 <<EOF
 Usage: $0 --yes CURRENT_PREFIX DUAL_PREFIX NEW_PREFIX OLD_PCR_CERT NEW_PCR_PUB RECOVERY_KEY SSH_TARGET SSH_KEY EXPECTED_MACHINE_ID INCUS_INSTANCE
 
-The target must be a disposable, MOK-enrolled cayo-ab (or another production native profile) Incus VM already
+The target must be a disposable, MOK-enrolled floe-ab (or another production native profile) Incus VM already
 running CURRENT_PREFIX with only the new TPM token. The destructive test installs
 dual-signed DUAL_PREFIX and new-only NEW_PREFIX, verifies explicit rollback,
 corrupts NEW_PREFIX, and force-restarts INCUS_INSTANCE until boot counting falls
@@ -217,7 +217,7 @@ matching_uki_entry() {
             MATCHING_UKI_ENTRY=${path##*/}
             matches=$((matches + 1))
         fi
-    done < <(guest "find /boot/EFI/Linux -maxdepth 1 -type f -name 'cayo-ab_${versions[index]}*.efi' -exec sha256sum {} +")
+    done < <(guest "find /boot/EFI/Linux -maxdepth 1 -type f -name 'floe-ab_${versions[index]}*.efi' -exec sha256sum {} +")
     [[ $matches -eq 1 ]] || {
         echo "Error: found $matches installed UKIs for ${versions[index]} with the expected hash" >&2
         return 1
@@ -243,7 +243,7 @@ verify_boot() {
         hash=$(sha256sum "/boot/EFI/Linux/$entry")
         printf "%s %s\n" "$entry" "${hash%% *}"
     ')
-    [[ $running_entry == cayo-ab_${versions[index]}*.efi && $running_hash == "${uki_hashes[index]}" ]] || {
+    [[ $running_entry == floe-ab_${versions[index]}*.efi && $running_hash == "${uki_hashes[index]}" ]] || {
         echo "Error: running UKI $running_entry has unexpected identity" >&2
         return 1
     }
@@ -273,9 +273,9 @@ install_update() {
     echo "Installing secure update ${versions[index]}"
     guest "systemd-sysupdate --definitions='$remote_dir/definitions' --verify=yes update '${versions[index]}'"
     layout=$(guest 'lsblk -J -o PATH,PARTLABEL,PARTUUID')
-    installed_root_uuid=$(jq -er --arg label "cayo_${versions[index]}_r" \
+    installed_root_uuid=$(jq -er --arg label "floe_${versions[index]}_r" \
         '.. | objects | select(.partlabel? == $label) | .partuuid | ascii_downcase' <<< "$layout")
-    installed_verity_uuid=$(jq -er --arg label "cayo_${versions[index]}_v" \
+    installed_verity_uuid=$(jq -er --arg label "floe_${versions[index]}_v" \
         '.. | objects | select(.partlabel? == $label) | .partuuid | ascii_downcase' <<< "$layout")
     [[ $installed_root_uuid == "${root_uuids[index]}" ]]
     [[ $installed_verity_uuid == "${verity_uuids[index]}" ]]
@@ -334,8 +334,8 @@ for prefix in "${prefixes[@]}"; do
     manifest="${prefix}.manifest"
     raw="${prefix}.raw"
     uki="${prefix}.efi"
-    root="${prefix}.cayo_@v.root.raw.raw"
-    verity="${prefix}.cayo_@v.root-verity.raw.raw"
+    root="${prefix}.floe_@v.root.raw.raw"
+    verity="${prefix}.floe_@v.root-verity.raw.raw"
     for file in "$manifest" "$raw" "$uki" "$root" "$verity"; do
         [[ -f $file ]] || { echo "Error: required artifact not found: $file" >&2; exit 1; }
     done
@@ -345,9 +345,9 @@ for prefix in "${prefixes[@]}"; do
         exit 1
     }
     layout=$(sfdisk --json "$raw")
-    root_uuid=$(jq -er --arg label "cayo_${version}_r" \
+    root_uuid=$(jq -er --arg label "floe_${version}_r" \
         '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<< "$layout")
-    verity_uuid=$(jq -er --arg label "cayo_${version}_v" \
+    verity_uuid=$(jq -er --arg label "floe_${version}_v" \
         '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<< "$layout")
     uki_hash=$(sha256sum "$uki")
     versions+=("$version")
@@ -407,16 +407,16 @@ assert_new_only_token
 guest "printf '%s\n' var-persist > /var/native-ab-secure-update-test"
 guest "printf '%s\n' etc-persist > /etc/native-ab-secure-update-test"
 verify_boot 0
-current_root_path=$(partition_path "cayo_${versions[0]}_r")
+current_root_path=$(partition_path "floe_${versions[0]}_r")
 
 echo "Preparing signed secure updates ${versions[1]} and ${versions[2]}"
 for index in 1 2; do
     prefix=${prefixes[index]}
-    xz -T0 -c "${prefix}.cayo_@v.root.raw.raw" > \
-        "$workdir/source/cayo_${versions[index]}_${root_uuids[index]}.root.raw.xz"
-    xz -T0 -c "${prefix}.cayo_@v.root-verity.raw.raw" > \
-        "$workdir/source/cayo_${versions[index]}_${verity_uuids[index]}.root-verity.raw.xz"
-    cp "${prefix}.efi" "$workdir/source/cayo-ab_${versions[index]}.efi"
+    xz -T0 -c "${prefix}.floe_@v.root.raw.raw" > \
+        "$workdir/source/floe_${versions[index]}_${root_uuids[index]}.root.raw.xz"
+    xz -T0 -c "${prefix}.floe_@v.root-verity.raw.raw" > \
+        "$workdir/source/floe_${versions[index]}_${verity_uuids[index]}.root-verity.raw.xz"
+    cp "${prefix}.efi" "$workdir/source/floe-ab_${versions[index]}.efi"
 done
 for file in "$workdir/source"/*; do
     name=${file##*/}
@@ -436,11 +436,11 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://127.0.0.1:$SOURCE_PORT/
-MatchPattern=cayo_@v_@u.root-verity.raw.xz
+MatchPattern=floe_@v_@u.root-verity.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_v
+MatchPattern=floe_@v_v
 MatchPartitionType=root-verity
 PartitionFlags=0
 ReadOnly=yes
@@ -453,11 +453,11 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://127.0.0.1:$SOURCE_PORT/
-MatchPattern=cayo_@v_@u.root.raw.xz
+MatchPattern=floe_@v_@u.root.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_r
+MatchPattern=floe_@v_r
 MatchPartitionType=root
 PartitionFlags=0
 ReadOnly=yes
@@ -470,14 +470,14 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://127.0.0.1:$SOURCE_PORT/
-MatchPattern=cayo-ab_@v.efi
+MatchPattern=floe-ab_@v.efi
 [Target]
 Type=regular-file
 Path=/EFI/Linux
 PathRelativeTo=boot
-MatchPattern=cayo-ab_@v+@l-@d.efi
-MatchPattern=cayo-ab_@v+@l.efi
-MatchPattern=cayo-ab_@v.efi
+MatchPattern=floe-ab_@v+@l-@d.efi
+MatchPattern=floe-ab_@v+@l.efi
+MatchPattern=floe-ab_@v.efi
 Mode=0444
 TriesLeft=3
 TriesDone=0
@@ -492,7 +492,7 @@ guest "if test -e /etc/systemd/import-pubring.gpg; then cp -a /etc/systemd/impor
 start_source
 
 install_update 1
-dual_root_path=$(partition_path "cayo_${versions[1]}_r")
+dual_root_path=$(partition_path "floe_${versions[1]}_r")
 [[ $dual_root_path != "$current_root_path" ]] || {
     echo "Error: N+2 overwrote the running N+1 slot" >&2
     exit 1
@@ -502,7 +502,7 @@ verify_boot 1
 start_source
 
 install_update 2
-new_root_path=$(partition_path "cayo_${versions[2]}_r")
+new_root_path=$(partition_path "floe_${versions[2]}_r")
 [[ $new_root_path == "$current_root_path" ]] || {
     echo "Error: N+3 did not reuse the inactive N+1 slot" >&2
     exit 1
@@ -523,13 +523,13 @@ reboot_guest
 verify_boot 2
 
 echo "Testing boot-count fallback from corrupt ${versions[2]} to ${versions[1]}"
-bad_root_path=$(partition_path "cayo_${versions[2]}_r")
+bad_root_path=$(partition_path "floe_${versions[2]}_r")
 matching_uki_entry 2
-[[ $MATCHING_UKI_ENTRY == "cayo-ab_${versions[2]}.efi" ]] || {
+[[ $MATCHING_UKI_ENTRY == "floe-ab_${versions[2]}.efi" ]] || {
     echo "Error: N+3 was not blessed before boot-count re-arming: $MATCHING_UKI_ENTRY" >&2
     exit 1
 }
-rearmed_entry="cayo-ab_${versions[2]}+3-0.efi"
+rearmed_entry="floe-ab_${versions[2]}+3-0.efi"
 guest "mv '/boot/EFI/Linux/$MATCHING_UKI_ENTRY' '/boot/EFI/Linux/$rearmed_entry'; sync -f /boot; bootctl set-default '$rearmed_entry'; test -e '/boot/EFI/Linux/$rearmed_entry'"
 guest "dd if=/dev/zero of='$bad_root_path' bs=4096 count=1 conv=fsync status=none"
 
@@ -551,6 +551,6 @@ force_stop
 start_instance
 wait_for_guest
 verify_boot 1
-guest "test -e /boot/EFI/Linux/cayo-ab_${versions[2]}+0-3.efi"
+guest "test -e /boot/EFI/Linux/floe-ab_${versions[2]}+0-3.efi"
 
 echo "Native A/B secure update passed: ${versions[0]} -> ${versions[1]} -> ${versions[2]} -> rollback/fallback ${versions[1]}"

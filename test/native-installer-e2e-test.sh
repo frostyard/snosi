@@ -35,7 +35,7 @@
 # path. This test always attaches the ISO as a plain virtio-blk disk.
 #
 # Sequence per product (brief numbering):
-#   1. (once, before any VM) build the ISO fresh, build+publish cayo-ab and
+#   1. (once, before any VM) build the ISO fresh, build+publish floe-ab and
 #      snow-ab through the real prepare -> candidate -> verify -> promote
 #      pipeline (shared/native-ab/publish/*.sh) with the committed DEV
 #      signing key, to a local origin.
@@ -43,7 +43,7 @@
 #      the product's documented minimum size + a fixed margin -- see
 #      TARGET_SIZE_MARGIN below for why a margin is needed to prove growth).
 #   3. In-ISO negative FIRST: point snosi-install at the ISO's own device;
-#      assert the own-boot-medium refusal (cayo-ab only -- product-agnostic
+#      assert the own-boot-medium refusal (floe-ab only -- product-agnostic
 #      logic, proven once; brief step 8).
 #   4. In-ISO non-interactive install: a world-readable --mok-password-file
 #      is refused (check_secret_file_perms) only after the full destructive
@@ -59,7 +59,7 @@
 #      alone; shim must reject the MOK-signed systemd-boot ("Security
 #      Violation").
 #   6. --restage-mok, dedicated: boot the ISO again (a fresh power cycle) and
-#      stage one more MOK request with a NEW password file (cayo-ab only;
+#      stage one more MOK request with a NEW password file (floe-ab only;
 #      product-agnostic mechanic, brief step 8).
 #   7. Host-side MOK injection (virt-fw-vars --add-mok on the SAME varstore)
 #      simulates the one-time MokManager approval; boot the target disk
@@ -67,7 +67,7 @@
 #
 # Usage: sudo ./test/native-installer-e2e-test.sh [--with-snowfield]
 # Env overrides: SKIP_ISO_BUILD=1 (reuse output/snosi-native-installer_*),
-# SKIP_CAYO_BUILD=1 / SKIP_SNOW_BUILD=1 with BUILD_CAYO_DIR / BUILD_SNOW_DIR
+# SKIP_FLOE_BUILD=1 / SKIP_SNOW_BUILD=1 with BUILD_FLOE_DIR / BUILD_SNOW_DIR
 # pointing at a previously copied-out split-artifact dir (see
 # copy_build_artifacts below) to skip a multi-GiB rebuild during iteration,
 # VM_MEMORY (4096), VM_CPUS (2), KEEP_VM (0 -- 1 keeps WORK_DIR + running
@@ -83,9 +83,9 @@ PUBLISH_DIR="$ROOT_DIR/shared/native-ab/publish"
 : "${VM_CPUS:=2}"
 : "${KEEP_VM:=0}"
 : "${SKIP_ISO_BUILD:=0}"
-: "${SKIP_CAYO_BUILD:=0}"
+: "${SKIP_FLOE_BUILD:=0}"
 : "${SKIP_SNOW_BUILD:=0}"
-: "${BUILD_CAYO_DIR:=}"
+: "${BUILD_FLOE_DIR:=}"
 : "${BUILD_SNOW_DIR:=}"
 : "${SOURCE_PORT:=18700}"
 
@@ -191,10 +191,10 @@ resolve_mkosi() {
 }
 
 # ===========================================================================
-# Step 1: build the ISO fresh, build + publish cayo-ab and snow-ab
+# Step 1: build the ISO fresh, build + publish floe-ab and snow-ab
 # ===========================================================================
 echo ""
-echo "=== Step 1: build ISO + cayo-ab + snow-ab, publish to a local origin ==="
+echo "=== Step 1: build ISO + floe-ab + snow-ab, publish to a local origin ==="
 echo "started $(date -u +%FT%TZ)"
 
 resolve_mkosi
@@ -227,14 +227,14 @@ fi
 [[ -f "$ISO" ]] || { echo "Error: missing built ISO: $ISO" >&2; exit 1; }
 
 # Copy the ISO OUT of mkosi's OutputDirectory immediately, before the
-# cayo-ab/snow-ab `mkosi build` invocations below run: empirically observed
+# floe-ab/snow-ab `mkosi build` invocations below run: empirically observed
 # live (2026-07-15, first run of this script) that mkosi's own output-
 # directory handling deletes files unrelated to the CURRENT build target
 # from $OUTPUT_DIR on every subsequent `mkosi build` (the ISO -- and the
 # PRIOR profile's own split artifacts -- vanished the moment the next
 # profile finished building, well before this script ever got to a VM
 # boot). copy_build_artifacts() below already existed to solve exactly this
-# for cayo-ab/snow-ab's own split outputs; the ISO -- a single self-
+# for floe-ab/snow-ab's own split outputs; the ISO -- a single self-
 # contained file -- needs the identical treatment. From here on, every
 # reference to $ISO in this script MUST be this copied path, never the
 # original $OUTPUT_DIR one.
@@ -263,14 +263,14 @@ copy_build_artifacts() { # profile image_id dest
     cp "$OUTPUT_DIR/${image_id}.features.json" "$dest/"
 }
 
-if [[ "$SKIP_CAYO_BUILD" != 1 ]]; then
-    echo "--- building cayo-ab ($(date -u +%FT%TZ)) ---"
-    "$MKOSI" --profile cayo-ab --force build
-    BUILD_CAYO_DIR="$WORK_DIR/build-cayo-ab"
-    copy_build_artifacts cayo-ab cayo "$BUILD_CAYO_DIR"
+if [[ "$SKIP_FLOE_BUILD" != 1 ]]; then
+    echo "--- building floe-ab ($(date -u +%FT%TZ)) ---"
+    "$MKOSI" --profile floe-ab --force build
+    BUILD_FLOE_DIR="$WORK_DIR/build-floe-ab"
+    copy_build_artifacts floe-ab floe "$BUILD_FLOE_DIR"
 else
-    [[ -d "$BUILD_CAYO_DIR" ]] || { echo "Error: SKIP_CAYO_BUILD=1 but BUILD_CAYO_DIR not set/found" >&2; exit 1; }
-    echo "SKIP_CAYO_BUILD=1: reusing $BUILD_CAYO_DIR"
+    [[ -d "$BUILD_FLOE_DIR" ]] || { echo "Error: SKIP_FLOE_BUILD=1 but BUILD_FLOE_DIR not set/found" >&2; exit 1; }
+    echo "SKIP_FLOE_BUILD=1: reusing $BUILD_FLOE_DIR"
 fi
 
 if [[ "$SKIP_SNOW_BUILD" != 1 ]]; then
@@ -287,29 +287,29 @@ echo "Product builds done ($(date -u +%FT%TZ))"
 ORIGIN_DEST="$WORK_DIR/origin"
 mkdir -p "$ORIGIN_DEST"
 
-echo "--- prepare-native-publication.sh --xz (cayo-ab, snow-ab) ---"
-"$PUBLISH_DIR/prepare-native-publication.sh" --xz "$BUILD_CAYO_DIR" cayo-ab "$ORIGIN_DEST" >&2
+echo "--- prepare-native-publication.sh --xz (floe-ab, snow-ab) ---"
+"$PUBLISH_DIR/prepare-native-publication.sh" --xz "$BUILD_FLOE_DIR" floe-ab "$ORIGIN_DEST" >&2
 "$PUBLISH_DIR/prepare-native-publication.sh" --xz "$BUILD_SNOW_DIR" snow-ab "$ORIGIN_DEST" >&2
-PREPARED_CAYO="$ORIGIN_DEST/cayo/x86-64"
+PREPARED_FLOE="$ORIGIN_DEST/floe/x86-64"
 PREPARED_SNOW="$ORIGIN_DEST/snow/x86-64"
-VERSION_CAYO="$(jq -er '.version' "$PREPARED_CAYO/publication-info.json")"
+VERSION_FLOE="$(jq -er '.version' "$PREPARED_FLOE/publication-info.json")"
 VERSION_SNOW="$(jq -er '.version' "$PREPARED_SNOW/publication-info.json")"
-echo "cayo-ab version: $VERSION_CAYO   snow-ab version: $VERSION_SNOW"
+echo "floe-ab version: $VERSION_FLOE   snow-ab version: $VERSION_SNOW"
 
 python3 "$ROOT_DIR/test/lib/range-http-server.py" "$SOURCE_PORT" "$ORIGIN_DEST" >"$WORK_DIR/http.log" 2>&1 &
 HTTP_PID=$!
 sleep 1
 kill -0 "$HTTP_PID" 2>/dev/null || { echo "Error: local origin HTTP server failed to start" >&2; cat "$WORK_DIR/http.log" >&2; exit 1; }
-CAYO_BASE_URL="http://127.0.0.1:${SOURCE_PORT}/os/native/v1/cayo/x86-64"
+FLOE_BASE_URL="http://127.0.0.1:${SOURCE_PORT}/os/native/v1/floe/x86-64"
 SNOW_BASE_URL="http://127.0.0.1:${SOURCE_PORT}/os/native/v1/snow/x86-64"
 GUEST_ORIGIN="http://10.0.2.2:${SOURCE_PORT}"
 
 echo "--- publish-candidate.sh / verify-remote.sh / promote.sh (DEV key, stock pubring) ---"
-"$PUBLISH_DIR/publish-candidate.sh" "$PREPARED_CAYO" "$ORIGIN_DEST"
-assert_true "verify-remote.sh clean pass for cayo-ab candidate" "$PUBLISH_DIR/verify-remote.sh" "$PREPARED_CAYO" "$CAYO_BASE_URL"
-"$PUBLISH_DIR/promote.sh" --signing-key "$SIGNING_KEY" --pubring "$PUBRING" "$PREPARED_CAYO" "$CAYO_BASE_URL" "$ORIGIN_DEST"
-assert_true "gpgv (stock pubring) accepts the promoted cayo-ab index" \
-    gpgv --keyring "$PUBRING" "$ORIGIN_DEST/os/native/v1/cayo/x86-64/SHA256SUMS.gpg" "$ORIGIN_DEST/os/native/v1/cayo/x86-64/SHA256SUMS"
+"$PUBLISH_DIR/publish-candidate.sh" "$PREPARED_FLOE" "$ORIGIN_DEST"
+assert_true "verify-remote.sh clean pass for floe-ab candidate" "$PUBLISH_DIR/verify-remote.sh" "$PREPARED_FLOE" "$FLOE_BASE_URL"
+"$PUBLISH_DIR/promote.sh" --signing-key "$SIGNING_KEY" --pubring "$PUBRING" "$PREPARED_FLOE" "$FLOE_BASE_URL" "$ORIGIN_DEST"
+assert_true "gpgv (stock pubring) accepts the promoted floe-ab index" \
+    gpgv --keyring "$PUBRING" "$ORIGIN_DEST/os/native/v1/floe/x86-64/SHA256SUMS.gpg" "$ORIGIN_DEST/os/native/v1/floe/x86-64/SHA256SUMS"
 
 "$PUBLISH_DIR/publish-candidate.sh" "$PREPARED_SNOW" "$ORIGIN_DEST"
 assert_true "verify-remote.sh clean pass for snow-ab candidate" "$PUBLISH_DIR/verify-remote.sh" "$PREPARED_SNOW" "$SNOW_BASE_URL"
@@ -484,7 +484,7 @@ run_product() {
     vm_prepare_swtpm "$wd"
 
     case "$product" in
-        cayo) SSH_PORT=2260 ;;
+        floe) SSH_PORT=2260 ;;
         snow) SSH_PORT=2261 ;;
         snowfield) SSH_PORT=2262 ;;
         *) echo "Error: unknown product $product" >&2; exit 1 ;;
@@ -517,7 +517,7 @@ run_product() {
     echo "ISO_DEV=$ISO_DEV  TARGET_DEV=$TARGET_DEV"
 
     # =======================================================================
-    # Step 3 (cayo-ab only): in-ISO negative FIRST -- own-boot-medium refusal
+    # Step 3 (floe-ab only): in-ISO negative FIRST -- own-boot-medium refusal
     # in the REAL initramfs environment.
     # =======================================================================
     if [[ "$full_mode" == 1 ]]; then
@@ -640,7 +640,7 @@ run_product() {
     vm_hard_stop
 
     # =======================================================================
-    # Step 6 (cayo-ab only): --restage-mok, dedicated -- a fresh ISO power
+    # Step 6 (floe-ab only): --restage-mok, dedicated -- a fresh ISO power
     # cycle, a brand new password file.
     # =======================================================================
     if [[ "$full_mode" == 1 ]]; then
@@ -756,10 +756,10 @@ run_product() {
 }
 
 # ===========================================================================
-# Main: cayo-ab full sequence, snow-ab partial (steps 2,4,5,7 -- brief
-# section "Do the full sequence for cayo-ab; for snow-ab run steps 2,4,5,7").
+# Main: floe-ab full sequence, snow-ab partial (steps 2,4,5,7 -- brief
+# section "Do the full sequence for floe-ab; for snow-ab run steps 2,4,5,7").
 # ===========================================================================
-run_product cayo cayo-ab "$VERSION_CAYO" 1
+run_product floe floe-ab "$VERSION_FLOE" 1
 run_product snow snow-ab "$VERSION_SNOW" 0
 
 if [[ "$WITH_SNOWFIELD" == 1 ]]; then

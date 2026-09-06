@@ -24,7 +24,7 @@ phase_marker() {
 
 marker_is_exact() { [[ $1 == "$2" ]]; }
 mode_0600() { [[ -f $1 && $(stat -c '%a' "$1") == 600 ]]; }
-valid_digest_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(cayo|snow|snowfield)@sha256:[[:xdigit:]]{64}$ ]]; }
+valid_digest_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(floe|snow|snowfield)@sha256:[[:xdigit:]]{64}$ ]]; }
 state_value() { jq -er --arg key "$2" '.[$key]' "$1"; }
 
 install_state_is_safe() { # Task 9 install-state manifest
@@ -93,11 +93,11 @@ run_fixtures() {
         'BOOTC_SECURE_ROTATION: dual-pcr: complete' "$(phase_marker dual-pcr)"
     assert_false 'wrapped phase markers are rejected' marker_is_exact \
         'prefix BOOTC_SECURE_ROTATION: dual-pcr: complete' "$(phase_marker dual-pcr)"
-    old="ghcr.io/frostyard/cayo@sha256:$(printf 'a%.0s' {1..64})"
-    transition="ghcr.io/frostyard/cayo@sha256:$(printf 'b%.0s' {1..64})"
-    new="ghcr.io/frostyard/cayo@sha256:$(printf 'c%.0s' {1..64})"
+    old="ghcr.io/frostyard/floe@sha256:$(printf 'a%.0s' {1..64})"
+    transition="ghcr.io/frostyard/floe@sha256:$(printf 'b%.0s' {1..64})"
+    new="ghcr.io/frostyard/floe@sha256:$(printf 'c%.0s' {1..64})"
     state="$work/install-state.json"
-    printf '%s\n' "{\"schema\":1,\"profile\":\"cayo\",\"tracking_ref\":\"ghcr.io/frostyard/cayo:secure-test\",\"accepted_oci_ref\":\"$old\",\"target_disk\":\"/tmp/disk\",\"ovmf_code\":\"/tmp/code\",\"ovmf_vars\":\"/tmp/vars\",\"tpm_state\":\"/tmp/tpm\",\"tpm_socket\":\"/tmp/tpm/socket\",\"recovery_key\":\"$work/recovery\",\"mok_cert\":\"$work/installed-mok.crt\",\"pcr_public\":\"$work/installed-pcr.pub\",\"ssh_key\":\"/tmp/id\"}" >"$state"
+    printf '%s\n' "{\"schema\":1,\"profile\":\"floe\",\"tracking_ref\":\"ghcr.io/frostyard/floe:secure-test\",\"accepted_oci_ref\":\"$old\",\"target_disk\":\"/tmp/disk\",\"ovmf_code\":\"/tmp/code\",\"ovmf_vars\":\"/tmp/vars\",\"tpm_state\":\"/tmp/tpm\",\"tpm_socket\":\"/tmp/tpm/socket\",\"recovery_key\":\"$work/recovery\",\"mok_cert\":\"$work/installed-mok.crt\",\"pcr_public\":\"$work/installed-pcr.pub\",\"ssh_key\":\"/tmp/id\"}" >"$state"
     printf recovery >"$work/recovery"; chmod 600 "$work/recovery" "$state"
     for identity in old-mok.crt new-mok.crt old-pcr.pub new-pcr.pub installed-mok.crt installed-pcr.pub; do printf public >"$work/$identity"; done
     printf '%s\n' '#!/bin/bash' 'phase=$2' 'printf "%s\\n" "$phase" >>"${ROTATION_PHASE_LOG:?}"' 'printf "BOOTC_SECURE_ROTATION: %s: complete\\n" "$phase"' 'if [[ $phase == old-trust-removed ]]; then printf "%s\\n" "BOOTC_SECURE_ROTATION: old-trust-removed: old-mok-rejected" "BOOTC_SECURE_ROTATION: old-trust-removed: recovery-ready"; fi' >"$work/runner"
@@ -121,7 +121,7 @@ run_fixtures() {
     assert_true 'runner receives the frozen phase order' cmp -s <(printf '%s\n' old-only dual-pcr new-pcr mok-overlap new-mok old-trust-removed) "$work/phases"
     chmod 644 "$state"; assert_false 'wrong state mode is rejected' rotation_inputs_are_valid; chmod 600 "$state"
     chmod 644 "$work/recovery"; assert_false 'wrong recovery credential mode is rejected' rotation_inputs_are_valid; chmod 600 "$work/recovery"
-    ROTATION_NEW_REF='ghcr.io/frostyard/cayo:latest'; assert_false 'tags are rejected' rotation_inputs_are_valid; ROTATION_NEW_REF=$new
+    ROTATION_NEW_REF='ghcr.io/frostyard/floe:latest'; assert_false 'tags are rejected' rotation_inputs_are_valid; ROTATION_NEW_REF=$new
     ROTATION_NEW_REF="ghcr.io/frostyard/snow@sha256:$(printf 'd%.0s' {1..64})"; assert_false 'cross-repository refs are rejected' rotation_inputs_are_valid; ROTATION_NEW_REF=$new
     ROTATION_NEW_REF=$old; assert_false 'equal digests are rejected' rotation_inputs_are_valid; ROTATION_NEW_REF=$new
     rm "$work/new-pcr.pub"; assert_false 'missing public identities are rejected' rotation_inputs_are_valid; printf public >"$work/new-pcr.pub"

@@ -24,7 +24,7 @@ fi
 mkdir -p /etc/kernel
 printf '%s' "${IMAGE_ID}-ab_${IMAGE_VERSION}" > /etc/kernel/entry-token
 
-# The cayo profile's historical tree carries this bootc-only config. The A/B
+# The server profile's historical tree carries this bootc-only config. The A/B
 # extra tree overwrites it before this point; fail closed if that changes.
 if grep -qr 'add_dracutmodules.*\bbootc\b' /usr/lib/dracut/dracut.conf.d; then
     echo "bootc dracut configuration leaked into the native A/B image" >&2

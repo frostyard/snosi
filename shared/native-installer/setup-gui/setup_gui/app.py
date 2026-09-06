@@ -30,7 +30,7 @@ APP_ID = "org.frostyard.SnosiSetup"
 _SELF_CHECK_DEFAULTS = {
     "proto": 1,
     "products": [
-        {"name": "cayo-ab", "bare": "cayo", "minimum_disk_bytes": 16642998272,
+        {"name": "floe-ab", "bare": "floe", "minimum_disk_bytes": 16642998272,
          "core_flatpaks_default": False, "core_flatpaks_allowed": False},
         {"name": "snow-ab", "bare": "snow", "minimum_disk_bytes": 23085449216,
          "core_flatpaks_default": True, "core_flatpaks_allowed": True},

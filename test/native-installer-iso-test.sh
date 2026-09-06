@@ -371,7 +371,7 @@ echo "=== Step 4: negative proof (Snosi-MOK-signed artifact, never-enrolled vars
 
 # Sign grub's own UNSIGNED monolithic EFI image with the project's real
 # Secure Boot key (mkosi.key/mkosi.crt -- the same key
-# shared/native-ab-secure/mkosi.conf uses for cayo-ab/snow-ab/snowfield-ab).
+# shared/native-ab-secure/mkosi.conf uses for floe-ab/snow-ab/snowfield-ab).
 # A genuine Snosi-MOK-signed artifact, no product rebuild required.
 unsigned_grub="$ROOTFS/usr/lib/grub/x86_64-efi/monolithic/grubx64.efi"
 [[ -f "$unsigned_grub" ]] || { echo "Error: missing unsigned grub image: $unsigned_grub" >&2; exit 1; }

@@ -8,7 +8,7 @@
 # .github/workflows/build.yml's `uses: systemd/mkosi@<sha>` line is this
 # repo's single source of truth for the pinned mkosi commit -- Justfile's
 # `mkosi_commit` (used by `just ensure-mkosi`, and therefore every local
-# `just cayo-ab`/`snow-ab`/`snowfield-ab`/etc. build) greps it directly, and
+# `just floe-ab`/`snow-ab`/`snowfield-ab`/etc. build) greps it directly, and
 # The native image and installer ISO workflow build jobs bootstrap mkosi via
 # shared/native-ab/ci/bootstrap-mkosi.sh, which greps the SAME line -- so there
 # is exactly one implementation of "how mkosi gets bootstrapped", not a second

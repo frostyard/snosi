@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # takes prebuilt artifact prefixes on the command line, so PROFILE only
 # feeds the IMAGE_ID default -- set IMAGE_ID/CHANNEL directly to test a
 # different product without a real "*-ab-raw" profile name to strip.
-: "${PROFILE:=cayo-ab-raw}"
+: "${PROFILE:=floe-ab-raw}"
 if [[ -z "${IMAGE_ID:-}" ]]; then
     IMAGE_ID="${PROFILE%-ab-raw}"
     IMAGE_ID="${IMAGE_ID%-ab}"

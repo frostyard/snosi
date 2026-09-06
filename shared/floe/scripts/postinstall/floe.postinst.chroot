@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+
+# This script runs inside the image after package installation
+# It performs final customizations
+
+echo "Running post-installation customizations..."
+
+# Common post-installation steps (os-release, mounts, cleanup, sysext infra)
+OS_PRETTY_NAME="Floe Linux"
+OS_NAME="Floe Linux"
+source "$SRCDIR"/shared/scripts/common-postinst.sh
+
+echo "Post-installation complete."

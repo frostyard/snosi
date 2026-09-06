@@ -4,11 +4,11 @@ set -euo pipefail
 # mkosi names the manifest file it writes after Output= (mkosi's own
 # save_manifest(), see "Saving manifest <Output>.manifest" in build logs),
 # not ImageId=. Those are usually the same value, but native A/B profiles
-# deliberately keep ImageId=cayo/snow/snowfield (branding, sysext
-# compatibility) while setting a distinct Output= (e.g. cayo-ab-raw) --
+# deliberately keep ImageId=floe/snow/snowfield (branding, sysext
+# compatibility) while setting a distinct Output= (e.g. floe-ab-raw) --
 # see CLAUDE.md "Native A/B Prototype". Matching on "$IMAGE_ID.manifest"
 # then finds nothing and this script fails the whole build post-output
-# step (caught 2026-07-14 running a real cayo-ab-raw build for the phase 2
+# step (caught 2026-07-14 running a real pre-rename raw server build for the phase 2
 # /var-audit task). Read the actual Output= value from $MKOSI_CONFIG (a
 # JSON summary of the current image's settings, available to
 # PostOutputScripts) instead of assuming it matches $IMAGE_ID.

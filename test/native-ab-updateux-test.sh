@@ -7,7 +7,7 @@
 #   already-installed publication-disabled image acquires the static native
 #   timer when upgraded to the first publication-enabled image."
 #
-# Builds two real versions of profile $PROFILE (default cayo-ab-raw) via the
+# Builds two real versions of profile $PROFILE (default floe-ab-raw) via the
 # pinned .mkosi checkout, mirroring test/native-ab-components-test.sh's
 # scaffolding:
 #   N    -- ordinary build, SNOSI_NATIVE_AUTOSTAGE unset (publication-
@@ -30,7 +30,7 @@
 #
 # Origin override (documented mechanism, see snosi-sysupdate-stage's own
 # header): the 3 shipped OS *.transfer files in
-# shared/native-ab/channels/cayo/tree/usr/lib/sysupdate.d/ point at the
+# shared/native-ab/channels/floe/tree/usr/lib/sysupdate.d/ point at the
 # production R2 URL. This test drops byte-identical replacements, differing
 # only in [Source] Path=, into /etc/sysupdate.d/ -- whole-file override by
 # identical name, confirmed to be the only override mechanism sysupdate.d(5)
@@ -66,7 +66,7 @@
 #
 # Usage: sudo ./test/native-ab-updateux-test.sh
 # Env overrides (docs/native-ab-contracts.md §1): PROFILE (default
-# cayo-ab-raw), IMAGE_ID (derived from PROFILE by default), CHANNEL
+# floe-ab-raw), IMAGE_ID (derived from PROFILE by default), CHANNEL
 # (derived as <IMAGE_ID>-ab by default).
 set -euo pipefail
 
@@ -80,7 +80,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 : "${BUILD_N_DIR:=}"
 : "${BUILD_N1_DIR:=}"
 
-: "${PROFILE:=cayo-ab-raw}"
+: "${PROFILE:=floe-ab-raw}"
 if [[ -z "${IMAGE_ID:-}" ]]; then
     IMAGE_ID="${PROFILE%-ab-raw}"
     IMAGE_ID="${IMAGE_ID%-ab}"
