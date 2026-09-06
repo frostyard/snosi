@@ -59,9 +59,12 @@ bootc and ostree install as regular APT packages from the Frostyard repository (
 
 **Bootc secure composition (Task 4):** the three OCI profiles include
 `shared/bootc-secure/mkosi.conf` immediately after the bootc runtime package
-fragment. It owns an isolated, low-priority Forky APT sandbox and an explicit,
-ABI-coherent Forky systemd family, avoiding accidental Trixie/Forky library
-mixes in systemd-boot, cryptsetup, and TPM tooling. It adds
+fragment. It lists the systemd family explicitly so systemd-boot, cryptsetup,
+TPM, and ukify tooling are stated dependencies; until the 2026-09 move to a
+forky base ([ADR-0014](../adr/0014-move-base-release-to-forky.md)) it also
+owned an isolated, low-priority Forky APT sandbox that pinned that family to
+Forky 261 on top of Trixie, and `test/bootc-secure-static-test.sh` now fails
+if that sandbox or any `/suite` package suffix returns. It adds
 `lockdown=integrity` through
 `/usr/lib/bootc/kargs.d/10-lockdown.toml`, not mkosi `KernelCommandLine=`:
 these directory-format profiles do not have an mkosi-built UKI for that setting

@@ -6,6 +6,25 @@ set -euo pipefail
 
 echo "Running post-installation customizations..."
 
+# Debian testing's base-files ships no VERSION_ID (os-release carries only
+# VERSION_CODENAME=forky until the release). Three things key off it: the
+# sysext filenames sysext-postoutput.sh emits (<name>_<ver>_14_x86-64.raw),
+# the %w specifier in every sysupdate .transfer MatchPattern, and the
+# VERSION_ID mkosi copies into each sysext's extension-release for
+# systemd-sysext's host match. Pin Debian's assigned number for forky (14)
+# here, in base, so every product image and every sysext delta inherit the
+# same value. common-postinst.sh's VERSION_ID="1.0" fallback would
+# otherwise take over on product images and desynchronize all three.
+if ! grep -q '^VERSION_ID=' /usr/lib/os-release; then
+    # shellcheck source=/dev/null
+    codename=$(. /usr/lib/os-release && echo "${VERSION_CODENAME:-}")
+    case "$codename" in
+        forky) version_id=14 ;;
+        *) echo "Error: no VERSION_ID in os-release and no mapping for codename '$codename'" >&2; exit 1 ;;
+    esac
+    printf 'VERSION_ID="%s"\nVERSION="%s (%s)"\n' "$version_id" "$version_id" "$codename" >> /usr/lib/os-release
+fi
+
 # Use proper home directory for new users
 sed -i 's|.*HOME=/home|HOME=/var/home|' "/etc/default/useradd"
 

@@ -1,3 +1,7 @@
+# Docker publishes no forky suite (download.docker.com/linux/debian/dists/
+# has only released codenames), so the trixie build stays selected on the
+# forky base: the debs are static Go binaries with generic library Depends
+# that forky satisfies (checked 2026-09-04).
 Types: deb
 URIs: https://download.docker.com/linux/debian
 Suites: trixie

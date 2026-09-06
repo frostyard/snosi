@@ -1,4 +1,6 @@
-# Pin backports lower than default
+# Pin backports lower than default. Match the CODENAME (n=): the suite's
+# Release file carries Suite: testing-backports, so an a=forky-backports pin
+# would never match anything.
 Package: *
-Pin: release a=trixie-backports
+Pin: release n=forky-backports
 Pin-Priority: 100

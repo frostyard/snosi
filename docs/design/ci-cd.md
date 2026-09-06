@@ -359,7 +359,7 @@ archive as well as expansion from a small gzip bomb.
 - Microsoft Azure VPN Client
 - Microsoft Edge Stable .deb
 - GitHub Copilot desktop .deb
-- Sunshine Trixie .deb
+- Sunshine .deb (the `ubuntu-26.04` build: its libicu78/libminiupnpc21/glibc 2.43 Depends are forky's sonames; LizardByte publishes no testing/forky deb)
 
 Version-based checks only propose an update when the candidate sorts
 **strictly newer** (`sort -V`) than the pinned version — a plain `!=`

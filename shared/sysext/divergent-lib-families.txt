@@ -1,8 +1,11 @@
-# Shared-library families that at least one desktop product ships from a
-# non-trixie suite (backports/forky), so a sysext delta copy would
-# shadow-DOWNGRADE the product's version for the whole merged /usr
-# (issue #781; root-caused live 2026-08-25 on a since-retired Hyprland
-# desktop product that pinned much of its GUI stack from trixie-backports).
+# Shared-library families that at least one desktop product has shipped
+# from a suite other than the base release (trixie-backports/forky while the
+# base was trixie), so a sysext delta copy would shadow-DOWNGRADE the
+# product's version for the whole merged /usr (issue #781; root-caused live
+# 2026-08-25 on a since-retired Hyprland desktop product that pinned much
+# of its GUI stack from trixie-backports). Since the 2026-09 forky move no
+# product pins a second suite, so every family below is defence in depth;
+# the list is kept because the shadowing mechanism is unchanged.
 #
 # Format: one shell glob per line, matched against paths RELATIVE to the
 # delta's /usr (e.g. lib/x86_64-linux-gnu/libxkbcommon.so.0.0.0).
@@ -28,8 +31,9 @@ lib/*/pipewire-0.3/*
 lib/*/spa-0.2/*
 lib/*/libwireplumber*.so*
 
-# mesa userspace -- LIVE today: snowfield pins mesa from trixie-backports
-# through shared/kernel/surface/mkosi.conf while snow tracks trixie.
+# mesa userspace -- was LIVE on the trixie base: snowfield pinned mesa from
+# trixie-backports through shared/kernel/surface/mkosi.conf while snow
+# tracked trixie; both now take forky's mesa.
 # Includes the mesa-vulkan-drivers ICDs and layers -- chatgpt's deb
 # hard-depends on that package, which is why gui-base and
 # shared/packages/snow both carry it.
@@ -46,7 +50,8 @@ lib/*/libVkLayer_*.so*
 # same defence-in-depth reasoning as xkbcommon)
 lib/*/libasound.so*
 
-# systemd libraries (secure bootc products ship the forky systemd family;
-# theoretical member of the class -- no sysext ships these today)
+# systemd libraries (the secure products shipped the forky systemd family
+# on a trixie base; theoretical member of the class -- no sysext ships
+# these today)
 lib/*/libsystemd.so*
 lib/*/libudev.so*

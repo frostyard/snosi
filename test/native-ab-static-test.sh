@@ -126,21 +126,30 @@ grep -q '^UnifiedKernelImages=unsigned$' "$secure"
 grep -q '^SecureBoot=yes$' "$secure"
 grep -q '^SecureBootAutoEnroll=no$' "$secure"
 grep -q '^SignExpectedPcr=yes$' "$secure"
-grep -q '^SandboxTrees=%D/shared/native-ab-secure/package-manager$' "$secure"
 grep -q '^ExtraSearchPaths=%D/shared/native-ab-secure/tools$' "$secure"
 grep -q '^SandboxTrees=%D/.snosi-private/history:/usr/lib/snosi-pcr-history$' "$secure"
 grep -q '^Environment=PCR_SIGNING_KEY_PREVIOUS$' "$secure"
 [[ -x "$root/shared/native-ab-secure/tools/ukify" ]]
 grep -q 'PCR_SIGNING_KEY_PREVIOUS' "$root/shared/native-ab-secure/tools/ukify"
-grep -q '^Suites: forky$' "$forky_tree/sources.list.d/forky.sources"
-grep -q '^Pin: release n=forky$' "$forky_tree/preferences.d/forky"
-grep -q '^Pin-Priority: 50$' "$forky_tree/preferences.d/forky"
+# The base release IS forky (mkosi.conf Release=forky, since 2026-09; see
+# docs/adr/0014). The former isolated low-priority forky APT sandbox and its
+# per-package /forky suffixes are gone; the systemd family stays listed
+# explicitly and unsuffixed.
+grep -q '^Release=forky$' "$root/mkosi.conf"
+if [[ -e "$forky_tree" ]]; then
+    echo "native-ab-secure must not carry a forky sandbox tree; forky is the base release" >&2
+    exit 1
+fi
+if grep -q '^SandboxTrees=%D/shared/native-ab-secure/package-manager' "$secure"; then
+    echo "native-ab-secure must not add a forky sandbox tree; forky is the base release" >&2
+    exit 1
+fi
 for package in libnss-myhostname libnss-mymachines libnss-systemd \
     libpam-systemd libsystemd-shared libsystemd0 libudev1 systemd \
     systemd-boot systemd-boot-efi systemd-boot-tools systemd-container \
     systemd-cryptsetup systemd-repart systemd-resolved systemd-sysv \
     systemd-timesyncd systemd-tpm systemd-ukify udev; do
-    grep -q "^[[:space:]]*$package/forky$" "$secure"
+    grep -q "^[[:space:]]*$package$" "$secure"
 done
 if grep -q 'grub-efi-amd64-signed' "$secure"; then
     exit 1
@@ -150,12 +159,11 @@ for package in openssl sbsigntool; do
     grep -q "^[[:space:]]*$package$" "$secure"
 done
 
-# Forky isolation: the fragment itself legitimately pins forky, but nothing
-# outside its own tree, the three production profiles' OWN mkosi.conf (they
-# must reach forky only through the [Include], never restate it), the base
-# tree, mkosi.images, the raw dev fixture, or the sandbox may reference it.
+# The three production profiles must reach the secure posture only through
+# the [Include], never restate it, and no mkosi config anywhere may pin a
+# package to a suite by name: the whole tree builds from one release.
 declare -A production_composition=([cayo-ab]=cayo [snow-ab]=snow [snowfield-ab]=snow)
-declare -A production_kernel=([cayo-ab]=backports [snow-ab]=backports [snowfield-ab]=surface)
+declare -A production_kernel=([cayo-ab]=stock [snow-ab]=stock [snowfield-ab]=surface)
 declare -A production_imageid=([cayo-ab]=cayo [snow-ab]=snow [snowfield-ab]=snowfield)
 production_profiles=(cayo-ab snow-ab snowfield-ab)
 for name in "${production_profiles[@]}"; do
@@ -164,10 +172,6 @@ for name in "${production_profiles[@]}"; do
     grep -q '^Include=%D/shared/native-ab-secure/mkosi.conf$' "$conf"
     if grep -qiE '^(Bootloader|ShimBootloader|UnifiedKernelImages|SecureBoot|SecureBootAutoEnroll|SignExpectedPcr)=' "$conf"; then
         echo "$conf must not restate secure-fragment markers directly -- it must only Include= shared/native-ab-secure/mkosi.conf" >&2
-        exit 1
-    fi
-    if grep -qi forky "$conf"; then
-        echo "$conf must reach forky only through the native-ab-secure [Include], not directly" >&2
         exit 1
     fi
     imageid="${production_imageid[$name]}"
@@ -181,9 +185,11 @@ for name in "${production_profiles[@]}"; do
         exit 1
     fi
 done
-if grep -Rqi forky "$root/mkosi.conf" "$root/mkosi.images" \
-    "$root/mkosi.profiles/cayo-ab-raw" "$root/mkosi.sandbox"; then
-    echo "Forky must remain isolated to shared/native-ab-secure and its production consumers" >&2
+if grep -RqE --include='*.conf' '^(Packages=|[[:space:]]+)[a-z0-9.+-]+/(forky|trixie|bookworm|testing|stable)(-backports)?$' \
+    "$root/mkosi.conf" "$root/mkosi.images" "$root/mkosi.profiles" "$root/shared"; then
+    echo "No mkosi config may pin a package to a suite by name; the tree builds from one release (mkosi.conf Release=)" >&2
+    grep -RnE --include='*.conf' '^(Packages=|[[:space:]]+)[a-z0-9.+-]+/(forky|trixie|bookworm|testing|stable)(-backports)?$' \
+        "$root/mkosi.conf" "$root/mkosi.images" "$root/mkosi.profiles" "$root/shared" >&2 || true
     exit 1
 fi
 
