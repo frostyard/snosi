@@ -190,7 +190,8 @@ document; the normative operational recovery and evidence rules are in
 **OCI signature policy (Task 6):** the secure bootc tree supplies
 `/etc/containers/policy.json`, which defaults to `reject` and has one
 `sigstoreSigned` rule, using `/usr/lib/snosi/cosign.pub`, for each exact
-`ghcr.io/frostyard/{cayo,snow,snowfield}` repository. Cosign v2.6.1 signatures
+`ghcr.io/frostyard/{cayo,floe,snow,snowfield}` repository. The floe scope is
+pre-staged for the ordered cayo rename. Cosign v2.6.1 signatures
 record only the repository identity, so `matchRepository` is required; using
 tag-exact identity would reject valid published images. The accompanying
 `registries.d/frostyard.yaml` enables Sigstore attachments for GHCR, without

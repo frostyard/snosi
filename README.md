@@ -664,9 +664,10 @@ gh attestation verify oci://ghcr.io/frostyard/snow:latest --owner frostyard
 The `test-install.yml` workflow verifies the signature before every installation test.
 Secure bootc OCI images additionally enforce this key at pull/install/update time
 through containers/image policy. The only accepted repositories are
-`ghcr.io/frostyard/cayo`, `ghcr.io/frostyard/snow`, and
+`ghcr.io/frostyard/cayo`, `ghcr.io/frostyard/floe`, `ghcr.io/frostyard/snow`, and
 `ghcr.io/frostyard/snowfield`; other images, keys, and repository identities are
-rejected. Cosign v2.6.1 signs repository identities, so the policy uses
+rejected. Floe trust is pre-staged for the ordered cayo rename. Cosign v2.6.1
+signs repository identities, so the policy uses
 repository matching rather than tag matching and enables GHCR Sigstore
 attachments explicitly.
 

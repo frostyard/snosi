@@ -15,6 +15,15 @@
           }
         }
       ],
+      "ghcr.io/frostyard/floe": [
+        {
+          "type": "sigstoreSigned",
+          "keyPath": "/usr/lib/snosi/cosign.pub",
+          "signedIdentity": {
+            "type": "matchRepository"
+          }
+        }
+      ],
       "ghcr.io/frostyard/snow": [
         {
           "type": "sigstoreSigned",

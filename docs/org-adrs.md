@@ -26,6 +26,7 @@ The ones that bind snosi:
 - [ADR-0030 — Shipped systemd units never use RequiredBy= enablement](https://github.com/frostyard/core/blob/main/docs/adr/0030-no-requiredby-enablement-in-shipped-units.md) — preset-persisted .requires links brick boot when the unit is retired; enforced here by check-required-by-guard.sh and the initrd prune (repo ADR-0013)
 - [ADR-0031 — Retire Dakota's secure bootc installer; Firn owns the path](https://github.com/frostyard/core/blob/main/docs/adr/0031-retire-dakota-secure-bootc-installer.md) — Firn's E2E and lab matrix own secure bootc installation; Snosi must not retain or pin Dakota/Fisherman adapter wiring
 - [ADR-0041 — Retire copilot-review-apply where Snowcat gates review](https://github.com/frostyard/core/blob/main/docs/adr/0041-retire-copilot-review-apply-where-snowcat-gates-review.md) — Copilot review findings route to people; Snosi retains only the `ai-fix-requested` issue handoff
+- [ADR-0046 — Rename the cayo server image to floe](https://github.com/frostyard/core/blob/main/docs/adr/0046-rename-cayo-server-image-to-floe.md) — sequences the bootc trust cutover, requires native reinstall, and freezes the old GHCR and R2 artifacts
 
 When changing behavior covered by one of these, update or supersede the ADR
 in frostyard/core first, then change this repo in the same effort.

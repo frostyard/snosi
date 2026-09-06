@@ -12,6 +12,7 @@ USER_POLICY="$PROJECT_ROOT/shared/bootc-secure/tree/usr/share/snosi/containers/u
 USER_TMPFILES="$PROJECT_ROOT/shared/bootc-secure/tree/usr/lib/user-tmpfiles.d/snosi-containers-policy.conf"
 VM_LIB="$PROJECT_ROOT/test/lib/vm.sh"
 UPDATER="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage"
+SECURE_IMAGES=(cayo floe snow snowfield)
 
 failures=0
 
@@ -45,7 +46,7 @@ if [[ -f "$POLICY" ]] && command -v jq >/dev/null; then
         fail "unlisted images are rejected"
     fi
 
-    for image in cayo snow snowfield; do
+    for image in "${SECURE_IMAGES[@]}"; do
         scope="ghcr.io/frostyard/$image"
         if jq -e --arg scope "$scope" '
             .transports.docker[$scope] == [{
@@ -66,7 +67,7 @@ if [[ -f "$POLICY" ]] && command -v jq >/dev/null; then
         fail "previously policy-verified local storage images are accepted"
     fi
 
-    for image in cayo snow snowfield; do
+    for image in "${SECURE_IMAGES[@]}"; do
         scope="ghcr.io/frostyard/${image}-wrong-repository"
         if jq -e --arg scope "$scope" '.transports.docker[$scope] == null' "$POLICY" >/dev/null; then
             pass "wrong repository $scope is rejected"
@@ -75,10 +76,15 @@ if [[ -f "$POLICY" ]] && command -v jq >/dev/null; then
         fi
     done
 
-    if jq -e '[.transports.docker | keys[] | select(startswith("ghcr.io/frostyard/"))] == ["ghcr.io/frostyard/cayo", "ghcr.io/frostyard/snow", "ghcr.io/frostyard/snowfield"]' "$POLICY" >/dev/null; then
-        pass "only the three supported GHCR repositories are trusted"
+    expected_scopes=()
+    for image in "${SECURE_IMAGES[@]}"; do
+        expected_scopes+=("ghcr.io/frostyard/$image")
+    done
+    if jq -e --args '(.transports.docker | keys) == $ARGS.positional' \
+            "${expected_scopes[@]}" <"$POLICY" >/dev/null; then
+        pass "only the supported exact GHCR repositories are trusted"
     else
-        fail "only the three supported GHCR repositories are trusted"
+        fail "only the supported exact GHCR repositories are trusted"
     fi
 
     # LOCAL file transports are accepted so an operator can actually do image
@@ -98,8 +104,8 @@ if [[ -f "$POLICY" ]] && command -v jq >/dev/null; then
     done
 
     # The half that must NOT move. Permitting local transports must never turn
-    # into permitting unsigned registry pulls: `docker` keeps exactly the three
-    # sigstoreSigned scopes and the default stays reject.
+    # into permitting unsigned registry pulls: `docker` keeps exactly the
+    # supported sigstoreSigned scopes and the default stays reject.
     if jq -e '.default == [{"type":"reject"}]' "$POLICY" >/dev/null; then
         pass "the default policy is still reject"
     else
@@ -146,6 +152,27 @@ if [[ -f "$REGISTRIES_CONFIG" ]] && grep -Fqx '    use-sigstore-attachments: tru
 else
     fail "Cosign signature attachments are enabled for GHCR"
 fi
+
+verify_vm_registry_policy() {
+    local expected
+    expected=$(mktemp)
+    # shellcheck source=test/lib/vm.sh
+    source "$VM_LIB"
+    create_registry_policy
+    jq --arg key "$PROJECT_ROOT/cosign.pub" '
+        .transports.docker |= with_entries(.value |= map(.keyPath = $key))
+    ' "$POLICY" >"$expected"
+    if cmp -s "$expected" "$IMAGE_POLICY"; then
+        pass "VM registry policy derives from the shipped policy"
+    else
+        fail "VM registry policy derives from the shipped policy"
+    fi
+    rm -f "$expected"
+    rm -rf "$IMAGE_POLICY_HOME"
+    IMAGE_POLICY=""
+    IMAGE_POLICY_HOME=""
+}
+verify_vm_registry_policy
 
 if grep -Fqx 'IMAGE_IS_FIXTURE="${IMAGE_IS_FIXTURE:-0}"' "$VM_LIB" && \
         grep -Fqx '        IMAGE_IS_FIXTURE=0' "$VM_LIB" && \
@@ -364,6 +391,8 @@ run_live_policy_proof() {
 
     IFS=, read -r -a live_images <<<"${LIVE_IMAGES:-cayo}"
     for image in "${live_images[@]}"; do
+        # Floe joins this live allowlist in Phase 2, after its signed image is
+        # published. Accepting it during Phase 1 would turn absence into FAIL.
         case "$image" in
             cayo|snow|snowfield) ;;
             *) printf 'BLOCKED: LIVE_IMAGES contains unsupported product %s\n' "$image" >&2; return 2 ;;
