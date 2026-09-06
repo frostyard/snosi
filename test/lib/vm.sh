@@ -27,21 +27,10 @@ create_registry_policy() {
     IMAGE_POLICY_HOME=$(mktemp -d)
     IMAGE_POLICY="$IMAGE_POLICY_HOME/.config/containers/policy.json"
     mkdir -p "$IMAGE_POLICY_HOME/.config/containers/registries.d"
-    cat >"$IMAGE_POLICY" <<EOF
-{
-  "default": [{"type": "reject"}],
-  "transports": {
-    "docker": {
-      "ghcr.io/frostyard/cayo": [{"type": "sigstoreSigned", "keyPath": "$PROJECT_ROOT/cosign.pub", "signedIdentity": {"type": "matchRepository"}}],
-      "ghcr.io/frostyard/snow": [{"type": "sigstoreSigned", "keyPath": "$PROJECT_ROOT/cosign.pub", "signedIdentity": {"type": "matchRepository"}}],
-      "ghcr.io/frostyard/snowfield": [{"type": "sigstoreSigned", "keyPath": "$PROJECT_ROOT/cosign.pub", "signedIdentity": {"type": "matchRepository"}}]
-    },
-    "containers-storage": {
-      "": [{"type": "insecureAcceptAnything"}]
-    }
-  }
-}
-EOF
+    jq --arg key "$PROJECT_ROOT/cosign.pub" '
+        .transports.docker |= with_entries(.value |= map(.keyPath = $key))
+    ' "$PROJECT_ROOT/shared/bootc-secure/tree/etc/containers/policy.json" \
+        >"$IMAGE_POLICY"
     cp "$PROJECT_ROOT/shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml" \
         "$IMAGE_POLICY_HOME/.config/containers/registries.d/frostyard.yaml"
 }
