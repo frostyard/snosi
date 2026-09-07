@@ -62,14 +62,31 @@ only. Fetching a remote package list is a later decision, not this one.
 
 ### Inventory
 
-Both sides of the diff are `apt list --installed` text, the format frozen by
-core ADR-0003. The running side is always
+Both sides of the diff are the `apt list --installed` text frozen by core
+ADR-0003. The running side is always
 `/usr/share/frostyard/<IMAGE_ID>.packages.txt` from the booted `/usr`.
-Parse `name/now version …`; skip the `Listing...` header. Compare by package
-name. Version ordering uses `dpkg --compare-versions` (the dpkg *database*
-is not read). Equal versions are omitted. A version that sorts higher in
-the new image is `Upgraded:`; one that sorts lower is `Downgraded:`. Do not
-fold both into a single "Changed" section.
+
+The grammar is apt's, not a simplified `name/now version` line. A file
+starts with `Listing... Done`. Each package line is:
+
+```text
+<name>[:<arch>]/<suite>,now <version> <arch> [<flags>]
+```
+
+`<suite>,now` collapses to `now` for a local/dpkg-only install
+(`name/now … [installed,local]`). `:arch` is present on Multi-Arch
+instances and may be absent on the native architecture; do not strip it
+and do not invent it. The comparison key is the architecture-qualified
+name, everything before the first `/` (`libfoo:amd64` and `libfoo:i386`
+are distinct). The version is the second whitespace field. Skip any line
+matching `^Listing`. Version ordering uses `dpkg --compare-versions` (the
+dpkg *database* is not read). Equal versions are omitted. A version that
+sorts higher in the new image is `Upgraded:`; one that sorts lower is
+`Downgraded:`. Do not fold both into a single "Changed" section.
+
+Parser fixtures must be lines captured from the target image's APT
+(`apt --version` of the image that wrote `packages.txt`), not
+hand-simplified `name/now version` stubs.
 
 One parser, used by both backends. Not a copy in `native_status()` and
 `bootc_status()`.
@@ -88,39 +105,84 @@ Post-reboot rollback diffs (`rpm-ostree status -v` against the previous
 deployment after it has become rollback) are deferred. `/run` is gone after
 the applying reboot, which is correct for a staged delta.
 
-### Bootc staged list
+### Staged sidecar
 
-`bootc-update-stage` extracts the pulled image's
-`/usr/share/frostyard/<IMAGE_ID>.packages.txt` *before* the post-stage
-`podman image prune -f` and writes it to `/run/snosi/staged-packages.txt`
-(mode 0644, root-owned, same lifetime as `update-staged`). The copy is the
-staged image's file bytes, not a regenerated `apt list`.
+The staged inventory is a directory, not a bare `packages.txt`:
 
-This file is a new sibling under `/run/snosi/`. It is not a field of
-`update-check` or `update-staged` (those stay small `key=value` files;
-motd and `bootc-update-notify` must not grow a package list). It is
-snosi-owned. It does not amend
+```text
+/run/snosi/staged-packages/identity      # exactly one of digest= or version=
+/run/snosi/staged-packages/packages.txt  # exact bytes from the staged image
+```
+
+`identity` uses the same exclusive invariant as `update-staged`: bootc
+writes `digest=sha256:<64hex>`, native writes `version=<14-digit>`. Never
+both. `packages.txt` is the staged image's
+`/usr/share/frostyard/<IMAGE_ID>.packages.txt` bytes, not a regenerated
+`apt list`.
+
+Publish is one `mv -T` of a temp directory over
+`/run/snosi/staged-packages`, so identity and bytes cannot split. This is
+a new sibling under `/run/snosi/`. It is not a field of `update-check` or
+`update-staged` (those stay small `key=value` files; motd and
+`bootc-update-notify` must not grow a package list). It is snosi-owned.
+It does not amend
 [core ADR-0005](https://github.com/frostyard/core/blob/main/docs/adr/0005-native-ab-marker-and-update-state-files.md)
 until a second consumer needs it.
 
-If bootc reports a staged deployment but the sidecar is missing (manual
-`bootc upgrade`, or a stager from before this ADR), print status, warn that
-the staged inventory was not captured, skip the delta, and still exit 0.
-Do not re-pull the image to recover the file. Do not parse composefs
-internals.
+`--pkg-diff` resolves the expected identity first (bootc staged
+`imageDigest`, or native pending/semaphore version), then opens the
+sidecar only if `identity` matches. On missing sidecar or mismatch, it
+discards the directory contents and does not print a delta from them. A
+later manual stage that replaced the deployment cannot reuse an older
+inventory.
+
+### Bootc capture order
+
+Extracting after `bootc switch`/`upgrade` cannot fail the stage: the
+deployment is already staged, and the next timer run takes the
+`pulled == staged` branch, re-asserts the semaphore, and exits 0.
+Capture must precede staging.
+
+`bootc-update-stage`:
+
+1. Pull, as today.
+2. After digest inspect, if the pulled image is already staged or still
+   needs staging (not booted, not held-rollback), copy its `packages.txt`
+   to a private temp file (not under `/run/snosi`). Failure here exits
+   before `bootc switch` or `bootc upgrade`. Current and held-rollback
+   runs skip the copy.
+3. If `pulled == staged` (already staged, including a previous run that
+   staged but failed to publish the sidecar): atomically publish the
+   sidecar bound to that digest from the captured temp, then re-assert
+   the semaphore. This path is what repairs a post-switch sidecar
+   publish failure; it must not skip the sidecar.
+4. If a new stage is required: `bootc switch`/`upgrade`, verify the
+   staged digest equals the pulled digest, atomically publish the
+   sidecar bound to that digest from the captured temp, then write the
+   semaphore, then `podman image prune`.
+
+Do not prune before the sidecar is published. Do not parse composefs
+internals. `--pkg-diff` does not re-pull to recover a missing sidecar;
+the stager's already-staged path does, because it already pulled.
+
+If bootc reports staged and the sidecar is still missing or mismatched
+after that (manual `bootc upgrade` with no timer run yet, or a stager
+from before this ADR), print status, warn that the staged inventory was
+not captured, skip the delta, and still exit 0.
 
 ### Native staged list
 
-`snosi-sysupdate-stage` writes the same `/run/snosi/staged-packages.txt`
-from the newly labeled other root after a successful stage (read-only
-EROFS access, then copy `packages.txt`). `snosi-update-status --pkg-diff`
-prefers that sidecar.
+`snosi-sysupdate-stage` copies `packages.txt` from the newly labeled
+other root after a successful stage (read-only EROFS access) and
+atomically publishes the sidecar bound to `version=<14-digit>`, then
+the semaphore. The already-staged re-assert branch publishes or repairs
+the sidecar the same way; it must not only rewrite `update-staged`.
 
-If the sidecar is missing but a newer other-slot version exists
-(`systemd-sysupdate pending` or the semaphore), the native backend reads
-`packages.txt` from that slot at query time as a fallback (one read-only
-EROFS access). That is the only filesystem the status CLI may mount for
-this flag. If the fallback also fails, same warn-and-skip as bootc.
+`--pkg-diff` prefers a sidecar whose `identity` matches the pending
+version. On missing sidecar or mismatch, discard it and read
+`packages.txt` from the other slot at query time (one read-only EROFS
+access). That is the only filesystem the status CLI may mount for this
+flag. If the fallback also fails, same warn-and-skip as bootc.
 
 ### Output and tests
 
@@ -128,10 +190,17 @@ this flag. If the fallback also fails, same warn-and-skip as bootc.
 `snosi-update-status` without the flag stay silent on packages.
 
 Fixture tests pin the parser (added / removed / version-changed /
-identical). Static tests pin that both stagers write the sidecar path and
-that `snosi-update-status` does not call `dpkg-query`, `dpkg -l`, or
-`apt list` to build either side of the diff. A live native or bootc update
-harness assertion can wait until those lanes already boot a staged hop.
+identical, architecture-qualified keys, `Listing... Done`, `<suite>,now`
+and `now`-only lines) using captured lines from the target image APT, not
+simplified stubs. They also pin identity mismatch: a sidecar bound to the
+wrong digest or version is discarded. Static tests pin that
+`bootc-update-stage` copies `packages.txt` from the pulled image before
+`bootc switch`/`upgrade`, that both stagers publish
+`/run/snosi/staged-packages/{identity,packages.txt}`, that the
+already-staged re-assert path publishes the sidecar, and that
+`snosi-update-status` does not call `dpkg-query`, `dpkg -l`, or `apt list`
+to build either side of the diff. A live native or bootc update harness
+assertion can wait until those lanes already boot a staged hop.
 
 ## Consequences
 
@@ -139,20 +208,24 @@ harness assertion can wait until those lanes already boot a staged hop.
   both transports, using the file ADR-0003 already required every image to
   ship.
 - Default status stays a cheap `/run` + `bootc status` / sysupdate read.
-- Bootc staging gains a new fail point: if extracting `packages.txt` from
-  the pulled image fails, the stage itself fails. Staging without an
-  inventory is how `--pkg-diff` goes mute on the next status. The extract
-  is a `podman run`/`cp` of one small file before prune; that is cheaper
-  than the pull that just happened.
-- `/run/snosi/staged-packages.txt` dies on reboot. After an applying
-  reboot the flag correctly has nothing staged to diff. Operators who want
-  "what did the last update change?" keep using Snow GitHub Releases, or a
-  later rollback-diff ADR.
+- Bootc staging gains a new fail point *before* `bootc switch`/`upgrade`:
+  if copying `packages.txt` out of the pulled image fails, nothing is
+  staged. A copy after switch cannot fail the stage, and the next timer
+  run would only re-assert the semaphore. The already-staged path is
+  therefore required to publish a matching sidecar, so a post-switch
+  sidecar `mv` failure is repaired on the next hourly run rather than
+  stuck as warn-and-skip until reboot.
+- `/run/snosi/staged-packages/` dies on reboot. After an applying reboot
+  the flag correctly has nothing staged to diff. Operators who want "what
+  did the last update change?" keep using Snow GitHub Releases, or a later
+  rollback-diff ADR. A sidecar whose identity does not match the live
+  staged digest or version is treated as missing, so a manual stage cannot
+  inherit the previous image's package list.
 - Images built before the stager change can stage an update and then
   `--pkg-diff` will warn and skip. That is an upgrade-once gap, not a
   reason to pull multi-gigabyte images from status.
-- Chairlift and motd ignore the new file. A future GUI package list would
-  be a core-contract change, not a silent reuse.
+- Chairlift and motd ignore the new directory. A future GUI package list
+  would be a core-contract change, not a silent reuse.
 - Unsigned R2 mkosi manifests and GHCR Syft SBOMs stay off the host CLI.
   The Snow release notes remain the human changelog; they are not a
   fallback parser target.
@@ -173,6 +246,21 @@ harness assertion can wait until those lanes already boot a staged hop.
   R2 manifests are unsigned. Remote package preview waits for a signed,
   small, dpkg-shaped artifact the image can actually fetch, and it belongs
   behind `--check`, not behind `--pkg-diff`.
+- **A bare `/run/snosi/staged-packages.txt` with no identity:** rejected.
+  Status cannot prove those bytes belong to the currently staged
+  deployment. A later manual stage would keep the old list and print a
+  wrong delta. Identity lives next to the bytes and is checked before
+  parse.
+- **Extract `packages.txt` after `bootc switch`/`upgrade`:** rejected.
+  Once the deployment is staged, a copy failure cannot unstage it, and
+  the next timer run hits `pulled == staged` and would otherwise only
+  rewrite the semaphore. Capture to a private temp file before staging;
+  publish the identity-bound directory only after the staged digest
+  equals the pulled digest; repair on the already-staged path.
+- **Identity in the filename only (`staged-packages.<digest>`):**
+  rejected as the sole binding. A matching name with stale bytes is still
+  a lie if the two are rewritten separately. A directory renamed into
+  place moves identity and bytes together.
 - **Mount the staged bootc composefs tree from status:** rejected. bootc
   treats ostree layout as an implementation detail; pinning it in a
   shipped CLI is the Task-5 class of hidden-interface contract. Capturing
@@ -190,13 +278,14 @@ harness assertion can wait until those lanes already boot a staged hop.
   (`snosi-update-status`, stagers), [design/overview.md](../design/overview.md)
   (native/bootc `/run/snosi` contract),
   [integration-contracts.md](../integration-contracts.md) §5 (`update-check` /
-  `update-staged`; the sidecar will be listed here when implemented)
+  `update-staged`; `/run/snosi/staged-packages/` will be listed here when
+  implemented)
 - Implemented by (when this ADR is accepted):
   `mkosi.images/base/mkosi.extra/usr/bin/snosi-update-status`,
   `mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage`,
   `shared/outformat/ab-root/tree/usr/libexec/snosi-sysupdate-stage`
 - Builds on: [core ADR-0003 — packages.txt in `/usr/share/frostyard`](https://github.com/frostyard/core/blob/main/docs/adr/0003-image-provenance-in-usr-share-frostyard.md),
   [core ADR-0005 — `/run/snosi` update-state files](https://github.com/frostyard/core/blob/main/docs/adr/0005-native-ab-marker-and-update-state-files.md)
-  (sibling file, not a field change)
+  (sibling directory, not a field change)
 - Related, not reused: `packagediff.sh` (dev-only, names-only),
   Snow GitHub Releases via `frostyard/changelog-generator`
