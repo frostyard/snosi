@@ -37,9 +37,9 @@
   },
   {
     "family": "bootc",
-    "name": "cayo",
+    "name": "floe",
     "description": "Headless server with podman and backports kernel",
-    "ref": "ghcr.io/frostyard/cayo:latest",
+    "ref": "ghcr.io/frostyard/floe:latest",
     "cosign_pub_key": "/usr/lib/snosi/cosign.pub",
     "default_groups": [
       "sudo",
@@ -83,9 +83,9 @@
   },
   {
     "family": "ab",
-    "name": "cayo-ab",
+    "name": "floe-ab",
     "description": "Native A/B headless server with podman",
-    "product": "cayo-ab",
+    "product": "floe-ab",
     "default_groups": [
       "sudo",
       "adm",

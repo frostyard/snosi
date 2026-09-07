@@ -18,9 +18,9 @@ index. It carries the **production** update-signing public key and satisfies
 - **Ships at:** `/usr/lib/systemd/import-pubring.gpg` on every native A/B
   image via a `file:target` `ExtraTrees=` pair in the generic
   `shared/outformat/ab-root/mkosi.conf` fragment (consumed by all native
-  profiles, including the never-published `cayo-ab-raw` dev fixture).
+  profiles, including the never-published `floe-ab-raw` dev fixture).
 - **QEMU tests never need the private half:** every harness generates its
-  own ephemeral signing key. The `cayo-ab-raw`-based harnesses
+  own ephemeral signing key. The `floe-ab-raw`-based harnesses
   (`test/native-ab-update-test.sh` etc.) inject the ephemeral public ring
   at `/etc/systemd/import-pubring.gpg` (systemd's documented user
   override); `test/native-ab-secure-boot-test.sh` instead bakes its

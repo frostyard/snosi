@@ -85,8 +85,8 @@ initialize_fixture_repository() {
         "$REPO_ROOT/check-native-publication-guard.sh"
 
     assert_status 0
-    assert_output_contains "cayo-ab/mkosi.conf satisfies the native publication guard"
-    assert_output_contains "cayo-ab-raw/mkosi.conf remains unpublishable"
+    assert_output_contains "floe-ab/mkosi.conf satisfies the native publication guard"
+    assert_output_contains "floe-ab-raw/mkosi.conf remains unpublishable"
 }
 
 @test "native guard rejects a missing Secure Boot marker" {
@@ -102,7 +102,7 @@ initialize_fixture_repository() {
 
 @test "native guard rejects publication markers on the raw development profile" {
     make_native_fixture
-    printf '\nSecureBoot=yes\n' >>"$FIXTURE/mkosi.profiles/cayo-ab-raw/mkosi.conf"
+    printf '\nSecureBoot=yes\n' >>"$FIXTURE/mkosi.profiles/floe-ab-raw/mkosi.conf"
 
     run env SNOSI_NATIVE_GUARD_ROOT="$FIXTURE" \
         "$REPO_ROOT/check-native-publication-guard.sh"

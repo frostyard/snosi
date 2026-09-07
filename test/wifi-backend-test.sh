@@ -1,7 +1,7 @@
 #!/bin/bash
 # NetworkManager Wi-Fi backend / package-closure drift guard (issue #805).
 #
-# Cayo shipped shared/cayo/tree/etc/NetworkManager/conf.d/iwd.conf setting
+# The server payload once shipped an iwd.conf setting
 # wifi.backend=iwd while no product installs iwd -- NetworkManager was told to
 # use a backend that is not in the image. This test fails whenever a shipped
 # payload selects a Wi-Fi backend whose implementing package is absent from the
@@ -79,12 +79,12 @@ for payload in $payload_dirs; do
     done < <(find "$payload" -path '*/NetworkManager/conf.d/*' -type f 2>/dev/null | sort)
 done
 
-# Regression pin for #805 itself: cayo must not resurrect the iwd override
-# while cayo's closure has wpasupplicant and no iwd.
-if [ -e shared/cayo/tree/etc/NetworkManager/conf.d/iwd.conf ]; then
-    not_ok "cayo ships no iwd.conf override (found shared/cayo/tree/etc/NetworkManager/conf.d/iwd.conf)"
+# Regression pin for #805 itself: floe must not resurrect the iwd override
+# while floe's closure has wpasupplicant and no iwd.
+if [ -e shared/floe/tree/etc/NetworkManager/conf.d/iwd.conf ]; then
+    not_ok "floe ships no iwd.conf override (found shared/floe/tree/etc/NetworkManager/conf.d/iwd.conf)"
 else
-    ok "cayo ships no iwd.conf override"
+    ok "floe ships no iwd.conf override"
 fi
 
 # Guard the mapping table itself: wpasupplicant is the backend base installs.

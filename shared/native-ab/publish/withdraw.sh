@@ -27,7 +27,7 @@
 # Usage: withdraw.sh [--pubring <path>] [--purge-hook <cmd>] [--dest-path <path>]
 #                     <product> <version> <dest>
 #
-#   product    e.g. "cayo" (the ImageId, docs/native-ab-contracts.md §1), or
+#   product    e.g. "floe" (the ImageId, docs/native-ab-contracts.md §1), or
 #              the ISO pseudo-product "native-installer" when combined with
 #              --dest-path (see below).
 #   version    the 14-digit version whose archived signed index pair

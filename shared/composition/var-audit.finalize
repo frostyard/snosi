@@ -12,7 +12,7 @@
 #
 # For each path found under $BUILDROOT/var, this script:
 #   - classifies it against the product's outcome map
-#     (shared/composition/<cayo|snow>/var-outcomes.txt), selected by
+#     (shared/composition/<floe|snow>/var-outcomes.txt), selected by
 #     $IMAGE_ID (snow and snowfield share the snow map: same payload
 #     composition, see shared/composition/snow/mkosi.conf). A product that
 #     installs a different payload needs its OWN map: adding a product means
@@ -52,8 +52,8 @@ set -euo pipefail
 : "${IMAGE_ID:?var-audit.finalize: \$IMAGE_ID not set (must run as a FinalizeScript)}"
 
 case "$IMAGE_ID" in
-    cayo)
-        map="$SRCDIR/shared/composition/cayo/var-outcomes.txt"
+    floe)
+        map="$SRCDIR/shared/composition/floe/var-outcomes.txt"
         ;;
     snow | snowfield)
         map="$SRCDIR/shared/composition/snow/var-outcomes.txt"

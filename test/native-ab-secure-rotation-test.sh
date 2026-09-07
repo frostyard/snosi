@@ -12,7 +12,7 @@ usage() {
     cat >&2 <<EOF
 Usage: $0 --yes ARTIFACT_PREFIX OLD_PCR_CERT NEW_PCR_PUB RECOVERY_KEY SSH_TARGET SSH_KEY EXPECTED_MACHINE_ID
 
-The target must already boot cayo-ab (or another production native profile) with its MOK enrolled and a working
+The target must already boot floe-ab (or another production native profile) with its MOK enrolled and a working
 vTPM. This destructive test installs ARTIFACT_PREFIX with systemd-sysupdate,
 normalizes the LUKS TPM tokens to old-only, reboots, then normalizes to new-only
 and reboots the identical UKI. It never submits the recovery key during boot.
@@ -53,8 +53,8 @@ expected_machine_id=$7
 manifest="${prefix}.manifest"
 raw="${prefix}.raw"
 uki="${prefix}.efi"
-root="${prefix}.cayo_@v.root.raw.raw"
-verity="${prefix}.cayo_@v.root-verity.raw.raw"
+root="${prefix}.floe_@v.root.raw.raw"
+verity="${prefix}.floe_@v.root-verity.raw.raw"
 
 for command in awk base64 gpg jq openssl python3 realpath scp sfdisk sha256sum ssh xz; do
     command -v "$command" >/dev/null || {
@@ -145,7 +145,7 @@ matching_uki_entry() {
             MATCHING_UKI_ENTRY=${path##*/}
             matches=$((matches + 1))
         fi
-    done < <(guest "find /boot/EFI/Linux -maxdepth 1 -type f -name 'cayo-ab_${version}*.efi' -exec sha256sum {} +")
+    done < <(guest "find /boot/EFI/Linux -maxdepth 1 -type f -name 'floe-ab_${version}*.efi' -exec sha256sum {} +")
     [[ $matches -gt 0 ]] || return 1
     [[ $matches -eq 1 ]] || {
         echo "Error: found $matches installed transition UKIs with hash $uki_hash" >&2
@@ -155,7 +155,7 @@ matching_uki_entry() {
 
 assert_transition_not_activated() {
     local rc
-    if guest "lsblk -J -o PARTLABEL | jq -e --arg root 'cayo_${version}_r' --arg verity 'cayo_${version}_v' '[.. | objects | .partlabel? // empty] | any(. == \$root or . == \$verity)'" >/dev/null; then
+    if guest "lsblk -J -o PARTLABEL | jq -e --arg root 'floe_${version}_r' --arg verity 'floe_${version}_v' '[.. | objects | .partlabel? // empty] | any(. == \$root or . == \$verity)'" >/dev/null; then
         echo "Error: rejected update activated a transition partition label" >&2
         return 1
     fi
@@ -344,7 +344,7 @@ verify_transition_boot() {
         hash=$(sha256sum "/boot/EFI/Linux/$entry")
         printf "%s %s\n" "$entry" "${hash%% *}"
     ')
-    [[ $running_entry == cayo-ab_${version}*.efi && $running_hash == "$uki_hash" ]] || {
+    [[ $running_entry == floe-ab_${version}*.efi && $running_hash == "$uki_hash" ]] || {
         echo "Error: running UKI $running_entry has hash $running_hash, expected $uki_hash" >&2
         return 1
     }
@@ -372,9 +372,9 @@ version=$(jq -er '.config.version' "$manifest")
     exit 1
 }
 layout=$(sfdisk --json "$raw")
-root_uuid=$(jq -er --arg label "cayo_${version}_r" \
+root_uuid=$(jq -er --arg label "floe_${version}_r" \
     '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<< "$layout")
-verity_uuid=$(jq -er --arg label "cayo_${version}_v" \
+verity_uuid=$(jq -er --arg label "floe_${version}_v" \
     '.partitiontable.partitions[] | select(.name == $label) | .uuid | ascii_downcase' <<< "$layout")
 expected_roothash=${root_uuid//-/}${verity_uuid//-/}
 uki_hash=$(sha256sum "$uki")
@@ -410,9 +410,9 @@ guest_with_input "$recovery_key" \
     "cryptsetup open --test-passphrase --key-file=- '$var_device'"
 
 echo "Preparing transition update $version"
-xz -T0 -c "$root" > "$workdir/source/cayo_${version}_${root_uuid}.root.raw.xz"
-xz -T0 -c "$verity" > "$workdir/source/cayo_${version}_${verity_uuid}.root-verity.raw.xz"
-cp "$uki" "$workdir/source/cayo-ab_${version}.efi"
+xz -T0 -c "$root" > "$workdir/source/floe_${version}_${root_uuid}.root.raw.xz"
+xz -T0 -c "$verity" > "$workdir/source/floe_${version}_${verity_uuid}.root-verity.raw.xz"
+cp "$uki" "$workdir/source/floe-ab_${version}.efi"
 for file in "$workdir/source"/*; do
     name=${file##*/}
     hash=$(sha256sum "$file")
@@ -433,11 +433,11 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://127.0.0.1:$SOURCE_PORT/
-MatchPattern=cayo_@v_@u.root-verity.raw.xz
+MatchPattern=floe_@v_@u.root-verity.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_v
+MatchPattern=floe_@v_v
 MatchPartitionType=root-verity
 PartitionFlags=0
 ReadOnly=yes
@@ -450,11 +450,11 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://127.0.0.1:$SOURCE_PORT/
-MatchPattern=cayo_@v_@u.root.raw.xz
+MatchPattern=floe_@v_@u.root.raw.xz
 [Target]
 Type=partition
 Path=auto
-MatchPattern=cayo_@v_r
+MatchPattern=floe_@v_r
 MatchPartitionType=root
 PartitionFlags=0
 ReadOnly=yes
@@ -467,14 +467,14 @@ Verify=yes
 [Source]
 Type=url-file
 Path=http://127.0.0.1:$SOURCE_PORT/
-MatchPattern=cayo-ab_@v.efi
+MatchPattern=floe-ab_@v.efi
 [Target]
 Type=regular-file
 Path=/EFI/Linux
 PathRelativeTo=boot
-MatchPattern=cayo-ab_@v+@l-@d.efi
-MatchPattern=cayo-ab_@v+@l.efi
-MatchPattern=cayo-ab_@v.efi
+MatchPattern=floe-ab_@v+@l-@d.efi
+MatchPattern=floe-ab_@v+@l.efi
+MatchPattern=floe-ab_@v.efi
 Mode=0444
 TriesLeft=3
 TriesDone=0
@@ -498,7 +498,7 @@ else
     expect_update_rejected "tampered signed manifest"
     guest "mv '$remote_dir/SHA256SUMS.valid' '$remote_dir/source/SHA256SUMS'"
 
-    root_source="$remote_dir/source/cayo_${version}_${root_uuid}.root.raw.xz"
+    root_source="$remote_dir/source/floe_${version}_${root_uuid}.root.raw.xz"
     guest "cp --reflink=auto '$root_source' '$remote_dir/root.raw.xz.valid'; printf x >> '$root_source'"
     # Earlier transfers may leave no-auto partial partition metadata. The UKI
     # entry point must not be committed, and the following valid update must

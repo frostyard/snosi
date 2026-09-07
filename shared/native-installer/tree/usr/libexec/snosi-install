@@ -2,16 +2,16 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # snosi-install -- product-aware installer for the native A/B products
-# (cayo-ab, snow-ab, snowfield-ab), shipped on the network-installer ISO
+# (floe-ab, snow-ab, snowfield-ab), shipped on the network-installer ISO
 # (mkosi.profiles/native-installer, shared/native-installer/mkosi.conf).
-# Generalizes test/cayo-ab-install-spike.sh's validated GPT-relocate/
+# Generalizes test/floe-ab-install-spike.sh's validated GPT-relocate/
 # var-grow/LUKS logic (ported here, not sourced -- see the note above the
 # ported functions below) into the full flow from docs/plans/2026-07-14-
 # bootc-native-ab-coexistence-plan.md "First-Round CLI Installer":
 #
 #   1.  Start networking and synchronize time.        (handled by the ISO's
 #       own NetworkManager/systemd-timesyncd units, not this script)
-#   2.  Offer cayo-ab, snow-ab, or snowfield-ab.       --product
+#   2.  Offer floe-ab, snow-ab, or snowfield-ab.       --product
 #   3.  Fetch and verify the product's signed R2 index.
 #   4.  Display version, minimum disk size, destructive warning.
 #   5.  Enumerate disks by path, model, serial, size, transport.
@@ -70,7 +70,7 @@
 #                                 ISO9660 fixture, root-gated, in
 #                                 test/snosi-install-test.sh).
 # --allow-file lets the install target be a regular file instead of a whole
-# block device (test-only, mirrors test/cayo-ab-install-spike.sh's own
+# block device (test-only, mirrors test/floe-ab-install-spike.sh's own
 # --allow-file; MOK/TPM enrollment both refuse to run against a --allow-file
 # target, matching the spike's existing safety boundary).
 set -euo pipefail
@@ -81,7 +81,7 @@ set -euo pipefail
 PUBRING_DEFAULT=/usr/lib/snosi/os-update-pubring.gpg
 MOK_CERT_DEFAULT=/usr/lib/snosi/mok.crt
 ORIGIN_DEFAULT=https://repository.frostyard.org
-VALID_PRODUCTS=(cayo-ab snow-ab snowfield-ab)
+VALID_PRODUCTS=(floe-ab snow-ab snowfield-ab)
 
 # Set at top level (not only inside main()) so PUBRING is always defined --
 # including when this script is `source`d for unit testing (test/snosi-
@@ -134,7 +134,7 @@ print_defaults() {
     local p bare cf products="[]"
     for p in "${VALID_PRODUCTS[@]}"; do
         bare="${p%-ab}"
-        cf=true; [[ "$p" != "cayo-ab" ]] || cf=false
+        cf=true; [[ "$p" != "floe-ab" ]] || cf=false
         products="$(jq -cn --argjson acc "$products" --arg name "$p" --arg bare "$bare" \
             --argjson min "$(minimum_disk_bytes "$bare")" --argjson cf "$cf" \
             '$acc + [{name:$name, bare:$bare, minimum_disk_bytes:$min,
@@ -172,7 +172,7 @@ list_disks_json() { # min_bytes self_device
 # previous probe still has open. This is transient -- settling and retrying
 # resolves it -- so only a failure that persists across the retry budget is
 # treated as fatal. Reproduced ~1/6 runs under test/snosi-install-test.sh's
-# root-gated harness (2026-07-15); see test/cayo-ab-install-spike.sh's
+# root-gated harness (2026-07-15); see test/floe-ab-install-spike.sh's
 # reread_partition_table() for the near-identical spike-script copy.
 rereadpt_settle() { # disk
     local disk="$1" attempt out
@@ -200,7 +200,7 @@ Usage:
   snosi-install --help
 
 Install mode options:
-  --product {cayo-ab|snow-ab|snowfield-ab}  Product/channel to install
+  --product {floe-ab|snow-ab|snowfield-ab}  Product/channel to install
   --origin URL                 R2 origin (default: https://repository.frostyard.org)
   --disk PATH                  Target disk (block device path, or a regular
                                 file with --allow-file)
@@ -233,7 +233,7 @@ Install mode options:
   --enable-feature NAME         Sysext feature to enable on first boot
                                 (repeatable; performed by snosi-firstboot)
   --core-flatpaks               Install the core desktop Flatpak set on first
-                                boot (snow/snowfield default; invalid on cayo)
+                                boot (snow/snowfield default; invalid on floe)
   --no-core-flatpaks            Skip the core Flatpak set
   --reboot                      Reboot when finished (never automatic
                                 otherwise, in either mode)
@@ -357,10 +357,10 @@ latest_channel_version() { # index_file channel
 # Exact, not a guess: these are the same fixed partition sizes systemd-repart
 # used to build the image, so the true minimum installable disk size for a
 # fresh install is deterministic from the product name alone.
-minimum_disk_bytes() { # product (bare, e.g. cayo)
+minimum_disk_bytes() { # product (bare, e.g. floe)
     local product="$1" esp=1073741824 verity=268435456 var_min=4294967296 root
     case "$product" in
-        cayo) root=5368709120 ;;
+        floe) root=5368709120 ;;
         snow|snowfield) root=8589934592 ;;
         *) die "unknown product for capacity table: $product" ;;
     esac
@@ -658,7 +658,7 @@ stream_download_verify() { # url expected_sha256 target
 # ---------------------------------------------------------------------------
 # Partition table relocate + var grow (plan steps 10-11)
 #
-# Ported (not sourced) from test/cayo-ab-install-spike.sh's already-validated
+# Ported (not sourced) from test/floe-ab-install-spike.sh's already-validated
 # logic: that spike test script is kept unchanged so every existing harness
 # that drives it (test/native-ab-secure-boot-test.sh et al.) keeps working
 # byte-for-byte, and factoring a shared lib at this stage would touch a
@@ -711,7 +711,7 @@ relocate_and_grow_var() { # disk image_size target_size -- prints the var partit
     # `cryptsetup`/`systemd-cryptenroll` "Block device required" or mapper-
     # not-found errors deep inside format_var()/enroll_tpm_var(), nowhere
     # near this actual root cause. This exact bug could not exist in
-    # test/cayo-ab-install-spike.sh (the "already-validated logic" this was
+    # test/floe-ab-install-spike.sh (the "already-validated logic" this was
     # ported from): that script never wraps this sequence in a function
     # whose stdout is captured -- it just uses top-level shell variables
     # directly in the same scope, so its identical unredirected sfdisk/
@@ -1473,11 +1473,11 @@ main() {
     fi
     local channel="$product" bare_product="${product%-ab}"
 
-    # Core-flatpak policy is product-shaped: cayo has no desktop, so the seed
+    # Core-flatpak policy is product-shaped: floe has no desktop, so the seed
     # never requests flatpaks there; the desktop products default to the core
     # set unless explicitly opted out.
-    if [[ "$product" == "cayo-ab" ]]; then
-        [[ "$core_flatpaks" != 1 ]] || die "--core-flatpaks: cayo-ab has no desktop (core flatpaks are snow/snowfield only)"
+    if [[ "$product" == "floe-ab" ]]; then
+        [[ "$core_flatpaks" != 1 ]] || die "--core-flatpaks: floe-ab has no desktop (core flatpaks are snow/snowfield only)"
         core_flatpaks=0
     elif [[ -z "$core_flatpaks" && "$non_interactive" == 1 ]]; then
         core_flatpaks=1

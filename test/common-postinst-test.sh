@@ -3,7 +3,7 @@
 #
 # Fixture regression test for shared/scripts/common-postinst.sh, the common
 # post-installation logic sourced by the image profiles
-# (shared/{snow,cayo}/scripts/postinstall/*.postinst.chroot). That
+# (shared/{snow,floe}/scripts/postinstall/*.postinst.chroot). That
 # script rewrites /usr/lib/os-release (NAME/PRETTY_NAME/ID and the sysext
 # matching fields) and generates the /usr/share/frostyard package manifest,
 # so it hard-requires OS_PRETTY_NAME and OS_NAME to be set before it is

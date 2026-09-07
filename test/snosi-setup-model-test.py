@@ -15,7 +15,7 @@
 #   - --list-disks-json parsing with refusal handling
 #   - the typed-erase confirmation matcher (CLI confirm_typed_matches port)
 #   - secret tmpfile creation/permissions/cleanup
-#   - page-flow sequencing (core-flatpaks page dropped for cayo-ab)
+#   - page-flow sequencing (core-flatpaks page dropped for floe-ab)
 #   - py_compile of every setup-gui file (+ pyflakes when available)
 #
 # Usage: python3 test/snosi-setup-model-test.py
@@ -66,8 +66,8 @@ FIXTURE_DEFAULTS = r"""
   "proto": 1,
   "products": [
     {
-      "name": "cayo-ab",
-      "bare": "cayo",
+      "name": "floe-ab",
+      "bare": "floe",
       "minimum_disk_bytes": 16642998272,
       "core_flatpaks_default": false,
       "core_flatpaks_allowed": false
@@ -155,13 +155,13 @@ else:
 # ---------------------------------------------------------------------------
 d = model.Defaults.from_json(FIXTURE_DEFAULTS)
 eq("defaults proto", d.proto, 1)
-eq("three products", d.product_names(), ["cayo-ab", "snow-ab",
+eq("three products", d.product_names(), ["floe-ab", "snow-ab",
                                          "snowfield-ab"])
-eq("cayo core flatpaks not allowed",
-   d.product("cayo-ab").core_flatpaks_allowed, False)
+eq("floe core flatpaks not allowed",
+   d.product("floe-ab").core_flatpaks_allowed, False)
 eq("snow core flatpaks default on",
    d.product("snow-ab").core_flatpaks_default, True)
-eq("cayo min disk bytes", d.product("cayo-ab").minimum_disk_bytes,
+eq("floe min disk bytes", d.product("floe-ab").minimum_disk_bytes,
    16642998272)
 eq("snow bare name", d.product("snow-ab").bare, "snow")
 eq("origin default", d.origin_default, "https://repository.frostyard.org")
@@ -344,7 +344,7 @@ ok("user password never on argv",
 ok("mok password never on argv",
    all("mok-secret-word" not in a for a in argv))
 
-st2 = full_state("cayo-ab")
+st2 = full_state("floe-ab")
 st2.username = None
 st2.user_password = None
 st2.user_fullname = ""
@@ -353,11 +353,11 @@ st2.features = []
 st2.confirm_text = "SER123"          # serial-based confirmation
 argv2 = model.build_install_argv(st2, d, None, "/run/s/mok",
                                  installer="/usr/libexec/snosi-install")
-ok("cayo argv has --no-create-user", "--no-create-user" in argv2)
-ok("cayo argv has no user flags", "--username" not in argv2 and
+ok("floe argv has --no-create-user", "--no-create-user" in argv2)
+ok("floe argv has no user flags", "--username" not in argv2 and
    "--user-password-file" not in argv2 and "--user-fullname" not in argv2)
-ok("cayo argv forces --no-core-flatpaks", "--no-core-flatpaks" in argv2)
-ok("cayo argv never has --core-flatpaks", "--core-flatpaks" not in argv2)
+ok("floe argv forces --no-core-flatpaks", "--no-core-flatpaks" in argv2)
+ok("floe argv never has --core-flatpaks", "--core-flatpaks" not in argv2)
 eq("serial confirm on argv", argv2[argv2.index("--confirm") + 1], "SER123")
 
 st3 = full_state()
@@ -381,8 +381,8 @@ for mutate, desc in [
     (lambda s: setattr(s, "features", ["ok", "no good"]),
      "invalid feature"),
     (lambda s: setattr(s, "core_flatpaks", True) or
-     setattr(s, "product", d.product("cayo-ab")),
-     "core flatpaks on cayo"),
+     setattr(s, "product", d.product("floe-ab")),
+     "core flatpaks on floe"),
 ]:
     s = full_state()
     mutate(s)
@@ -457,13 +457,13 @@ eq("log tail keeps newest", pbound.log_tail[-1],
 # ---------------------------------------------------------------------------
 seq_none = model.page_sequence(None)
 seq_snow = model.page_sequence(d.product("snow-ab"))
-seq_cayo = model.page_sequence(d.product("cayo-ab"))
+seq_floe = model.page_sequence(d.product("floe-ab"))
 eq("full sequence has 15 pages", len(seq_none), 15)
 ok("snow sequence keeps flatpaks page", model.PAGE_FLATPAKS in seq_snow)
-ok("cayo sequence drops flatpaks page",
-   model.PAGE_FLATPAKS not in seq_cayo)
-eq("cayo sequence otherwise identical",
-   [x for x in seq_snow if x != model.PAGE_FLATPAKS], seq_cayo)
+ok("floe sequence drops flatpaks page",
+   model.PAGE_FLATPAKS not in seq_floe)
+eq("floe sequence otherwise identical",
+   [x for x in seq_snow if x != model.PAGE_FLATPAKS], seq_floe)
 eq("first page is welcome", seq_none[0], model.PAGE_WELCOME)
 eq("last pages are progress, done", seq_none[-2:],
    [model.PAGE_PROGRESS, model.PAGE_DONE])

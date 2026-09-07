@@ -12,7 +12,7 @@ source "$ROOT_DIR/test/lib/ssh.sh"
 # shellcheck disable=SC1091
 source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
 
-: "${PROFILE:=cayo}"
+: "${PROFILE:=floe}"
 : "${DAKOTA_ISO:=}"
 : "${OCI_REF:=}"
 : "${MOK_CERT:=}"
@@ -39,8 +39,8 @@ fail() { printf 'not ok - %s\n' "$1" >&2; FAIL=$((FAIL + 1)); }
 assert_true() { local description=$1; shift; if "$@"; then pass "$description"; else fail "$description"; fi; }
 assert_false() { local description=$1; shift; if "$@"; then fail "$description"; else pass "$description"; fi; }
 
-validate_profile() { [[ $1 == cayo || $1 == snow || $1 == snowfield ]]; }
-valid_oci_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(cayo|snow|snowfield)@sha256:[[:xdigit:]]{64}$ ]]; }
+validate_profile() { [[ $1 == floe || $1 == snow || $1 == snowfield ]]; }
+valid_oci_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(floe|snow|snowfield)@sha256:[[:xdigit:]]{64}$ ]]; }
 valid_recovery_key() { [[ -f $1 && $(stat -c '%a' "$1") == 600 && -s $1 ]]; }
 disk_is_raw() { # block devices are raw by construction; regular files must be raw qemu images.
     [[ -b $1 ]] && return 0
@@ -73,7 +73,7 @@ run_marked_runner() { # runner expected-marker args...
     runner_output_has_marker "$RUNNER_OUTPUT" "$marker" || { printf '%s\n' "$RUNNER_OUTPUT" >&2; return 1; }
 }
 tpm_token_identity() { jq -c '[.tokens | to_entries[] | select(.value.type == "systemd-tpm2") | .value] | if length == 1 then .[0] else empty end' | sha256sum | cut -d' ' -f1; }
-valid_tracking_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(cayo|snow|snowfield):[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; }
+valid_tracking_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(floe|snow|snowfield):[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; }
 recovery_state_is_ready() { # manifest
     [[ -f $1 && $(stat -c '%a' "$1") == 600 ]] && jq -e '
         .schema == 1 and
@@ -110,7 +110,7 @@ write_install_state() { # state-path workdir recovery-key ssh-private-key recipe
 
 require_live_inputs() {
     local missing=() command
-    validate_profile "$PROFILE" || missing+=("PROFILE=cayo|snow|snowfield")
+    validate_profile "$PROFILE" || missing+=("PROFILE=floe|snow|snowfield")
     [[ -f $DAKOTA_ISO ]] || missing+=("DAKOTA_ISO=<fresh secure Dakota ISO>")
     valid_oci_ref "$OCI_REF" && [[ $OCI_REF == "ghcr.io/frostyard/$PROFILE@"* ]] || missing+=("OCI_REF=ghcr.io/frostyard/$PROFILE@sha256:<digest>")
     [[ -f $MOK_CERT ]] || missing+=("MOK_CERT")
@@ -152,15 +152,15 @@ run_fixtures() {
     local work entries output
     work=$(mktemp -d)
     trap 'rm -rf "$work"' RETURN
-    assert_true 'cayo is a supported profile' validate_profile cayo
+    assert_true 'floe is a supported profile' validate_profile floe
     assert_true 'snow is a supported profile' validate_profile snow
     assert_true 'snowfield is a supported profile' validate_profile snowfield
     assert_false 'unknown profiles are rejected' validate_profile invalid
-    assert_true 'immutable matching OCI reference is accepted' valid_oci_ref "ghcr.io/frostyard/cayo@sha256:$(printf 'a%.0s' {1..64})"
-    assert_false 'tags and wrong repositories are rejected' valid_oci_ref 'ghcr.io/frostyard/cayo:latest'
+    assert_true 'immutable matching OCI reference is accepted' valid_oci_ref "ghcr.io/frostyard/floe@sha256:$(printf 'a%.0s' {1..64})"
+    assert_false 'tags and wrong repositories are rejected' valid_oci_ref 'ghcr.io/frostyard/floe:latest'
     printf key >"$work/recovery"; chmod 600 "$work/recovery"
     printf mok >"$work/mok.crt"; printf pcr >"$work/pcr.pub"; : >"$work/disk"
-    OCI_REF="ghcr.io/frostyard/cayo@sha256:$(printf 'e%.0s' {1..64})"
+    OCI_REF="ghcr.io/frostyard/floe@sha256:$(printf 'e%.0s' {1..64})"
     MOK_CERT="$work/mok.crt"; PCR_PUBLIC="$work/pcr.pub"; TARGET_DISK="$work/disk"; RECOVERY_KEY="$work/recovery"
     if command -v qemu-img >/dev/null 2>&1; then
         qemu-img create -q -f raw "$work/raw.img" 32212254720
@@ -230,8 +230,8 @@ run_fixtures() {
         write_install_state "$work/install-state.json" "$work" "$work/recovery" "$work/id_ed25519" "$work/recipe.json"
     assert_true 'install handoff manifest is mode 0600' test "$(stat -c '%a' "$work/install-state.json")" = 600
     assert_false 'install handoff manifest contains no recovery bytes' grep -Fq '"key"' "$work/install-state.json"
-    assert_true 'install handoff preserves its tracking tag' jq -e '.tracking_ref == "ghcr.io/frostyard/cayo:secure-test"' "$work/install-state.json"
-    assert_true 'recipe schema includes the tracking tag' jq -e '.tracking_ref == "ghcr.io/frostyard/cayo:secure-test"' "$work/recipe.json"
+    assert_true 'install handoff preserves its tracking tag' jq -e '.tracking_ref == "ghcr.io/frostyard/floe:secure-test"' "$work/install-state.json"
+    assert_true 'recipe schema includes the tracking tag' jq -e '.tracking_ref == "ghcr.io/frostyard/floe:secure-test"' "$work/recipe.json"
     assert_true 'recovery state is a mode-0600 path-only install handoff' recovery_state_is_ready "$work/install-state.json"
     output=$(PROFILE=invalid DAKOTA_ISO='' OCI_REF='' MOK_CERT='' PCR_PUBLIC='' RECOVERY_KEY='' TARGET_DISK='' BOOTC_SECURE_INSTALLER='' require_live_inputs 2>&1) || true
     if [[ $output == *'BLOCKED:'* ]]; then pass 'missing real inputs block rather than pass'; else fail 'missing real inputs block rather than pass'; fi

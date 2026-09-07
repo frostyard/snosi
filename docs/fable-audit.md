@@ -34,7 +34,7 @@ Each ships a `40-<name>.preset` but no `usr/lib/systemd/system/multi-user.target
 
 Confirmed live on the running system: `systemd: /usr/lib/systemd/system-preset/99-disable-unwanted-services.preset:1: Couldn't parse line 'mask systemd-boot-update.service'. Ignoring.` (same for all 4 lines). Consequences observed: `systemd-boot-update.service` is `enabled` and ran this boot (bootloader auto-rewrite on an immutable image), `dpkg-db-backup.timer` is active. The apt timers happen to be off by packaging defaults only.
 
-- **Files:** `shared/snow/tree/usr/lib/systemd/system-preset/99-disable-unwanted-services.preset`, `shared/cayo/tree/usr/lib/systemd/system-preset/99-disable-unwanted-services.preset`
+- **Files:** `shared/snow/tree/usr/lib/systemd/system-preset/99-disable-unwanted-services.preset`, `shared/floe/tree/usr/lib/systemd/system-preset/99-disable-unwanted-services.preset`
 - **Fix:** Presets only support `enable`/`disable`. Use `disable`, and for true masking ship `/etc/systemd/system/<unit> → /dev/null` symlinks in the image tree.
 
 ### H3. `rm -rf /opt/{Bitwarden,}` deletes `/opt` itself; currently masked by accidental script ordering
@@ -119,11 +119,11 @@ Comparing every `.dsh-also` under `/var/lib/systemd/deb-systemd-user-helper-enab
 
 - **Fix:** Pin to a versioned/stable channel.
 
-### M11. cayo ships a Zabbly APT source whose keyring path is wrong
+### M11. floe ships a Zabbly APT source whose keyring path is wrong
 
-`shared/cayo/tree/etc/apt/sources.list.d/zabbly-incus-stable.sources` says `Signed-By: /etc/apt/keyrings/zabbly.asc` but the tree ships `zabbly.gpg` — any runtime `apt update` on cayo errors. Also stale: build-time incus now comes from Debian trixie, so a runtime Zabbly source risks version drift vs the image.
+`shared/floe/tree/etc/apt/sources.list.d/zabbly-incus-stable.sources` says `Signed-By: /etc/apt/keyrings/zabbly.asc` but the tree ships `zabbly.gpg` — any runtime `apt update` on floe errors. Also stale: build-time incus now comes from Debian trixie, so a runtime Zabbly source risks version drift vs the image.
 
-- **Fix:** Remove the source+key from the cayo tree (or fix the filename if intentional).
+- **Fix:** Remove the source+key from the floe tree (or fix the filename if intentional).
 
 ### M12. Unused NordVPN repo enabled in the build sandbox
 
@@ -145,7 +145,7 @@ All `curl -s` calls to api.github.com are unauthenticated (60 req/hr shared-IP l
 
 ### M15. validate.yml shellcheck misses every extensionless shell script and suppresses warnings
 
-`validate.yml:28` lints only `*.sh`/`*.chroot` with `-S error`. Unlinted (verified by shebang scan): `mkosi.clean`, `mkosi.version`, five sysext `mkosi.finalize` scripts, `shared/manifest/postoutput/mkosi.postoutput`, and all in-image runtime scripts (`shared/snow/tree/usr/libexec/*`, `shared/cayo/tree/usr/{bin,libexec}/*`, sysext setup scripts). A syntax error in a runtime libexec script ships broken into images. `-S error` also suppresses SC2086-class warnings everywhere.
+`validate.yml:28` lints only `*.sh`/`*.chroot` with `-S error`. Unlinted (verified by shebang scan): `mkosi.clean`, `mkosi.version`, five sysext `mkosi.finalize` scripts, `shared/manifest/postoutput/mkosi.postoutput`, and all in-image runtime scripts (`shared/snow/tree/usr/libexec/*`, `shared/floe/tree/usr/{bin,libexec}/*`, sysext setup scripts). A syntax error in a runtime libexec script ships broken into images. `-S error` also suppresses SC2086-class warnings everywhere.
 
 - **Fix:** Discover scripts by shebang (`git grep -lE '^#!/(usr/)?bin/(env )?(ba)?sh' | xargs shellcheck`), raise to `-S warning`.
 
@@ -157,7 +157,7 @@ All `curl -s` calls to api.github.com are unauthenticated (60 req/hr shared-IP l
 
 ### M17. Release changelog silently loses intervals when any sibling profile fails
 
-With `fail-fast: false`, snowloaded can push while e.g. cayo fails; `needs.build.result == 'success'` (`build-images.yml:288`) then skips the release. The next successful run diffs only tags N-1→N, so the skipped interval's changes are never described in any release. `continue-on-error: true` (line 289) additionally makes all release-job failures invisible.
+With `fail-fast: false`, snowloaded can push while e.g. floe fails; `needs.build.result == 'success'` (`build-images.yml:288`) then skips the release. The next successful run diffs only tags N-1→N, so the skipped interval's changes are never described in any release. `continue-on-error: true` (line 289) additionally makes all release-job failures invisible.
 
 - **Fix:** Gate on the snowloaded leg specifically, or diff against the tag recorded in the latest GitHub Release; let the job fail visibly instead of `continue-on-error`.
 
@@ -171,15 +171,15 @@ With `fail-fast: false`, snowloaded can push while e.g. cayo fails; `needs.build
 ## Low
 
 - **L1.** dev sysext ships dangling `/usr/bin/automake`/`aclocal` → `/etc/alternatives/*` symlinks (alternatives don't exist at runtime; confirmed live). Replace with direct symlinks to the `-1.17` binaries in the dev sysext build; sweep dev/debdev for other alternatives-managed tools.
-- **L2.** `install-incus-agent` (snow tree + base mkosi.extra copies) uses `set -ouex pipefail` — xtrace permanently on in a shipped boot service (log noise), and its `if [ $? -ne 0 ]` after `mount` is dead code under `set -e`. The cayo copy is correct; three drifted copies total. Deduplicate.
-- **L3.** Snow/cayo duplicated runtime scripts drift: snow `bbrew-helper` lacks `set -euo pipefail` (cayo has it), snow `bls-gc` lacks `-u`. `bazaar-helper`/`distroshelf-helper`/`missioncenter-helper` have no strict mode at all.
+- **L2.** `install-incus-agent` (snow tree + base mkosi.extra copies) uses `set -ouex pipefail` — xtrace permanently on in a shipped boot service (log noise), and its `if [ $? -ne 0 ]` after `mount` is dead code under `set -e`. The floe copy is correct; three drifted copies total. Deduplicate.
+- **L3.** Snow/floe duplicated runtime scripts drift: snow `bbrew-helper` lacks `set -euo pipefail` (floe has it), snow `bls-gc` lacks `-u`. `bazaar-helper`/`distroshelf-helper`/`missioncenter-helper` have no strict mode at all.
 - **L4.** `shared/scripts/common-postinst.sh:45` — `apt list --installed ... || true` silently ships an empty package manifest if `apt` is ever dropped from an image. Use `dpkg-query -W` (always present).
 - **L5 (resolved in `5e3876a`).** `packagediff.sh` derives the running image ID from `/etc/os-release` and reads `/usr/share/frostyard/${ID}.packages.txt`, matching the ADR-0003 provenance location and the `common-postinst.sh` writer.
 - **L6.** Environment= placed in wrong mkosi sections repo-wide (`[Output]` in all 6 profiles, `[Content]` in all 10 sysexts); mkosi 27 warns `should be configured in [Build]` — may hard-fail in a future mkosi.
 - **L7.** `mkosi.images/incus/mkosi.extra/usr/lib/tmpfiles.d/incus.conf` has `C` directives for `/etc/libvirt`, `/etc/profile.d/vte-2.91.sh`, `/etc/qemu-ifdown` etc. that no package in the sysext appears to create — likely boot-time copy-failure noise. Verify against a built image and prune.
 - **L8.** code-server is the only sysext where `KEYPACKAGE` isn't in `Packages=` (deb installed via postinst `dpkg -i`); works today, fragile under refactoring — add a comment in the conf.
 - **L9.** `shared/packages/snow/mkosi.conf` duplicates `mesa-va-drivers`/`mesa-vulkan-drivers` unpinned alongside the backports-pinned entries in the kernel fragments; drop the unpinned duplicates.
-- **L10.** `http://deb.debian.org` backports sources (sandbox + snow + cayo trees) — signed, but inconsistent with everything else being https.
+- **L10.** `http://deb.debian.org` backports sources (sandbox + snow + floe trees) — signed, but inconsistent with everything else being https.
 - **L11.** `mkosi.sandbox/etc/apt/sources.list.d/tailscale.list` is the only legacy one-line-format source; convert to deb822.
 - **L12.** No update automation for: chunkah image digest (`shared/outformat/image/chunkah-package.sh:21`), `RUST_VERSION` (`shared/bootc/build/bootc.chroot:24`), syft/cosign versions (`build-images.yml:145,212`), `systemd/mkosi@3c3a08f` action ref. None will ever be flagged stale.
 - **L13.** `build-images.yml:127` — `SOURCE_DATE_EPOCH` from `github.event.head_commit.timestamp` is empty on `workflow_dispatch`; GNU `date -d ''` silently yields today-midnight. Fall back to `git log -1 --format=%ct`.
@@ -191,7 +191,7 @@ With `fail-fast: false`, snowloaded can push while e.g. cayo fails; `needs.build
 - **L19.** `shared/scripts/build/brew.chroot:25` — `mkdir -p /out` is dead code.
 - **L20.** `shared/outformat/image/chunkah-package.sh:28-29` — `NEW_REF` extraction greps exact `podman load` output wording; a podman message change aborts packaging after the image is already loaded. Also unquoted `$MAX_LAYERS` (benign).
 - **L21.** `compare-images.sh:230-244` — layer extraction is `|| true`-masked; a corrupt layer silently yields a wrong diff report.
-- **L22.** `saved-unused/10-image-cayo/mkosi.finalize.chroot` — dead directory containing an active-looking script that `rm -rf`s `/boot`, `/home`. Delete (git history preserves it).
+- **L22.** `saved-unused/10-image-floe/mkosi.finalize.chroot` — dead directory containing an active-looking script that `rm -rf`s `/boot`, `/home`. Delete (git history preserves it).
 - **L23.** Initrd logs `Failed to resolve user 'tss'` (tmpfiles + udev) every boot; harmless after switch-root (`/dev/tpm0` ends up `tss root`), but recurring boot errors. Add tss to the dracut initrd passwd or exclude the tpm2 tmpfiles/udev files from the initrd (`shared/kernel/` dracut config).
 - **L24.** dconf profile references `system-db:local` and `system-db:site` but `/etc/dconf/db/` ships neither — 24+ warnings per boot from flatpak/gnome-session/portals. Compile empty DBs at build (`dconf update`) or drop the lines.
 - **L25.** Docs, smaller items: yeti/ci-cd.md lists only 7 of 12 check-dependencies resources; yeti/sysexts.md per-sysext file listings stale (wrong tmpfiles names, missing Upholds drop-ins/finalize scripts, duplicate step "7"); README image table says "OCI archive" (actual `Format=directory` + buildah/chunkah); README omits `just test-install`/`run-qemu` and four workflows; CLAUDE.md omits `chunkah-package.sh`; `package-versions.json` Edge entry is dead data (Edge is tracked via checksums.json); `compare-images.sh`/`packagediff.sh`/`mkosi.tools` undocumented everywhere.

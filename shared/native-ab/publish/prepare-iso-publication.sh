@@ -99,7 +99,7 @@ commit_tmpfile "$sums_tmp" "$sums_file"
 echo "Writing $sums_file (unsigned; signing is the Phase 7 promotion step)"
 
 # product == channel == "snosi-installer" here (unlike the OS artifact
-# pipeline, where product/channel differ, e.g. "cayo"/"cayo-ab"): there is
+# pipeline, where product/channel differ, e.g. "floe"/"floe-ab"): there is
 # exactly one installer (firn, the successor to native-installer; core
 # ADR-0027/0028), not one per product, and this value must equal the
 # literal prefix of the frozen object name itself

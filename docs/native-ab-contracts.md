@@ -10,9 +10,9 @@ That test is the executable form of this document. If the two disagree, the
 test is currently wrong (fix it) unless a value here was deliberately changed
 (update both in the same commit).
 
-Known deviations between the current prototype and this contract are tracked,
-not silently tolerated, via `test/native-ab-contracts-allow.txt`. Every
-allowlist entry names the phase that removes it.
+Temporary deviations from this contract must be tracked, not silently
+tolerated, via `test/native-ab-contracts-allow.txt`. Every allowlist entry must
+name the phase that removes it; no deviations are currently listed.
 
 The doc+test+allowlist governance mechanism itself is decided in
 [ADR-0007](adr/0007-frozen-contract-executable-allowlist.md); the
@@ -23,18 +23,16 @@ name-triggered publication-guard rule (§1, §15) is decided in
 
 | Kind | Names |
 |---|---|
-| bootc profiles (unchanged) | `cayo`, `snow`, `snowfield` |
-| Production native profiles | `cayo-ab`, `snow-ab`, `snowfield-ab` (secure posture only) |
-| Development fixtures | `cayo-ab-raw` (Phase 1 rename of today's `cayo-ab`; never published) |
-| Shared secure posture fragment | `shared/native-ab-secure/mkosi.conf` (Phase 3 generalization of the retired `cayo-ab-secure` spike profile; `Include=`d by all three production native profiles) |
+| bootc profiles (unchanged) | `floe`, `snow`, `snowfield` |
+| Production native profiles | `floe-ab`, `snow-ab`, `snowfield-ab` (secure posture only) |
+| Development fixtures | `floe-ab-raw` (never published) |
+| Shared secure posture fragment | `shared/native-ab-secure/mkosi.conf` (generalized from the retired `cayo-ab-secure` spike profile; `Include=`d by all three production native profiles) |
 
-A profile literally named `cayo-ab`, `snow-ab`, or `snowfield-ab` is
+A profile literally named `floe-ab`, `snow-ab`, or `snowfield-ab` is
 production-facing and MUST satisfy the publication guard (§15). It must never
-mean "raw prototype" at any point after Phase 1. Today's `cayo-ab` is the raw
-prototype and fails the guard; it is allowlisted with tag `pending-rename`
-until Phase 1 renames it to `cayo-ab-raw`.
+mean "raw prototype"; that role belongs only to `floe-ab-raw`.
 
-Channel name = `<ImageId>-ab`. `ImageId` stays `cayo`/`snow`/`snowfield` in
+Channel name = `<ImageId>-ab`. `ImageId` stays `floe`/`snow`/`snowfield` in
 native profiles (branding, `os-release`, sysext compatibility all key off
 `ImageId`, not the channel name).
 
@@ -69,10 +67,9 @@ code units of headroom against the GPT partition-name limit of 36 UTF-16 code
 units. A label MUST NOT be chosen that leaves less headroom, even if it still
 fits under 36.
 
-Today's repart labels (`cayo_%A_root`, `cayo_%A_root_verity`) predate this
-format. `cayo_%A_root_verity` computes to 31 code units with a 14-digit
-version — already over the 30-unit ceiling — and is allowlisted with tag
-`pending-label-shortening` until Phase 1/3 renames the split to `_r`/`_v`.
+The earlier prototype's `_root` and `_root_verity` suffixes exceeded this
+budget. Every current channel fragment uses the frozen `_r` and `_v` forms,
+and the contracts test enforces the ceiling.
 
 ## 4. Public artifact names
 
@@ -107,7 +104,7 @@ the plan) — this document freezes the *names*; the plan freezes the
 Naming implemented by `shared/native-ab/publish/prepare-native-publication.sh`
 (Phase 3): given an mkosi output directory and a built profile's `Output=`
 name (validated to equal `<ImageId>-ab`, refusing e.g. the never-published
-`cayo-ab-raw` fixture), it derives product/channel/version from the built
+`floe-ab-raw` fixture), it derives product/channel/version from the built
 artifacts themselves and produces the `.root.raw[.xz]`, `.root-verity.raw[.xz]`,
 `.efi`, `.disk.raw[.xz]`, `.manifest.json`, `.sbom.spdx.json`, and
 `.features.json` names above plus an unsigned `SHA256SUMS` (signing is the
@@ -138,7 +135,7 @@ signed promotion, withdrawal) lives in `shared/native-ab/publish/publish-candida
 ## 5. R2 namespaces
 
 ```text
-https://repository.frostyard.org/os/native/v1/<product>/x86-64/     # product = cayo | snow | snowfield
+https://repository.frostyard.org/os/native/v1/<product>/x86-64/     # product = floe | snow | snowfield
 https://repository.frostyard.org/isos/native/v1/
 https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso
 https://repository.frostyard.org/ext/<name>/                        # sysexts, unchanged
@@ -151,12 +148,9 @@ live R2 `SHA256SUMS`; it carries no independent version state and never proxies
 ISO bytes. `SHA256SUMS` plus `SHA256SUMS.gpg`, not the redirect, remain the
 integrity and authenticity contract.
 
-The current prototype transfers bake `https://repository.frostyard.org/os/cayo/%a/`
-into their `[Source] Path=`. That is a tracked deviation from the frozen URL
-above, allowlisted with tag `legacy-url` in the three OS transfer files
-(`10-root-verity.transfer`, `20-root.transfer`, `90-uki.transfer`) until
-Phase 3 replaces every shipped transfer and validates the baked client path
-against the publisher path as one contract.
+Every current OS transfer uses the frozen `os/native/v1/<product>/x86-64/`
+prefix above. `test/native-ab-contracts-test.sh` validates the baked client
+paths against the publisher namespace as one contract.
 
 ## 6. Sysupdate target and component topology
 
@@ -276,7 +270,7 @@ commented-out "is not set" form other unset bools get in this same file
 (e.g. `# CONFIG_LOCK_DOWN_KERNEL_FORCE_INTEGRITY is not set` IS present),
 even though `CONFIG_EFI=y` is set, which is what makes that symbol visible
 to Kconfig in the first place — unlike the backports kernel
-`cayo-ab`/`snow-ab` use, which evidently carries that wiring. Under enforced SB,
+`floe-ab`/`snow-ab` use, which evidently carries that wiring. Under enforced SB,
 `/sys/kernel/security/lockdown` stayed at `none` until
 `shared/native-ab-secure/mkosi.conf` gained an explicit
 `KernelCommandLine=lockdown=integrity`. Module-signature enforcement itself
@@ -388,10 +382,10 @@ No final-root `KernelModules=` pruning. Initrd content is controlled via
 dracut configuration only, with the custom dracut archive kept authoritative
 through `Initrds=` and `KernelModulesInitrd=no`.
 
-The virtio-only filter, now in `mkosi.profiles/cayo-ab-raw/mkosi.conf`
+The virtio-only filter, now in `mkosi.profiles/floe-ab-raw/mkosi.conf`
 (Phase 3 moved it out of the shared `shared/outformat/ab-root/mkosi.conf`
 fragment, which no longer carries any `KernelModules=` line), is permitted
-**only** in the `cayo-ab-raw` dev fixture; it must never ship in `cayo-ab`,
+**only** in the `floe-ab-raw` dev fixture; it must never ship in `floe-ab`,
 `snow-ab`, or `snowfield-ab`.
 
 ## 10. `/var` mount contracts
@@ -420,7 +414,7 @@ in a commit separate from any payload change.
 
 | Product | ESP | Root slot |
 |---|---|---|
-| cayo | 1 GiB | 5 GiB (measured 2026-07-14, full module/firmware policy; see docs/native-ab-capacities.md) |
+| floe | 1 GiB | 5 GiB (measured 2026-07-14, full module/firmware policy; see docs/native-ab-capacities.md) |
 | snow | 1 GiB | 8 GiB (measured 2026-07-14 against the real `snow-ab` production build; runtime-confirmed 2026-07-15 across the full N..N+3 secure update window, Phase 5 exit — see docs/native-ab-capacities.md) |
 | snowfield | 1 GiB | 8 GiB (measured 2026-07-14 against the real `snowfield-ab` production build; see docs/native-ab-capacities.md) |
 
@@ -457,7 +451,7 @@ native promotion.
 
 ## 15. Static publication guard
 
-A native profile literally named `cayo-ab`, `snow-ab`, or `snowfield-ab` is
+A native profile literally named `floe-ab`, `snow-ab`, or `snowfield-ab` is
 publishable only if its `mkosi.conf` (or an `[Include]`d fragment it always
 pulls in) satisfies, at minimum:
 

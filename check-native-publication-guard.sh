@@ -8,7 +8,7 @@
 # place that grows the remaining §15 criteria as later phases land.
 #
 # What it inspects, for every directory mkosi.profiles/<name> whose name is
-# exactly one of the production native profile names (cayo-ab, snow-ab,
+# exactly one of the production native profile names (floe-ab, snow-ab,
 # snowfield-ab -- docs/native-ab-contracts.md §1):
 #
 #   - The profile's own mkosi.conf, verbatim.
@@ -34,7 +34,7 @@
 #   - NO `KernelModules=` final-root filter line in the profile's OWN
 #     mkosi.conf (docs/native-ab-contracts.md §9). Phase 3 removed the
 #     dev-only virtio-only filter from the shared ab-root fragment entirely;
-#     it now lives only in mkosi.profiles/cayo-ab-raw/mkosi.conf, the one
+#     it now lives only in mkosi.profiles/floe-ab-raw/mkosi.conf, the one
 #     dev fixture permitted to carry it (never a production-named profile).
 #     This check still only inspects the profile's OWN conf, not
 #     shared/outformat/ab-root/mkosi.conf or the per-product channel
@@ -43,11 +43,11 @@
 #     test/native-ab-contracts-test.sh instead, since that's true for every
 #     consumer, not just production-named ones.
 #
-# If no directory named cayo-ab, snow-ab, or snowfield-ab exists yet (the
+# If no directory named floe-ab, snow-ab, or snowfield-ab exists yet (the
 # case as of Phase 1), this exits 0 with a note: there is nothing to publish,
 # so there is nothing to gate.
 #
-# Independently of the loop above, mkosi.profiles/cayo-ab-raw -- the
+# Independently of the loop above, mkosi.profiles/floe-ab-raw -- the
 # permanent, never-published raw dev fixture (docs/native-ab-contracts.md
 # §1) -- is HARD-FAILED if its mkosi.conf ever grows any of the publication
 # markers (ShimBootloader=signed, SecureBoot=yes, SignExpectedPcr=yes). A raw
@@ -60,7 +60,7 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 guard_root=${SNOSI_NATIVE_GUARD_ROOT:-$script_dir}
 cd "$guard_root"
 
-production_names=(cayo-ab snow-ab snowfield-ab)
+production_names=(floe-ab snow-ab snowfield-ab)
 pubring="shared/native-ab/keys/import-pubring.gpg"
 
 fail=0
@@ -109,10 +109,10 @@ for name in "${production_names[@]}"; do
 done
 
 if ((! found_production)); then
-    echo "No production native profiles (cayo-ab, snow-ab, snowfield-ab) exist yet -- nothing to gate."
+    echo "No production native profiles (floe-ab, snow-ab, snowfield-ab) exist yet -- nothing to gate."
 fi
 
-raw_conf="mkosi.profiles/cayo-ab-raw/mkosi.conf"
+raw_conf="mkosi.profiles/floe-ab-raw/mkosi.conf"
 if [[ -f "$raw_conf" ]]; then
     if grep -qE '^(ShimBootloader=signed|SecureBoot=yes|SignExpectedPcr=yes)$' "$raw_conf"; then
         echo "FAIL: $raw_conf: the raw dev fixture must never carry publication markers" >&2
@@ -148,7 +148,7 @@ else
         fi
     done
 
-    for job in build-cayo build-snow build-snowfield; do
+    for job in build-floe build-snow build-snowfield; do
         job_block=$(awk -v job="$job" '
           $0 == "  " job ":" { capture=1 }
           capture && /^  [A-Za-z0-9_-]+:$/ && $0 != "  " job ":" { exit }

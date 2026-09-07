@@ -17,8 +17,8 @@ Rules that are easy to break here:
   before and after, normalizing `Seed:`, `Prepare Scripts:` tmpdirs, and
   `Image Version:`. Delete `.mkosi-private/history/latest.json` first, or the
   cached profile silently overrides `--profile`.
-- `cayo-ab-raw` is a permanent, never-published dev fixture. The published
-  products are `cayo-ab`, `snow-ab`, and `snowfield-ab`, and they must keep
+- `floe-ab-raw` is a permanent, never-published dev fixture. The published
+  products are `floe-ab`, `snow-ab`, and `snowfield-ab`, and they must keep
   passing `check-native-publication-guard.sh`.
 - Enablement belongs in presets or static `/usr` wants links, never in shipped
   `/etc` symlinks or runtime `systemctl enable`/`disable`.

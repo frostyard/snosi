@@ -24,7 +24,7 @@ are a human-facing changelog and download index over signed artifacts, not
 milestone gates.
 
 The shipped surface is three image families (`snow`, `snowfield`, and
-`cayo`) and a large sysext catalogue, described in [`README.md`](README.md).
+`floe`) and a large sysext catalogue, described in [`README.md`](README.md).
 
 ## Position: bootc is the transport; native A/B is being phased out
 
@@ -40,8 +40,8 @@ native A/B is not a supported way to run snosi.
 
 | Transport | What it is | Update origin | Status |
 | --- | --- | --- | --- |
-| **bootc OCI** | `snow`, `snowfield`, `cayo` — OCI images consumed by bootc | GHCR | **Supported.** The transport snosi is built around. |
-| **native A/B** | `snow-ab`, `snowfield-ab`, `cayo-ab` — GPT disk images, EROFS + dm-verity, Secure Boot + TPM/LUKS `/var` | Cloudflare R2 | **Phasing out by 2026-10-28.** Builds and updates during the window; not a supported target after it. |
+| **bootc OCI** | `snow`, `snowfield`, `floe` — OCI images consumed by bootc | GHCR | **Supported.** The transport snosi is built around. |
+| **native A/B** | `snow-ab`, `snowfield-ab`, `floe-ab` — GPT disk images, EROFS + dm-verity, Secure Boot + TPM/LUKS `/var` | Cloudflare R2 | **Phasing out by 2026-10-28.** Builds and updates during the window; not a supported target after it. |
 
 GHCR is authoritative for bootc OCI images. R2 remains authoritative for
 sysexts, raw installer images, and the installer ISO; it is authoritative for

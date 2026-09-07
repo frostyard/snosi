@@ -27,12 +27,12 @@ make_fixture() {
         "$fixture/shared/bootc-secure/ci" \
         "$fixture/.github/workflows"
 
-    for profile in cayo snow snowfield; do
+    for profile in floe snow snowfield; do
         mkdir -p "$fixture/mkosi.profiles/$profile"
         printf 'Include=%%D/shared/bootc-secure/mkosi.conf\n' >"$fixture/mkosi.profiles/$profile/mkosi.conf"
     done
-    mkdir -p "$fixture/mkosi.profiles/cayo-ab"
-    printf 'Include=%%D/shared/outformat/ab-root/mkosi.conf\n' >"$fixture/mkosi.profiles/cayo-ab/mkosi.conf"
+    mkdir -p "$fixture/mkosi.profiles/floe-ab"
+    printf 'Include=%%D/shared/outformat/ab-root/mkosi.conf\n' >"$fixture/mkosi.profiles/floe-ab/mkosi.conf"
 
     : >"$fixture/cosign.pub"
     : >"$fixture/shared/native-ab/keys/mok-2026.crt"
@@ -113,11 +113,11 @@ jobs:
             SNOSI_BOOTC_MOK_CERT="$SNOSI_BOOTC_MOK_CERT" \
             SNOSI_BOOTC_PCR_KEY="$SNOSI_BOOTC_PCR_KEY" \
             SNOSI_BOOTC_PCR_CERT="$SNOSI_BOOTC_PCR_CERT" \
-            ./shared/outformat/image/buildah-package.sh output/cayo localhost/cayo:version
+            ./shared/outformat/image/buildah-package.sh output/floe localhost/floe:version
       - name: Validate locally assembled secure artifact
         run: |
           sudo ./test/bootc-secure-artifact-test.sh \
-            "output/${{ matrix.profile }}" localhost/cayo:version mok.crt pcr.pub
+            "output/${{ matrix.profile }}" localhost/floe:version mok.crt pcr.pub
        - name: Remove protected bootc signing credentials
         if: always()
         run: sudo rm -rf /var/tmp/bootc-secure-credentials
@@ -204,8 +204,8 @@ assert_guard() {
 }
 
 unchanged() { :; }
-remove_secure_include() { rm "$1/mkosi.profiles/cayo/mkosi.conf"; }
-add_native_secure_include() { printf 'Include=%%D/shared/bootc-secure/mkosi.conf\n' >>"$1/mkosi.profiles/cayo-ab/mkosi.conf"; }
+remove_secure_include() { rm "$1/mkosi.profiles/floe/mkosi.conf"; }
+add_native_secure_include() { printf 'Include=%%D/shared/bootc-secure/mkosi.conf\n' >>"$1/mkosi.profiles/floe-ab/mkosi.conf"; }
 remove_required_file() { rm "$2/$1"; }
 remove_environment() { perl -0pi -e 's/    environment: native-build\n//' "$1/.github/workflows/build-images.yml"; }
 permit_pull_request() { perl -0pi -e "s/github\.event_name != 'pull_request'/github.event_name == 'pull_request'/" "$1/.github/workflows/build-images.yml"; }

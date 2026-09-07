@@ -18,7 +18,7 @@
 # the build rather than warning.
 #
 # Scope: wired only into sysexts whose BaseTrees is %O/gui-base. Server
-# sysexts (incus with its qemu GUI libs, needed on cayo) legitimately carry
+# sysexts (incus with its qemu GUI libs, needed on floe) legitimately carry
 # some of these families and must NOT get this check.
 set -euo pipefail
 

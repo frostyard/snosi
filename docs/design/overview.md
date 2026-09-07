@@ -66,12 +66,12 @@ Snowfield hardware gates remain blocked.
 
 | Image | Kernel | Extras |
 |-------|--------|--------|
-| **cayo** | backports | Headless server, podman |
+| **floe** | backports | Headless server, podman |
 
 ### Native A/B Prototype
 
 The frozen naming/path/policy contract for the eventual production native A/B
-products (`cayo-ab`, `snow-ab`, `snowfield-ab` — channel `<ImageId>-ab`,
+products (`floe-ab`, `snow-ab`, `snowfield-ab` — channel `<ImageId>-ab`,
 14-digit `YYYYMMDDHHMMSS` versions, `<ImageId>_<version>_r`/`_v` GPT labels,
 `os/native/v1/<product>/x86-64/` R2 paths, sysupdate component topology, key
 custody/rotation, capacity, and retention policy) lives in
@@ -86,7 +86,7 @@ is product-neutral: disk/boot mechanics only (`Format=disk`,
 `SplitArtifacts=`, `Bootable=yes`, `Initrds=`/`KernelModulesInitrd=no`,
 `KernelCommandLine=`, the shared `tree/`, the finalize script). It carries
 NO `RepartDirectories=`, NO `*.transfer` files, and NO `KernelModules=`
-filter. `shared/native-ab/channels/{cayo,snow,snowfield}/` each carry
+filter. `shared/native-ab/channels/{floe,snow,snowfield}/` each carry
 the product-specific half: `RepartDirectories=` (6 repart defs,
 `<ImageId>_%A_r`/`_v` labels, mkosi-internal `SplitName=`, 1 GiB ESP,
 root/verity sizes validated against real native builds for all three
@@ -95,13 +95,13 @@ products as of Task 3.2 — see
 transfers, frozen `os/native/v1/<product>/x86-64/` URL, `<ImageId>-ab_`
 channel-prefixed `Source MatchPattern=`, `<ImageId>_`-based `Target
 MatchPattern=` labels). A profile `Include=`s BOTH the generic fragment and
-exactly one channel; `cayo-ab-raw` and the production `cayo-ab` both include
-the `cayo` channel, `snow-ab` includes `snow`, and `snowfield-ab` includes
+exactly one channel; `floe-ab-raw` and the production `floe-ab` both include
+the `floe` channel, `snow-ab` includes `snow`, and `snowfield-ab` includes
 `snowfield` (Task 3.2 gave every channel a real consuming profile). Release
 channels ship the
 complete packaged kernel module/firmware set (`docs/native-ab-contracts.md`
 §9) — the virtio-only dev filter that used to live in the shared fragment
-now lives only in `mkosi.profiles/cayo-ab-raw/mkosi.conf`, the one dev
+now lives only in `mkosi.profiles/floe-ab-raw/mkosi.conf`, the one dev
 fixture permitted to carry it; the three production profiles build with the full set.
 Measured against the former `cayo-ab-secure` spike (Phase 3) and reconfirmed
 against the real `cayo-ab` production build (Task 3.2, 999364 vs 999267
@@ -109,9 +109,9 @@ erofs blocks — a small difference from profile-identity/manifest metadata,
 not payload): the full module set barely changes UKI
 size (dracut's own non-hostonly selection logic bounds it, not the
 mkosi-level module filter) but grows `/usr/lib/firmware`
-from 21 MiB to 1019 MiB, which left cayo's then-frozen 4 GiB root slot
+from 21 MiB to 1019 MiB, which left Cayo's then-frozen 4 GiB root slot
 under 5% headroom instead of the required 20% (spare/total-slot
-definition, §12). Fixed in a Phase 3 follow-up: cayo's root slot is now
+definition, §12). Fixed in a Phase 3 follow-up: Cayo's root slot became
 5 GiB (~23.8% headroom against the same measured content), with the
 verity slot scaled in step from 128 MiB to 256 MiB per the verity:root
 ratio rule. `snow-ab` (~5.29 GiB content, ~33.8% headroom against 8 GiB)
@@ -140,12 +140,12 @@ harmless for `cayo-ab`/`snow-ab` by rebuilding both with the fix.
 `shared/native-ab/publish/prepare-native-publication.sh` turns one built
 native profile's mkosi outputs into the frozen `docs/native-ab-contracts.md`
 §4 public names. It takes an mkosi output directory and a profile's
-`Output=` value (e.g. `cayo-ab`), reads product (`ImageId`) and version from
+`Output=` value (e.g. `floe-ab`), reads product (`ImageId`) and version from
 that profile's own JSON manifest (`.config.name`/`.config.version` — version
 validated against the frozen `^[0-9]{14}$` grammar), and validates the given
 `Output=` value equals `<product>-ab` — a real safety property, not a
 convention: it is the mechanism that refuses to "publish" the never-shipped
-`cayo-ab-raw` dev fixture, independent of the publication guard's static
+`floe-ab-raw` dev fixture, independent of the publication guard's static
 config-marker check. Root/root-verity PARTUUIDs come from `sfdisk --json` on
 the built disk image, located by GPT partition name (`<product>_<version>_r`
 /`_v`, §3) — this needs neither a loop device nor root, confirmed against a
@@ -172,7 +172,7 @@ exercises the naming/derivation logic against a synthetic fixture (`truncate`
 `test/native-ab-contracts-test.sh` also runs it so a naming drift fails that
 same static gate. `test/native-ab-update-test.sh` and
 `test/native-ab-components-test.sh` accept `PROFILE`/`IMAGE_ID`/`CHANNEL`
-env overrides (default `cayo-ab-raw`/`cayo`/`cayo-ab`, byte-equivalent to
+env overrides (default `floe-ab-raw`/`floe`/`floe-ab`, byte-equivalent to
 their prior hardcoded behavior); `native-ab-components-test.sh`'s N+1 OS
 update fixture is now generated by running the profile's build output
 (symlinked under its `$CHANNEL` name, since the publisher's own name-equals-
@@ -276,22 +276,22 @@ independent of a specific expected version.
 
 
 `test/native-ab-publication-test.sh` is the full local end-to-end rehearsal:
-two real `cayo-ab-raw` builds (N, N+1) published under the real `cayo-ab`
+two real `floe-ab-raw` builds (N, N+1) published under the real `floe-ab`
 channel name (the by-now-established "stage build outputs under
 `$CHANNEL`-named symlinks" trick, since `prepare-native-publication.sh`
 validates its channel *argument*, not which mkosi profile physically
 produced the bytes — see `test/native-ab-updateux-test.sh`'s header for the
-same pattern). Deliberately uses `cayo-ab-raw` (no Secure Boot/MOK) rather
-than the secure `cayo-ab` profile: `shared/native-ab/keys/README.md`
+same pattern). Deliberately uses `floe-ab-raw` (no Secure Boot/MOK) rather
+than the secure `floe-ab` profile: `shared/native-ab/keys/README.md`
 documents that the update-signing pubring ships at `/usr/lib/systemd/import-pubring.gpg`
 on **every** native A/B image via the shared `shared/outformat/ab-root/
-mkosi.conf` fragment, `cayo-ab-raw` included, so booting it and never
+mkosi.conf` fragment, `floe-ab-raw` included, so booting it and never
 touching `/etc/systemd/import-pubring.gpg` exercises the
 "verify a promotion signature against the stock shipped pubring" trust path
 without paying for OVMF Secure Boot + MOK enrollment (orthogonal Phase 6
 machinery). CAVEAT (learned from the 2026-07-17 `.pgp` outage, commit
 91718d7): this is NOT byte-identical to a production profile's trust path —
-`cayo-ab-raw` runs Trixie's systemd 257, whose vendor keyring is the OLD
+`floe-ab-raw` runs Trixie's systemd 257, whose vendor keyring is the OLD
 `/usr/lib/systemd/import-pubring.gpg` name, while the production profiles'
 Forky systemd 261 reads `/usr/lib/systemd/import-pubring.pgp` with no
 `/usr` `.gpg` fallback. This leg therefore proves the promotion-signature
@@ -333,7 +333,7 @@ caller -- every real step is a call into one of the scripts above,
 artifact-test.sh` / `test/snowfield-artifact-test.sh`; no build/publish
 logic lives directly in the YAML. Jobs: `pin-check` (governance gate, see
 below) -> `prepare` (assigns one version/revision shared by every product
-this run, mirroring `build-images.yml`'s own version tag) -> `build-cayo` /
+this run, mirroring `build-images.yml`'s own version tag) -> `build-floe` /
 `build-snow` / `build-snowfield` (independent jobs, not a matrix, each
 gated on the `native-build` protected GitHub environment which holds the
 Secure Boot/MOK and PCR signing private keys as environment secrets --
@@ -341,7 +341,7 @@ written to `mkosi.key`/`mkosi.crt`/`.snosi-private/pcr-signing.{key,crt}`
 immediately before the one `mkosi build` step that needs them, removed by
 an `if: always()` cleanup step right after) -> `test-public-origin` (one
 matrix job, `verify-remote.sh` against the REAL public URL, not the write
-path) -> `promote-cayo` / `promote-snow` / `promote-snowfield` (independent
+path) -> `promote-floe` / `promote-snow` / `promote-snowfield` (independent
 jobs gated on the `native-promotion` protected environment, which holds the
 OpenPGP update-signing key; runs `promote.sh`) -> `release-notes`
 (non-blocking). Only small pipeline records (`publication-info.json`,
@@ -394,13 +394,13 @@ are dry-runnable with no network/build required for the no-checkout-yet
 case; `pin-check` runs `check-mkosi-pin.sh` before any build job starts,
 and each `build-*` job re-runs it right after its own bootstrap step.
 
-`mkosi.profiles/cayo-ab-raw` (renamed from `cayo-ab` in Phase 1; the name
-`cayo-ab` now names the production secure posture — see below — and
-`check-native-publication-guard.sh` hard-fails if `cayo-ab-raw` ever grows a
+`mkosi.profiles/floe-ab-raw` is the permanent raw development fixture. The name
+`floe-ab` identifies the production secure posture, and
+`check-native-publication-guard.sh` hard-fails if `floe-ab-raw` ever grows a
 publication marker) is an isolated, non-production GPT disk prototype. It
 uses systemd-boot UKIs, two fixed EROFS root slots with paired dm-verity slots,
 a persistent ext4 `/var`, and an overlay `/etc` backed by `/var`. The full raw
-disk is the installer artifact; `test/cayo-ab-install-spike.sh` performs a
+disk is the installer artifact; `test/floe-ab-install-spike.sh` performs a
 checksum- and layout-guarded destructive write. The file-target option is only
 for QEMU. Do not remove bootc or treat this as supported until signed manifests,
 per-install identity, `/var` growth, rollback, and failure-injection tests pass.
@@ -445,9 +445,9 @@ boots a one-shot rollback, proves alternating physical slot reuse, and corrupts
 unblessed N+3 so systemd-boot exhausts all three tries and falls back to N+2.
 
 The shared `shared/native-ab-secure/mkosi.conf` fragment (`Include=`d by the
-three production profiles `cayo-ab`, `snow-ab`, `snowfield-ab`; the former
-standalone `cayo-ab-secure` spike profile that originated this content was
-retired in Task 3.2) answers the security-design questions
+three production profiles `floe-ab`, `snow-ab`, `snowfield-ab`; the former
+standalone `cayo-ab-secure` spike profile that originated this content was retired in
+Task 3.2) answers the security-design questions
 without changing the baseline test image. Its chain is firmware Microsoft db ->
 Debian signed shim -> MOK-signed systemd-boot -> MOK-signed snosi UKI. Debian shim
 does not trust a locally signed UKI automatically, so the installer schedules
@@ -460,7 +460,7 @@ enforces the shim/MOK trust chain. A separately stored recovery passphrase
 remains mandatory for TPM clear or motherboard replacement. The installer
 encrypts `/var` only after writing the generic raw image and growing its final
 partition, preventing cloned volume keys and LUKS UUIDs. The initrd explicitly
-unlocks LUKS `/var`, then falls back to raw ext4 for `cayo-ab-raw`. Static config and
+unlocks LUKS `/var`, then falls back to raw ext4 for `floe-ab-raw`. Static config and
 real LUKS2 conversion have passed. A clean secure build also proved that the ESP
 carries Debian-signed shim, MokManager, and MOK-signed systemd-boot and that the
 generated MOK-signed UKI contains the
@@ -540,23 +540,23 @@ fresh-key TPM token booted without those failures.
 
 The shared `shared/native-ab-secure/mkosi.conf` fragment upgrades the complete exact-version systemd family to Forky
 261+ using its own `SandboxTrees=` APT source pinned at priority 50. The
-base, `cayo-ab-raw`, and the normal bootc profiles remain on Trixie; only the
+base, `floe-ab-raw`, and the normal bootc profiles remain on Trixie; only the
 three production native profiles that `Include=` the fragment run Forky.
 
 ### Native `/var` Factory State (phase 2)
 
 Every product's disk image ships with an EMPTY `var` partition, always —
 this isn't installer behavior, it's baked in at build time. Confirmed by
-reading `shared/native-ab/channels/cayo/mkosi.repart/11-root.conf` (Phase 3
+reading `shared/native-ab/channels/floe/mkosi.repart/11-root.conf` (Phase 3
 moved the per-product repart defs out of the shared `ab-root` fragment; see
 "Generic output + per-product channels" below)
 (`ExcludeFilesTarget=/var/`, so the root erofs partition never gets any
 `/var` content copied in) and `30-var.conf` (no `CopyFiles=` at all, so the
 `var` ext4 partition is formatted and left empty). Mounting a built
-`cayo-ab-raw` image and checking directly: the root partition's `/var/`
+`floe-ab-raw` image and checking directly: the root partition's `/var/`
 directory exists but is genuinely 0 entries. So the question "what happens
 to everything a package build wrote under `/var`" isn't native-specific —
-it's true of `cayo`/`snow`/`snowfield` bootc images too, they just don't
+it's true of `floe`/`snow`/`snowfield` bootc images too, they just don't
 notice because ostree's first-deployment `/var` seed (a one-time copy on
 FIRST bootc install, never repeated on updates) papers over it. Native has
 no such seed at all: the installer's `mkfs` on the `var` partition is
@@ -570,9 +570,9 @@ with no `.chroot` suffix — it deliberately runs OUTSIDE the chroot, on the
 host, so it can just `find $BUILDROOT/var` directly instead of needing
 `mkosi-chroot` machinery for what's fundamentally a host-side inventory
 task. It's wired as the LAST `FinalizeScripts=` entry in `shared/
-composition/cayo/mkosi.conf` and `shared/composition/snow/mkosi.conf` —
-those fragments are shared between bootc profiles (`cayo`, `snow`,
-`snowfield`) and native ones (`cayo-ab-raw`, `cayo-ab`, `snow-ab`,
+composition/floe/mkosi.conf` and `shared/composition/snow/mkosi.conf` —
+those fragments are shared between bootc profiles (`floe`, `snow`,
+`snowfield`) and native ones (`floe-ab-raw`, `floe-ab`, `snow-ab`,
 `snowfield-ab`), so the SAME
 audit and the SAME per-product map run for both output formats. This
 mattered concretely for one thing: the dpkg database. Native relocates it
@@ -585,7 +585,7 @@ build ("stale") — two separate globs (one for the symlink shape, one for
 the real-directory shape) would make whichever shape didn't occur in a
 given build spuriously flag the other glob as stale. The same dual-shape
 trick shows up a few more times in the actual maps (`shared/composition/
-cayo/var-outcomes.txt`, `shared/composition/snow/var-outcomes.txt`) for
+floe/var-outcomes.txt`, `shared/composition/snow/var-outcomes.txt`) for
 paths that are sometimes an empty tmpfiles-managed directory and sometimes
 hold real generated content (GNOME's `lib/xkb`/`lib/xfonts`, dpkg's own
 `lib/AccountsService/users`).
@@ -606,7 +606,7 @@ newline after each file before concatenating; (2) once a map has real
 content, the FAST way to validate a change without a 20-40 min real build
 is a synthetic scratch buildroot (`mkdir` + `touch` every path from a
 saved real unclassified-paths dump) and invoking the script directly:
-`BUILDROOT=<scratch> SRCDIR=<repo> IMAGE_ID=<cayo|snow> bash
+`BUILDROOT=<scratch> SRCDIR=<repo> IMAGE_ID=<floe|snow> bash
 shared/composition/var-audit.finalize`. (A new product's map is populated
 exactly this way: derive it from the closest existing product's map minus
 the packages the new one does not install, then correct it against the
@@ -660,7 +660,7 @@ The matching native-only tmpfiles rule is `shared/outformat/ab-root/tree/
 usr/lib/tmpfiles.d/00-snosi-aspell.conf`; its `00-` prefix is load-bearing
 exactly like the dpkg one, this time against the base image's own
 `aspell.conf` rule (`d /var/lib/aspell`). The relocation runs even where
-the directory is EMPTY — `cayo` ships no aspell/aspell-en (snow-only
+the directory is EMPTY — `floe` ships no aspell/aspell-en (snow-only
 packages), only the bare tmpfiles-created directory — so every native
 product has one shape, the shared tmpfiles symlink never dangles, and
 each per-product map classifies one shape per output format with a single
@@ -681,8 +681,8 @@ real `cayo-ab-raw` build for the first time: `shared/manifest/postoutput/
 mkosi.postoutput` searched for the built manifest by
 `-name "$IMAGE_ID.manifest"`, but mkosi actually names it after `Output=`
 (confirmed: "Saving manifest cayo-ab-raw.manifest" in the build log).
-Native profiles deliberately keep `ImageId=cayo` (branding, sysext
-compatibility) while setting a distinct `Output=cayo-ab-raw` (channel
+Native profiles then kept `ImageId=cayo` (branding, sysext compatibility)
+while setting a distinct `Output=cayo-ab-raw` (channel
 naming) — see "Native A/B Prototype" above — so this always failed for
 `cayo-ab-raw` and never for bootc `cayo`/`snow`/`snowfield`, where
 `Output==ImageId`. It silently aborted the ENTIRE build before any output
@@ -765,7 +765,7 @@ fail-closed cases.
 ### Firn installer ISO
 
 `mkosi.profiles/firn-installer/` (Include=`shared/firn-installer/mkosi.conf`)
-is a payload-free network-installer image: no Snow/Snowfield/Cayo content, no
+is a payload-free network-installer image: no Snow/Snowfield/Floe content, no
 `Dependencies=`, `BaseTrees=` reset to empty (cancels the root `mkosi.conf`'s
 `BaseTrees=%O/base` -- this profile must never inherit the shared bootc/
 sysext base). `Format=directory`, `Bootable=no`: mkosi's own UKI/systemd-boot/
@@ -851,7 +851,7 @@ profile) in place of the trusted GRUB, is rejected by shim itself
 ("Verification failed: (0x1A) Security Violation") -- proving the positive
 boot is a genuine Secure Boot enforcement result, not an accidentally-
 permissive OVMF configuration. `check-native-publication-guard.sh`'s
-production-name matching (`cayo-ab`/`snow-ab`/`snowfield-ab` only) already
+production-name matching (`floe-ab`/`snow-ab`/`snowfield-ab` only) already
 excludes `firn-installer` with no code change needed.
 
 Two carry-over fixes from the phase 8.1 review, both in
@@ -872,13 +872,13 @@ unrelated path ending in that literal string. The profile also gained a
 firmware package block (`firmware-linux-free`/`-nonfree`/`-linux` plus the
 same per-vendor `firmware-*` set `shared/kernel/stock/mkosi.conf` ships,
 plus network-adapter extras from `shared/packages/snow`/`shared/packages/
-cayo`) so the installer can actually reach a network on real hardware, not
+floe`) so the installer can actually reach a network on real hardware, not
 just virtio-only QEMU fixtures.
 
 `test/native-installer-e2e-test.sh` is the higher-level Phase 8 exit proof: where
 `native-installer-iso-test.sh` validates the boot chain structurally and via
 positive/negative Secure Boot boots, the e2e test drives a REAL install of both
-`cayo-ab` and `snow-ab` — build+publish through the actual publication pipeline to
+`floe-ab` and `snow-ab` — build+publish through the actual publication pipeline to
 a local origin, boot the fresh ISO on a virgin never-enrolled `OVMF_VARS_4M.ms.fd`
 + persistent swtpm, run a non-interactive encrypted-`/var` install (recovery key +
 TPM enrollment + MOK password file), prove the pre-enrollment Security Violation,
@@ -887,7 +887,7 @@ varstore, then boot the installed system fully enforced and fully unattended and
 assert SB enforced, kernel lockdown, unattended TPM `/var` unlock, the `/etc`
 overlay, `IMAGE_ID`/`IMAGE_VERSION`, `install-info.json`, clean
 `snosi-update-status`, and no failed units. It also de-risks commit 99f4921's
-own-boot-medium refusal in the real initramfs (cayo-ab step 3). First green run
+own-boot-medium refusal in the real initramfs (`cayo-ab` step 3). First green run
 75/75 (2026-07-15); see testing.md "Phase 8 (ISO install end-to-end)" for the
 full step breakdown and the real product bugs it surfaced.
 
@@ -898,7 +898,7 @@ by Firn. They remain here only as historical rationale for still-named legacy
 tests; do not extend these paths as current installer architecture.
 
 `shared/native-installer/tree/usr/libexec/snosi-install` replaces the
-phase-8.1 placeholder (`test/cayo-ab-install-spike.sh` shipped verbatim at
+phase-8.1 placeholder (`test/floe-ab-install-spike.sh` shipped verbatim at
 `/usr/libexec/snosi-install-spike`) with the full 21-step flow from the
 plan's "First-Round CLI Installer". The spike test script itself is
 UNCHANGED (still shipped at its own path, still what every existing QEMU
@@ -1085,9 +1085,9 @@ mkosi.images/               # Image definitions (base + 23 sysexts)
   docker/                   # Each sysext: mkosi.conf + optional extra/scripts
   tailscale/
   ...
-mkosi.profiles/             # Transport+kernel selector profiles (7: cayo, snow,
-  snow/                     # snowfield, cayo-ab-raw, cayo-ab, snow-ab,
-  cayo/                     # snowfield-ab). Each profile: mkosi.conf +
+mkosi.profiles/             # Transport+kernel selector profiles (7: floe, snow,
+  snow/                     # snowfield, floe-ab-raw, floe-ab, snow-ab,
+  floe/                     # snowfield-ab). Each profile: mkosi.conf +
   ...                       # (native only) its own transport-specific extras.
 shared/                     # Reusable fragments composed via Include=
   download/                 # Verified download metadata (sysext/image checksums, package version sentinels) + helpers
@@ -1095,20 +1095,20 @@ shared/                     # Reusable fragments composed via Include=
   packages/                 # Package set configs (desktop/server bases, bootc runtime deps)
   composition/              # Per-product payload fragments (tree/scripts/packages),
                              # shared verbatim by every transport for that product
-    cayo/                   # ExtraTrees + postinst/build/finalize/postoutput scripts + Include packages/cayo
+    floe/                   # ExtraTrees + postinst/build/finalize/postoutput scripts + Include packages/floe
     snow/                   # Same pattern with snow's extra BuildScripts (hotedge, logomenu, bazaar, surface-cert)
   scripts/                  # Shared scripts (common-postinst.sh sourced by all profiles, brew.chroot build script)
   outformat/image/          # bootc OCI output format, buildah/chunkah packaging
   outformat/ab-root/        # Native A/B GENERIC disk output format (product-neutral
                              # disk/boot mechanics only -- no RepartDirectories=,
                              # no *.transfer, no KernelModules=; Phase 3)
-  native-ab/channels/       # Per-product native A/B fragments (cayo, snow, snowfield):
+  native-ab/channels/       # Per-product native A/B fragments (floe, snow, snowfield):
                              # RepartDirectories= (6 repart defs, ImageId labels,
                              # 1G ESP) + the 3 OS sysupdate.d transfers (Phase 3)
   sysext/postoutput/        # Shared sysext versioning and manifest logic
   manifest/postoutput/      # Image manifest processing
   snow/                     # Snow desktop: build scripts + tree overlay (consumed by shared/composition/snow)
-  cayo/                     # Cayo server: postinstall scripts + tree overlay (consumed by shared/composition/cayo)
+  floe/                     # Floe server: postinstall scripts + tree overlay (consumed by shared/composition/floe)
 mkosi.sandbox/etc/apt/       # External APT repo configs + GPG keyrings
 mkosi.tools.sandbox/etc/apt/ # APT config for mkosi's ToolsTree=default bootstrap
 .github/workflows/          # CI/CD (build, publish, dependency checks, testing)
@@ -1143,14 +1143,14 @@ shared/composition/snow/mkosi.conf                  # snow payload, shared by ev
 └── Include: shared/packages/snow/mkosi.conf        # Package set
 ```
 
-`mkosi.profiles/cayo-ab-raw` and `mkosi.profiles/cayo-ab` (the native A/B
-dev fixture and its production successor) `Include=shared/composition/cayo/mkosi.conf` the same way the bootc
-`cayo` profile does, instead of restating ExtraTrees/scripts/packages — this is
-what makes the cayo brew BuildScript and manifest PostOutputScript apply to
+`mkosi.profiles/floe-ab-raw` and `mkosi.profiles/floe-ab` (the native A/B
+dev fixture and its production successor) `Include=shared/composition/floe/mkosi.conf` the same way the bootc
+`floe` profile does, instead of restating ExtraTrees/scripts/packages — this is
+what makes the floe brew BuildScript and manifest PostOutputScript apply to
 every transport instead of only bootc. They swap `shared/packages/bootc/mkosi.conf`
 for nothing (native images never ship bootc) and `shared/outformat/image/mkosi.conf`
 for TWO fragments: `shared/outformat/ab-root/mkosi.conf` (generic disk/boot
-mechanics) AND `shared/native-ab/channels/cayo/mkosi.conf` (cayo's
+mechanics) AND `shared/native-ab/channels/floe/mkosi.conf` (floe's
 `RepartDirectories=` + OS transfers — Phase 3 split; see "Generic output +
 per-product channels" in CLAUDE.md). Because mkosi accumulates list settings
 (`Packages=`, `FinalizeScripts=`, `ExtraTrees=`, `RepartDirectories=`, ...) in
@@ -1159,7 +1159,7 @@ order of `Include=` lines in a profile is significant whenever more than one
 fragment sets the same key — verify any composition change with a `mkosi
 cat-config`/`summary` diff, not just a source read.
 
-The app-bundling "loaded" variants (snowloaded, snowfieldloaded, cayoloaded) were retired in 2026-07: every app they baked in (Edge, VS Code, Bitwarden, Azure VPN, Incus, Docker) is delivered as a sysext instead. The shared `packages/{edge,vscode,bitwarden,azurevpn}` fragments now serve only the sysext builds.
+The app-bundling "loaded" variants for Snow, Snowfield, and the server were retired in 2026-07: every app they baked in (Edge, VS Code, Bitwarden, Azure VPN, Incus, Docker) is delivered as a sysext instead. The shared `packages/{edge,vscode,bitwarden,azurevpn}` fragments now serve only the sysext builds.
 
 ### Script Pipeline
 
@@ -1262,7 +1262,7 @@ candidates):
    changes nothing (no graphical device ever exists).
 2. Native initrds omit the plymouth dracut module (`omit_dracutmodules+="
    plymouth "` in the ab-root `30-bootc-standard.conf` override; no-op on
-   cayo which never installs plymouth): initrd plymouthd loses a race —
+   floe which never installs plymouth): initrd plymouthd loses a race —
    virtio-gpu's card0 emits a premature udev `change` event before its
    devnode exists, plymouth's open gets ENOENT and it permanently falls
    back to the text splash (the later `add` event is never retried), and
@@ -1302,7 +1302,7 @@ candidates):
    (6.19.8-surface-3, snowfield) sets `DEFERRED_TAKEOVER=y`, never binds
    fbcon during boot (`/sys/class/vtconsole` holds only vtcon0 dummy at
    multi-user) and its probe spans 21 ms, so snowfield never enters the
-   window; cayo installs no plymouth (`Packages=plymouth` lives only in
+   window; floe installs no plymouth (`Packages=plymouth` lives only in
    `shared/packages/snow/`). Symptom when it loses the race: `plymouth-start.service`
    `killed, signal=SEGV` → `is-system-running` = `degraded` →
    `test-public-origin`'s boot smoke gate fails → no `native-verified-snow`
@@ -1318,7 +1318,7 @@ harness's console pump needs for the first-boot LUKS recovery passphrase.
 `sysinit.target.wants` link, ridden into the native initrd via
 `install_items` in the same dracut conf) runs `systemd-tty-ask-password-agent
 --watch --console=/dev/ttyS0`, Condition-gated on `console=tty0` +
-`console=ttyS0` + `/dev/ttyS0` (desktop natives only; cayo unchanged).
+`console=ttyS0` + `/dev/ttyS0` (desktop natives only; floe unchanged).
 Deliberately NO plymouth condition — plymouth never manages serial on
 these images. Prompts appear on the VT (visible on hardware, an
 improvement) AND serial (pump-compatible raw-agent shape). Kernel printk
@@ -1331,7 +1331,7 @@ passphrase typed through the new serial agent, TPM auto-unlock, GDM,
 signed update hop); QMP screendump sequence on the harness-exact
 single-GPU config (flower + spinner at ~14s, GDM at 30s, no crash);
 bootc snow rootfs + initrd carry the theme. Static guards at the end of
-`test/native-ab-static-test.sh` (splash kargs, channel console=tty0, cayo
+`test/native-ab-static-test.sh` (splash kargs, channel console=tty0, floe
 exclusion, agent units, initrd omit, no-skeleton).
 
 **Known cosmetic follow-up:** without `quiet`, kernel messages are visible
@@ -1420,7 +1420,7 @@ just                    # List targets
 just sysexts            # Build base + all 23 sysexts
 just snow               # Build snow desktop
 just snowfield          # Build snowfield (Surface)
-just cayo               # Build cayo server
+just floe               # Build floe server
 just clean              # Remove build artifacts
 just test-install       # Run bootc install test
 just run-qemu           # Run image in QEMU
@@ -1433,7 +1433,7 @@ All `just` targets run `mkosi clean` first (clean build every time).
 | Variable | Where Set | Purpose |
 |----------|-----------|---------|
 | `KEYPACKAGE` | Sysext mkosi.conf `[Output]` | Package name for sysext version extraction |
-| `IMAGE_ID` | Profile mkosi.conf | Image identifier (snow, cayo, etc.) |
+| `IMAGE_ID` | Profile mkosi.conf | Image identifier (snow, floe, etc.) |
 | `IMAGE_VERSION` | mkosi.version (timestamp) | Build version (YYYYMMDDHHMMSS) |
 | `BUILD_ID` | CI environment | Injected into os-release |
 | `BREW_TREE` | Profile mkosi.conf | Tree path for Homebrew tarball output (e.g., `shared/snow/tree`) |
@@ -1458,7 +1458,7 @@ Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GP
 - `compare-images.sh` — diffoscope-style comparison of two OCI images (extracts layers, handles whiteouts, reports file-level differences); dev tool, not used by CI
 - `packagediff.sh` — diffs the build manifest against the running system's package list (`/usr/share/frostyard/<id>.packages.txt`)
 - `check-duplicate-packages.sh` / `check-profile-dependencies.sh` — config sanity checks, run by CI
-- `check-native-publication-guard.sh` — static gate for `docs/native-ab-contracts.md` §15: requires any profile literally named `cayo-ab`/`snow-ab`/`snowfield-ab` to carry shim/Secure Boot/PCR-signing/NvPCR/pubring markers and no `KernelModules=` filter, and hard-fails `cayo-ab-raw` if it ever gains a publication marker; run by CI. Since Phase 3 all three production profiles exist and pass the guard for real; `cayo-ab-raw` continues to pass the "must stay unpublishable" side of the check
+- `check-native-publication-guard.sh` — static gate for `docs/native-ab-contracts.md` §15: requires any profile literally named `floe-ab`/`snow-ab`/`snowfield-ab` to carry shim/Secure Boot/PCR-signing/NvPCR/pubring markers and no `KernelModules=` filter, and hard-fails `floe-ab-raw` if it ever gains a publication marker; run by CI. Since Phase 3 all three production profiles exist and pass the guard for real; `floe-ab-raw` continues to pass the "must stay unpublishable" side of the check
 
 ## CI/CD
 

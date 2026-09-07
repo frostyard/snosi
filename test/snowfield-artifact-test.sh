@@ -19,7 +19,7 @@
 #     (surface_aggregator, intel-lpss, 8250_dw, the surface-hid chain).
 #
 # A NEW script rather than growing native-ab-secure-artifact-test.sh: these
-# checks are meaningless for cayo-ab/snow-ab (backports kernel), and an
+# checks are meaningless for floe-ab/snow-ab (backports kernel), and an
 # if-branch gated on OUTPUT_NAME would clutter a script that is otherwise
 # fully profile-neutral.
 #

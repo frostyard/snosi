@@ -44,7 +44,7 @@ bootc-update-test.sh	unwired	-
 bootstrap-mkosi-test.sh	unwired	-
 brew-installer-retry-test.sh	unwired	-
 build-workflow-permissions-test.py	ci	validate.yml
-cayo-ab-install-spike.sh	nested	native-ab-secure-boot-test.sh
+floe-ab-install-spike.sh	nested	native-ab-secure-boot-test.sh
 check-dependencies-workflow-token-test.sh	ci	validate.yml
 check-mkosi-pin-test.sh	unwired	-
 check-profile-dependencies-local-mkosi-test.sh	ci	validate.yml

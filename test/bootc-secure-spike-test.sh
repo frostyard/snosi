@@ -612,7 +612,7 @@ validate_uki() { # rootfs uki kernel initrd pcr-public-key expected-digest
 
 run_real_proof() {
     local kernel_info version kernel initrd installed_uki digest_before digest_after
-    ROOTFS=${BOOTC_SECURE_ROOTFS:-$ROOT_DIR/output/cayo}
+    ROOTFS=${BOOTC_SECURE_ROOTFS:-$ROOT_DIR/output/floe}
     require_prerequisites
     PCR_PUBLIC=$(mktemp)
     openssl pkey -in "$BOOTC_SECURE_PCR_KEY" -pubout -out "$PCR_PUBLIC" >/dev/null 2>&1

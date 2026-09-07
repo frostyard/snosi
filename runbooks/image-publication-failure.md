@@ -13,7 +13,7 @@ tag", or `latest` does not reflect an expected new release.
 
 ## User impact
 
-Consumers pulling `ghcr.io/frostyard/<profile>:latest` (or `snow`, `cayo`,
+Consumers pulling `ghcr.io/frostyard/<profile>:latest` (or `snow`, `floe`,
 `snowfield` images) either get a stale image or, if the failure is upstream
 of promotion, no change at all. **No consumer can ever receive an unsigned
 or unverified image under `latest`** — that is the invariant this pipeline
@@ -88,7 +88,7 @@ listing as a fallback; that reintroduces the original incident class.
 ## Step 5 — Escalate / close out
 
 - If root cause is unclear after Steps 1–4, or the guard (Step 2) is
-  green but the failure recurs across profiles (`cayo`, `snow`,
+  green but the failure recurs across profiles (`floe`, `snow`,
   `snowfield`), open an incident using
   [.github/ISSUE_TEMPLATE/incident_report.md](../.github/ISSUE_TEMPLATE/incident_report.md).
 - Once resolved, write up a postmortem using

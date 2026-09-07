@@ -32,7 +32,7 @@
 # (docs/design/sysexts.md), so stripping loses nothing.
 #
 # GdkPixbuf's loaders.cache is also a singleton, but base-built sysexts cannot
-# simply drop it: cayo has no graphical stack, so an incus/dev/Paseo sysext
+# simply drop it: floe has no graphical stack, so an incus/dev/Paseo sysext
 # that introduces GdkPixbuf must bring the cache needed by its own loaders.
 # Such a cache also shadows Snow's richer base cache for the whole merged
 # /usr. At minimum it MUST contain the SVG loader GNOME's Adwaita icons need.

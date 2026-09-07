@@ -11,17 +11,17 @@
 #
 # Scaffolding choice (brief: "secure-boot harness scaffolding or the lighter
 # updateux scaffolding -- your choice, document it"): this test builds
-# `cayo-ab-raw` (unsigned, no Secure Boot/MOK), NOT `cayo-ab`. It uses the
+# `floe-ab-raw` (unsigned, no Secure Boot/MOK), NOT `floe-ab`. It uses the
 # same "publish under the channel name" trick already established by
 # test/native-ab-updateux-test.sh and test/native-ab-components-test.sh:
 # prepare-native-publication.sh's channel-name argument is validated
 # independently of which mkosi profile actually produced the bytes, so
-# cayo-ab-raw's split artifacts are staged under symlinks literally named
-# "cayo-ab.*" before being handed to it. This is deliberate and safe for
+# floe-ab-raw's split artifacts are staged under symlinks literally named
+# "floe-ab.*" before being handed to it. This is deliberate and safe for
 # THIS test's purpose: shared/native-ab/keys/README.md documents that the
 # DEV update-signing pubring ships at /usr/lib/systemd/import-pubring.gpg on
 # EVERY native A/B image via the shared shared/outformat/ab-root/mkosi.conf
-# fragment, cayo-ab-raw included -- so booting cayo-ab-raw and NEVER
+# fragment, floe-ab-raw included -- so booting floe-ab-raw and NEVER
 # touching /etc/systemd/import-pubring.gpg gives exactly the "verify against
 # the stock shipped pubring" trust path the brief requires, without paying
 # for OVMF Secure Boot + MOK enrollment (Phase 6 territory, orthogonal to
@@ -37,13 +37,13 @@
 # verify-remote.sh's mandatory range-GET check meaningless).
 #
 # Sequence (brief section B):
-#   1. Build cayo-ab-raw twice (N, N+1); prepare publication with --xz.
+#   1. Build floe-ab-raw twice (N, N+1); prepare publication with --xz.
 #   2. publish-candidate.sh -> local origin; served by the range HTTP server.
 #   3. verify-remote.sh: corrupt one candidate byte first (must fail
 #      closed), then a clean pass.
 #   4. promote.sh with the committed DEV key; assert signature-first
 #      ordering (nanosecond mtimes) and both no-store sidecars.
-#   5. QEMU: boot N directly (mkosi's cayo-ab-raw output is already a
+#   5. QEMU: boot N directly (mkosi's floe-ab-raw output is already a
 #      bootable GPT disk -- no bootc/podman install step for native
 #      images), point the guest's OS transfers at the local origin via the
 #      documented /etc/sysupdate.d override, do NOT touch the pubring.
@@ -61,9 +61,9 @@
 #
 # Usage: sudo ./test/native-ab-publication-test.sh
 # Env overrides: SKIP_BUILD=1 with BUILD_N_DIR/BUILD_N1_DIR to reuse
-# already-built cayo-ab-raw output dirs (each must contain
-# cayo-ab-raw.manifest, cayo-ab-raw.raw, cayo-ab-raw.efi,
-# cayo-ab-raw.cayo_@v.root.raw.raw, cayo-ab-raw.cayo_@v.root-verity.raw.raw)
+# already-built floe-ab-raw output dirs (each must contain
+# floe-ab-raw.manifest, floe-ab-raw.raw, floe-ab-raw.efi,
+# floe-ab-raw.floe_@v.root.raw.raw, floe-ab-raw.floe_@v.root-verity.raw.raw)
 # instead of building fresh (tens of minutes each).
 set -euo pipefail
 
@@ -78,8 +78,8 @@ PUBLISH_DIR="$ROOT_DIR/shared/native-ab/publish"
 : "${BUILD_N_DIR:=}"
 : "${BUILD_N1_DIR:=}"
 
-PROFILE=cayo-ab-raw
-IMAGE_ID=cayo
+PROFILE=floe-ab-raw
+IMAGE_ID=floe
 CHANNEL="${IMAGE_ID}-ab"
 SIGNING_KEY="$ROOT_DIR/.snosi-private/os-update-signing.key"
 PUBRING="$ROOT_DIR/shared/native-ab/keys/import-pubring.gpg"

@@ -35,7 +35,7 @@ grep -Eq '^[[:space:]]*echo tpm2-tss' "$module" \
 tpm_confs=(
     "mkosi.images/base/mkosi.extra/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
     "shared/snow/tree/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
-    "shared/cayo/tree/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
+    "shared/floe/tree/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
 )
 for conf in "${tpm_confs[@]}"; do
     path="$root/$conf"

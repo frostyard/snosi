@@ -3,10 +3,10 @@
 # Phase 5/6 QEMU validation: fully automated Secure Boot + TPM (+ desktop,
 # when the payload has one; + Surface module-trust, when the kernel is
 # Surface) validation for a native A/B product (default snow-ab; also
-# accepts cayo-ab and snowfield-ab). Step 5's
+# accepts floe-ab and snowfield-ab). Step 5's
 # desktop assertions (graphical.target, gdm.service, notify-send, the
 # hicolor icon-cache sysext fixture) are gated on HAS_DESKTOP, derived from
-# IMAGE_ID: snow and snowfield compose the GNOME desktop payload, cayo does
+# IMAGE_ID: snow and snowfield compose the GNOME desktop payload, floe does
 # not and skips Step 5 entirely -- see the HAS_DESKTOP derivation below and
 # docs/native-ab-contracts.md / CLAUDE.md's per-profile package-set mapping.
 # Step 3c (Surface module-trust under lockdown -- signed in-tree module
@@ -41,7 +41,7 @@
 #   1. Build two real versions (N, N+1) of $PROFILE via the pinned .mkosi
 #      checkout, mirroring test/native-ab-updateux-test.sh's build_profile.
 #   2. Install N to a raw disk FILE (test-only) via
-#      test/cayo-ab-install-spike.sh --allow-file --yes --encrypt-var
+#      test/floe-ab-install-spike.sh --allow-file --yes --encrypt-var
 #      --recovery-key-file <fresh>. Deliberately does NOT pass
 #      --mok-certificate: that flag drives `mokutil --import`, which talks
 #      to the HOST's live EFI variable store -- wrong (and refused by the
@@ -76,7 +76,7 @@
 #      machine must still boot, with the argument absent.
 #   5. Desktop assertions on the TPM-unlocked boot, ONLY when HAS_DESKTOP=1
 #      (IMAGE_ID in snow, snowfield -- see the derivation below; skipped
-#      entirely for cayo, which has no desktop payload):
+#      entirely for floe, which has no desktop payload):
 #      graphical.target, gdm.service, a logind seat, notify-send, the
 #      fresh-/var tmpfiles targets, dpkg-query, and a minimal ad hoc sysext
 #      (plain-directory form, not a raw disk image -- systemd-sysext(8)
@@ -104,7 +104,7 @@
 #      This makes the hop verify through systemd 261's real vendor path,
 #      /usr/lib/systemd/import-pubring.pgp -- the exact link the 2026-07-17
 #      outage proved untested (commit 91718d7): every other harness boots
-#      cayo-ab-raw, whose Trixie systemd 257 still reads the old .gpg
+#      floe-ab-raw, whose Trixie systemd 257 still reads the old .gpg
 #      vendor name, and/or injects the /etc override. Then run
 #      /usr/libexec/snosi-sysupdate-stage, reboot with zero serial input
 #      (proving the signed PCR 11 policy survives a real UKI change -- the
@@ -174,7 +174,7 @@
 #    post-step-6 checkpoint.
 #
 # Usage: sudo ./test/native-ab-secure-boot-test.sh [--full-window]
-# Env overrides: PROFILE (default snow-ab; also accepts cayo-ab),
+# Env overrides: PROFILE (default snow-ab; also accepts floe-ab),
 # IMAGE_ID/CHANNEL (derived from PROFILE by default), SSH_PORT (2225),
 # SOURCE_PORT (18095), SSH_TIMEOUT/BOOT_TIMEOUT (300s), VM_MEMORY (4096),
 # VM_CPUS (4), KEEP_VM (0), SKIP_BUILD/BUILD_N_DIR/BUILD_N1_DIR (reuse
@@ -224,12 +224,12 @@ fi
 # Step 5's assertions (graphical.target, gdm.service, notify-send, the
 # hicolor icon-cache sysext fixture, ...) are GNOME-desktop-specific. Both
 # snow-ab and snowfield-ab compose the snow desktop payload (see
-# production_composition in test/native-ab-static-test.sh: cayo-ab=cayo,
+# production_composition in test/native-ab-static-test.sh: floe-ab=floe,
 # snow-ab=snow, snowfield-ab=snow) -- snowfield only swaps the kernel
-# variant (Surface vs backports), not the package set -- while cayo-ab has
+# variant (Surface vs backports), not the package set -- while floe-ab has
 # no desktop at all. Derive the gate from IMAGE_ID (snow|snowfield) rather
 # than a literal "snow" comparison so a future PROFILE=snowfield-ab run
-# takes Step 5 too; cayo-ab correctly skips it.
+# takes Step 5 too; floe-ab correctly skips it.
 case "$IMAGE_ID" in
     snow | snowfield) HAS_DESKTOP=1 ;;
     *) HAS_DESKTOP=0 ;;
@@ -946,7 +946,7 @@ image_sha256="$(sha256sum "$BUILD_N_DIR/$PROFILE.raw" | cut -d' ' -f1)"
 truncate -s "$image_size" "$DISK_IMAGE"
 recovery_key_file="$WORK_DIR/recovery.key"
 
-"$SCRIPT_DIR/cayo-ab-install-spike.sh" --allow-file --yes \
+"$SCRIPT_DIR/floe-ab-install-spike.sh" --allow-file --yes \
     --encrypt-var --recovery-key-file "$recovery_key_file" \
     "$BUILD_N_DIR/$PROFILE.raw" "$image_sha256" "$DISK_IMAGE"
 pass "installer completed against a same-size raw disk file"
@@ -1388,10 +1388,10 @@ vm_ssh 'shred -u /run/mkosi.key; rm -f /run/mkosi.crt'
 # ===========================================================================
 # Step 5: post-TPM-unlock assertions. tmpfiles ownership and dpkg-query are
 # profile-neutral (fresh-/var tmpfiles rules and the /var/lib/dpkg
-# relocation symlink apply to every profile, cayo included) and always run;
+# relocation symlink apply to every profile, floe included) and always run;
 # the GNOME-desktop-specific checks (graphical.target, gdm.service, a
 # logind seat, notify-send, the hicolor-icon-cache sysext fixture) are
-# gated on HAS_DESKTOP below and skipped for cayo-ab.
+# gated on HAS_DESKTOP below and skipped for floe-ab.
 # ===========================================================================
 echo ""
 echo "=== Step 5: post-TPM-unlock assertions ==="
@@ -1583,13 +1583,13 @@ scp "${SSH_OPTS[@]}" -i "$SSH_KEY" -P "$SSH_PORT" \
     root@localhost:/etc/sysupdate.d/
 
 # ---------------------------------------------------------------------------
-# Shipped vendor keyring (the reason THIS harness, not a cayo-ab-raw one,
+# Shipped vendor keyring (the reason THIS harness, not a floe-ab-raw one,
 # carries this coverage): systemd 261 -- which only the production profiles
 # run -- reads the vendor update keyring at
 # /usr/lib/systemd/import-pubring.pgp, with NO legacy .gpg fallback for the
-# /usr path (commit 91718d7). Trixie's systemd 257, which cayo-ab-raw
+# /usr path (commit 91718d7). Trixie's systemd 257, which floe-ab-raw
 # boots, still reads the OLD /usr/lib/systemd/import-pubring.gpg name, so
-# no cayo-ab-raw harness (updateux/components/update/publication) can
+# no floe-ab-raw harness (updateux/components/update/publication) can
 # exercise this link -- which is exactly how shipping only .gpg produced a
 # total signature-verification outage on real installs while every QEMU
 # harness passed via its /etc/systemd/import-pubring.gpg override. This

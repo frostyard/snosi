@@ -41,7 +41,7 @@
 #                 the source of the reference bytes changes.
 #   base-url      HTTP(S) URL of the product's "os/native/v1/<product>/
 #                 x86-64" directory (e.g. the local rehearsal origin, or
-#                 https://repository.frostyard.org/os/native/v1/cayo/x86-64
+#                 https://repository.frostyard.org/os/native/v1/floe/x86-64
 #                 in production) -- NOT the bucket root. The candidate
 #                 sub-path is appended automatically.
 set -euo pipefail

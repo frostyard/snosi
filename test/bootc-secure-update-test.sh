@@ -33,9 +33,9 @@ source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
 WORK=""
 QEMU_PID=""
 
-valid_profile() { [[ $1 == cayo || $1 == snow || $1 == snowfield ]]; }
-valid_digest_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(cayo|snow|snowfield)@sha256:[[:xdigit:]]{64}$ ]]; }
-valid_tracking_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(cayo|snow|snowfield):[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; }
+valid_profile() { [[ $1 == floe || $1 == snow || $1 == snowfield ]]; }
+valid_digest_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(floe|snow|snowfield)@sha256:[[:xdigit:]]{64}$ ]]; }
+valid_tracking_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(floe|snow|snowfield):[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; }
 valid_image_version() { [[ $1 =~ ^[0-9]{14}$ ]]; }
 valid_publish_slot() { [[ $1 == N+1 || $1 == N+2 ]]; }
 mode_0600() { [[ -f $1 && $(stat -c '%a' "$1") == 600 ]]; }
@@ -255,21 +255,21 @@ run_fixtures() {
     trap 'rm -rf "$work"' RETURN
     state="$work/install-state.json"
     digest="sha256:$(printf 'a%.0s' {1..64})"
-    n1="ghcr.io/frostyard/cayo@${digest}"
-    n2="ghcr.io/frostyard/cayo@sha256:$(printf 'b%.0s' {1..64})"
+    n1="ghcr.io/frostyard/floe@${digest}"
+    n2="ghcr.io/frostyard/floe@sha256:$(printf 'b%.0s' {1..64})"
     if command -v qemu-img >/dev/null 2>&1; then
         qemu-img create -q -f raw "$work/raw.img" 1048576
         qemu-img create -q -f qcow2 "$work/not-raw.qcow2" 1048576
         assert_true 'raw handoff disk is accepted' disk_is_raw "$work/raw.img"
         assert_false 'non-raw handoff disk is rejected' disk_is_raw "$work/not-raw.qcow2"
     fi
-    printf '%s\n' "{\"schema\":1,\"profile\":\"cayo\",\"tracking_ref\":\"ghcr.io/frostyard/cayo:secure-test\",\"accepted_oci_ref\":\"$n1\",\"target_disk\":\"/tmp/disk\",\"ovmf_code\":\"/tmp/code\",\"ovmf_vars\":\"/tmp/vars\",\"tpm_state\":\"/tmp/tpm\",\"tpm_socket\":\"/tmp/tpm/socket\",\"recovery_key\":\"/tmp/recovery\",\"mok_cert\":\"/tmp/mok.crt\",\"pcr_public\":\"/tmp/pcr.pub\",\"ssh_key\":\"/tmp/id\"}" >"$state"
+    printf '%s\n' "{\"schema\":1,\"profile\":\"floe\",\"tracking_ref\":\"ghcr.io/frostyard/floe:secure-test\",\"accepted_oci_ref\":\"$n1\",\"target_disk\":\"/tmp/disk\",\"ovmf_code\":\"/tmp/code\",\"ovmf_vars\":\"/tmp/vars\",\"tpm_state\":\"/tmp/tpm\",\"tpm_socket\":\"/tmp/tpm/socket\",\"recovery_key\":\"/tmp/recovery\",\"mok_cert\":\"/tmp/mok.crt\",\"pcr_public\":\"/tmp/pcr.pub\",\"ssh_key\":\"/tmp/id\"}" >"$state"
     chmod 600 "$state"
     assert_true 'mode-0600 install state accepts only non-secret handoff fields' install_state_is_safe "$state"
-    assert_true 'handoff profile, tracking tag, and accepted digest agree' state_matches_profile "$state" cayo
+    assert_true 'handoff profile, tracking tag, and accepted digest agree' state_matches_profile "$state" floe
     assert_true 'immutable N+1 digest is accepted' valid_digest_ref "$n1"
     assert_true 'immutable N+2 digest is accepted' valid_digest_ref "$n2"
-    assert_true 'tracking tag is accepted separately from immutable deployment refs' valid_tracking_ref ghcr.io/frostyard/cayo:secure-test
+    assert_true 'tracking tag is accepted separately from immutable deployment refs' valid_tracking_ref ghcr.io/frostyard/floe:secure-test
     assert_true 'publisher accepts the N+1 slot' valid_publish_slot N+1
     assert_true 'publisher accepts the N+2 slot' valid_publish_slot N+2
     assert_false 'publisher rejects an unrecognized slot' valid_publish_slot N+3
@@ -281,7 +281,7 @@ run_fixtures() {
     assert_false 'root status rejects no backing device' root_backing_device 'type: LUKS2'
     assert_false 'root status rejects multiple backing devices' root_backing_device $'device: /dev/vda2\ndevice: /dev/vdb2'
     assert_true 'publisher marker is exact' marker_is_exact 'BOOTC_SECURE_UPDATE_PUBLISH: N+1: published' 'BOOTC_SECURE_UPDATE_PUBLISH: N+1: published'
-    printf '%s\n' "{\"schema\":1,\"profile\":\"cayo\",\"tracking_ref\":\"ghcr.io/frostyard/cayo:secure-test\",\"accepted_oci_ref\":\"$n1\",\"target_disk\":\"/tmp/disk\",\"ovmf_code\":\"/tmp/code\",\"ovmf_vars\":\"/tmp/vars\",\"tpm_state\":\"/tmp/tpm\",\"tpm_socket\":\"/tmp/tpm/socket\",\"recovery_key\":\"/tmp/passphrase-secret-private-key\",\"mok_cert\":\"/tmp/mok.crt\",\"pcr_public\":\"/tmp/pcr.pub\",\"ssh_key\":\"/tmp/id\"}" >"$work/unsafe.json"; chmod 600 "$work/unsafe.json"
+    printf '%s\n' "{\"schema\":1,\"profile\":\"floe\",\"tracking_ref\":\"ghcr.io/frostyard/floe:secure-test\",\"accepted_oci_ref\":\"$n1\",\"target_disk\":\"/tmp/disk\",\"ovmf_code\":\"/tmp/code\",\"ovmf_vars\":\"/tmp/vars\",\"tpm_state\":\"/tmp/tpm\",\"tpm_socket\":\"/tmp/tpm/socket\",\"recovery_key\":\"/tmp/passphrase-secret-private-key\",\"mok_cert\":\"/tmp/mok.crt\",\"pcr_public\":\"/tmp/pcr.pub\",\"ssh_key\":\"/tmp/id\"}" >"$work/unsafe.json"; chmod 600 "$work/unsafe.json"
     if install_state_is_safe "$work/unsafe.json"; then fail 'manifest rejects secret-bearing fields'; else pass 'manifest rejects secret-bearing fields'; fi
     printf '%s\n' '#!/bin/bash' 'printf "%s\\n" "BOOTC_SECURE_UPDATE_PUBLISH: N+1: published NOOP"' >"$work/noop-publisher"
     chmod +x "$work/noop-publisher"

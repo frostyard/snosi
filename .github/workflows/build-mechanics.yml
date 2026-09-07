@@ -54,8 +54,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - profile: cayo
-            description: "Cayo Linux Server Image"
+          - profile: floe
+            description: "Floe Linux Server Image"
           - profile: snow
             description: "Snow Linux OS Image"
           - profile: snowfield

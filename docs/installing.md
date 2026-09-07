@@ -15,8 +15,8 @@ installer.
 
 | Path | Choose it when | Products | Target disk |
 | --- | --- | --- | --- |
-| Bootc live ISO | You want the established bootc/composefs layout and graphical installer | `snow`, `snowfield`, `cayo` | At least 30 GiB |
-| Native A/B installer | You want signed A/B systemd-sysupdate images, Secure Boot through MOK, and encrypted `/var` | `snow-ab`, `snowfield-ab`, `cayo-ab` | 15.5 GiB for Cayo; 21.5 GiB for Snow or Snowfield |
+| Bootc live ISO | You want the established bootc/composefs layout and graphical installer | `snow`, `snowfield`, `floe` | At least 30 GiB |
+| Native A/B installer | You want signed A/B systemd-sysupdate images, Secure Boot through MOK, and encrypted `/var` | `snow-ab`, `snowfield-ab`, `floe-ab` | 15.5 GiB for Floe; 21.5 GiB for Snow or Snowfield |
 
 Use a larger disk than the minimum when possible. The native minimum leaves
 only 4 GiB for `/var`; applications, containers, Flatpaks, home directories,
@@ -26,7 +26,7 @@ Product selection is the same on both paths:
 
 - **Snow** is the general-purpose GNOME desktop.
 - **Snowfield** is the GNOME desktop for Microsoft Surface devices.
-- **Cayo** is the headless server image.
+- **Floe** is the headless server image.
 
 The native installer supports UEFI x86-64 systems. Leave Secure Boot enabled;
 the installer boots through Debian's trusted chain and stages the Snosi MOK
@@ -136,7 +136,7 @@ Linux**. If it was closed, launch **Install Snow Linux** (also shown as
 
 1. Connect to the network. Snow may be available from the media, but another
    selected product or a newer image can require a registry download.
-2. On the image page, choose Snow, Snowfield, or Cayo.
+2. On the image page, choose Snow, Snowfield, or Floe.
 3. Select the target disk. Confirm it by model, size, and serial before
    continuing; the entire disk will be erased.
 4. Configure disk encryption and record its unlock credential outside the
@@ -194,7 +194,7 @@ choose a disk or credential silently.
 
 During either flow:
 
-1. Select `snow-ab`, `snowfield-ab`, or `cayo-ab`.
+1. Select `snow-ab`, `snowfield-ab`, or `floe-ab`.
 2. Select the target disk by path, model, serial, size, and transport. Mounted,
    undersized, ambiguous, RAID-member, and installer-media disks are refused.
 3. Type the exact disk path or serial to confirm erasure.

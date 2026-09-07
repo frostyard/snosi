@@ -70,7 +70,7 @@ load-bearing triggers (`build.yml` for `build-native-images.yml` via
 `test-bootc-secure.yml` via the publication guard and docs contracts).
 
 Both the PR `mechanics-build` path and protected `secure-build` path iterate the
-three profiles (snow, snowfield, cayo); only the latter can publish.
+three profiles (snow, snowfield, floe); only the latter can publish.
 
 Both jobs select the GitHub runner bundle's `runc` through a job-local
 `containers.conf.d` drop-in and verify the effective runtime before building.
@@ -88,9 +88,12 @@ GHCR authentication is repository- and run-scoped: `secure-build` grants
 Docker login writes the user-context auth file used by Cosign and Skopeo.
 Registry-login `run:` steps map `github.actor` to `GHCR_USER` in `env:` and
 quote that shell variable; direct GitHub context interpolation in shell source
-is forbidden. No long-lived GHCR PAT is required. Scheduled mechanics run `31150007630`
-successfully pushed all three profiles with the same repository token, proving
-the cayo, snow, and snowfield package access needed by secure publication.
+is forbidden. No long-lived GHCR PAT is required. Scheduled mechanics run
+`31150007630` successfully pushed the then-existing cayo, snow, and snowfield
+packages with the repository token. It did not create a package with that
+token. The first protected Floe `secure-build` must create
+`ghcr.io/frostyard/floe`; the rename plan records the package's
+private-by-default cutover check.
 
 **Protected publication steps:**
 1. Transiently materialize the durable production MOK/PCR signing credentials supplied by the four `NATIVE_*` secrets, then build and package each profile. The supplied MOK certificate and derived PCR public key must byte-match the committed public identities; runner-local credential files are removed unconditionally after local artifact validation and before registry writes. The distinct disposable PR keys remain ephemeral.
@@ -144,7 +147,7 @@ the mechanical job-by-job summary.
 2. `prepare` -- assigns one 14-digit version + records the source revision,
    shared by every product built this run (mirrors `build-images.yml`'s own
    version tag step)
-3. `build-cayo` / `build-snow` / `build-snowfield` -- independent jobs
+3. `build-floe` / `build-snow` / `build-snowfield` -- independent jobs
    (not a matrix), each gated on the `native-build` protected GitHub
    environment:
    - Free disk space, redirect `TMPDIR` to `/mnt/tmp` (mirrors
@@ -173,7 +176,7 @@ the mechanical job-by-job summary.
      Actions artifact (`native-prepared-<product>`) -- never the
      multi-gigabyte payload objects, which are already durably in R2
 4. `test-public-origin` -- one matrix job (`fail-fast: false`, legs
-   `[cayo, snow, snowfield]`), no secrets needed (pure HTTP). Downloads its
+   `[floe, snow, snowfield]`), no secrets needed (pure HTTP). Downloads its
    product's `native-prepared-<product>` artifact with
    `continue-on-error: true` and no-ops if absent (that product's build
    didn't finish), otherwise runs `verify-remote.sh` against the REAL
@@ -197,7 +200,7 @@ the mechanical job-by-job summary.
    native installation and TPM-backed boot; deeper signed-addon and update
    lifecycle validation remains manual in
    `test/native-ab-secure-boot-test.sh`.
-5. `promote-cayo` / `promote-snow` / `promote-snowfield` -- independent
+5. `promote-floe` / `promote-snow` / `promote-snowfield` -- independent
    jobs, each gated on the `native-promotion` protected GitHub environment
    (holds `NATIVE_UPDATE_SIGNING_KEY`, the OpenPGP update-signing private
    key). Downloads its own `native-verified-<product>` marker and
@@ -484,7 +487,7 @@ depend on title heuristics.
 **Trigger:** PR/push to main, manual dispatch
 
 Three jobs:
-1. **shell-lint:** Runs shellcheck on tracked `*.sh`/`*.chroot` files and extensionless tracked shell scripts discovered by shebang, excluding `saved-unused/`; then `test/native-ab-static-test.sh` (cheap native A/B configuration invariants — no root, no build); then `test/native-ab-contracts-test.sh` (validates `docs/native-ab-contracts.md`'s frozen naming/label/URL grammar against the actual tree and the `test/native-ab-contracts-allow.txt` deviation list); then `check-native-publication-guard.sh` (docs/native-ab-contracts.md §15 — hard-fails a `cayo-ab`/`snow-ab`/`snowfield-ab` profile missing shim/Secure Boot/PCR-signing/NvPCR/pubring markers or carrying a `KernelModules=` filter, and hard-fails `cayo-ab-raw` if it ever gains a publication marker; since Phase 3 all three production profiles exist and are validated for real, `cayo-ab-raw` continues to pass the "must stay unpublishable" side)
+1. **shell-lint:** Runs shellcheck on tracked `*.sh`/`*.chroot` files and extensionless tracked shell scripts discovered by shebang, excluding `saved-unused/`; then `test/native-ab-static-test.sh` (cheap native A/B configuration invariants — no root, no build); then `test/native-ab-contracts-test.sh` (validates `docs/native-ab-contracts.md`'s frozen naming/label/URL grammar against the actual tree and the `test/native-ab-contracts-allow.txt` deviation list); then `check-native-publication-guard.sh` (docs/native-ab-contracts.md §15 — hard-fails a `floe-ab`/`snow-ab`/`snowfield-ab` profile missing shim/Secure Boot/PCR-signing/NvPCR/pubring markers or carrying a `KernelModules=` filter, and hard-fails `floe-ab-raw` if it ever gains a publication marker; since Phase 3 all three production profiles exist and are validated for real, `floe-ab-raw` continues to pass the "must stay unpublishable" side)
 2. **runtime-etc-guard:** Runs `check-runtime-etc-guard.sh` — scans every tracked file in image payload dirs (`mkosi.extra/`, `shared/*/tree/`) for patterns that delete paths from `/etc` at runtime: `systemctl disable/enable/revert/unmask/preset` (and `deb-systemd-helper`) in units/scripts, `rm`/`mv`/`find -delete` targeting `/etc/`, and tmpfiles.d removal types (`r`/`R`/`D`) on `/etc`. Any such deletion on a bootc/composefs install breaks the `/etc` merge in `bootc-finalize-staged` at shutdown ("a path led outside of the filesystem", bootc ≤ 1.16.3) and the staged update is silently discarded — the host keeps booting the old image while the updater logs success (root-caused 2026-07-05 on `enable-incus-agent.service`, which self-disabled via `ExecStartPost`). Run-once units must gate on a `/var` marker instead (`ConditionPathExists=!/var/lib/<unit>.done` + `ExecStartPost=touch`). Escape hatch for provably safe lines: `# etc-guard-allow: <reason>` comment on the same line or the line directly above (unit files have no trailing comments). Build-time scripts (`*.chroot`, `mkosi.postinst`, etc.) are outside payload dirs and intentionally unscanned — build-time `systemctl enable` is correct. `test/runtime-etc-guard-test.sh` and `test/duplicate-packages-test.sh` provide standalone TAP fixture coverage for these two guards.
 3. **wifi-backend drift guard:** `test/wifi-backend-test.sh` (run in the runtime-etc/package-contracts step) scans shipped payload trees (`mkosi.extra/`, `shared/*/tree/`) for NetworkManager `conf.d` files setting `wifi.backend=` and fails if the implementing package (`iwd` → `iwd`, `wpa_supplicant` → `wpasupplicant`) is absent from that payload's closure (base `mkosi.conf` plus `shared/packages/<product>/mkosi.conf`). Cayo shipped `wifi.backend=iwd` for months while only `wpasupplicant` was installed (frostyard/snosi#805); the override is removed and this guard keeps backend and package closure in sync.
 4. **mkosi-config-sanity:** Runs `mkosi summary` for root config and all profiles to verify configuration, plus `check-profile-dependencies.sh` to ensure profile builds do not include sysext images
@@ -536,5 +539,5 @@ Runs OpenSSF Scorecard analysis for supply-chain security assessment. Publishes 
 | Sysexts (EROFS) | repository.frostyard.org/ext/ | R2 upload via frostyard/repogen |
 | Desktop/server OCI images | ghcr.io/frostyard/ | buildah push + cosign sign + SBOM via ORAS |
 | Manifests | R2 manifests bucket | Direct upload |
-| Native A/B images (cayo-ab/snow-ab/snowfield-ab) | repository.frostyard.org/os/native/v1/\<product\>/x86-64/ | `rclone` candidate upload + independent HTTP re-verify + `promote.sh` (OpenPGP-signed `SHA256SUMS`/`SHA256SUMS.gpg`) via `build-native-images.yml`; production upload not yet exercised, see `docs/native-ab-publication.md` |
+| Native A/B images (floe-ab/snow-ab/snowfield-ab) | repository.frostyard.org/os/native/v1/\<product\>/x86-64/ | `rclone` candidate upload + independent HTTP re-verify + `promote.sh` (OpenPGP-signed `SHA256SUMS`/`SHA256SUMS.gpg`) via `build-native-images.yml`; production upload not yet exercised, see `docs/native-ab-publication.md` |
 | Native installer stable URL | repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso | Cloudflare Worker derives an uncacheable redirect from the live R2 `SHA256SUMS`; immutable ISO publication runs through `build-installer-iso.yml` |

@@ -5,8 +5,8 @@ partition sizes in `shared/native-ab/channels/<product>/mkosi.repart/`. It
 is the AI-facing companion to `docs/native-ab-contracts.md` §12 (which
 freezes the *policy*: 1 GiB ESP for every product, >=20% root-slot headroom
 at publication, capacity numbers live in channel fragments not the generic
-outformat). As of Task 3.2, all three products (cayo, snow, snowfield) are
-measured against real production native builds (`cayo-ab`, `snow-ab`,
+outformat). As of Task 3.2, all three products (floe, snow, snowfield) are
+measured against real production native builds (`floe-ab`, `snow-ab`,
 `snowfield-ab`) and marked "validated" below — none remain provisional.
 Re-measure if a future package-set or module-policy change materially
 changes any product's payload size.
@@ -17,7 +17,7 @@ changes any product's payload size.
   `headroom = (slot size - measured content size) / slot size` — spare
   capacity as a fraction of the TOTAL slot size, always divided by the SLOT
   size, never by the measured content size. `spare / used` (measured
-  content) is NOT the definition and overstates the margin: e.g. cayo's old
+  content) is NOT the definition and overstates the margin: e.g. floe's old
   4 GiB slot against 4092997632 B measured content is `spare/used =
   201969664/4092997632 = ~4.9%` either way at that gap size, but at larger
   fill fractions the two formulas diverge sharply (a slot at 80% of capacity
@@ -36,10 +36,10 @@ changes any product's payload size.
 - **Verity:root ratio rule:** the verity slot is sized at 1/32 of the root
   slot (in MiB), rounded UP to the next power-of-two MiB value. This
   reproduces every validated/provisional value in this document exactly:
-  cayo's original 4 GiB root gives `4096/32 = 128 MiB`, already a power of
+  floe's original 4 GiB root gives `4096/32 = 128 MiB`, already a power of
   two, hence its historical 128 MiB verity slot; snow/snowfield's 7 GiB root
   gave `7168/32 = 224 MiB`, rounded up to 256 MiB, matching their historical
-  verity slot. Applied to the Phase 3 bumped sizes: cayo's new 5 GiB root
+  verity slot. Applied to the Phase 3 bumped sizes: floe's new 5 GiB root
   gives `5120/32 = 160 MiB`, rounded up to **256 MiB** (a real bump, since
   160 sits strictly between the 128 and 256 powers of two); snow/snowfield's
   new 8 GiB root gives `8192/32 = 256 MiB`, already a power of two, so their
@@ -51,11 +51,12 @@ changes any product's payload size.
   which the generic tree's dracut config would need `omit_drivers=`/
   `drivers=` constraints.
 
-## cayo (validated, 2026-07-14, real `cayo-ab` production build)
+## floe (capacity inherited from the 2026-07-14 `cayo-ab` build)
 
-Measured on a real `mkosi --profile cayo-ab build` (Task 3.2) — the actual
-production profile (`mkosi.profiles/cayo-ab/mkosi.conf`), not the retired
-`cayo-ab-secure` spike it replaces. Full production module set (no
+Measured on a real `mkosi --profile cayo-ab build` (Task 3.2), the production
+profile at that date, not the retired `cayo-ab-secure` spike it replaced. Phase
+2 preserves the payload and slot sizes under the new `floe-ab` identity. Full
+production module set (no
 `KernelModules=` filter anywhere in its Include chain), the frozen channel
 structure, and the committed update pubring
 (`/usr/lib/systemd/import-pubring.gpg`, confirmed present via
@@ -78,20 +79,20 @@ measurement that drove the Phase 3 slot bump (999267 blocks) and an
 intermediate `cayo-ab` build without the fix (999302 blocks) — the
 few-hundred-block deltas are profile-identity/manifest metadata, not
 payload — confirming the 5 GiB root / 256 MiB verity sizing already in
-`shared/native-ab/channels/cayo/mkosi.repart/{11-root,21-root-empty,
+`shared/native-ab/channels/floe/mkosi.repart/{11-root,21-root-empty,
 10-root-verity,20-root-verity-empty}.conf` and `docs/native-ab-contracts.md`
-§12 remains correct for the real `cayo-ab` production profile. No repart
-changes were needed this task; this section replaces the prior
-`cayo-ab-secure`-sourced numbers with the real `cayo-ab` ones for the
-record.
+§12 remains correct for the real `floe-ab` production profile. No repart
+changes were needed this task; this section keeps the `cayo-ab-secure` and
+`cayo-ab` measurement names while carrying their capacity result forward to
+`floe-ab`.
 
 **Real artifact problem found and fixed (Task 3.2):** the first `snowfield-ab`
 build failed outright — `dracut[E]: Module 'bootc' cannot be found`,
 triggered synchronously by the linux-surface kernel package's own postinst
 hook (`run-parts: /etc/kernel/postinst.d/dracut exited with return code 1`)
 during package installation, before `ExtraTrees=` composition has run.
-Debian's own `linux-image-amd64` (used by `cayo-ab`/`snow-ab`) defers its
-equivalent hook via a dpkg trigger and never hit this in either cayo-ab
+Debian's own `linux-image-amd64` (used by `floe-ab`/`snow-ab`) defers its
+equivalent hook via a dpkg trigger and never hit this in either floe-ab
 build; the surface kernel's postinst runs the hook immediately instead. At
 that point the base image's `usr/lib/dracut/dracut.conf.d/
 30-bootc-standard.conf` (which requests the `bootc` dracut module) is still
@@ -215,21 +216,21 @@ The brief required checking whether removing the `KernelModules=` filter
 initrd enough to need `omit_drivers=`/`drivers=` constraints in the generic
 tree's dracut configuration, targeting <=40% of the 1 GiB ESP for the UKI.
 
-Measured result: cayo-ab-secure's UKI (full module set, no filter) is
-~114.8 MiB, only marginally larger than cayo-ab-raw's UKI (virtio-only
+Measured result: `cayo-ab-secure`'s UKI (full module set, no filter) is
+~114.8 MiB, only marginally larger than `cayo-ab-raw`'s UKI (virtio-only
 filter) at ~114.06 MiB (the `esp.raw` split diff of the two full ESPs was
 negligible). Both are far under the 40% (~410 MiB) threshold. **No dracut
 driver-list constraint was added** — dracut's own non-hostonly module
 selection logic already keeps the initrd bounded regardless of how many
 kernel modules exist on disk under `/usr/lib/modules`; the size growth from
 removing the mkosi-level `KernelModules=` filter lands almost entirely in
-the final-root `/usr/lib/modules`+`/usr/lib/firmware` tree (see the cayo
+the final-root `/usr/lib/modules`+`/usr/lib/firmware` tree (see the floe
 headroom fix above), not in the dracut-generated initrd/UKI.
 
 **Re-checked with real snow-ab/snowfield-ab builds (Task 3.2):** confirmed
 for both the backports kernel (`snow-ab.efi`, ~257.6 MiB, ~25.2% of ESP) and
 the Surface kernel (`snowfield-ab.efi`, ~242.8 MiB, ~23.7% of ESP) — both
 comfortably under the 40% threshold despite snow/snowfield's much larger
-package set (desktop + Surface-specific drivers) than cayo's headless
+package set (desktop + Surface-specific drivers) than floe's headless
 server payload. No dracut driver-list constraint is needed for any of the
 three production profiles.
