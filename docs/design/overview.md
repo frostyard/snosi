@@ -725,6 +725,8 @@ forked), `/usr/libexec/bootc-update-notify` (ditto), and
 `snosi-update-status` additionally dispatches its ENTIRE backend
 (`native_status()` vs `bootc_status()`) on `/usr/lib/snosi/native-ab` before
 ever calling the `bootc` CLI, which isn't installed on native images at all.
+`--pkg-diff` (local staged package delta from `packages.txt`) is proposed in
+[ADR-0014](../adr/0014-update-status-pkg-diff.md); it is not shipped.
 
 No native `held-rollback`: `systemd-sysupdate`'s `InstancesMax=2` accounting
 treats both on-disk root slots as "installed" when deciding what's newer, so
