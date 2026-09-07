@@ -107,34 +107,59 @@ the applying reboot, which is correct for a staged delta.
 
 ### Staged sidecar
 
-The staged inventory is a directory, not a bare `packages.txt`:
+The published name is a symlink. The inventory lives in a write-once
+backing directory named by identity:
 
 ```text
-/run/snosi/staged-packages/identity      # exactly one of digest= or version=
-/run/snosi/staged-packages/packages.txt  # exact bytes from the staged image
+/run/snosi/staged-packages -> staged-packages.sha256-<64hex>   # bootc
+/run/snosi/staged-packages -> staged-packages.<14-digit>       # native
+
+/run/snosi/staged-packages.<id>/identity      # exactly one of digest= or version=
+/run/snosi/staged-packages.<id>/packages.txt  # exact bytes from the staged image
 ```
 
+Bootc backing names use `sha256-` plus the 64 hex digits, never a colon.
 `identity` uses the same exclusive invariant as `update-staged`: bootc
 writes `digest=sha256:<64hex>`, native writes `version=<14-digit>`. Never
 both. `packages.txt` is the staged image's
 `/usr/share/frostyard/<IMAGE_ID>.packages.txt` bytes, not a regenerated
-`apt list`.
+`apt list`. A backing directory is created complete and never mutated.
 
-Publish is one `mv -T` of a temp directory over
-`/run/snosi/staged-packages`, so identity and bytes cannot split. This is
-a new sibling under `/run/snosi/`. It is not a field of `update-check` or
-`update-staged` (those stay small `key=value` files; motd and
-`bootc-update-notify` must not grow a package list). It is snosi-owned.
-It does not amend
+Publish:
+
+1. If `staged-packages.<id>` already exists, leave it. Otherwise write a
+   unique temp directory, then rename it to `staged-packages.<id>` (a
+   name that must not already exist). Do not `mv -T` a directory onto
+   an existing backing name either.
+2. `ln -s staged-packages.<id>` to a temp name in `/run/snosi`.
+3. `mv -T` that temp symlink onto `/run/snosi/staged-packages`.
+
+`mv -T` here replaces a symlink, which `rename(2)` can do atomically.
+It cannot replace a non-empty directory (`mv: cannot overwrite
+'.../staged-packages': Directory not empty`), so `staged-packages` is
+always a symlink, never a directory. Do not `rm` the live symlink or
+the previous backing directory before that `mv`. Removing first opens
+the identity/list gap this design exists to close. After the swap, the
+unreferenced previous backing directory may stay until reboot (`/run`
+is tmpfs); unlinking it is optional and must not precede the swap.
+
+Readers resolve `staged-packages` once (`readlink -f` or an `O_PATH`
+open of the target) and then read `identity` and `packages.txt` from
+that path, so the two files cannot split across generations.
+
+This is a new sibling under `/run/snosi/`. It is not a field of
+`update-check` or `update-staged` (those stay small `key=value` files;
+motd and `bootc-update-notify` must not grow a package list). It is
+snosi-owned. It does not amend
 [core ADR-0005](https://github.com/frostyard/core/blob/main/docs/adr/0005-native-ab-marker-and-update-state-files.md)
 until a second consumer needs it.
 
 `--pkg-diff` resolves the expected identity first (bootc staged
 `imageDigest`, or native pending/semaphore version), then opens the
-sidecar only if `identity` matches. On missing sidecar or mismatch, it
-discards the directory contents and does not print a delta from them. A
-later manual stage that replaced the deployment cannot reuse an older
-inventory.
+resolved backing directory only if `identity` matches. On missing
+symlink, dangling target, or mismatch, it does not print a delta from
+those bytes. A later manual stage that replaced the deployment cannot
+reuse an older inventory.
 
 ### Bootc capture order
 
@@ -195,12 +220,13 @@ and `now`-only lines) using captured lines from the target image APT, not
 simplified stubs. They also pin identity mismatch: a sidecar bound to the
 wrong digest or version is discarded. Static tests pin that
 `bootc-update-stage` copies `packages.txt` from the pulled image before
-`bootc switch`/`upgrade`, that both stagers publish
-`/run/snosi/staged-packages/{identity,packages.txt}`, that the
-already-staged re-assert path publishes the sidecar, and that
-`snosi-update-status` does not call `dpkg-query`, `dpkg -l`, or `apt list`
-to build either side of the diff. A live native or bootc update harness
-assertion can wait until those lanes already boot a staged hop.
+`bootc switch`/`upgrade`, that both stagers publish by `mv -T` of a new
+symlink onto `/run/snosi/staged-packages` (never `rm` of that name first,
+never `mv -T` of a directory onto it), that the already-staged re-assert
+path publishes the sidecar, and that `snosi-update-status` does not call
+`dpkg-query`, `dpkg -l`, or `apt list` to build either side of the diff.
+A live native or bootc update harness assertion can wait until those
+lanes already boot a staged hop.
 
 ## Consequences
 
@@ -213,19 +239,20 @@ assertion can wait until those lanes already boot a staged hop.
   staged. A copy after switch cannot fail the stage, and the next timer
   run would only re-assert the semaphore. The already-staged path is
   therefore required to publish a matching sidecar, so a post-switch
-  sidecar `mv` failure is repaired on the next hourly run rather than
+  sidecar publish failure is repaired on the next hourly run rather than
   stuck as warn-and-skip until reboot.
-- `/run/snosi/staged-packages/` dies on reboot. After an applying reboot
-  the flag correctly has nothing staged to diff. Operators who want "what
-  did the last update change?" keep using Snow GitHub Releases, or a later
-  rollback-diff ADR. A sidecar whose identity does not match the live
-  staged digest or version is treated as missing, so a manual stage cannot
-  inherit the previous image's package list.
+- `/run/snosi/staged-packages` and its backing directories die on reboot.
+  After an applying reboot the flag correctly has nothing staged to diff.
+  Operators who want "what did the last update change?" keep using Snow
+  GitHub Releases, or a later rollback-diff ADR. A sidecar whose identity
+  does not match the live staged digest or version is treated as missing,
+  so a manual stage cannot inherit the previous image's package list.
 - Images built before the stager change can stage an update and then
   `--pkg-diff` will warn and skip. That is an upgrade-once gap, not a
   reason to pull multi-gigabyte images from status.
-- Chairlift and motd ignore the new directory. A future GUI package list
-  would be a core-contract change, not a silent reuse.
+- Chairlift and motd ignore the new symlink and backing directories. A
+  future GUI package list would be a core-contract change, not a silent
+  reuse.
 - Unsigned R2 mkosi manifests and GHCR Syft SBOMs stay off the host CLI.
   The Snow release notes remain the human changelog; they are not a
   fallback parser target.
@@ -255,12 +282,21 @@ assertion can wait until those lanes already boot a staged hop.
   Once the deployment is staged, a copy failure cannot unstage it, and
   the next timer run hits `pulled == staged` and would otherwise only
   rewrite the semaphore. Capture to a private temp file before staging;
-  publish the identity-bound directory only after the staged digest
-  equals the pulled digest; repair on the already-staged path.
-- **Identity in the filename only (`staged-packages.<digest>`):**
-  rejected as the sole binding. A matching name with stale bytes is still
-  a lie if the two are rewritten separately. A directory renamed into
-  place moves identity and bytes together.
+  publish the identity-bound backing directory only after the staged
+  digest equals the pulled digest; repair on the already-staged path.
+- **`mv -T` of a directory onto `/run/snosi/staged-packages`:** rejected.
+  `rename(2)` cannot replace a non-empty directory, so every publish
+  after the first fails with `Directory not empty`. Removing the old
+  directory first would make the second publish work and would reopen
+  the identity/list gap. `renameat2(RENAME_EXCHANGE)` would work, but
+  the host CLI should not depend on `mv --exchange` / a raw
+  `renameat2` helper when swapping a symlink is the ordinary atomic
+  `rename(2)` of a file.
+- **Rewriting files inside a live `staged-packages/` directory, or
+  `rm` then `mv`:** rejected. Readers can observe identity from one
+  generation and `packages.txt` from another, or a missing path
+  between the `rm` and the `mv`. Versioned backing directories are
+  write-once; the symlink is the only mutating name.
 - **Mount the staged bootc composefs tree from status:** rejected. bootc
   treats ostree layout as an implementation detail; pinning it in a
   shipped CLI is the Task-5 class of hidden-interface contract. Capturing
@@ -278,7 +314,7 @@ assertion can wait until those lanes already boot a staged hop.
   (`snosi-update-status`, stagers), [design/overview.md](../design/overview.md)
   (native/bootc `/run/snosi` contract),
   [integration-contracts.md](../integration-contracts.md) §5 (`update-check` /
-  `update-staged`; `/run/snosi/staged-packages/` will be listed here when
+  `update-staged`; `/run/snosi/staged-packages` will be listed here when
   implemented)
 - Implemented by (when this ADR is accepted):
   `mkosi.images/base/mkosi.extra/usr/bin/snosi-update-status`,
@@ -286,6 +322,6 @@ assertion can wait until those lanes already boot a staged hop.
   `shared/outformat/ab-root/tree/usr/libexec/snosi-sysupdate-stage`
 - Builds on: [core ADR-0003 — packages.txt in `/usr/share/frostyard`](https://github.com/frostyard/core/blob/main/docs/adr/0003-image-provenance-in-usr-share-frostyard.md),
   [core ADR-0005 — `/run/snosi` update-state files](https://github.com/frostyard/core/blob/main/docs/adr/0005-native-ab-marker-and-update-state-files.md)
-  (sibling directory, not a field change)
+  (sibling symlink and backing directories, not a field change)
 - Related, not reused: `packagediff.sh` (dev-only, names-only),
   Snow GitHub Releases via `frostyard/changelog-generator`
