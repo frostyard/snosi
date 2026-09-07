@@ -284,6 +284,9 @@ Consumers of the update state:
   staged outside the checker via manual `bootc upgrade`); `--check` does a
   live `skopeo inspect` of the followed registry image and compares
   version labels. No-ops gracefully on nbc (non-bootc) installs.
+  `--pkg-diff` (package-level added/removed/upgraded against a *local*
+  staged image, from `packages.txt`) is proposed in
+  [ADR-0014](../adr/0014-update-status-pkg-diff.md) and is not shipped.
 - `bootc-update-notify.path` + `.service` (user scope) with
   `/usr/libexec/bootc-update-notify` — desktop notification. The path unit
   fires when the semaphore appears mid-session or is modified (newer image

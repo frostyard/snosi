@@ -32,6 +32,7 @@ states intent; the categories below hold the record.
 - [adr/0011-mkosi-bootstrapped-and-pin-shared.md](adr/0011-mkosi-bootstrapped-and-pin-shared.md) — mkosi runs from a repo-local checkout pinned to the workflow's action commit, bootstrapped pre-sudo
 - [adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md](adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md) — OCI layers are chunked by changelog-derived update cadence; secure images chunk before digest sealing, never after
 - [adr/0013-no-requiredby-enablement-prune-stale-requires.md](adr/0013-no-requiredby-enablement-prune-stale-requires.md) — shipped units never use RequiredBy= enablement (CI guard), and the native A/B initrd prunes stale .requires links that would brick boot at "Failed to isolate default target"
+- [adr/0014-update-status-pkg-diff.md](adr/0014-update-status-pkg-diff.md) — **Proposed:** `snosi-update-status --pkg-diff` diffs local staged deployments from `packages.txt`; default status stays silent on packages
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design
