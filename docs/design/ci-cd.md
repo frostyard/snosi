@@ -88,9 +88,12 @@ GHCR authentication is repository- and run-scoped: `secure-build` grants
 Docker login writes the user-context auth file used by Cosign and Skopeo.
 Registry-login `run:` steps map `github.actor` to `GHCR_USER` in `env:` and
 quote that shell variable; direct GitHub context interpolation in shell source
-is forbidden. No long-lived GHCR PAT is required. Scheduled mechanics run `31150007630`
-successfully pushed all three profiles with the same repository token, proving
-the floe, snow, and snowfield package access needed by secure publication.
+is forbidden. No long-lived GHCR PAT is required. Scheduled mechanics run
+`31150007630` successfully pushed the then-existing cayo, snow, and snowfield
+packages with the repository token. It did not create a package with that
+token. The first protected Floe `secure-build` must create
+`ghcr.io/frostyard/floe`; the rename plan records the package's
+private-by-default cutover check.
 
 **Protected publication steps:**
 1. Transiently materialize the durable production MOK/PCR signing credentials supplied by the four `NATIVE_*` secrets, then build and package each profile. The supplied MOK certificate and derived PCR public key must byte-match the committed public identities; runner-local credential files are removed unconditionally after local artifact validation and before registry writes. The distinct disposable PR keys remain ephemeral.
@@ -114,7 +117,7 @@ After `secure-build` completes, a self-contained `release` job runs on main-bran
 
 **Release tag scheme:** `YYYY-MM-DD.N` (daily counter, e.g. `2026-04-09.1`). The release title is `Build YYYY-MM-DD HH:MM:SS UTC`. The body comes from the generated changelog plus the hidden `snow-tag` marker used by future releases.
 
-**Evidence boundary:** Protected run `30627996880` passed all three secure image jobs (`floe`, `snow`, and `snowfield`); only its release changelog failed. The old fallback selected failed-build tag `20260731030941`, which had no SBOM. The replacement is fixture and static-test verified, not live-proven, until a main-branch run creates or cleanly skips a Snow release under this contract.
+**Evidence boundary:** Protected run `30627996880` passed all three secure image jobs (`cayo`, `snow`, and `snowfield`); only its release changelog failed. The old fallback selected failed-build tag `20260731030941`, which had no SBOM. The replacement is fixture and static-test verified, not live-proven, until a main-branch run creates or cleanly skips a Snow release under this contract.
 
 ### build-native-images.yml — Native A/B Build and Publish (Phase 7)
 
@@ -486,7 +489,7 @@ depend on title heuristics.
 Three jobs:
 1. **shell-lint:** Runs shellcheck on tracked `*.sh`/`*.chroot` files and extensionless tracked shell scripts discovered by shebang, excluding `saved-unused/`; then `test/native-ab-static-test.sh` (cheap native A/B configuration invariants — no root, no build); then `test/native-ab-contracts-test.sh` (validates `docs/native-ab-contracts.md`'s frozen naming/label/URL grammar against the actual tree and the `test/native-ab-contracts-allow.txt` deviation list); then `check-native-publication-guard.sh` (docs/native-ab-contracts.md §15 — hard-fails a `floe-ab`/`snow-ab`/`snowfield-ab` profile missing shim/Secure Boot/PCR-signing/NvPCR/pubring markers or carrying a `KernelModules=` filter, and hard-fails `floe-ab-raw` if it ever gains a publication marker; since Phase 3 all three production profiles exist and are validated for real, `floe-ab-raw` continues to pass the "must stay unpublishable" side)
 2. **runtime-etc-guard:** Runs `check-runtime-etc-guard.sh` — scans every tracked file in image payload dirs (`mkosi.extra/`, `shared/*/tree/`) for patterns that delete paths from `/etc` at runtime: `systemctl disable/enable/revert/unmask/preset` (and `deb-systemd-helper`) in units/scripts, `rm`/`mv`/`find -delete` targeting `/etc/`, and tmpfiles.d removal types (`r`/`R`/`D`) on `/etc`. Any such deletion on a bootc/composefs install breaks the `/etc` merge in `bootc-finalize-staged` at shutdown ("a path led outside of the filesystem", bootc ≤ 1.16.3) and the staged update is silently discarded — the host keeps booting the old image while the updater logs success (root-caused 2026-07-05 on `enable-incus-agent.service`, which self-disabled via `ExecStartPost`). Run-once units must gate on a `/var` marker instead (`ConditionPathExists=!/var/lib/<unit>.done` + `ExecStartPost=touch`). Escape hatch for provably safe lines: `# etc-guard-allow: <reason>` comment on the same line or the line directly above (unit files have no trailing comments). Build-time scripts (`*.chroot`, `mkosi.postinst`, etc.) are outside payload dirs and intentionally unscanned — build-time `systemctl enable` is correct. `test/runtime-etc-guard-test.sh` and `test/duplicate-packages-test.sh` provide standalone TAP fixture coverage for these two guards.
-3. **wifi-backend drift guard:** `test/wifi-backend-test.sh` (run in the runtime-etc/package-contracts step) scans shipped payload trees (`mkosi.extra/`, `shared/*/tree/`) for NetworkManager `conf.d` files setting `wifi.backend=` and fails if the implementing package (`iwd` → `iwd`, `wpa_supplicant` → `wpasupplicant`) is absent from that payload's closure (base `mkosi.conf` plus `shared/packages/<product>/mkosi.conf`). Floe shipped `wifi.backend=iwd` for months while only `wpasupplicant` was installed (frostyard/snosi#805); the override is removed and this guard keeps backend and package closure in sync.
+3. **wifi-backend drift guard:** `test/wifi-backend-test.sh` (run in the runtime-etc/package-contracts step) scans shipped payload trees (`mkosi.extra/`, `shared/*/tree/`) for NetworkManager `conf.d` files setting `wifi.backend=` and fails if the implementing package (`iwd` → `iwd`, `wpa_supplicant` → `wpasupplicant`) is absent from that payload's closure (base `mkosi.conf` plus `shared/packages/<product>/mkosi.conf`). Cayo shipped `wifi.backend=iwd` for months while only `wpasupplicant` was installed (frostyard/snosi#805); the override is removed and this guard keeps backend and package closure in sync.
 4. **mkosi-config-sanity:** Runs `mkosi summary` for root config and all profiles to verify configuration, plus `check-profile-dependencies.sh` to ensure profile builds do not include sysext images
 
 ### test-install.yml — Bootc Installation Test

@@ -20,12 +20,12 @@
 # runs unconditionally. Coverage note: only the snow-ab (desktop) path had
 # been run end-to-end through this QEMU harness as of Phase 5; Phase 6 added
 # the first snowfield-ab (desktop + Surface kernel) run, and the Phase 6
-# review follow-up (2026-07-15) added the first server-profile (no-desktop)
+# review follow-up (2026-07-15) added the first cayo-ab (server, no-desktop)
 # run -- green (47/47), proving the Step-5-skipped control flow and that the
 # backports kernel tolerates the shared secure fragment's explicit
 # `lockdown=integrity` (its own SB->lockdown wiring and the explicit
 # parameter coexist; the unconditional lockdown assertion passed). That run
-# also root-caused a real profile difference: floe's initrd has no plymouth
+# also root-caused a real profile difference: cayo's initrd has no plymouth
 # (server payload), so the passphrase prompt is systemd's raw TTY agent
 # shape with a trailing "(press TAB for no echo)" hint -- see the console
 # pump's prompt_re comment. No MokManager interaction: the Snosi MOK
@@ -649,10 +649,10 @@ else:
 s.settimeout(1.0)
 # Match a systemd-ask-password-shaped prompt sitting at the END of the
 # console buffer (i.e. the guest is waiting for input right now). Two real
-# shapes exist, root-caused on the first-ever server-profile run (2026-07-15):
+# shapes exist, root-caused on the first-ever cayo-ab run (2026-07-15):
 # snow-ab/snowfield-ab initrds carry plymouth (desktop payload), whose
 # console prompt ends at the colon and matched the original ':\s*$' anchor;
-# floe-ab (server, no plymouth) gets systemd's raw TTY agent prompt --
+# cayo-ab (server, no plymouth) gets systemd's raw TTY agent prompt --
 # exact observed bytes:
 #   \x1b[0;1;39mPlease enter passphrase for disk var: (press TAB for no echo) \x1b[0m
 # -- where the '(press TAB for no echo)' hint plus the trailing ANSI SGR

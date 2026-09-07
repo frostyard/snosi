@@ -8,7 +8,7 @@ set -euo pipefail
 # compatibility) while setting a distinct Output= (e.g. floe-ab-raw) --
 # see CLAUDE.md "Native A/B Prototype". Matching on "$IMAGE_ID.manifest"
 # then finds nothing and this script fails the whole build post-output
-# step (caught 2026-07-14 running a real pre-rename raw server build for the phase 2
+# step (caught 2026-07-14 running a real cayo-ab-raw build for the phase 2
 # /var-audit task). Read the actual Output= value from $MKOSI_CONFIG (a
 # JSON summary of the current image's settings, available to
 # PostOutputScripts) instead of assuming it matches $IMAGE_ID.

@@ -111,8 +111,8 @@ grep -q 'blkid -p -s TYPE -o value' \
 grep -q '^After=sysroot.mount cryptsetup.target$' \
     "$ab/tree/usr/lib/dracut/modules.d/95etc-overlay/snosi-etc-overlay-initrd.service"
 
-# Phase 3: the security posture that used to live directly in a standalone
-# secure-server spike profile is now a shared, includable fragment
+# Phase 3: the security posture that used to live directly in the
+# cayo-ab-secure spike profile is now a shared, includable fragment
 # (shared/native-ab-secure/mkosi.conf), consumed by the three production
 # profiles (floe-ab, snow-ab, snowfield-ab). Assert the markers on the
 # fragment itself, then assert each production profile actually reaches it

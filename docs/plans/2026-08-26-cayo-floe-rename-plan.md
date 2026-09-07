@@ -159,12 +159,13 @@ the load-bearing groups:
       they won't get new cayo builds, but keeping the scope one release
       longer is free and removes a failure mode during the switch window).
 - [x] Pin the temporary live-compatibility inventory through Phase 5. Outside
-      historical files, `cayo` is allowed in exactly these active places:
+      historical files and dated evidence in living documentation, `cayo` is
+      allowed in exactly these active code paths:
       the single `"ghcr.io/frostyard/cayo"` key in
       `shared/bootc-secure/tree/etc/containers/policy.json`, and the single
       `cayo` entry in `test/bootc-container-policy-test.sh`'s
-      `SECURE_IMAGES` array. That array also includes floe and drives both
-      loops plus the exact trusted-key assertion. Every other
+      `SECURE_IMAGES` array and live-test allowlist. That array also includes
+      floe and drives both loops plus the exact trusted-key assertion. Every other
       test fixture, live-test default, image ref, and payload identity moves to
       floe in this phase. Phase 5 removes this whole temporary allowlist; do
       not remove it sooner and strand a late cayo host.
@@ -241,6 +242,9 @@ the load-bearing groups:
       `docs/native-ab-prototype-history.md`, superpowers specs/plans, or
       `.memory/` history — they are historical record; the org ADR is the
       pointer from old name to new.
+- [x] In living documentation, rename current interfaces but retain exact Cayo
+      profile, artifact, and repository names in dated evidence and run records
+      so their commands, logs, and git history remain traceable.
 - [x] Append a `.memory/corrections.jsonl`-adjacent note only if something
       believed here turns out wrong; otherwise nothing (the repo records the
       rename itself).
@@ -274,6 +278,10 @@ the load-bearing groups:
       to private (CI verification passes because it authenticates). Set
       `ghcr.io/frostyard/floe` public in org package settings and confirm an
       unauthenticated `podman pull ghcr.io/frostyard/floe:latest` succeeds.
+- [ ] **Cloudflare cache rule:** before the first `floe-ab` promotion, confirm
+      the exact-name cache-bypass rule covers
+      `os/native/v1/floe/x86-64/SHA256SUMS` and `SHA256SUMS.gpg`. Add the new
+      prefix if the dashboard rule enumerates product paths.
 - [ ] **Done when:** an anonymous pull of `ghcr.io/frostyard/floe:latest`
       passes signature policy on a Phase-1-updated host, the floe-ab index
       at `https://repository.frostyard.org/os/native/v1/floe/x86-64/` is

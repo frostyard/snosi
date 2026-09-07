@@ -484,7 +484,7 @@ return the same digest; protected assembly never chunks after that overlay. The 
 reconciler activates after local filesystems without writing `/etc`, verifies
 the MOK signer before atomically replacing only shim's `grubx64.efi`, and allows
 valid rollback deployments to restore their own stage. It never remounts an
-already-mounted read-only ESP. The pre-rename server proof validates immutable-source
+already-mounted read-only ESP. The real Cayo proof validates immutable-source
 assembly only; FAT-ESP reconciler execution is deferred to Task 9 secure-install
 runtime coverage. Secure and insecure images carry explicit
 `io.snosi.bootc.secureboot-capable=true|false` labels. This is a maintained,

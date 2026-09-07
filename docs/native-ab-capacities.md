@@ -51,11 +51,12 @@ changes any product's payload size.
   which the generic tree's dracut config would need `omit_drivers=`/
   `drivers=` constraints.
 
-## floe (validated, 2026-07-14, pre-rename production server build)
+## floe (capacity inherited from the 2026-07-14 `cayo-ab` build)
 
-Measured on the real pre-rename production server profile (Task 3.2), not the
-retired standalone secure-server spike. Phase 2 preserves the payload and slot
-sizes while changing the profile identity to `floe-ab`. Full production module set (no
+Measured on a real `mkosi --profile cayo-ab build` (Task 3.2), the production
+profile at that date, not the retired `cayo-ab-secure` spike it replaced. Phase
+2 preserves the payload and slot sizes under the new `floe-ab` identity. Full
+production module set (no
 `KernelModules=` filter anywhere in its Include chain), the frozen channel
 structure, and the committed update pubring
 (`/usr/lib/systemd/import-pubring.gpg`, confirmed present via
@@ -68,21 +69,22 @@ structure, and the committed update pubring
 |---|---|---|---|
 | Root (EROFS, erofs blocks, `dump.erofs -s`) | 999364 blocks * 4096 = 4093394944 B (~3.81 GiB) | 5 GiB (5368709120 B) | (5368709120 - 4093394944) / 5368709120 = 1275314176 / 5368709120 = ~23.8% |
 | Verity | 268435456 B (256 MiB, exact partition size) | 256 MiB | n/a (fixed by the ratio rule; partition ships at its full budget) |
-| UKI (server production profile) | 120397648 B (~114.8 MiB) | ESP 1 GiB | UKI is ~11.2% of ESP (well under the 40% dracut-constraint threshold) |
+| UKI (`cayo-ab.efi`) | 120397648 B (~114.8 MiB) | ESP 1 GiB | UKI is ~11.2% of ESP (well under the 40% dracut-constraint threshold) |
 | ESP (ESP partition itself) | 1073741824 B (1 GiB, exact) | 1 GiB | n/a (fixed) |
 
 **Validated, no change needed:** this real production measurement
 (999364 blocks, from the final build including the `SkeletonTrees=` fix
-below) is essentially identical to the prior standalone secure-server spike
+below) is essentially identical to the prior `cayo-ab-secure` spike
 measurement that drove the Phase 3 slot bump (999267 blocks) and an
-intermediate production server build without the fix (999302 blocks) — the
+intermediate `cayo-ab` build without the fix (999302 blocks) — the
 few-hundred-block deltas are profile-identity/manifest metadata, not
 payload — confirming the 5 GiB root / 256 MiB verity sizing already in
 `shared/native-ab/channels/floe/mkosi.repart/{11-root,21-root-empty,
 10-root-verity,20-root-verity-empty}.conf` and `docs/native-ab-contracts.md`
 §12 remains correct for the real `floe-ab` production profile. No repart
-changes were needed this task; this section records the production measurement
-that remains authoritative after the rename.
+changes were needed this task; this section keeps the `cayo-ab-secure` and
+`cayo-ab` measurement names while carrying their capacity result forward to
+`floe-ab`.
 
 **Real artifact problem found and fixed (Task 3.2):** the first `snowfield-ab`
 build failed outright — `dracut[E]: Module 'bootc' cannot be found`,
@@ -103,7 +105,7 @@ package manager runs, per mkosi's `install_skeleton_trees()` ->
 `install_distribution()` -> `install_extra_trees()` build order), so the
 `bootc` module request is neutralized from the very start of the buildroot
 regardless of which kernel package's postinst happens to run synchronously.
-Reconfirmed harmless for `floe-ab`: rebuilding it with the fix in place
+Reconfirmed harmless for `cayo-ab`: rebuilding it with the fix in place
 produced the 999364-block measurement above (vs. 999302 without the fix) —
 a negligible, metadata-level difference, not a functional regression.
 
@@ -214,8 +216,8 @@ The brief required checking whether removing the `KernelModules=` filter
 initrd enough to need `omit_drivers=`/`drivers=` constraints in the generic
 tree's dracut configuration, targeting <=40% of the 1 GiB ESP for the UKI.
 
-Measured result: the secure-server spike's UKI (full module set, no filter) is
-~114.8 MiB, only marginally larger than the raw server fixture's UKI (virtio-only
+Measured result: `cayo-ab-secure`'s UKI (full module set, no filter) is
+~114.8 MiB, only marginally larger than `cayo-ab-raw`'s UKI (virtio-only
 filter) at ~114.06 MiB (the `esp.raw` split diff of the two full ESPs was
 negligible). Both are far under the 40% (~410 MiB) threshold. **No dracut
 driver-list constraint was added** — dracut's own non-hostonly module

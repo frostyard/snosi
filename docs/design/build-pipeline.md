@@ -132,7 +132,7 @@ options, and the signed-PCR recovery policy. The normative cross-repository
 consumer contract is `docs/bootc-secure-install-contract.md`; it does not
 implement Fisherman, bootc-installer, or Dakota in this repository.
 An existing `ro` ESP mount is refused before any remount or write. The real
-floe Buildah proof validates immutable-source assembly/retention and signer
+Cayo Buildah proof validates immutable-source assembly/retention and signer
 binding, not runtime reconciliation on an installed FAT ESP; that execution is
 deferred to the Task 9 secure-install runtime harness.
 
@@ -190,9 +190,9 @@ document; the normative operational recovery and evidence rules are in
 **OCI signature policy (Task 6):** the secure bootc tree supplies
 `/etc/containers/policy.json`, which defaults to `reject` and has one
 `sigstoreSigned` rule, using `/usr/lib/snosi/cosign.pub`, for each exact
-the temporary legacy server repository and each current
-`ghcr.io/frostyard/{floe,snow,snowfield}` repository. The legacy scope remains
-for the migration window. Cosign v2.6.1 signatures
+`ghcr.io/frostyard/{cayo,floe,snow,snowfield}` repository. The exact Cayo scope
+remains through Phase 5 of the rename plan so late Cayo hosts can migrate.
+Cosign v2.6.1 signatures
 record only the repository identity, so `matchRepository` is required; using
 tag-exact identity would reject valid published images. The accompanying
 `registries.d/frostyard.yaml` enables Sigstore attachments for GHCR, without
@@ -210,10 +210,10 @@ semaphore and its existing EXIT trap records `outcome=failed`.
 **Forky compatibility evidence and limit:** Frostyard's `bootc` and
 `libostree-1-1` debs are built independently of the Forky systemd family, so
 their coexistence is a compatibility risk, not a package-manager proof. Task 4
-ran a full `just floe` build resolving bootc `1.16.3-frostyard202607061837`,
+ran a full `just cayo` build resolving bootc `1.16.3-frostyard202607061837`,
 libostree `2026.2-frostyard202607061837`, and the selected systemd family at
 `261.1-3`; it then ran `bootc --version` and `bootc container --help` under
-`bwrap --ro-bind output/floe /`, preventing host libraries from satisfying the
+`bwrap --ro-bind output/cayo /`, preventing host libraries from satisfying the
 commands. This is evidence for that exact combination only. Re-run the build
 and isolated-root command check whenever bootc-debian, libostree, or the Forky
 selection changes; do not treat the low APT pin or a host-side `ldd` result as
@@ -579,7 +579,7 @@ Server configuration overlay:
 - APT sources for Docker
 - NetworkManager: no Wi-Fi backend override — floe uses NetworkManager's
   default `wpa_supplicant` backend, matching the `wpasupplicant` package that
-  base installs. An early floe overlay shipped
+  base installs. An early Cayo overlay shipped
   `etc/NetworkManager/conf.d/iwd.conf` with `wifi.backend=iwd` while no product
   installs `iwd`, pointing NetworkManager at an absent backend (frostyard/snosi#805,
   removed 2026-08). `test/wifi-backend-test.sh` (validate.yml) fails the build

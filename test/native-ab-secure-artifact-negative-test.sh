@@ -4,7 +4,8 @@
 set -euo pipefail
 
 # OUTPUT_NAME selects which built profile's artifacts to validate (e.g.
-# floe-ab, snow-ab, snowfield-ab); defaults to the production server profile.
+# floe-ab, snow-ab, snowfield-ab); defaults to floe-ab, the renamed successor
+# to the retired cayo-ab-secure spike profile.
 output_name=${OUTPUT_NAME:-floe-ab}
 manifest=${1:-output/$output_name.manifest}
 uki=${2:-output/$output_name.efi}

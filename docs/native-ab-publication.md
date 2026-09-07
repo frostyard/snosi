@@ -551,7 +551,7 @@ real `repository.frostyard.org` origin:
    `NATIVE_UPDATE_SIGNING_KEY` secret in the `native-promotion` GitHub
    environment -- never anywhere else.
 2. **Secure Boot/MOK and PCR signing keys.** Generate (or carry over from an
-   already-validated secure-server spike) production Secure
+   already-validated `cayo-ab-secure`-style spike) production Secure
    Boot/MOK and PCR signing key pairs. Store them as the `native-build`
    environment's `NATIVE_SECURE_BOOT_KEY`/`NATIVE_SECURE_BOOT_CERTIFICATE`/
    `NATIVE_PCR_SIGNING_KEY`/`NATIVE_PCR_SIGNING_CERTIFICATE` secrets. Confirm

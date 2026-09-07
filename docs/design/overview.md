@@ -103,15 +103,15 @@ complete packaged kernel module/firmware set (`docs/native-ab-contracts.md`
 §9) — the virtio-only dev filter that used to live in the shared fragment
 now lives only in `mkosi.profiles/floe-ab-raw/mkosi.conf`, the one dev
 fixture permitted to carry it; the three production profiles build with the full set.
-Measured against the former standalone secure-server spike (Phase 3) and
-reconfirmed against the pre-rename production server build (Task 3.2, 999364 vs 999267
+Measured against the former `cayo-ab-secure` spike (Phase 3) and reconfirmed
+against the real `cayo-ab` production build (Task 3.2, 999364 vs 999267
 erofs blocks — a small difference from profile-identity/manifest metadata,
 not payload): the full module set barely changes UKI
 size (dracut's own non-hostonly selection logic bounds it, not the
 mkosi-level module filter) but grows `/usr/lib/firmware`
-from 21 MiB to 1019 MiB, which left floe's then-frozen 4 GiB root slot
+from 21 MiB to 1019 MiB, which left Cayo's then-frozen 4 GiB root slot
 under 5% headroom instead of the required 20% (spare/total-slot
-definition, §12). Fixed in a Phase 3 follow-up: floe's root slot is now
+definition, §12). Fixed in a Phase 3 follow-up: Cayo's root slot became
 5 GiB (~23.8% headroom against the same measured content), with the
 verity slot scaled in step from 128 MiB to 256 MiB per the verity:root
 ratio rule. `snow-ab` (~5.29 GiB content, ~33.8% headroom against 8 GiB)
@@ -134,7 +134,7 @@ module) before the shadow ever landed. Fixed by pulling the SAME canonical
 file in a second time via `SkeletonTrees=` in
 `shared/outformat/ab-root/mkosi.conf` (no duplication, one source, two
 composition mechanisms), which runs before packages install. Reconfirmed
-harmless for `floe-ab`/`snow-ab` by rebuilding both with the fix.
+harmless for `cayo-ab`/`snow-ab` by rebuilding both with the fix.
 
 **Publication naming pipeline (Task 3.3).**
 `shared/native-ab/publish/prepare-native-publication.sh` turns one built
@@ -446,7 +446,7 @@ unblessed N+3 so systemd-boot exhausts all three tries and falls back to N+2.
 
 The shared `shared/native-ab-secure/mkosi.conf` fragment (`Include=`d by the
 three production profiles `floe-ab`, `snow-ab`, `snowfield-ab`; the former
-standalone secure-server spike that originated this content was retired in
+standalone `cayo-ab-secure` spike profile that originated this content was retired in
 Task 3.2) answers the security-design questions
 without changing the baseline test image. Its chain is firmware Microsoft db ->
 Debian signed shim -> MOK-signed systemd-boot -> MOK-signed snosi UKI. Debian shim
@@ -677,17 +677,17 @@ least one `image-metadata` line (including the `/var/lib/aspell` one), and
 that none of this introduces a failed unit.
 
 Also fixed along the way, unrelated to `/var` but discovered running a
-real `floe-ab-raw` build for the first time: `shared/manifest/postoutput/
+real `cayo-ab-raw` build for the first time: `shared/manifest/postoutput/
 mkosi.postoutput` searched for the built manifest by
 `-name "$IMAGE_ID.manifest"`, but mkosi actually names it after `Output=`
-(confirmed: "Saving manifest floe-ab-raw.manifest" in the build log).
-Native profiles deliberately keep `ImageId=floe` (branding, sysext
-compatibility) while setting a distinct `Output=floe-ab-raw` (channel
+(confirmed: "Saving manifest cayo-ab-raw.manifest" in the build log).
+Native profiles then kept `ImageId=cayo` (branding, sysext compatibility)
+while setting a distinct `Output=cayo-ab-raw` (channel
 naming) — see "Native A/B Prototype" above — so this always failed for
-`floe-ab-raw` and never for bootc `floe`/`snow`/`snowfield`, where
+`cayo-ab-raw` and never for bootc `cayo`/`snow`/`snowfield`, where
 `Output==ImageId`. It silently aborted the ENTIRE build before any output
 artifact got moved into place, which is why nobody had noticed: nothing
-downstream of a successful `floe-ab-raw` build had run recently enough to
+downstream of a successful `cayo-ab-raw` build had run recently enough to
 surface it. Fixed by reading the real `Output=` value from `$MKOSI_CONFIG`
 (a JSON summary of the current image's settings available to
 `PostOutputScripts`) via `python3` instead of assuming it equals
@@ -887,7 +887,7 @@ varstore, then boot the installed system fully enforced and fully unattended and
 assert SB enforced, kernel lockdown, unattended TPM `/var` unlock, the `/etc`
 overlay, `IMAGE_ID`/`IMAGE_VERSION`, `install-info.json`, clean
 `snosi-update-status`, and no failed units. It also de-risks commit 99f4921's
-own-boot-medium refusal in the real initramfs (server-profile step 3). First green run
+own-boot-medium refusal in the real initramfs (`cayo-ab` step 3). First green run
 75/75 (2026-07-15); see testing.md "Phase 8 (ISO install end-to-end)" for the
 full step breakdown and the real product bugs it surfaced.
 

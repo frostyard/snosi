@@ -339,7 +339,7 @@ run_updater_digest_fixture "updater verifies a newly staged manifest and reports
 
 run_live_policy_proof() {
     local live_home host_policy wrong_key_policy wrong_identity_policy unsigned_policy wrong_key log
-    local image
+    local image policy_image
     local -a live_images=()
     local -a required=(podman jq openssl skopeo)
     local command
@@ -350,6 +350,17 @@ run_live_policy_proof() {
             return 2
         fi
     done
+
+    IFS=, read -r -a live_images <<<"${LIVE_IMAGES:-floe}"
+    for image in "${live_images[@]}"; do
+        # Cayo remains covered while its exact policy scope is retained for
+        # late Phase 2 migrations. Phase 5 removes both together.
+        case "$image" in
+            cayo|floe|snow|snowfield) ;;
+            *) printf 'BLOCKED: LIVE_IMAGES contains unsupported product %s\n' "$image" >&2; return 2 ;;
+        esac
+    done
+    policy_image=${live_images[0]}
 
     live_home=$(mktemp -d)
     host_policy=$(mktemp)
@@ -362,6 +373,14 @@ run_live_policy_proof() {
 
     mkdir -p "$live_home/.config/containers/registries.d"
     cp "$REGISTRIES_CONFIG" "$live_home/.config/containers/registries.d/frostyard.yaml"
+    for image in "${live_images[@]}"; do
+        if ! HOME="$live_home" skopeo inspect --no-creds \
+            "docker://ghcr.io/frostyard/$image:latest" >"$log" 2>&1; then
+            printf 'BLOCKED: ghcr.io/frostyard/%s:latest is not anonymously accessible\n' \
+                "$image" >&2
+            return 2
+        fi
+    done
     jq --arg key "$PROJECT_ROOT/cosign.pub" '
         (.transports.docker[][] | select(.type == "sigstoreSigned").keyPath) = $key
     ' "$POLICY" >"$host_policy"
@@ -374,8 +393,9 @@ run_live_policy_proof() {
     jq --arg key "$PROJECT_ROOT/cosign.pub" '
         {default: [{type: "reject"}], transports: {docker: {"docker.io/library/busybox": [{type: "sigstoreSigned", keyPath: $key, signedIdentity: {type: "matchRepository"}}]}}}
     ' "$POLICY" >"$unsigned_policy"
-    jq --arg key "$PROJECT_ROOT/cosign.pub" '
-        {default: [{type: "reject"}], transports: {docker: {"ghcr.io/frostyard/floe": [{type: "sigstoreSigned", keyPath: $key, signedIdentity: {type: "exactRepository", dockerRepository: "ghcr.io/frostyard/snow"}}]}}}
+    jq --arg key "$PROJECT_ROOT/cosign.pub" \
+        --arg scope "ghcr.io/frostyard/$policy_image" '
+        {default: [{type: "reject"}], transports: {docker: {($scope): [{type: "sigstoreSigned", keyPath: $key, signedIdentity: {type: "exactRepository", dockerRepository: "ghcr.io/frostyard/snow"}}]}}}
     ' "$POLICY" >"$wrong_identity_policy"
 
     expect_policy_rejection() { # description policy image
@@ -389,14 +409,7 @@ run_live_policy_proof() {
         fi
     }
 
-    IFS=, read -r -a live_images <<<"${LIVE_IMAGES:-floe}"
     for image in "${live_images[@]}"; do
-        # Floe joins this live allowlist in Phase 2, after its signed image is
-        # published. Accepting it during Phase 1 would turn absence into FAIL.
-        case "$image" in
-            floe|snow|snowfield) ;;
-            *) printf 'BLOCKED: LIVE_IMAGES contains unsupported product %s\n' "$image" >&2; return 2 ;;
-        esac
         if HOME="$live_home" podman pull "ghcr.io/frostyard/$image:latest" >/dev/null 2>&1; then
             pass "live Cosign v2.6.1 signature for ghcr.io/frostyard/$image is accepted"
         else
@@ -410,8 +423,8 @@ run_live_policy_proof() {
     done
 
     expect_policy_rejection "scoped unsigned image is rejected" "$unsigned_policy" docker.io/library/busybox:latest
-    expect_policy_rejection "wrong Cosign key is rejected" "$wrong_key_policy" ghcr.io/frostyard/floe:latest
-    expect_policy_rejection "signature repository identity mismatch is rejected" "$wrong_identity_policy" ghcr.io/frostyard/floe:latest
+    expect_policy_rejection "wrong Cosign key is rejected" "$wrong_key_policy" "ghcr.io/frostyard/$policy_image:latest"
+    expect_policy_rejection "signature repository identity mismatch is rejected" "$wrong_identity_policy" "ghcr.io/frostyard/$policy_image:latest"
 }
 
 if [[ "${RUN_LIVE:-0}" == "1" ]]; then

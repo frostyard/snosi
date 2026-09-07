@@ -5,7 +5,7 @@
 # State" for the audit mechanism and meanings. List more specific globs
 # before broader ones matching the same subtree (first match wins).
 #
-# Populated from a real pre-rename raw server build (2026-07-14) —
+# Populated from a real cayo-ab-raw build (2026-07-14) —
 # the audit's own "unclassified paths" failure listing was used as the
 # ground truth for what actually lands under /var at build time; see
 # docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md and the phase 2

@@ -26,7 +26,7 @@ name-triggered publication-guard rule (§1, §15) is decided in
 | bootc profiles (unchanged) | `floe`, `snow`, `snowfield` |
 | Production native profiles | `floe-ab`, `snow-ab`, `snowfield-ab` (secure posture only) |
 | Development fixtures | `floe-ab-raw` (never published) |
-| Shared secure posture fragment | `shared/native-ab-secure/mkosi.conf` (generalized from the retired standalone secure-server spike; `Include=`d by all three production native profiles) |
+| Shared secure posture fragment | `shared/native-ab-secure/mkosi.conf` (generalized from the retired `cayo-ab-secure` spike profile; `Include=`d by all three production native profiles) |
 
 A profile literally named `floe-ab`, `snow-ab`, or `snowfield-ab` is
 production-facing and MUST satisfy the publication guard (§15). It must never
@@ -281,7 +281,7 @@ but it was a real gap in lockdown's other protections (kexec restriction,
 `/dev/mem`, debugfs, BPF, hibernation) that is now closed for all three
 production profiles, not just snowfield-ab — empirically re-proven on a
 second consumer of the shared fragment on 2026-07-15: the first-ever
-`floe-ab` run of `test/native-ab-secure-boot-test.sh` passed 47/47 with the
+`cayo-ab` run of `test/native-ab-secure-boot-test.sh` passed 47/47 with the
 backports kernel reporting `none [integrity] confidentiality`, i.e. its own
 SB→lockdown wiring and the explicit parameter coexist. **Expected consequence, not
 just a security win:** on the snowfield laptop profile specifically, this

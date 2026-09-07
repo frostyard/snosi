@@ -57,7 +57,7 @@ installer contract; `docs/bootc-secure-install-contract.md` retains the retired
 Task 9 adapter protocol for compatibility and fixture history.
 The Forky systemd family is a deliberate cross-suite compatibility risk with
 Frostyard's bootc/libostree debs, not an inferred package guarantee. Task 4
-validated one real pre-rename server build with bootc 1.16.3, libostree 2026.2, and systemd
+validated one real Cayo build with bootc 1.16.3, libostree 2026.2, and systemd
 261.1-3, then ran `bootc --version` and `bootc container --help` in a bwrap
 root containing only that output. Repeat that build/root check when either the
 Frostyard debs or the selected systemd family changes.
@@ -106,7 +106,7 @@ mutation. Storage-digest authority remains bootc inside the candidate OCI image.
 Direct ukify executes as `/usr/bin/ukify` inside the chunked first-pass
 candidate with network disabled, individual read-only credential mounts, and a
 public-only writable work mount. Protected run 30579247524 reached this point
-but the pre-rename server job 90995134482 failed because the unprivileged candidate could not
+but the Cayo job 90995134482 failed because the unprivileged candidate could not
 read its mode-restricted in-image initramfs; no validation, push, signing, or
 promotion ran. Before execution, the assembler canonicalizes the discovered
 in-root kernel/initrd paths, copies their bytes to mode-0644 `linux`/`initrd`
@@ -161,7 +161,7 @@ The prior second stage is restored byte-for-byte if post-replacement sync fails.
 Shim `BOOTX64.EFI` and MokManager `mmx64.efi` are never modified. Reconciliation
 intentionally permits rollback: the authenticated deployment currently booted,
 not a monotonic version, selects the replacement.
-The pre-rename server proof validates immutable-source assembly, OCI retention, and
+The real Cayo proof validates immutable-source assembly, OCI retention, and
 signature binding only; executing this reconciler against an installed FAT ESP
 is deferred to the Task 9 secure-install runtime harness.
 
@@ -235,8 +235,10 @@ steps expose `github.actor` only through the quoted `GHCR_USER` environment
 variable; never interpolate GitHub context values directly into shell source.
 The successful
 three-profile mechanics publication run `31150007630` proves repository-token
-write access to the pre-rename server, snow, and snowfield packages, so a long-lived
-GHCR PAT is neither required nor permitted. Pinned Cosign v2.6.1 receives
+write access to the then-existing cayo, snow, and snowfield packages. It does
+not prove token-based creation of the new Floe package; the first protected
+Floe `secure-build` is that cutover check. A long-lived GHCR PAT is neither
+required nor permitted. Pinned Cosign v2.6.1 receives
 registry auth through command-scoped
 `DOCKER_CONFIG`; it has no registry-config flag. Version-tag resolution must
 equal the pushed digest before policy copy. The verifier never relies on sudo
@@ -293,12 +295,16 @@ claimed from fixture or native evidence. User and recovery guidance lives in
 
 **Bootc OCI signature policy (Task 6, 2026-07-28):** secure bootc profiles ship
 `/etc/containers/policy.json` with global `reject` and exact
-`sigstoreSigned` scopes only for the temporary legacy server repository,
-`floe`, `snow`, and `snowfield`; each
+`sigstoreSigned` scopes only for `ghcr.io/frostyard/cayo`, `floe`, `snow`, and
+`snowfield`; each
 uses the committed public-only `cosign.pub` copied to
 `/usr/lib/snosi/cosign.pub`. Cosign v2.6.1 signatures record repository rather
 than tag identities, so this MUST use `signedIdentity: matchRepository` and
 the GHCR `registries.d` entry MUST retain `use-sigstore-attachments: true`.
+The exact Cayo scope remains through Phase 5 of
+`docs/plans/2026-08-26-cayo-floe-rename-plan.md` so late Cayo hosts can migrate;
+`test/bootc-container-policy-test.sh` must retain Cayo in `SECURE_IMAGES` and
+its live allowlist until that phase removes both.
 LOCAL transports are accepted with `insecureAcceptAnything`: `containers-storage`
 (so bootc consumes the image Podman's signed `docker` pull already accepted),
 plus `tarball`, `docker-archive`, `oci-archive`, `dir`, and `oci` so an operator
@@ -314,7 +320,7 @@ change `default` from `reject`. That is the half that matters, and
 `test/bootc-container-policy-test.sh` fails if either moves: it requires every
 `docker` scope to stay `sigstoreSigned`, forbids a catch-all `docker` scope, and
 pins the default to `reject`. Verified against the real policy that an unsigned
-`docker.io` pull and an unsigned `ghcr.io/frostyard/floe` pull are both still
+`docker.io` pull and an unsigned `ghcr.io/frostyard/cayo` pull are both still
 refused while `podman import` succeeds. Secure install
 paths must not use `--skip-fetch-check`. Local rootfs test fixtures use their
 own disposable permissive policy only; registry paths use a disposable HOME
@@ -323,8 +329,9 @@ containing the restrictive policy so host configuration is never changed.
 staged storage-digest check; a failed pull, including policy rejection, clears
 `/run/snosi/update-staged` and leaves the existing EXIT trap to record
 `outcome=failed`. Run `test/bootc-container-policy-test.sh`; set `RUN_LIVE=1`
-(and optionally `LIVE_IMAGES=floe,snow,snowfield`) to verify published
-signatures, wrong key, unsigned, and wrong-repository rejection through Podman.
+(and optionally `LIVE_IMAGES=cayo,floe,snow,snowfield`) to verify public,
+published signatures, wrong key, unsigned, and wrong-repository rejection
+through Podman.
 Run live Floe validation only after its first signed image is published.
 
 **Bootc sealed-UKI feasibility gate (Tasks 1-2, 2026-07-28):**
@@ -607,12 +614,12 @@ already had, so the `.raw` is an assertion about base's transitive closure at
 build time that nothing revalidates later. Removing a package from base
 therefore breaks every sysext published before that removal, and
 `skip-duplicates` means an unchanged KEYPACKAGE version never republishes on
-its own. Root-caused on incus/floe: until 33455fc (2026-08-25, #771) base
+its own. Root-caused on incus/cayo: until 33455fc (2026-08-25, #771) base
 transitively pulled a whole desktop through `network-manager-applet`'s
 `policykit-1-gnome | polkit-1-auth-agent` virtual, so the 2026-08-04 incus
 delta shipped `qemu-system-gui`, `libsdl2-2.0-0`, `libvte-2.91-0`,
 `libgtk-vnc-2.0-0` and `virt-viewer` with NONE of their GTK3/media deps. After
-#771 floe has 24 unresolved sonames in that payload; the incus deb's bundled
+#771 cayo has 24 unresolved sonames in that payload; the incus deb's bundled
 `/usr/incus/bin/qemu-system-x86_64` (`DT_NEEDED: libepoxy.so.0`, and incusd's
 `/usr/incus/lib/systemd/incusd` wrapper puts `/usr/incus/bin` first on `PATH`,
 so it — not Debian's working `/usr/bin/qemu-system-x86_64` — is what gets
@@ -702,7 +709,7 @@ The target (e.g. `gnome-session.target`) comes from the service's `WantedBy=` in
 - `claude.yml` - ACMM-recognized GitHub Actions AI integration marker. It is manual-only, keeps default permissions empty, performs no checkout, uses no secrets, and points to the existing operational Copilot issue handoff rather than introducing another agent pathway.
 - `triage.yml` - Adds one missing classification label (`acmm`, `bug`, `documentation`, `enhancement`, or `question`) from explicit issue-title signals on open, edit, or reopen. It never removes labels or overrides an existing classification, uses only job-scoped `issues: write`, and passes no issue text through workflow expressions or shell evaluation. The bug-report template applies `bug` exactly before heuristic triage runs.
 - `build.yml` - Builds base + sysexts and publishes to Frostyard repo (Cloudflare R2) only outside pull requests. Its build job executes PR-controlled mkosi configuration under `sudo`, so that job's `GITHUB_TOKEN` is restricted to `contents: read`; it must not regain package, OIDC, or attestation write scope. `test/build-workflow-permissions-test.py`, wired into `validate.yml`, enforces that exact permission boundary. Push/PR triggers exclude Markdown, agent-context stores, the standalone installer ISO and redirect workflows, repository metadata, workflow files that never run on push/PR, and sibling push/PR workflow files it never reads, because none can affect sysext composition or publication; manual dispatch remains available. `build.yml` itself is never ignored by any workflow — it is the canonical mkosi pin source (`shared/native-ab/ci/bootstrap-mkosi.sh` and the Justfile read it). `test/workflow-path-filter-test.sh` pins all expensive-workflow ignore lists and the load-bearing non-ignores.
-- `build-images.yml` - Push/PR triggers exclude Markdown, agent-context stores, the standalone installer ISO and redirect workflows, repository metadata, workflow files that never run on push/PR, and sibling push/PR workflow files it never reads; those paths cannot affect image inputs or validation, while manual/repository dispatch remains available. Superseded runs of the same ref are cancelled for push AND pull_request events (a new push to a PR branch previously left the prior three-profile mechanics matrix running to completion). Three-profile PR `mechanics-build` packages and smoke-tests locally with no secrets or registry writes. Protected `secure-build` runs only for main non-PR events in `native-build`: it transiently materializes the durable production MOK/PCR identities supplied by the four `NATIVE_*` secrets, deletes those runner-local files before registry writes, validates the local artifact, pushes/signs the immutable version digest, verifies labels/signature and policy-copied bytes remotely, then copies that verified digest to `latest`. Both jobs select the runner-bundled `runc` through a job-local `containers.conf.d` drop-in and verify it before building, avoiding the hosted Podman 5.8.4/default-crun incompatibility without changing shipped-image runtime policy. The Snow tag artifact is emitted only after its SBOM upload/signature, provenance attestation, and R2 manifest upload all succeed. The `release` job needs `secure-build`; it derives a predecessor only from newest-first GitHub Release `<!-- snow-tag: ... -->` markers whose older immutable Snow image has an exact `application/vnd.syft+json` referrer. It never falls back to arbitrary registry tags. If no eligible marker exists, it warns and safely skips changelog and release creation. Run `30627996880` passed all three protected secure image jobs (`floe`, `snow`, `snowfield`), but its release changelog failed because the old fallback selected failed-build tag `20260731030941`, which had no SBOM. This repair is fixture-verified only, not live-proven, until a main-branch run creates or cleanly skips a Snow release using this resolver.
+- `build-images.yml` - Push/PR triggers exclude Markdown, agent-context stores, the standalone installer ISO and redirect workflows, repository metadata, workflow files that never run on push/PR, and sibling push/PR workflow files it never reads; those paths cannot affect image inputs or validation, while manual/repository dispatch remains available. Superseded runs of the same ref are cancelled for push AND pull_request events (a new push to a PR branch previously left the prior three-profile mechanics matrix running to completion). Three-profile PR `mechanics-build` packages and smoke-tests locally with no secrets or registry writes. Protected `secure-build` runs only for main non-PR events in `native-build`: it transiently materializes the durable production MOK/PCR identities supplied by the four `NATIVE_*` secrets, deletes those runner-local files before registry writes, validates the local artifact, pushes/signs the immutable version digest, verifies labels/signature and policy-copied bytes remotely, then copies that verified digest to `latest`. Both jobs select the runner-bundled `runc` through a job-local `containers.conf.d` drop-in and verify it before building, avoiding the hosted Podman 5.8.4/default-crun incompatibility without changing shipped-image runtime policy. The Snow tag artifact is emitted only after its SBOM upload/signature, provenance attestation, and R2 manifest upload all succeed. The `release` job needs `secure-build`; it derives a predecessor only from newest-first GitHub Release `<!-- snow-tag: ... -->` markers whose older immutable Snow image has an exact `application/vnd.syft+json` referrer. It never falls back to arbitrary registry tags. If no eligible marker exists, it warns and safely skips changelog and release creation. Run `30627996880` passed all three protected secure image jobs (`cayo`, `snow`, `snowfield`), but its release changelog failed because the old fallback selected failed-build tag `20260731030941`, which had no SBOM. This repair is fixture-verified only, not live-proven, until a main-branch run creates or cleanly skips a Snow release using this resolver.
 - `build-native-images.yml` (Phase 7) - Native A/B (`floe-ab`/`snow-ab`/`snowfield-ab`) build/publish pipeline; a thin caller of `shared/native-ab/publish/*.sh` and `shared/native-ab/ci/*.sh` — see `docs/native-ab-publication.md`'s "CI publication flow" section for the full job graph, secret inventory, and the "First production publication checklist" that must be completed before it is allowed to touch real R2. Triggers on relevant push + PR changes to main (including `build.yml`, whose mkosi pin it reads) plus `workflow_dispatch`/`repository_dispatch`; ISO-only paths are ignored. PRs run only the non-publishing `build-pr` matrix with runner-generated RSA-4096 MOK and RSA-2048 PCR credentials. Production `build-{floe,snow,snowfield}` and promotion stay outside PRs in their protected environments. Each product independently uploads, public-origin verifies, boots via `test/native-boot-smoke-test.sh`, and promotes, so one failure never blocks another. Range verification requires HTTP 206 plus exact `Content-Range` and byte count; each response is size-capped so ignored Range requests cannot pull a whole image. Each fresh promotion runner refreshes APT immediately before installing rclone.
 - `build-installer-iso.yml` - Independent Firn installer ISO publication pipeline. Main pushes use a positive list of ISO build/trust/publication/smoke-test inputs; manual and generic org `build` repository dispatch remain because dispatches do not identify their source component. It has no PR trigger. `pin-check`/`prepare` feed `build-iso` in `native-build`, `test-public-origin-iso` re-downloads and boots the candidate to a serial login prompt, and `promote-iso` signs the index in `native-promotion` before verifying the served index and stable redirect. Its non-cancelling concurrency group serializes ISO publication without waiting on native product builds.
 - `nightly-compliance.yml` - Runs the existing secretless runtime `/etc`, native publication, bootc publication, and signed-sysext policy contracts every day at 04:30 UTC and on manual dispatch. It has read-only contents access, performs no publication, and uses a non-cancelling concurrency group so a slow run is not hidden by the next schedule.

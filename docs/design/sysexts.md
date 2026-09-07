@@ -682,7 +682,7 @@ That makes the published `.raw` a **frozen assertion about the base's
 transitive closure at build time** — and nothing re-validates it when the
 base later changes.
 
-This bit incus on the pre-rename server image (root-caused 2026-09-01). Until
+This bit incus on Cayo (root-caused 2026-09-01). Until
 33455fc (2026-08-25, #771) the base image transitively pulled an entire
 desktop, because `network-manager-applet` depends on the
 `policykit-1-gnome | polkit-1-auth-agent` virtual and apt satisfied it with
@@ -694,10 +694,10 @@ sysext built 2026-08-04 against that fat base therefore shipped
 their GTK3/media dependencies** — all correctly omitted as "already in the
 base".
 
-#771 removed `network-manager-applet`. Floe images built after it have none
+#771 removed `network-manager-applet`. Cayo images built after it have none
 of those libs, and the incus sysext was never rebuilt (its KEYPACKAGE
 version had not moved, so `skip-duplicates` skipped every republish). The
-merged result on floe had 24 unresolved sonames. The user-visible symptom
+merged result on Cayo had 24 unresolved sonames. The user-visible symptom
 was total loss of VM support:
 
 ```
