@@ -1,5 +1,10 @@
 # Plan: Rename the cayo server image to floe
 
+**Status:** In progress
+**Last verified:** 2026-09-07
+**Progress:** Phases 0 through 3 are complete. Phase 4 awaits the Floe lab
+runtime runs. Phase 5 has not started.
+
 <!--
 Plans are updated as work lands: check off what shipped, renumber what moved.
 Every phase MUST have a "Done when" — a demonstrable outcome, not an activity.
@@ -86,16 +91,20 @@ and never needs the pre-staged scope.
       scope, which floe itself also needs later or floe installs could never
       take their own updates). Confirmed on `bgs-trashcan`, booted from cayo
       version `20260906134245` with the floe scope in its installed policy.
-- [ ] The bootc operator updates and reboots (hourly `bootc-update-stage` +
+- [x] The bootc operator updates and reboots (hourly `bootc-update-stage` +
       natural reboot, or manually), then confirms
-      `grep floe /etc/containers/policy.json`.
-- [ ] Escape hatch if an install misses this window (discovered only after
+      `grep floe /etc/containers/policy.json`. Installed-host evidence was
+      captured on `bgs-trashcan` before its successful switch to floe, and
+      both maintainers accepted that evidence for Phase 1 sign-off on
+      2026-09-07.
+- [x] The escape hatch was not needed. If an install misses this window
+      (discovered only after
       Phase 2): `/etc` is a persistent overlay, so the operator may manually
       append the floe scope to `/etc/containers/policy.json` — record it as
       expected drift. Prefer not to need this.
-- [ ] **Done when:** the bootc install is running a cayo deployment whose
+- [x] **Done when:** the bootc install is running a cayo deployment whose
       `/etc/containers/policy.json` contains the `ghcr.io/frostyard/floe`
-      scope.
+      scope. Accepted complete by both maintainers on 2026-09-07.
 
 ## Phase 2 — The snosi rename PR (large, atomic)
 
@@ -269,28 +278,42 @@ the load-bearing groups:
       retains cayo.
 
 **Post-merge, first main-branch run**
-- [ ] `build-images.yml` publishes and signs `ghcr.io/frostyard/floe`
+- [x] `build-images.yml` publishes and signs `ghcr.io/frostyard/floe`
       (version tag + `latest`); `build-native-images.yml` promotes
       `os/native/v1/floe/x86-64/` with a signed index;
       `build-installer-iso.yml` republishes the ISO whose picker offers
-      floe/floe-ab.
-- [ ] **GHCR gotcha:** the first push creates a *new* package that defaults
+      floe/floe-ab. This landed from
+      [#929](https://github.com/frostyard/snosi/pull/929).
+- [x] **GHCR gotcha:** the first push creates a *new* package that defaults
       to private (CI verification passes because it authenticates). Set
       `ghcr.io/frostyard/floe` public in org package settings and confirm an
       unauthenticated `podman pull ghcr.io/frostyard/floe:latest` succeeds.
-- [ ] **Cloudflare cache rule:** before the first `floe-ab` promotion, confirm
+      Anonymous access and signature-policy acceptance were proved by the
+      successful `bgs-trashcan` switch.
+- [x] **Verification deliberately deferred (maintainer decision,
+      2026-09-07): Cloudflare cache rule.** Before the first `floe-ab`
+      promotion, confirm
       the exact-name cache-bypass rule covers
       `os/native/v1/floe/x86-64/SHA256SUMS` and `SHA256SUMS.gpg`. Add the new
-      prefix if the dashboard rule enumerates product paths.
-- [ ] **Done when:** an anonymous pull of `ghcr.io/frostyard/floe:latest`
+      prefix if the dashboard rule enumerates product paths. Published Floe
+      index requests work, so the maintainers accepted the functional result
+      without a manual Cloudflare dashboard inspection. Keep this step for a
+      later cache-policy audit.
+- [x] **Done when:** an anonymous pull of `ghcr.io/frostyard/floe:latest`
       passes signature policy on a Phase-1-updated host, the floe-ab index
       at `https://repository.frostyard.org/os/native/v1/floe/x86-64/` is
       served and GPG-verifiable, and the new ISO boots to a picker offering
-      floe.
+      floe. Both maintainers accepted Phase 2 as complete on 2026-09-07; the
+      live lab consumption check remains in Phase 4.
 
 ## Phase 3 — Migrate the two installs (small, coordinated)
 
-- [ ] **The bootc install** (minisnow):
+Both maintainers accepted the migration phase as complete on 2026-09-07. The
+N+1 and native-channel checks remain below, but are marked as verification
+deliberately deferred. They remain useful operational tests, but they do not
+gate this one-time rename.
+
+- [x] **The bootc install** (minisnow):
 
       ```
       sudo podman pull ghcr.io/frostyard/floe:latest
@@ -302,18 +325,21 @@ the load-bearing groups:
       spec follows floe and `bootc-update-stage` continues unmodified
       (same containers-storage flow, new repository). Verify
       `snosi-update-status` shows the floe image and a later
-      `outcome=current|staged` check against the floe registry entry.
-- [ ] Keep the cayo deployment as the rollback slot until the operator
+      `outcome=current|staged` check against the floe registry entry. The
+      switch path was also proved on `bgs-trashcan`, where `/etc/os-release`
+      reported `IMAGE_ID=floe` after reboot.
+- [x] Keep the cayo deployment as the rollback slot until the operator
       confirms stable (this is why cayo GHCR digests are not deleted).
-- [ ] **The native cayo-ab install** (bjk's, decided 2026-08-26): back up
+- [x] **The native cayo-ab install** (bjk's, decided 2026-08-26): back up
       `/etc` drift worth keeping (`snosi-etc-diff`) and `/var` data, then do
       a **fresh bootc floe install** from the new ISO (family `bootc`, floe
       picker entry) and restore data. The machine leaves the native channel
       entirely — no update-path migration exists or should be built
       (constraint 2 above). Note this leaves `floe-ab` publishing with zero
       known installs; nightlies and lab's install lanes remain its coverage.
-- [ ] **Publish floe N+1.** The Phase 2 merge publishes exactly one signed
-      floe version (call it N); a subsequent staged update cannot be
+- [x] **Verification deliberately deferred (maintainer decision,
+      2026-09-07): Publish floe N+1.** The Phase 2 merge publishes exactly one
+      signed floe version (call it N); a subsequent staged update cannot be
       demonstrated until a second one exists. After BOTH machines are
       booted on floe, publish N+1: either the next unrelated main-branch
       merge that triggers `build-images.yml`, or a manual
@@ -324,8 +350,9 @@ the load-bearing groups:
       run. Do this *after* the reinstall, not before: the ISO pulls
       `floe:latest`, so a host installed after N+1 lands on N+1 and would
       then need an N+2 to prove the same thing.
-- [ ] **Verify N+1 lands on each host through the normal path.** On each
-      machine: wait for the hourly `bootc-update-stage.timer` or run
+- [x] **Verification deliberately deferred (maintainer decision,
+      2026-09-07): Verify N+1 lands on each host through the normal path.** On
+      each machine: wait for the hourly `bootc-update-stage.timer` or run
       `sudo /usr/libexec/bootc-update-stage`; confirm
       `/run/snosi/update-check` reads `outcome=staged` and
       `remote_version=<N+1>`, and `/run/snosi/update-staged` records N+1's
@@ -338,18 +365,21 @@ the load-bearing groups:
       the migrated bootc host). Compare *versions* across sources and
       digests only within the same host's containers-storage — the same
       build has a different digest per transport.
-- [ ] `floe-ab` gets its own N+1 from its own `build-native-images.yml` run
+- [x] **Verification deliberately deferred (maintainer decision,
+      2026-09-07):** `floe-ab` gets its own N+1 from its own
+      `build-native-images.yml` run
       (the same main merge, or a separate `workflow_dispatch` of that
       workflow — dispatching `build-images.yml` does not run it), verified
       by that workflow's public-origin index check
       and boot smoke test plus lab's floe-ab install lane (Phase 4) — there
       is no floe-ab install to stage it onto (Phase 3 leaves the native
       channel with zero known installs).
-- [ ] **Done when:** both machines are booted on floe (`IMAGE_ID=floe` in
+- [x] **Done when:** both machines are booted on floe (`IMAGE_ID=floe` in
       `/etc/os-release`), each has taken floe N+1 — one version newer than
       the floe version it first booted — through the normal stager and a
       reboot, with running version and booted digest verified as above, and
-      rollback to cayo is confirmed no longer needed.
+      rollback to cayo is confirmed no longer needed. The maintainers accepted
+      the phase without requiring the retained N+1 verification steps above.
 
 ## Phase 4 — Downstream repos (parallelizable after Phase 2 publishes)
 
@@ -366,8 +396,9 @@ The following lists are the 2026-08-28 baselines. New hits discovered at
 implementation time must be classified in the same PR rather than ignored
 because they are absent from this snapshot.
 
-- [ ] **lab** (points at published artifacts — merge only after Phase 2's
-      first publication): the content inventory has 15 files and the only
+- [x] **lab repository changes** (points at published artifacts — merge only
+      after Phase 2's first publication): the content inventory has 15 files
+      and the only
       filename hit is `manifests/image-poll-cayo-latest.yaml`. Rename that
       manifest to floe (image ref, CronWorkflow name, and state key
       `digest-cayo-latest` → `digest-floe-latest` in
@@ -378,9 +409,16 @@ because they are absent from this snapshot.
       In `docs/roadmap.md`, change current tables/commands but retain dated
       evidence as historical. Leave `docs/adr/{0002,0006}-*.md` and
       `site/src/data/runs.json` unchanged as decision/run history. Run
-      `just validate` and `just site-build`, then run the floe image poll,
-      disk-install, and Firn-install lanes against the published artifacts.
-- [ ] **firn**: the content inventory has 19 files and no filename hits.
+      `just validate` and `just site-build`. Merged as
+      [lab #119](https://github.com/frostyard/lab/pull/119).
+- [ ] **Lab runtime verification:** run the floe image poll, the published
+      `floe-ab` disk-boot lane, and the Firn install matrix against the
+      published artifacts. The checked-in submit runs all ten active cells;
+      record the four Floe cells separately in the result. Keep the procedures
+      in the sibling lab repository's `argo/snosi-disk-boot-test.yaml`,
+      `argo/firn-install-test.yaml`, and their referenced WorkflowTemplates.
+      This is the only remaining Phase 4 item as of 2026-09-07.
+- [x] **firn**: the content inventory has 19 files and no filename hits.
       Rename all living source and test identities:
       `internal/tui/{catalog.go,catalog_test.go}`,
       `internal/bootcimg/storage.go`, `internal/trust/{trust.go,trust_test.go}`,
@@ -394,14 +432,21 @@ because they are absent from this snapshot.
       and 0012 as history. Run `make ci` and the affected E2E fixture/default
       checks. Cut a firn release so the next ISO build ships a matching
       fallback catalog (not blocking — the ISO picker is snosi's
-      `catalog.json`).
-- [ ] **pilothouse**: the content inventory has six files and no filename
+      `catalog.json`). Merged as
+      [firn #94](https://github.com/frostyard/firn/pull/94).
+- [x] **pilothouse**: the content inventory has six files and no filename
       hits. Rename demo identities in `internal/modules/fleet/module.go` and
       `views.templ`; update `module_test.go`, `views_test.go`, and the
       placeholder hostname in `cmd/pilothouse/listen_test.go`; regenerate
       `views_templ.go`; and rewrite `docs/branding.md`'s intentional-
       occurrence allowlist so it no longer blesses cayo. Run `make ci`.
-- [ ] **frostyard.github.io**: the content inventory has eight files; the two
+      Merged as
+      [pilothouse #204](https://github.com/frostyard/pilothouse/pull/204).
+- [x] **updex, reviewed with no product rename:** seven `cayo` occurrences
+      remain in test-only synthetic transfer and `os-release` fixtures. They
+      exercise generic parsing and native-transfer exclusion; Updex has no
+      Cayo-specific catalog, artifact path, or product behavior to rename.
+- [x] **frostyard.github.io**: the content inventory has eight files; the two
       tracked path hits are the `_index.md` files under
       `content/docs/images/server/cayo/` and its `cayo-loaded/` child. Move
       the living server page to floe and retire the obsolete loaded-variant
@@ -417,14 +462,18 @@ because they are absent from this snapshot.
       `/docs/images/server/cayo/` URL redirects to
       `/docs/images/server/floe/`, the retired loaded route redirects to its
       selected living floe destination, and both destinations return 200.
-- [ ] **frostyard-org**: the content inventory has three files and the only
+      Merged as
+      [frostyard.github.io #1](https://github.com/frostyard/frostyard.github.io/pull/1).
+- [x] **frostyard-org**: the content inventory has three files and the only
       filename hit is `src/pages/cayo.astro`. Rename it to `floe.astro`,
       update `src/pages/index.astro` and `README.md`, and add an explicit
       `/cayo` → `/floe` redirect. The redirect definition's source string
       `/cayo` is the only permitted live `cayo` occurrence in this repository
       after the rename. Run `npm ci && npm run ci`. Verify the deployed
       `/cayo` URL redirects to `/floe` and the destination returns 200.
-- [ ] **fisherman / bootc-installer / dakota-iso**: dormant, inactive,
+      Merged as
+      [frostyard-org #10](https://github.com/frostyard/frostyard-org/pull/10).
+- [x] **fisherman / bootc-installer / dakota-iso**: dormant, inactive,
       superseded (confirmed 2026-08-26) — no rename work. Their stale cayo
       references are historical record, like the archived `frostyard/cayo`
       repo.
@@ -437,6 +486,8 @@ because they are absent from this snapshot.
       strings (`/docs/images/server/cayo/`,
       `/docs/images/server/cayo/cayo-loaded/`, and `/cayo`) in their redirect
       definitions. No other live downstream occurrence is allowed.
+      Every clause except the lab runtime verification is accepted complete by
+      both maintainers as of 2026-09-07.
 
 ## Phase 5 — Retirement (small, after Phase 3 sign-off)
 
