@@ -282,6 +282,9 @@ jobs:
           file-install: false
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Test Nix persistent state ownership
+        run: sudo python3 ./test/nix-state-ownership-test.py
+
       - name: Test Nix client group access
         run: sudo python3 ./test/nix-client-group-test.py
 
