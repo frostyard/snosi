@@ -455,6 +455,13 @@ Scripts execute in order: **BuildScripts** (in chroot) -> **PostInstallationScri
 
 ### Immutable Filesystem Constraints
 
+SANE is installed in base, so `sysusers.d/sane.conf` and
+`tmpfiles.d/saned.conf` also live in base. Floe and desktop profiles inherit
+the same account, scanner membership, and persistent home. The desktop must
+not shadow those definitions. `test/sane-base-provisioning-test.py` checks
+base-only provisioning and preservation of existing account IDs.
+
+
 Service group membership uses `m USER GROUP`: saned joins scanner,
 cups-pk-helper joins lpadmin, and usbmux joins plugdev. The latter two use
 Debian-compatible primary groups for newly created accounts; `m` also repairs

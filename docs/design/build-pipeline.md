@@ -566,6 +566,13 @@ Each profile has filesystem overlays (ExtraTrees) that are merged into the image
 
 ### Base NFS service accounts
 
+SANE is installed in base, so `sysusers.d/sane.conf` and
+`tmpfiles.d/saned.conf` also live in base. Floe and desktop profiles inherit
+the same account, scanner membership, and persistent home. The desktop must
+not shadow those definitions. `test/sane-base-provisioning-test.py` checks
+base-only provisioning and preservation of existing account IDs.
+
+
 `mkosi.images/base/mkosi.conf` installs `nfs-common`, which depends on
 `rpcbind`. Debian's package postinst scripts create `statd` and `_rpc` in
 the build-time `/etc`; installed machines with persistent account databases

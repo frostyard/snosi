@@ -85,6 +85,7 @@ required-by-guard-test.sh	ci	validate.yml
 run-qemu.sh	helper	-
 runtime-etc-guard-test.sh	ci	validate.yml
 service-account-memberships-test.py	ci	validate.yml
+sane-base-provisioning-test.py	ci	validate.yml
 secure-vm-fixture-test.sh	unwired	-
 snosi-etc-diff-test.sh	ci	validate.yml
 snosi-firstboot-test.sh	ci	validate.yml
