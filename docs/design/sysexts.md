@@ -264,6 +264,14 @@ Some sysexts include extra files via `mkosi.extra/`:
 
 ### nix
 
+Nix state uses `tmpfiles.d/snosi-nix.conf`, distinct from base's backing
+directory rule `nix.conf`. It creates the store as root:nixbld mode 1775 and
+injects factory configuration without replacing local settings. `nixbld` is
+a group only; never use it as the owner. Debian's packaged tmpfiles handles
+its per-user profiles and GC roots. `test/nix-state-ownership-test.py` tests
+the base+sysext composition, immutable outputs and local-config preservation.
+
+
 Nix recreates Debian's `nix-users` client group at boot. Client access is
 opt-in: after merging the extension, run `sudo usermod -aG nix-users USER` and
 start a new login session. This grants daemon-socket access, not Nix
@@ -275,7 +283,7 @@ access for a group member, denial for a nonmember, and existing-GID preservation
 - `usr/lib/systemd/system-preset/40-nix.preset` — Enable nix.mount + nix-daemon
 - `usr/lib/systemd/system/multi-user.target.d/10-nix.conf` — `Upholds=nix.mount nix-daemon.socket nix-daemon.service` drop-in for reliable boot activation
 - `usr/lib/sysusers.d/nix.conf` — Nix user/group
-- `usr/lib/tmpfiles.d/nix.conf` — `/nix` hierarchy + factory config injection
+- `usr/lib/tmpfiles.d/snosi-nix.conf` — Root-owned store and factory config injection; base retains `nix.conf` for the backing directory
 
 ### pilothouse
 - `mkosi.postinst.chroot` — Downloads the frostyard-pilothouse .deb (GitHub release, no apt repo) via `verified_download()`, then uses `shared/download/deb-dependencies.sh` to verify its declared `Depends` against the merged buildroot before `dpkg -i` can mutate it. Runtime dependencies must be explicit in `Packages=` or supplied by the base; everything ships natively under `/usr`, so no relocation is needed
