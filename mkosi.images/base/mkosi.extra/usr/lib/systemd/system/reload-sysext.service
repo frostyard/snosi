@@ -11,8 +11,8 @@ ConditionDirectoryNotEmpty=|/.extra/sysext
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=systemd-tmpfiles --create --graceful --no-pager
 ExecStart=systemd-sysusers --no-pager
+ExecStart=systemd-tmpfiles --create --graceful --no-pager
 ExecStart=systemctl daemon-reload
 
 [Install]

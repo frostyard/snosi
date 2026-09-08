@@ -539,6 +539,12 @@ these before changing anything under the native A/B tree:
 
 ### Sysext Constraints
 
+Sysext provisioning runs sysusers before tmpfiles in `reload-sysext.service`.
+The graceful tmpfiles mode can otherwise create state as root when its intended
+owner is absent. `test/sysext-account-order-test.py` replays the shipped commands
+and checks fresh and previously root-owned Coder homes.
+
+
 **Sysext udev rules and kernel modules (2026-08-28):** a
 `/usr/lib/udev/rules.d/` entry shipped inside a sysext is applied on NO boot
 unless the sysext also wires the post-merge reload.

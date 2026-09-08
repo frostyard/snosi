@@ -208,6 +208,12 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `mkosi.postinst.chroot` — Downloads code-server .deb via `verified_download()`, installs with `dpkg -i`. Upstream package targets `/usr/lib/code-server` with `/usr/bin/code-server` symlink and systemd units under `/usr/lib/systemd/`, so no relocation is required.
 
 ### coder
+
+Sysext provisioning runs sysusers before tmpfiles in `reload-sysext.service`.
+The graceful tmpfiles mode can otherwise create state as root when its intended
+owner is absent. `test/sysext-account-order-test.py` replays the shipped commands
+and checks fresh and previously root-owned Coder homes.
+
 - `mkosi.postinst.chroot` — Downloads the coder .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Single static binary + two units, all natively under `/usr`; no relocation
 - `mkosi.finalize` — Captures `/etc/coder.d/` to factory defaults; `coder.service` is gated on `ConditionFileNotEmpty=/etc/coder.d/coder.env`, so the enabled+upheld unit stays inert until an admin fills in `CODER_ACCESS_URL` etc.
 - `usr/lib/sysusers.d/coder.conf` — Recreates the `coder` system user at boot (the deb preinst's `useradd` lands in the buildroot `/etc/passwd`, stripped from the delta) with membership in `docker` (mirrors preinst) and `incus-admin` (Incus-template provisioning); `m` lines implicitly create those groups when the owning sysext isn't merged
