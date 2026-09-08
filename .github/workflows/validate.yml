@@ -304,6 +304,9 @@ jobs:
       - name: Test gui-base sysext divergent-lib contract
         run: ./test/sysext-divergent-libs-test.sh
 
+      - name: Test order account provisioning
+        run: sudo python3 ./test/sysext-account-order-test.py
+
       - name: Test staged-update notify unit trigger shape
         run: ./test/update-notify-units-test.sh
 

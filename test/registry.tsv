@@ -101,6 +101,7 @@ sysext-divergent-libs-test.sh	ci	validate.yml
 sysext-postoutput-test.sh	unwired	-
 sysext-required-paths-test.sh	ci	validate.yml
 sysext-signature-verification-test.sh	ci	nightly-compliance.yml,validate.yml
+sysext-account-order-test.py	ci	validate.yml
 sysext-udev-reload-test.sh	ci	validate.yml
 task2-recovery-key-bytes-test.sh	ci	test-bootc-secure.yml,validate.yml
 task3-console-pump-test.py	ci	test-bootc-secure.yml,validate.yml
