@@ -301,6 +301,9 @@ jobs:
           ./test/required-by-guard-test.sh
           ./test/etc-overlay-prune-test.sh
 
+      - name: Test geoclue account provisioning
+        run: sudo python3 ./test/geoclue-state-scope-test.py
+
       - name: Test gui-base sysext divergent-lib contract
         run: ./test/sysext-divergent-libs-test.sh
 

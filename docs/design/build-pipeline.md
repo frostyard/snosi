@@ -598,6 +598,12 @@ Desktop configuration overlay:
 
 ### shared/floe/tree/
 
+Geoclue state provisioning is Snow-only, alongside `geoclue-2.0` and its
+sysusers definition. Base and Floe must not carry a tmpfiles rule referencing
+the absent geoclue account. `test/geoclue-state-scope-test.py` checks scope and
+real desktop state-directory ownership.
+
+
 Server configuration overlay:
 - APT sources for Docker
 - NetworkManager: no Wi-Fi backend override — floe uses NetworkManager's

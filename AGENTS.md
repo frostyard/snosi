@@ -432,6 +432,12 @@ production-ready.
 
 ### Configuration Composition
 
+Geoclue state provisioning is Snow-only, alongside `geoclue-2.0` and its
+sysusers definition. Base and Floe must not carry a tmpfiles rule referencing
+the absent geoclue account. `test/geoclue-state-scope-test.py` checks scope and
+real desktop state-directory ownership.
+
+
 mkosi configs use `Include=` directives to compose reusable fragments. The composition chain:
 
 - `mkosi.conf` (root) declares base + sysext dependencies
