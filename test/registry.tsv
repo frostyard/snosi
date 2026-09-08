@@ -54,6 +54,7 @@ duplicate-packages-test.sh	ci	validate.yml
 etc-overlay-prune-test.sh	ci	validate.yml
 firn-catalog-test.sh	ci	validate.yml
 firn-installer-iso-test.sh	unwired	-
+geoclue-state-scope-test.py	ci	validate.yml
 generate-sbom-test.sh	unwired	-
 latest-apt-version-test.sh	ci	validate.yml
 lemonade-sysext-test.sh	ci	validate.yml
