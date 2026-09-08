@@ -539,13 +539,6 @@ these before changing anything under the native A/B tree:
 
 ### Sysext Constraints
 
-Nix recreates Debian's `nix-users` client group at boot. Client access is
-opt-in: after merging the extension, run `sudo usermod -aG nix-users USER` and
-start a new login session. This grants daemon-socket access, not Nix
-`trusted-users` privileges. `test/nix-client-group-test.py` checks real socket
-access for a group member, denial for a nonmember, and existing-GID preservation.
-
-
 **Sysext udev rules and kernel modules (2026-08-28):** a
 `/usr/lib/udev/rules.d/` entry shipped inside a sysext is applied on NO boot
 unless the sysext also wires the post-merge reload.
@@ -695,6 +688,12 @@ rendered blank even though Snow's package manifest contained
 bump each affected `SYSEXT_REVISION`; otherwise `skip-duplicates` leaves the
 broken raw image published. Full contract and fixture coverage:
 `docs/design/sysexts.md` and `test/sysext-authoring-contract-test.sh`.
+
+Nix recreates Debian's `nix-users` client group at boot. Client access is
+opt-in: after merging the extension, run `sudo usermod -aG nix-users USER` and
+start a new login session. This grants daemon-socket access, not Nix
+`trusted-users` privileges. `test/nix-client-group-test.py` checks real socket
+access for a group member, denial for a nonmember, and existing-GID preservation.
 
 The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput.sh`) handles versioned naming and manifest processing. It requires the `KEYPACKAGE` env var set in each sysext's `mkosi.conf`. If `SYSEXT_REVISION` is also set, the version gets a `+rN` suffix — bump this to force a republish of tree/content fixes when the KEYPACKAGE version hasn't changed (publishing skips existing filenames via `skip-duplicates`, so tree fixes otherwise never reach users; remove the setting when the package version bumps). Every sysext must also ship `mkosi.images/<name>/required-paths.txt` (one absolute path per line); the shared finalize check (`shared/sysext/finalize/sysext-required-paths.sh`) fails the build if any listed path is missing from the buildroot — guard against publishing structurally broken sysexts (the 2026-07-01 incus publish shipped with no incusd/CLI/units and nothing noticed). The sibling `shared/sysext/finalize/sysext-usr-only.sh` guard fails any delta with an entry below `/opt` (the empty mountpoint directory itself is permitted; symlinks are reported, never followed). It deliberately does NOT inspect `/var`: mkosi's sysext repart definition (`sysext.repart.d/10-root.conf`) copies exactly `/usr/` and `/opt/` into the published erofs, so buildroot `/var` — dpkg logs, package caches, postinst trigger state such as `/var/lib/emacsen-common` — is inert build residue that never ships, while `/opt` does ship and is shadowed at runtime by the `/var/opt` bind mount. `test/sysext-usr-only-test.sh` pins that `CopyFiles=` set whenever the `.mkosi` checkout is present, so a mkosi bump that widens the packed tree re-opens the question instead of silently widening the payload. An earlier draft of the guard checked `/var` too and had to grow a per-package residue allowlist one CI round at a time (dpkg.log, dictionaries-common, emacsen-common, coder's preinst home); do not reintroduce that. For `Overlay=yes` images the finalize `$BUILDROOT` is the sysext DELTA (upper layer), so list only paths the sysext itself ships — packages also present in the base image never appear in the delta and will always fail the check.
 
