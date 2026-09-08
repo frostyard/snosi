@@ -293,6 +293,9 @@ jobs:
           ./test/wifi-backend-test.sh
           ./test/socat-package-test.sh
 
+      - name: Test ssh account provisioning
+        run: sudo python3 ./test/openssh-agent-group-test.py
+
       - name: Test NFS system accounts and tmpfiles ownership
         run: sudo bash ./test/nfs-system-accounts-test.sh
 

@@ -721,6 +721,12 @@ The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput
 
 ## Shell Script Conventions
 
+Base recreates the `_ssh` group using `g _ssh /usr/bin/ssh-agent`, deriving
+the GID from the immutable setgid binary. Never replace this with an arbitrary
+dynamic or hardcoded GID. Existing group identities and the binary remain
+unchanged; `test/openssh-agent-group-test.py` exercises both cases.
+
+
 - Use `set -euo pipefail` at the top of all scripts
 - Build scripts running in chroot use `.chroot` extension
 - External direct downloads must go through `verified_download()` with entries in `sysext-checksums.json` for sysext consumers or `image-checksums.json` for OCI profile consumers
