@@ -77,6 +77,7 @@ native-iso-boot-smoke-test.sh	ci	build-installer-iso.yml,build-native-images.yml
 native-publication-pipeline-test.sh	ci	validate.yml
 native-publish-test.sh	ci	validate.yml
 native-rclone-install-test.py	ci	validate.yml
+nix-client-group-test.py	ci	validate.yml
 nfs-system-accounts-test.sh	ci	validate.yml
 openssh-agent-group-test.py	ci	validate.yml
 output-organizer-test.sh	unwired	-

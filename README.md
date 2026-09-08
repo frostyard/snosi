@@ -75,6 +75,9 @@ image inherits those chunked layers and overlays only `/boot`; its bootc must
 return the same digest in the second of exactly two digest probes. Protected
 assembly never runs a post-assembly chunk pass.
 
+Nix clients need membership in `nix-users` after the Nix extension is merged;
+see [Nix client setup](docs/design/sysexts.md#nix).
+
 ## Architecture
 
 All OS profiles inherit NFS client support from base. Base sysusers definitions
