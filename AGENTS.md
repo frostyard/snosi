@@ -539,6 +539,13 @@ these before changing anything under the native A/B tree:
 
 ### Sysext Constraints
 
+Nix recreates Debian's `nix-users` client group at boot. Client access is
+opt-in: after merging the extension, run `sudo usermod -aG nix-users USER` and
+start a new login session. This grants daemon-socket access, not Nix
+`trusted-users` privileges. `test/nix-client-group-test.py` checks real socket
+access for a group member, denial for a nonmember, and existing-GID preservation.
+
+
 **Sysext udev rules and kernel modules (2026-08-28):** a
 `/usr/lib/udev/rules.d/` entry shipped inside a sysext is applied on NO boot
 unless the sysext also wires the post-merge reload.

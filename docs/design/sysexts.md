@@ -263,6 +263,13 @@ Some sysexts include extra files via `mkosi.extra/`:
 - `usr/lib/systemd/system/multi-user.target.d/10-lemonade.conf` — `Upholds=lemond.service` drop-in for reliable boot activation
 
 ### nix
+
+Nix recreates Debian's `nix-users` client group at boot. Client access is
+opt-in: after merging the extension, run `sudo usermod -aG nix-users USER` and
+start a new login session. This grants daemon-socket access, not Nix
+`trusted-users` privileges. `test/nix-client-group-test.py` checks real socket
+access for a group member, denial for a nonmember, and existing-GID preservation.
+
 - `mkosi.finalize` — Captures `/etc/nix` to factory defaults
 - `usr/lib/systemd/system/nix.mount` + `nix-daemon.service.d/mount-binding.conf` — `/nix` bind mount wiring
 - `usr/lib/systemd/system-preset/40-nix.preset` — Enable nix.mount + nix-daemon
