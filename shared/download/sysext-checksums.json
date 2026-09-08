@@ -65,8 +65,8 @@
     "version": "0.9.0"
   },
   "sunshine": {
-    "url": "https://github.com/LizardByte/Sunshine/releases/download/v2026.516.143833/sunshine-debian-trixie-amd64.deb",
-    "sha256": "b9b65f2be93b3e30be0710a940a616b1381da5bc6d858dce33bc0094d7fd4131",
-    "version": "2026.516.143833"
+    "url": "https://github.com/LizardByte/Sunshine/releases/download/v2026.906.222525/sunshine_2026.906.222525-1+debiantrixie_amd64.deb",
+    "sha256": "c87f226920ad83055a898be1f0c7540307593e92d8b0baf1f076909758db8ca0",
+    "version": "2026.906.222525"
   }
 }

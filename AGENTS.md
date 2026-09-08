@@ -565,7 +565,18 @@ host for Moonlight installed from its official pinned Trixie deb through
 `cap_sys_admin,cap_sys_nice` capability, `uhid` modules-load entry, and udev
 access rules; those last two reach udev only through the post-merge reload
 above. Its upstream user service is available for manual user startup; do not
-add a preset or `Upholds=` activation for Sunshine itself.
+add a preset or `Upholds=` activation for Sunshine itself. Since
+v2026.906.222525 (2026-09-08) the release asset is
+`sunshine_<VER>-1+debiantrixie_amd64.deb` (the old
+`sunshine-debian-trixie-amd64.deb` name 404s; `check-dependencies.yml` pins
+the new shape), the tray is Qt6 instead of GTK3/appindicator (so `Packages=`
+carries the Qt6 libs plus `qt6-qpa-plugins`/`qt6-wayland`, which are
+libqt6gui6 Recommends mkosi never installs but without which QGuiApplication
+aborts the process), and upstream's CPack Depends still names
+`libqt5widgets5, libqt5svg5` that the binary never links. The postinst strips
+exactly that pair from the control file before `dpkg -i` and fails closed if
+it is absent, so an upstream packaging fix forces the workaround's deliberate
+removal; `test/sunshine-capabilities-test.sh` fixtures both branches.
 
 **Voxtype sysext:** AI voice dictation for Wayland from the Frostyard APT
 repository, bundling its own text-output chain (`wtype` for wlroots/Hyprland,
