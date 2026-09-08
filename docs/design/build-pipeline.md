@@ -586,6 +586,13 @@ identities and NFS state using real systemd tools.
 
 ### shared/snow/tree/
 
+Service group membership uses `m USER GROUP`: saned joins scanner,
+cups-pk-helper joins lpadmin, and usbmux joins plugdev. The latter two use
+Debian-compatible primary groups for newly created accounts; `m` also repairs
+existing accounts without renumbering them. Keep base/Snow usbmux copies in sync.
+`test/service-account-memberships-test.py` checks fresh and existing identities.
+
+
 Desktop configuration overlay:
 - APT sources for Docker, backports
 - dconf/GLib schema overrides for GNOME defaults

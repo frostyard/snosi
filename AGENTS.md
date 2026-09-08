@@ -455,6 +455,13 @@ Scripts execute in order: **BuildScripts** (in chroot) -> **PostInstallationScri
 
 ### Immutable Filesystem Constraints
 
+Service group membership uses `m USER GROUP`: saned joins scanner,
+cups-pk-helper joins lpadmin, and usbmux joins plugdev. The latter two use
+Debian-compatible primary groups for newly created accounts; `m` also repairs
+existing accounts without renumbering them. Keep base/Snow usbmux copies in sync.
+`test/service-account-memberships-test.py` checks fresh and existing identities.
+
+
 **NFS accounts belong in base:** base installs `nfs-common` and its `rpcbind`
 dependency. Keep `statd` and `_rpc` in base's `usr/lib/sysusers.d/`, with
 Debian-compatible `nogroup` primary groups and nologin shells. Package

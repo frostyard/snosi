@@ -296,6 +296,9 @@ jobs:
       - name: Test NFS system accounts and tmpfiles ownership
         run: sudo bash ./test/nfs-system-accounts-test.sh
 
+      - name: Test memberships account provisioning
+        run: sudo python3 ./test/service-account-memberships-test.py
+
       - name: Test RequiredBy guard and initrd requires-pruning fixtures
         run: |
           ./test/required-by-guard-test.sh
