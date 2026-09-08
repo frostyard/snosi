@@ -296,6 +296,9 @@ jobs:
       - name: Test NFS system accounts and tmpfiles ownership
         run: sudo bash ./test/nfs-system-accounts-test.sh
 
+      - name: Test base SANE provisioning
+        run: sudo python3 ./test/sane-base-provisioning-test.py
+
       - name: Test memberships account provisioning
         run: sudo python3 ./test/service-account-memberships-test.py
 
