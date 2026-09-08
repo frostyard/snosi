@@ -455,6 +455,15 @@ Scripts execute in order: **BuildScripts** (in chroot) -> **PostInstallationScri
 
 ### Immutable Filesystem Constraints
 
+**NFS accounts belong in base:** base installs `nfs-common` and its `rpcbind`
+dependency. Keep `statd` and `_rpc` in base's `usr/lib/sysusers.d/`, with
+Debian-compatible `nogroup` primary groups and nologin shells. Package
+postinst account creation in the build root cannot repair missing accounts
+in an installed machine's persistent `/etc`. The existing base NFS tmpfiles
+rules and packaged rpcbind tmpfiles rule need these accounts at boot.
+`sudo bash test/nfs-system-accounts-test.sh` verifies real sysusers/tmpfiles
+creation and preservation of existing identities/state in disposable roots.
+
 - `/usr/` - Read-only. All binaries and libraries must live here.
 - `/etc/` - Overlay on `/usr/etc`. Base configs in image, user changes persist.
 - `/var/` - Persistent, writable. State, logs, container storage.

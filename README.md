@@ -77,6 +77,11 @@ assembly never runs a post-assembly chunk pass.
 
 ## Architecture
 
+All OS profiles inherit NFS client support from base. Base sysusers definitions
+create missing `_rpc` and `statd` service accounts before tmpfiles initializes
+their runtime and persistent state; see
+[base NFS service accounts](docs/design/build-pipeline.md#base-nfs-service-accounts).
+
 Naming, path, and policy contracts for the production native A/B products
 (`floe-ab`, `snow-ab`, `snowfield-ab`) are frozen in
 [`docs/native-ab-contracts.md`](docs/native-ab-contracts.md) and validated

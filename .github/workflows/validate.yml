@@ -293,6 +293,9 @@ jobs:
           ./test/wifi-backend-test.sh
           ./test/socat-package-test.sh
 
+      - name: Test NFS system accounts and tmpfiles ownership
+        run: sudo bash ./test/nfs-system-accounts-test.sh
+
       - name: Test RequiredBy guard and initrd requires-pruning fixtures
         run: |
           ./test/required-by-guard-test.sh

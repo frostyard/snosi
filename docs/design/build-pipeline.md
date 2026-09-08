@@ -564,6 +564,26 @@ test, wired into `validate.yml`; the read side is covered by
 
 Each profile has filesystem overlays (ExtraTrees) that are merged into the image:
 
+### Base NFS service accounts
+
+`mkosi.images/base/mkosi.conf` installs `nfs-common`, which depends on
+`rpcbind`. Debian's package postinst scripts create `statd` and `_rpc` in
+the build-time `/etc`; installed machines with persistent account databases
+can still lack them. Base therefore ships `usr/lib/sysusers.d/nfs-common.conf`
+and `rpcbind.conf` to create missing accounts at boot, with dynamically
+allocated UIDs, primary group `nogroup`, and `/usr/sbin/nologin`, matching
+Debian's account setup. Existing identities are preserved.
+
+The directory rules already exist: base's `usr/lib/tmpfiles.d/nfs-common.conf`
+creates `/var/lib/nfs/{sm,sm.bak,state}`, while Debian's packaged
+`rpcbind.conf` creates `/run/rpcbind`. Sysusers supplies their missing owners
+before tmpfiles runs; no additional tmpfiles rule or service is needed.
+Keep these definitions in base so Floe, Snow, and Snowfield inherit them.
+`sudo bash test/nfs-system-accounts-test.sh` (also run by `validate.yml`)
+reproduces the missing-owner failures in disposable roots, then checks account
+creation, directory ownership, idempotence, and preservation of existing
+identities and NFS state using real systemd tools.
+
 ### shared/snow/tree/
 
 Desktop configuration overlay:
