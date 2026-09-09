@@ -59,7 +59,7 @@ keeps the relevant AppArmor profile in complain mode).
    | `--domain DOMAIN` | Entra ID sign-in domain |
    | `--map LOCAL=UPN` | make an existing local account authenticate through Entra ID under its current username (repeatable; maintains `/etc/himmelblau/user-map`) |
    | `--join-type join\|register` | device registration mode |
-   | `--hsm-type TYPE` | `tpm_bound_soft_if_possible` (default), `tpm` (require the TPM), `tpm_if_possible` |
+   | `--hsm-type TYPE` | `tpm_bound_soft_if_possible` (default), `tpm` (require the TPM), `tpm_if_possible`; pick this before the first login, see troubleshooting |
    | `--allow-groups LIST` | restrict sign-in to these group object IDs / UPNs |
    | `--sudo-groups LIST` | grant local sudo to members of these groups |
    | `--enable-hello` / `--disable-hello` | Windows Hello PIN enrollment |
@@ -128,6 +128,14 @@ klist                           # Kerberos ticket after an Entra login
 
 - `systemctl status himmelblaud` says "condition not met": run the setup
   tool; the daemon is deliberately skipped until a domain is configured.
+- Changing `--hsm-type` after the daemon has already started (for example
+  moving from the default soft HSM to `tpm`) makes himmelblaud fail with
+  "Unable to load machine root key ... IncorrectKeyType": the machine key
+  was created by the previous HSM. Stop `himmelblaud`, delete
+  `/var/cache/private/himmelblaud/himmelblau.cache.db`, start it again.
+  That forgets the device registration and any enrolled Hello PIN; the
+  device re-registers on the next sign-in. Decide the HSM type before the
+  first login to avoid this (verified live 2026-09-09).
 - Logins fail with "user unknown": confirm `getent passwd user@example.com`
   resolves; if not, `/etc/nsswitch.conf` lacks `himmelblau` -- run
   `sudo /usr/lib/himmelblau/himmelblau-sysext-setup` and check its journal.
