@@ -1,0 +1,50 @@
+#!/bin/bash
+set -euo pipefail
+
+echo "Running post-installation customizations..."
+
+OS_PRETTY_NAME="Sundog Linux"
+OS_NAME="Sundog Linux"
+source "$SRCDIR"/shared/scripts/common-postinst.sh
+
+# Floe's tree is the current canonical copy of the shared bootc system
+# policy. Remove its sole product-specific payload and give the persistent
+# journal drop-in the Sundog name; the contents are profile-neutral.
+rm -rf /usr/share/floe
+if [[ -f /usr/lib/systemd/system/journald.conf.d/10-floe-bootc-persistent.conf ]]; then
+    mv /usr/lib/systemd/system/journald.conf.d/10-floe-bootc-persistent.conf \
+        /usr/lib/systemd/system/journald.conf.d/10-sundog-bootc-persistent.conf
+fi
+
+# Keep Flathub configured exactly as on Snow. The descriptor (including the
+# signing key) remains canonical in Snow's tree until desktop infrastructure
+# is split into a product-neutral fragment.
+install -Dm0644 \
+    "$SRCDIR/shared/snow/tree/etc/flatpak/remotes.d/flathub.flatpakrepo" \
+    /etc/flatpak/remotes.d/flathub.flatpakrepo
+
+# Debian's plasma-workspace ships an X11 session descriptor even when the
+# X11 KWin compositor is absent. Do not offer a session that cannot start;
+# Sundog's supported desktop session is Plasma on Wayland.
+rm -f /usr/share/xsessions/plasmax11.desktop
+
+# Discover is Flatpak-only. Debian's plasma-discover binary package bundles
+# the PackageKit backend plugin (there is no separate
+# plasma-discover-backend-packagekit package to leave out), and with it
+# Discover would offer apt package installs on an immutable host. Strip the
+# plugin; fail closed if Debian moves it so the assumption gets re-checked
+# rather than silently shipping the backend again.
+mapfile -t packagekit_backends < <(find /usr/lib -path '*/qt6/plugins/discover/packagekit-backend.so')
+if (( ${#packagekit_backends[@]} == 0 )); then
+    echo "sundog.postinst: expected plasma-discover's packagekit-backend.so under /usr/lib/*/qt6/plugins/discover/; Debian packaging changed, re-check the Flatpak-only Discover contract" >&2
+    exit 1
+fi
+rm -f "${packagekit_backends[@]}"
+
+# The static /usr alias selects SDDM on every boot without relying on mutable
+# /etc enablement. The build-time enable is still useful to mkosi's preset
+# pass and mirrors the established Flurry display-manager contract.
+ln -sfn sddm.service /usr/lib/systemd/system/display-manager.service
+systemctl enable sddm.service
+
+echo "Post-installation complete."

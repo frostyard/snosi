@@ -89,11 +89,13 @@ lib/tpm	tmpfiles
 lib/tpm2-tss/system/keystore	tmpfiles
 lib/usb_modeswitch	tmpfiles
 lib/xfsprogs	tmpfiles
-# snow-only: gnome-*.conf in shared/snow/tree/usr/lib/tmpfiles.d/ recreate
-# these — NOTE these three are `discard` in the floe map (floe ships no
-# gnome-tuned/gnome-upower/gnome-xkb tmpfiles rule, so the same relative
-# path has no recreation mechanism there). Per-product maps are exactly the
-# right place for this: the outcome legitimately differs by product.
+# desktop-only: gnome-tuned.conf/gnome-xkb.conf in shared/snow/tree/usr/lib/
+# tmpfiles.d/ and upower.conf in the product-neutral shared/desktop/tree
+# (shared with sundog, alongside saned.conf) recreate these — NOTE these
+# three are `discard` in the floe map (floe ships no tuned/upower/xkb
+# tmpfiles rule, so the same relative path has no recreation mechanism
+# there). Per-product maps are exactly the right place for this: the outcome
+# legitimately differs by product.
 lib/tuned	tmpfiles
 lib/upower	tmpfiles
 local	tmpfiles

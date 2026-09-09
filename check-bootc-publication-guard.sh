@@ -36,7 +36,7 @@ if [[ ! -d $guard_root ]]; then
     exit "$fail"
 fi
 
-profiles=(floe snow snowfield)
+profiles=(floe snow snowfield sundog)
 secure_include='Include=%D/shared/bootc-secure/mkosi.conf'
 for profile in "${profiles[@]}"; do
     conf="$guard_root/mkosi.profiles/$profile/mkosi.conf"

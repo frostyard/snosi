@@ -98,6 +98,7 @@ snosi-setup-model-test.py	ci	validate.yml
 snosi-setup-pages-test.py	ci	validate.yml
 snowfield-artifact-test.sh	ci	build-native-images.yml
 socat-package-test.sh	ci	validate.yml
+sundog-profile-test.sh	ci	validate.yml
 sunshine-capabilities-test.sh	ci	validate.yml
 sunshine-package-dependencies-test.sh	ci	validate.yml
 sysext-authoring-contract-test.sh	ci	validate.yml

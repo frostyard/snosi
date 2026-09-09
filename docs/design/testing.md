@@ -8,7 +8,9 @@ assertions), [ADR-0002](../adr/0002-ship-no-enablement-symlinks-in-etc.md)
 fixtures), [ADR-0007](../adr/0007-frozen-contract-executable-allowlist.md)
 (executable contract),
 [ADR-0009](../adr/0009-snosi-env-var-classes.md) (test hooks and guard-root
-overrides).
+overrides), and
+[ADR-0016](../adr/0016-name-kde-bootc-product-sundog.md) (Sundog's bootc-only
+KDE profile contract).
 
 ## Overview
 
@@ -95,6 +97,7 @@ test/
 ├── native-installer-e2e-test.sh # Phase 8 exit: real ISO install of floe-ab + snow-ab end to end (build/publish -> boot ISO -> non-interactive encrypted install -> MOK enroll -> enforced unattended boot)
 ├── native-publication-pipeline-test.sh # Phase 7 candidate/verify/promote/withdraw pipeline self-test (OS + ISO fixture legs)
 ├── snosi-install-test.sh      # snosi-install CLI unit tests (index verification, disk refusal, arg validation, streamed-verify, restage-mok)
+├── sundog-profile-test.sh     # Sundog bootc-only, Plasma/Wayland, SDDM, package, and gui-base inclusion contract
 ├── run-qemu.sh                # Interactive QEMU runner (GTK display)
 ├── lib/
 │   ├── helpers.sh             # Shared test helpers: check(), counters, summary
@@ -111,6 +114,20 @@ test/
     ├── 04-smoke.sh            # Tier 4: Smoke tests
     └── 05-firstboot-presets.sh # Tier 5: First-boot preset parity
 ```
+
+### Sundog profile validation
+
+`test/sundog-profile-test.sh` keeps the KDE product bootc-only and pins the
+deliberate desktop choices: Plasma on Wayland, SDDM with Breeze, Flatpak-only
+Discover, no GNOME session packages, and one-way inclusion of every package in
+`mkosi.images/gui-base/mkosi.conf` so the shared divergent-library closure is
+present. Sundog may select additional product packages; the test does not
+require complete package-set equality. `check-profile-dependencies.sh`
+discovers the profile automatically (it composes `shared/bootc-secure`) and
+resolves it with `mkosi --profile sundog summary`. A release-capable change
+should additionally complete a real `just sundog` build so package resolution,
+the fail-closed `/var` outcome map (`shared/composition/sundog/var-outcomes.txt`),
+and the installed session descriptors are checked as assembled.
 
 ## Interactive QEMU Runner (run-qemu.sh)
 

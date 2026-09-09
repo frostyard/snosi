@@ -15,9 +15,9 @@ A bootable container image build system using [mkosi](https://github.com/systemd
 
 - [Firn installer — all image families, bootc and A/B (latest x86-64)](https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso)
 - [Installer checksums](https://repository.frostyard.org/isos/native/v1/SHA256SUMS) and [OpenPGP signature](https://repository.frostyard.org/isos/native/v1/SHA256SUMS.gpg)
-- Older bootc installer: [Bootc live installation media](https://repository.frostyard.org/isos/snow-live-latest.iso)
+
 See the [supported installation guide](docs/installing.md) to choose an image,
-verify the native installer, create boot media, install safely, and recover or
+verify the Firn installer, create boot media, install safely, and recover or
 update the installed system.
 
 ## Community
@@ -37,6 +37,7 @@ The project produces:
 | ------------------- | --------------------------------------------------------------- | ------------- |
 | **snow**            | GNOME desktop with backports kernel                             | directory → OCI (buildah/chunkah) |
 | **snowfield**       | snow with linux-surface kernel for Surface devices              | directory → OCI (buildah/chunkah) |
+| **sundog**          | KDE Plasma Wayland desktop with Snow's immutable workstation opinions (bootc only) | directory → OCI (buildah/chunkah) |
 | **floe**            | Headless server with podman + backports kernel                  | directory → OCI (buildah/chunkah) |
 | **floe-ab-raw**     | Experimental native A/B server image (dev fixture, never published) | GPT disk (EROFS + dm-verity) |
 | **floe-ab**         | Production native A/B server image (Secure Boot + TPM/LUKS `/var`) | GPT disk (EROFS + dm-verity) |
@@ -322,7 +323,8 @@ Profiles in `mkosi.profiles/` define complete image variants by composing shared
 mkosi.profiles/
 ├── floe/           ← Headless server + podman
 ├── snow/           ← GNOME desktop + backports kernel
-└── snowfield/      ← GNOME desktop + Surface kernel
+├── snowfield/      ← GNOME desktop + Surface kernel
+└── sundog/         ← KDE Plasma Wayland desktop + backports kernel (bootc only)
 ```
 
 ### Shared Components
@@ -355,6 +357,7 @@ shared/
 ├── packages/
 │   ├── floe/mkosi.conf        ← Server packages + podman
 │   ├── snow/mkosi.conf        ← GNOME desktop packages
+│   ├── sundog/mkosi.conf      ← KDE Plasma desktop packages
 │   ├── edge/mkosi.conf        ← Microsoft Edge browser
 │   ├── vscode/mkosi.conf      ← Visual Studio Code
 │   ├── bitwarden/mkosi.conf   ← Bitwarden password manager
@@ -422,6 +425,7 @@ Include=%D/shared/outformat/image/mkosi.conf    # OCI output format
 | **snow**            | backports | —                              | `kernel/backports`, `packages/snow`, `outformat/image`                        |
 | **snowfield**       | surface   | —                              | `kernel/surface`, `packages/snow`, `outformat/image`                          |
 | **floe**            | backports | —                              | `kernel/backports`, `packages/floe`, `outformat/image`                        |
+| **sundog**          | backports | —                              | `kernel/backports`, `packages/sundog`, `outformat/image`                      |
 
 ## Building Images
 
@@ -680,7 +684,8 @@ The `test-install.yml` workflow verifies the signature before every installation
 Secure bootc OCI images additionally enforce this key at pull/install/update time
 through containers/image policy. The only accepted repositories are the
 temporary legacy server scope, `ghcr.io/frostyard/floe`,
-`ghcr.io/frostyard/snow`, and `ghcr.io/frostyard/snowfield`; other images,
+`ghcr.io/frostyard/snow`, `ghcr.io/frostyard/snowfield`, and
+`ghcr.io/frostyard/sundog`; other images,
 keys, and repository identities are rejected. The legacy scope remains only
 for the migration window. Cosign v2.6.1
 signs repository identities, so the policy uses

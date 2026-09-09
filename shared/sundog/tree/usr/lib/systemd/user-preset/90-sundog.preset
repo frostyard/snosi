@@ -1,0 +1,6 @@
+# Sundog user policy. Plasma session services use their package defaults.
+# Base carries Bazaar for Snow, but Sundog uses Discover with only its Flatpak
+# backend. Keep podman's API socket available without eagerly starting the
+# service at every graphical login.
+disable bazaar.service
+disable podman.service

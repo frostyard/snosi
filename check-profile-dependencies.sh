@@ -11,7 +11,7 @@ fi
 # Discover the bootc image profiles instead of hardcoding them. A profile is a
 # bootc image profile when its mkosi.conf composes the bootc-secure fragment
 # (shared/bootc-secure/mkosi.conf) -- the same set the bootc publication guard
-# gates (floe, snow, snowfield today). New bootc image profiles are picked up
+# gates (floe, snow, snowfield, sundog today). New bootc image profiles are picked up
 # automatically; the native A/B (*-ab) and installer profiles compose different
 # fragments and are intentionally excluded from this "depend only on base" check.
 profiles=()

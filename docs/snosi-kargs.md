@@ -13,10 +13,10 @@ slot changes and bootc deployment changes rather than being tied to one
 versioned UKI filename. State and optional local signing material live under
 `/var/lib/snosi/kargs/`.
 
-This interface is supported by the secure bootc (`floe`, `snow`, `snowfield`)
-and production native A/B (`floe-ab`, `snow-ab`, `snowfield-ab`) profiles. Base
-and non-secure development profiles do not carry the addon stub and signing
-toolchain.
+This interface is supported by the secure bootc (`floe`, `snow`, `snowfield`,
+`sundog`) and production native A/B (`floe-ab`, `snow-ab`, `snowfield-ab`)
+profiles. Base and non-secure development profiles do not carry the addon stub
+and signing toolchain.
 
 ## Quick Start
 
