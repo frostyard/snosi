@@ -1,0 +1,11 @@
+Upgraded:
+  libde265-0:amd64 1.0.15-1+deb13u1 -> 1.0.15-1+deb13u2
+  linux-image-amd64 6.12.30-1 -> 6.12.33-1
+Downgraded:
+  libssl3t64:amd64 3.5.1-1 -> 3.4.0-1
+Added:
+  htop 3.3.0-1
+  libnewdep:amd64 1.2-1
+Removed:
+  libc6:i386 2.41-12
+  obsolete-tool 2.0-3

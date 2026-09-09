@@ -322,6 +322,9 @@ jobs:
       - name: Test staged-update notify unit trigger shape
         run: ./test/update-notify-units-test.sh
 
+      - name: Test --pkg-diff parser, sidecar, and stager contract
+        run: ./test/pkg-diff-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:

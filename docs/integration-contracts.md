@@ -323,7 +323,22 @@ staged_at=<iso-8601>          staged_at=<iso-8601>
 - Consumers key off whichever exists: `bootc-update-notify:26-29` (`id="${digest:-$version}"`), motd hook `86:23-26`, `snosi-update-status`. The native stager also re-reads its own file (`snosi-sysupdate-stage:207-209`) — so it must find `version=`, not `digest=`.
 - **Fragility:** 🔴 — the invariant is a convention with no enforcement; a producer emitting both (or the wrong one for its transport) would confuse consumers that prefer `digest`.
 
-### 5.3 Other filesystem contracts
+### 5.3 `/run/snosi/staged-packages` (symlink → write-once backing dir)
+Staged-package inventory for `snosi-update-status --pkg-diff` (ADR-0014). A
+sibling of §5.1/§5.2, **not** a field of either.
+```
+/run/snosi/staged-packages -> staged-packages.sha256-<64hex>   # bootc
+/run/snosi/staged-packages -> staged-packages.<14-digit>       # native
+/run/snosi/staged-packages.<id>/identity      # exactly one of digest= / version=
+/run/snosi/staged-packages.<id>/packages.txt  # exact staged-image packages.txt bytes
+```
+- **Backing-name invariant:** bootc uses `sha256-<64hex>` (never a colon); native uses the 14-digit version. `identity` holds exactly `digest=sha256:<hex>` **or** `version=<14-digit>` — the same exclusive invariant as §5.2, never both.
+- **Write-once:** a backing dir is created complete and never mutated; only the symlink is swapped, atomically, by `mv -T` of a fresh symlink (rename(2) of a file). Publishers never `rm` the live name first, nor `mv -T` a directory onto it.
+- Producers: both stagers via `staged_packages_publish` in `usr/lib/snosi/staged-packages.sh` (bootc captures the pulled image's `packages.txt` before `bootc switch`/`upgrade`; native reads it from the freshly-labeled other root slot).
+- Consumer: `snosi-update-status --pkg-diff` via `staged_packages_resolve` — reads the sidecar **only** when `identity` matches the live staged digest/version; a mismatch (a later manual stage) is treated as missing (warn-and-skip). Dies with `/run` on the applying reboot.
+- **Fragility:** 🟡 — identity is checked before parse, but a stager predating ADR-0014 leaves no sidecar (`--pkg-diff` warns and skips until the next hop).
+
+### 5.4 Other filesystem contracts
 - `/var/lib/extensions.d/` — sysext download target; `/var/lib/extensions/` — sysext discovery symlinks (updex writes, `systemd-sysext refresh` reads).
 - `/etc/sysupdate.<name>.d/<feature>.feature.d/00-updex.conf` — updex enable/disable drop-in (also the whole-file test-override mechanism for `.transfer`).
 - `/run/pilothouse/broker.sock` — HTTP-over-Unix between pilothouse web and broker (see §6).
