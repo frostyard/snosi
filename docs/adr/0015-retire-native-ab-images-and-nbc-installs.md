@@ -71,8 +71,11 @@ continued support."
   `test/eol-notice-test.sh` (validate.yml) fails if a consumer grows its own
   copy, and it pins the predicate against fixture command lines, the
   ostree-booted exclusion, and the container guard.
-- Re-notifying every user after a wording change requires bumping
-  `NOTICE_ID` in `snosi-eol-notify`; the motd hook needs nothing.
+- Re-notifying every user after a substantive wording change requires
+  bumping `NOTICE_ID` in `snosi-eol-notify`; the motd hook needs nothing.
+  The date passing is not such a change: the toast title ("This OS image
+  is being retired") picks no tense, only the body flips, and nobody gets a
+  second toast for a verb change.
 - Removal of the native A/B publication lane, `build-native-images.yml`,
   the ab-root output format, the native harnesses, and the nbc timer units is
   deferred to a follow-up after the date; this ADR only fixes the date and

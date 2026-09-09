@@ -118,7 +118,8 @@ check "notify unit is not RequiredBy= anything (ADR-0013)" no_match "$unit" "Req
 
 # --- notify script: one toast per user, ack only after success -------------
 fake_notice="$work/bin/fake-notice"
-printf '#!/bin/sh\nprintf "\\nNOTICE: fixture\\n"\n' >"$fake_notice"
+# Same shape as the real helper: leading blank line, multi-line body.
+printf '#!/bin/sh\nprintf "\\nNOTICE: fixture\\nbody line\\n"\n' >"$fake_notice"
 chmod +x "$fake_notice"
 run_notify() { # notify-send body
     cat >"$work/bin/notify-send" <<EOF2
@@ -140,6 +141,10 @@ check "notify script sends once" test "$(wc -l <"$work/calls")" -eq 1
 check "notify script writes the ack after a successful send" test -s "$work/state/snosi/eol-notice.ack"
 check "toast is critical urgency (persists until dismissed)" has_line "$work/args" "--urgency=critical"
 check "toast body carries the helper text" has_line "$work/args" "NOTICE: fixture"
+check "toast body drops the helper's leading blank line" \
+    has "$(cat "$work/args")" "--urgency=critical This OS image is being retired NOTICE: fixture"
+check "toast title picks no tense (body says reaches/reached)" \
+    no_match "$work/args" "is end of life|reaches|reached"
 run_notify 'echo 1 >> "'"$work"'/calls"; exit 0'
 check "second login does not re-notify (ack-gated)" test "$(wc -l <"$work/calls")" -eq 1
 

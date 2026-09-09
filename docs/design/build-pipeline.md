@@ -318,8 +318,11 @@ it), the user-scope `snosi-eol-notify.service` (static
 `graphical-session.target.wants/` link, no `[Install]`,
 `ConditionKernelCommandLine=!composefs` pre-filter) running
 `/usr/libexec/snosi-eol-notify` (one critical-urgency toast per user,
-ack-gated on `NOTICE_ID` in `~/.local/state/snosi/eol-notice.ack`, ack
-written only after a successful `notify-send`, same daemon-race retry as
+tense-neutral title "This OS image is being retired" over the helper text
+with its motd-style leading blank line stripped, ack-gated on `NOTICE_ID`
+in `~/.local/state/snosi/eol-notice.ack` -- bump only for a substantive
+wording change, never for the post-date tense flip -- ack written only
+after a successful `notify-send`, same daemon-race retry as
 `bootc-update-notify`), and `snosi-update-status` (prints it first).
 `test/eol-notice-test.sh` (validate.yml) pins the predicate against fixture
 command lines, the single-source rule (the EOL sentence may exist in exactly

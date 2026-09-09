@@ -4,9 +4,11 @@
 # (-ab) image or nbc install is end of life (docs/adr/0015). Detection and
 # wording come from /usr/libexec/snosi-eol-notice -- this script never
 # decides on its own whether the system is affected. Ack-gated per NOTICE_ID
-# (not per login): bump NOTICE_ID to re-notify every user after a wording
-# change; the motd hook keeps repeating the notice on every headless login
-# regardless.
+# (not per login): bump NOTICE_ID only for a substantive wording change that
+# every user must see again -- NOT when the date passes and the helper's
+# tense flips (the motd hook picks that up by itself; nobody needs a second
+# toast for a verb change). The motd hook keeps repeating the notice on
+# every headless login regardless.
 #
 # Same daemon-race handling as bootc-update-notify: the static
 # graphical-session.target.wants/ run can beat the session's notification
@@ -24,15 +26,19 @@ NOTICE="${SNOSI_EOL_NOTICE_CMD:-/usr/libexec/snosi-eol-notice}"
 
 notice=$("$NOTICE")
 [[ -n "$notice" ]] || exit 0
+# The helper opens with a blank line so it reads right after the other motd
+# hooks; a toast body must not.
+notice="${notice#$'\n'}"
 
 command -v notify-send >/dev/null || exit 0
 
 # Critical urgency: GNOME keeps it on screen until dismissed, which is the
-# right shape for a once-per-user end-of-life notice.
+# right shape for a once-per-user end-of-life notice. The title picks no
+# tense: the body says "reaches" before the date and "reached" after.
 sent=0
 for _ in 1 2 3 4 5 6; do
     if notify-send --app-name="Snow Linux" --icon=dialog-warning --urgency=critical \
-        "This OS image is end of life" "$notice" 2>/dev/null; then
+        "This OS image is being retired" "$notice" 2>/dev/null; then
         sent=1
         break
     fi

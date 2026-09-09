@@ -516,8 +516,10 @@ delegate: `/etc/update-motd.d/80-snosi-eol` execs it on every headless
 login, the user-scope `snosi-eol-notify.service` (static
 `graphical-session.target.wants/` link, no `[Install]`, `!composefs`
 condition) runs `/usr/libexec/snosi-eol-notify` for one critical-urgency
-toast per user (ack-gated on `NOTICE_ID`; bump it to re-notify after a
-wording change), and `snosi-update-status` prints it first. Never copy the
+toast per user (ack-gated on `NOTICE_ID`; bump it only for a substantive
+wording change, never for the date passing -- the tense-neutral title "This
+OS image is being retired" and a stripped leading newline are both
+pinned), and `snosi-update-status` prints it first. Never copy the
 predicate or the sentence into a second file: `test/eol-notice-test.sh`
 (validate.yml) fails if the EOL sentence appears in more than one shipped
 file or a consumer grows its own detection. Removing the native lanes and
