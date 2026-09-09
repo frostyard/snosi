@@ -19,11 +19,6 @@
     "sha256": "cc42a4f3eacdcb25ec31f0016b1272acb003145ab30484db8965450e20c72cd2",
     "version": "1.18.2"
   },
-  "microsoft-azurevpnclient": {
-    "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_4.0.0_amd64.deb",
-    "sha256": "54bf4c63f78feb560fada20cdc107543141b1744c10349cc4f5607ff4a45ab56",
-    "version": "4.0.0"
-  },
   "microsoft-edge-stable": {
     "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_152.0.4191.66-1_amd64.deb",
     "sha256": "186c19f9d6079d174efbb4ef331ccc1e11d139b6f7a8ea3b0db75f9b17e25f0d",

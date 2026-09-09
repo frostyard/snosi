@@ -8,11 +8,6 @@ enable-hot-corners=false
 [org.gnome.desktop.wm.preferences]
 button-layout='appmenu:minimize,maximize,close'
 
-[org/gnome/desktop/app-folders/folders/Microsoft]
-apps=['microsoft-azurevpnclient.desktop']
-name='Microsoft'
-translate=false
-
 [org/gnome/desktop/app-folders/folders/AppStores]
 apps=['bbrew.desktop']
 name='App Stores'

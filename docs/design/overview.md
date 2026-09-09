@@ -1068,7 +1068,7 @@ installed), plus a first-promotion assertion that `promote.sh` prints
 
 ### System Extensions (EROFS sysexts, published to Frostyard R2 repo)
 
-1password, 1password-cli, azurevpn, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode
+1password, 1password-cli, bitwarden, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, nix, paseo, pilothouse, podman, sunshine, tailscale, vscode
 
 ## Architecture
 
@@ -1161,7 +1161,7 @@ order of `Include=` lines in a profile is significant whenever more than one
 fragment sets the same key — verify any composition change with a `mkosi
 cat-config`/`summary` diff, not just a source read.
 
-The app-bundling "loaded" variants for Snow, Snowfield, and the server were retired in 2026-07: every app they baked in (Edge, VS Code, Bitwarden, Azure VPN, Incus, Docker) is delivered as a sysext instead. The shared `packages/{edge,vscode,bitwarden,azurevpn}` fragments now serve only the sysext builds.
+The app-bundling "loaded" variants for Snow, Snowfield, and the server were retired in 2026-07: every app they baked in (Edge, VS Code, Bitwarden, Azure VPN, Incus, Docker) is delivered as a sysext instead (the Azure VPN sysext was itself retired in 2026-09). The shared `packages/{edge,vscode,bitwarden}` fragments now serve only the sysext builds.
 
 ### Script Pipeline
 
@@ -1366,7 +1366,7 @@ Docker, 1Password) are tracked separately in
 `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
 This file is only a rebuild sentinel; mkosi still resolves packages from APT.
 
-Current sysext checksum-managed downloads are 1Password, Bitwarden, Azure VPN,
+Current sysext checksum-managed downloads are 1Password, Bitwarden,
 Microsoft Edge, code-server, coder, GitHub Copilot, Lemonade, Paseo, Pilothouse,
 and Sunshine. Current image checksum-managed downloads are Homebrew
 install script, Surface secure boot certificate, Hotedge, Logomenu, and Bazaar

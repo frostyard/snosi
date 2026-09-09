@@ -24,7 +24,6 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 |--------|------------|-------------|
 | **1password** | 1password | 1Password desktop app (pinned .deb via verified_download, relocated from /opt; pinned-GID groups via sysusers.d, group-owner polkit policy) |
 | **1password-cli** | 1password-cli | 1Password CLI tool |
-| **azurevpn** | microsoft-azurevpnclient | Microsoft Azure VPN client (pinned .deb via verified_download, relocated from /opt) |
 | **bitwarden** | bitwarden | Bitwarden desktop app (pinned .deb via verified_download, relocated from /opt) |
 | **chatgpt** | chatgpt | ChatGPT desktop application with Codex (from persistent.oaistatic.com apt repo) |
 | **claude-desktop** | claude-desktop | Claude desktop application (from downloads.claude.ai apt repo) |
@@ -147,7 +146,7 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server`, `coder`, `edge`, `bitwarden`, `github-copilot`, `paseo`, `sunshine`, and `azurevpn` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb`; its Tauri payload already has a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
+`code-server`, `coder`, `edge`, `bitwarden`, `github-copilot`, `paseo`, and `sunshine` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb`; its Tauri payload already has a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
 
 ## Sysext-Specific Extra Files
 
@@ -161,12 +160,6 @@ Some sysexts include extra files via `mkosi.extra/`:
 - The polkit system-auth policy is regenerated with `unix-group:onepassword` as owner — the deb template fills in build-time human users, of which the chroot has none; users join the `onepassword` group to enable CLI/SSH-agent system-auth integration
 - `/etc/1password/custom_allowed_browsers` uses the factory pattern: captured by `mkosi.finalize`, injected at boot by `mkosi.extra/usr/lib/tmpfiles.d/1password.conf`
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
-
-### azurevpn
-- No `mkosi.extra/` — the fragment + postinst live in `shared/packages/azurevpn/`
-- Ships `cap_net_admin` as a real file capability: erofs preserves `security.capability`, so the sysext deliberately does NOT carry the loaded profiles' `microsoft-azurevpn-workaround.service` (that service exists only because the OCI image packaging path drops caps)
-- Desktop entry uses an absolute-path `Icon=` — no icon theme/cache involvement
-- The postinst purges `patchelf` after the rpath fixes so the build tool ships nowhere
 
 ### bitwarden
 - No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/bitwarden/`)
@@ -639,7 +632,7 @@ but survived because gbm's ABI tolerated it).
 
 **The fix — `mkosi.images/gui-base`**: an internal, never-published
 directory image (base + the common GUI lib closure). Desktop-app sysexts
-(1password, azurevpn, bitwarden, chatgpt, claude-desktop, edge,
+(1password, bitwarden, chatgpt, claude-desktop, edge,
 github-copilot, localsend, moonlight, obsidian, sunshine, voxtype,
 vscode) set
 `Dependencies=gui-base` +

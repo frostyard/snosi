@@ -347,7 +347,6 @@ Both snow and floe postinstall scripts source this shared script after setting `
 | Script | Location | Purpose |
 |--------|----------|---------|
 | `edge.chroot` | `shared/packages/edge/mkosi.postinst.d/` | Downloads Edge .deb via `verified_download()`, strips `install_key`/`install_deb822_sources` from its `DEBIAN/postinst` (those call `apt-config` and break inside the chroot), installs the patched deb, relocates `/opt/microsoft/msedge` → `/usr/lib/microsoft-edge`, creates symlinks, patches icon paths |
-| `azurevpn.chroot` | `shared/packages/azurevpn/mkosi.postinst.d/` | Downloads Azure VPN via `verified_download()`, relocates from `/opt`, uses patchelf to fix RPATH for Flutter .so files |
 | `bitwarden.chroot` | `shared/packages/bitwarden/mkosi.postinst.d/` | Downloads Bitwarden .deb via `verified_download()`, relocates `/opt/Bitwarden` → `/usr/lib/Bitwarden`, sets SUID on chrome-sandbox |
 | `vscode.chroot` | `shared/packages/vscode/mkosi.postinst.d/` | Patches desktop entry to add inode/directory MIME type |
 
@@ -450,7 +449,6 @@ ln -sf /usr/lib/<package>/<binary> /usr/bin/<binary>
 | Package | From | To | Extra Steps |
 |---------|------|----|-------------|
 | Microsoft Edge | `/opt/microsoft/msedge` | `/usr/lib/microsoft-edge` | Icon symlinks, gnome-control-center default-apps patch |
-| Azure VPN | `/opt/microsoft/microsoft-azurevpnclient` | `/usr/lib/microsoft-azurevpnclient` | patchelf RPATH fix for 5 .so files, polkit rules fix, `cap_net_admin+eip` capability |
 | Bitwarden | `/opt/Bitwarden` | `/usr/lib/Bitwarden` | SUID on chrome-sandbox (4755), desktop entry path update |
 
 ## OCI Image Packaging
@@ -490,7 +488,7 @@ by the build artifact that must be rebuilt when a dependency changes:
 ### sysext-checksums.json
 
 Pins URL + SHA256 for direct downloads consumed by sysext builds. Current
-consumers are 1Password, Bitwarden, Azure VPN, Edge, code-server, coder,
+consumers are 1Password, Bitwarden, Edge, code-server, coder,
 GitHub Copilot, Lemonade, Paseo, Pilothouse, and Sunshine.
 Updates to this file should trigger `build.yml` and skip the OCI image matrix.
 
