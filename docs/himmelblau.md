@@ -63,7 +63,7 @@ keeps the relevant AppArmor profile in complain mode).
    | `--allow-groups LIST` | restrict sign-in to these group object IDs / UPNs |
    | `--sudo-groups LIST` | grant local sudo to members of these groups |
    | `--enable-hello` / `--disable-hello` | Windows Hello PIN enrollment |
-   | `--apply-policy` / `--no-apply-policy` | apply Intune policies |
+   | `--apply-policy` / `--no-apply-policy` | Intune enrollment and compliance checks. Default on, as in the upstream installer: `apply_policy` gates both the device's Intune enrollment (done during the next login or screen unlock) and `himmelblau-compliance-check.timer`. Off, a tenant that requires a compliant device answers every token request with `AADSTS530003` and browsers loop on "register your device" |
    | `--set KEY=VALUE`, `--unset KEY` | any other option from `himmelblau.conf(5)` |
    | `--show` | print the current configuration and exit |
    | `--no-restart` | write configuration only |
@@ -138,6 +138,16 @@ klist                           # Kerberos ticket after an Entra login
   (`snosi-himmelblau-setup --map LOCAL=UPN`), run `aad-tool cache-clear` so
   the UPN resolves to the local uid, then log out and back in through Entra
   (root-caused live 2026-09-09).
+- Browsers say the device must be registered / managed, and `journalctl -u
+  himmelblaud` shows `AADSTS530003` on "Failed to exchange PRT for access
+  token": the tenant requires an Intune-compliant device and this one is not
+  enrolled. Make sure the drop-in has `apply_policy = true` (the wizard's
+  default; `--no-apply-policy` removes it), then lock and unlock the screen
+  or log in again so the enrollment runs inside an authentication
+  (`himmelblaud-tasks` logs `apply_intune_policy ... intune_device_id`), and
+  confirm with `aad-tool compliance-check` from your session. The Ubuntu
+  reference host enrolled on its first login because the upstream installer
+  writes `apply_policy = true`.
 - Changing `--hsm-type` after the daemon has already started (for example
   moving from the default soft HSM to `tpm`) makes himmelblaud fail with
   "Unable to load machine root key ... IncorrectKeyType": the machine key

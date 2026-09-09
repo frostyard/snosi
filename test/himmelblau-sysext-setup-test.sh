@@ -177,6 +177,7 @@ check "wizard: domain lower-cased" grep -qx 'domain = example.com' "$dropin"
 check "wizard: join_type written" grep -qx 'join_type = register' "$dropin"
 check "wizard: --set passthrough written" grep -qx 'enable_experimental_mfa = true' "$dropin"
 check "wizard: user_map_file points at the map" grep -qx 'user_map_file = /etc/himmelblau/user-map' "$dropin"
+check "wizard: apply_policy defaults to true (Intune enrollment gate, upstream installer default)" grep -qx 'apply_policy = true' "$dropin"
 check "wizard: user map entry written" grep -qx 'bjk:bketelsen@example.com' "$umap"
 check "wizard: drop-in mode 0644" test "$(stat -c %a "$dropin")" = 644
 check "wizard: runs the /etc integration" grep -qx 'passwd:         files systemd himmelblau' "$r/etc/nsswitch.conf"
@@ -190,7 +191,8 @@ check "wizard: no stray temp files left in the config dir" bash -c "! ls '$r/etc
 out=$(run_wizard "$r" "$bin" --map alice=alice@example.com --no-apply-policy --unset enable_experimental_mfa --no-restart 2>&1) || fail "wizard re-run exits 0" "$out"
 check "re-run: domain preserved without --domain" grep -qx 'domain = example.com' "$dropin"
 check "re-run: join_type preserved" grep -qx 'join_type = register' "$dropin"
-check "re-run: new key added" grep -qx 'apply_policy = false' "$dropin"
+check "re-run: --no-apply-policy overrides the default" grep -qx 'apply_policy = false' "$dropin"
+check "re-run: only one apply_policy line" test "$(grep -c '^apply_policy' "$dropin")" = 1
 check "re-run: --unset removes the key" bash -c "! grep -q enable_experimental_mfa '$dropin'"
 check "re-run: first mapping kept" grep -qx 'bjk:bketelsen@example.com' "$umap"
 check "re-run: second mapping added" grep -qx 'alice:alice@example.com' "$umap"

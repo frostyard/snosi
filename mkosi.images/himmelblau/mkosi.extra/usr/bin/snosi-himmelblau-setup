@@ -61,7 +61,9 @@ Access policy:
   --enable-hello | --disable-hello
                            Windows Hello PIN enrollment (upstream default: on)
   --apply-policy | --no-apply-policy
-                           Apply Intune policies for authenticated users
+                           Intune enrollment + compliance checks (default: on,
+                           like the upstream installer; off breaks tenants that
+                           require a compliant device)
 
 Anything else:
   --set KEY=VALUE          Any other [global] option from himmelblau.conf(5)
@@ -263,6 +265,15 @@ for spec in "${new_maps[@]}"; do
 done
 if (( ${#map_order[@]} > 0 )); then
     set_key user_map_file "$USER_MAP_PATH"
+fi
+# Upstream installer default (CONFIG_BOOLEAN_DEFAULTS: apply_policy = True).
+# apply_policy gates BOTH Intune enrollment (during the next PAM auth) and
+# the periodic compliance check; without it a tenant with a
+# compliant-device conditional-access policy answers every token request
+# with AADSTS530003 and browsers show "register your device" forever
+# (root-caused live 2026-09-09). --no-apply-policy opts out explicitly.
+if [[ -z ${cfg[apply_policy]+x} ]]; then
+    set_key apply_policy true
 fi
 
 # --- write --------------------------------------------------------------------
