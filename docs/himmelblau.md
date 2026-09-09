@@ -34,9 +34,10 @@ keeps the relevant AppArmor profile in complain mode).
 ## Enable and configure
 
 1. Enable the `himmelblau` feature with Updex (or drop the `.raw` into
-   `/var/lib/extensions.d/` and `systemd-sysext refresh`). The daemons start
-   as soon as the extension is merged; until a domain is configured they sit
-   idle.
+   `/var/lib/extensions.d/` and `systemd-sysext refresh`). The boot-time
+   integration runs as soon as the extension is merged; `himmelblaud` itself
+   is skipped (condition not met) until `/etc/himmelblau` holds configuration,
+   because the 4.0.2 daemon exits when no domain is set.
 2. Run the setup tool as root:
 
    ```bash
@@ -125,6 +126,8 @@ journalctl -u himmelblaud -u himmelblaud-tasks -u himmelblau-sysext-setup -b
 klist                           # Kerberos ticket after an Entra login
 ```
 
+- `systemctl status himmelblaud` says "condition not met": run the setup
+  tool; the daemon is deliberately skipped until a domain is configured.
 - Logins fail with "user unknown": confirm `getent passwd user@example.com`
   resolves; if not, `/etc/nsswitch.conf` lacks `himmelblau` -- run
   `sudo /usr/lib/himmelblau/himmelblau-sysext-setup` and check its journal.

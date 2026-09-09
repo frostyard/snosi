@@ -129,7 +129,7 @@ check "gdm: pam_gnome_keyring auth line gains use_authtok" grep -qE '^auth[[:spa
 check "krb5: includedir appended to an existing krb5.conf" grep -qx 'includedir /etc/krb5.conf.d' "$r/etc/krb5.conf"
 check "krb5: existing realm config preserved" grep -qx $'\tdefault_realm = EXAMPLE.ORG' "$r/etc/krb5.conf"
 check "krb5: /etc/krb5.conf.d created" test -d "$r/etc/krb5.conf.d"
-check "sshd: running ssh.service is reloaded for the drop-in" grep -qx 'systemctl try-reload-or-restart ssh.service' "$work/int/calls"
+check "sshd: running ssh.service reload is queued with --no-block (blocking would deadlock behind Before=ssh.service)" grep -qx 'systemctl --no-block try-reload-or-restart ssh.service' "$work/int/calls"
 check "guard: no systemctl enable/disable/preset at runtime" bash -c "! grep -Eq 'systemctl (enable|disable|preset|unmask|revert)' '$work/int/calls'"
 
 snap=$(mktemp -d)
@@ -237,7 +237,12 @@ done < <(sed -n '/^FACTORY_PATHS=(/,/^)/p' "$finalize" | grep -E '^    [a-z]')
 if [[ -z $parity_failed ]]; then ok "every mkosi.finalize capture has a tmpfiles C rule"; else fail "finalize/tmpfiles parity" "$parity_failed"; fi
 
 check "tmpfiles: no removal types aimed at /etc" bash -c "! awk '\$1 ~ /^[rR]\$/ && \$2 ~ /^\\/etc/' '$tmpfiles' | grep -q ."
-check "Upholds drop-in names the setup unit and himmelblaud" grep -qx 'Upholds=himmelblau-sysext-setup.service himmelblaud.service' "$upholds"
+check "Upholds drop-in upholds ONLY the setup unit" grep -qx 'Upholds=himmelblau-sysext-setup.service' "$upholds"
+check "Upholds drop-in never upholds himmelblaud directly (condition-failed upheld units are retried forever)" bash -c "! grep -E '^Upholds=.*himmelblaud\.service' '$upholds'"
+check "setup unit Wants= himmelblaud (one-shot pull, clean skip when unconfigured)" grep -qx 'Wants=himmelblaud.service' "$extra/usr/lib/systemd/system/himmelblau-sysext-setup.service"
+gate="$extra/usr/lib/systemd/system/himmelblaud.service.d/10-snosi-configured.conf"
+check "himmelblaud gate: main file OR any conf.d drop-in counts as configured" bash -c "grep -qx 'ConditionPathExists=|/etc/himmelblau/himmelblau.conf' '$gate' && grep -qx 'ConditionPathExistsGlob=|/etc/himmelblau/himmelblau.conf.d/\*.conf' '$gate'"
+check "himmelblaud gate is pinned in required-paths" grep -qx /usr/lib/systemd/system/himmelblaud.service.d/10-snosi-configured.conf "$required"
 check "preset enables the setup unit" grep -qx 'enable himmelblau-sysext-setup.service' "$preset"
 check "preset enables himmelblaud" grep -qx 'enable himmelblaud.service' "$preset"
 check "setup unit orders after reload-sysext and before himmelblaud/ssh/display-manager" bash -c "grep -q '^After=.*reload-sysext.service' '$extra/usr/lib/systemd/system/himmelblau-sysext-setup.service' && grep -Eq '^Before=.*himmelblaud.service.*display-manager.service.*ssh.service' '$extra/usr/lib/systemd/system/himmelblau-sysext-setup.service'"

@@ -43,6 +43,7 @@
 /usr/bin/snosi-himmelblau-setup
 /usr/lib/systemd/system/himmelblau-sysext-setup.service
 /usr/lib/systemd/system/multi-user.target.d/10-himmelblau.conf
+/usr/lib/systemd/system/himmelblaud.service.d/10-snosi-configured.conf
 /usr/lib/systemd/system-preset/40-himmelblau.preset
 /usr/lib/systemd/user/timers.target.wants/himmelblau-compliance-check.timer
 /usr/lib/tmpfiles.d/himmelblau-sysext.conf

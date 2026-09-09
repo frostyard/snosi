@@ -698,9 +698,19 @@ it only ever ADDS to `/etc` and never runs `systemctl enable`. (2)
 `snosi-himmelblau-setup` therefore writes a DROP-IN,
 `/etc/himmelblau/himmelblau.conf.d/50-snosi-setup.conf` (merging on re-run),
 plus `/etc/himmelblau/user-map` for `--map LOCAL=UPN`, then runs the
-integration and restarts the daemons. `himmelblaud` runs fine with no domain
-configured (verified in a Trixie container), so the daemons start at merge
-and the wizard is configuration only. Deb-shipped `/etc` files (sshd
+integration and restarts the daemons. `himmelblaud` 4.0.2 exits 1 ("No
+provider was configured!") after ~13 s of HSM init when no domain is set
+(the first live sideload restart-looped; a too-short container probe had
+suggested otherwise), so `himmelblaud.service.d/10-snosi-configured.conf`
+condition-gates it on a main file OR any `/etc/himmelblau/himmelblau.conf.d/*.conf`.
+That gate is why the `multi-user.target.d` drop-in upholds ONLY the setup
+unit, which `Wants=` the daemon: an upheld unit whose condition fails is
+retried continuously (measured live, 33 attempts in 12 s, then rate-limited
+"Will retry later"), while a `Wants=` pull is a single clean skip. The
+integration script queues its sshd reload with `systemctl --no-block`
+because it runs inside a unit ordered `Before=ssh.service`; a blocking reload
+job sits behind the unit's own start job and a oneshot has no start timeout
+(hung forever on the first sideload). Deb-shipped `/etc` files (sshd
 drop-in, Chromium/Chrome native-messaging host and policies) go through
 `mkosi.finalize` factory capture (fail-closed) and
 `usr/lib/tmpfiles.d/himmelblau-sysext.conf` `C` rules; the static factory

@@ -15,6 +15,11 @@ Documentation=man:himmelblau.conf(5) https://himmelblau-idm.org
 DefaultDependencies=no
 After=reload-sysext.service systemd-sysusers.service systemd-tmpfiles-setup.service local-fs.target
 Before=himmelblaud.service himmelblaud-tasks.service display-manager.service ssh.service
+# Pull the daemon in from here rather than upholding it from
+# multi-user.target.d (see 10-himmelblau.conf): a Wants= is one-shot, so the
+# daemon's configuration condition failing on an unconfigured machine is a
+# single clean skip, not a retry loop.
+Wants=himmelblaud.service
 ConditionPathExists=!/run/himmelblau-sysext-setup.done
 
 [Service]
