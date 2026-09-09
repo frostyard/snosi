@@ -674,6 +674,10 @@ with gui-base by comments on both sides). Verification procedure for additions
 profile's manifest; snow closure = base ∪ `apt-get install --simulate` of
 `shared/packages/snow/mkosi.conf` in a podman trixie container using the
 repo's `mkosi.sandbox/etc/apt` config and base's dpkg status.
+`test/sundog-profile-test.sh` additionally pins gui-base inclusion for
+sundog: every package in `mkosi.images/gui-base/mkosi.conf` must appear
+explicitly in `shared/packages/sundog/mkosi.conf` (one-way inclusion —
+sundog may carry additional product packages).
 
 **The tripwire**: every gui-base sysext also lists
 `shared/sysext/finalize/sysext-no-divergent-libs.sh` in

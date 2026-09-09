@@ -16,8 +16,8 @@ makes this worse — upstream Debian freely adds, removes, and renames its
 ## Decision
 
 Every product carries an outcome map, `shared/composition/<product>/
-var-outcomes.txt` (`cayo/var-outcomes.txt` for cayo; `snow/var-outcomes.txt`
-shared by snow and snowfield), that
+var-outcomes.txt` (`floe/var-outcomes.txt` for floe; `snow/var-outcomes.txt`
+shared by snow and snowfield; `sundog/var-outcomes.txt` for sundog), that
 classifies every path present under the
 buildroot's `/var` into exactly one of four outcomes:
 
@@ -87,8 +87,9 @@ On success the audit writes the classified inventory to
 - Shapes: [design/overview.md](../design/overview.md) (Native `/var`
   Factory State), [design/testing.md](../design/testing.md)
 - Implemented by: `shared/composition/var-audit.finalize`,
-  `shared/composition/cayo/var-outcomes.txt`,
-  `shared/composition/snow/var-outcomes.txt`
+  `shared/composition/floe/var-outcomes.txt`,
+  `shared/composition/snow/var-outcomes.txt`,
+  `shared/composition/sundog/var-outcomes.txt`
 - Guarded by: the build itself (finalize failure — this is the only
   enforcement that actually runs today);
   `test/native-ab-components-test.sh` (guest-side inventory) is classed

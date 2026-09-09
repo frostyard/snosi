@@ -25,6 +25,9 @@ snow: ensure-mkosi
 snowfield: ensure-mkosi
     sudo PATH="$PATH" {{just}} _snowfield
 
+sundog: ensure-mkosi
+    sudo PATH="$PATH" {{just}} _sundog
+
 floe: ensure-mkosi
     sudo PATH="$PATH" {{just}} _floe
 
@@ -160,6 +163,10 @@ _snow: _clean
 [private]
 _snowfield: _clean
     {{mkosi}} --profile snowfield build
+
+[private]
+_sundog: _clean
+    {{mkosi}} --profile sundog build
 
 [private]
 _floe: _clean

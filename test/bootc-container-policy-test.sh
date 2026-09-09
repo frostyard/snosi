@@ -12,7 +12,7 @@ USER_POLICY="$PROJECT_ROOT/shared/bootc-secure/tree/usr/share/snosi/containers/u
 USER_TMPFILES="$PROJECT_ROOT/shared/bootc-secure/tree/usr/lib/user-tmpfiles.d/snosi-containers-policy.conf"
 VM_LIB="$PROJECT_ROOT/test/lib/vm.sh"
 UPDATER="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage"
-SECURE_IMAGES=(cayo floe snow snowfield)
+SECURE_IMAGES=(cayo floe snow snowfield sundog)
 
 failures=0
 
@@ -373,7 +373,7 @@ run_live_policy_proof() {
         # Cayo remains covered while its exact policy scope is retained for
         # late Phase 2 migrations. Phase 5 removes both together.
         case "$image" in
-            cayo|floe|snow|snowfield) ;;
+            cayo|floe|snow|snowfield|sundog) ;;
             *) printf 'BLOCKED: LIVE_IMAGES contains unsupported product %s\n' "$image" >&2; return 2 ;;
         esac
     done

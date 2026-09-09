@@ -12,7 +12,7 @@
 #
 # For each path found under $BUILDROOT/var, this script:
 #   - classifies it against the product's outcome map
-#     (shared/composition/<floe|snow>/var-outcomes.txt), selected by
+#     (shared/composition/<floe|snow|sundog>/var-outcomes.txt), selected by
 #     $IMAGE_ID (snow and snowfield share the snow map: same payload
 #     composition, see shared/composition/snow/mkosi.conf). A product that
 #     installs a different payload needs its OWN map: adding a product means
@@ -57,6 +57,9 @@ case "$IMAGE_ID" in
         ;;
     snow | snowfield)
         map="$SRCDIR/shared/composition/snow/var-outcomes.txt"
+        ;;
+    sundog)
+        map="$SRCDIR/shared/composition/sundog/var-outcomes.txt"
         ;;
     *)
         echo "var-audit.finalize: no /var outcome map wired for IMAGE_ID='$IMAGE_ID'" >&2
