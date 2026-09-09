@@ -3,6 +3,12 @@
 Operator runbook for migrating hosts installed with **nbc** (the legacy A/B
 partition installer/updater) to **bootc/composefs** deployments.
 
+> **nbc installs reach end of life on 2026-09-30**
+> ([ADR-0015](adr/0015-retire-native-ab-images-and-nbc-installs.md)). Every
+> nbc host prints an end-of-life notice at login (`/etc/update-motd.d/80-snosi-eol`)
+> and raises one desktop notification per user; the same runbook below is
+> the migration path.
+
 Companion documents:
 
 - [`2026-07-03-bootc-migration-record.md`](2026-07-03-bootc-migration-record.md) —

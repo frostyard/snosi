@@ -316,6 +316,29 @@ Consumers of the update state:
   observed on the first real desktop bootc host 2026-07-07); the per-digest ack
   keeps the repeat triggers harmless.
 
+**End-of-life notice for native A/B and nbc hosts (ADR-0015, 2026-09-08):**
+`/usr/libexec/snosi-eol-notice` (base `usr/libexec/`) is the single owner of
+both the detection predicate and the wording: native A/B when
+`/usr/lib/snosi/native-ab` exists, nbc when the kernel command line has no
+`composefs=` AND `/run/ostree-booted` is absent (the same `!composefs`
+predicate the nbc timer units gate on; the ostree check excludes an
+ostree-backend bootc deployment), silent in containers and on every bootc
+install, tense flips after 2026-09-30. Three consumers delegate to it and
+carry no detection of their own: `/etc/update-motd.d/80-snosi-eol` (execs
+it), the user-scope `snosi-eol-notify.service` (static
+`graphical-session.target.wants/` link, no `[Install]`,
+`ConditionKernelCommandLine=!composefs` pre-filter) running
+`/usr/libexec/snosi-eol-notify` (one critical-urgency toast per user,
+tense-neutral title "This OS image is being retired" over the helper text
+with its motd-style leading blank line stripped, ack-gated on `NOTICE_ID`
+in `~/.local/state/snosi/eol-notice.ack` -- bump only for a substantive
+wording change, never for the post-date tense flip -- ack written only
+after a successful `notify-send`, same daemon-race retry as
+`bootc-update-notify`), and `snosi-update-status` (prints it first).
+`test/eol-notice-test.sh` (validate.yml) pins the predicate against fixture
+command lines, the single-source rule (the EOL sentence may exist in exactly
+one shipped file), the unit shape, and the once-per-user ack.
+
 **Recommends-split companion binaries (recurring pattern):** the image build
 installs without Recommends, so a transitively-pulled library package can ship
 config that references a helper binary living in a Recommends-only companion

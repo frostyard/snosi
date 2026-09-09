@@ -1,0 +1,51 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# One-time desktop notification (user scope) that the running native A/B
+# (-ab) image or nbc install is end of life (docs/adr/0015). Detection and
+# wording come from /usr/libexec/snosi-eol-notice -- this script never
+# decides on its own whether the system is affected. Ack-gated per NOTICE_ID
+# (not per login): bump NOTICE_ID only for a substantive wording change that
+# every user must see again -- NOT when the date passes and the helper's
+# tense flips (the motd hook picks that up by itself; nobody needs a second
+# toast for a verb change). The motd hook keeps repeating the notice on
+# every headless login regardless.
+#
+# Same daemon-race handling as bootc-update-notify: the static
+# graphical-session.target.wants/ run can beat the session's notification
+# daemon, so notify-send is retried and the ack is written ONLY after a
+# successful send. Exits 0 when every attempt fails so the unit never shows
+# failed; the next login retries.
+set -euo pipefail
+
+NOTICE_ID=native-ab-nbc-eol-2026-09-30
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/snosi"
+ACK="$STATE_DIR/eol-notice.ack"
+NOTICE="${SNOSI_EOL_NOTICE_CMD:-/usr/libexec/snosi-eol-notice}"
+
+[[ "$NOTICE_ID" == "$(cat "$ACK" 2>/dev/null || true)" ]] && exit 0
+
+notice=$("$NOTICE")
+[[ -n "$notice" ]] || exit 0
+# The helper opens with a blank line so it reads right after the other motd
+# hooks; a toast body must not.
+notice="${notice#$'\n'}"
+
+command -v notify-send >/dev/null || exit 0
+
+# Critical urgency: GNOME keeps it on screen until dismissed, which is the
+# right shape for a once-per-user end-of-life notice. The title picks no
+# tense: the body says "reaches" before the date and "reached" after.
+sent=0
+for _ in 1 2 3 4 5 6; do
+    if notify-send --app-name="Snow Linux" --icon=dialog-warning --urgency=critical \
+        "This OS image is being retired" "$notice" 2>/dev/null; then
+        sent=1
+        break
+    fi
+    # Override exists for the fixture test only (test/eol-notice-test.sh).
+    sleep "${SNOSI_NOTIFY_RETRY_DELAY:-5}"
+done
+[[ "$sent" == 1 ]] || exit 0
+
+mkdir -p "$STATE_DIR"
+echo "$NOTICE_ID" > "$ACK"

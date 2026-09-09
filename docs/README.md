@@ -33,6 +33,7 @@ states intent; the categories below hold the record.
 - [adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md](adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md) — OCI layers are chunked by changelog-derived update cadence; secure images chunk before digest sealing, never after
 - [adr/0013-no-requiredby-enablement-prune-stale-requires.md](adr/0013-no-requiredby-enablement-prune-stale-requires.md) — shipped units never use RequiredBy= enablement (CI guard), and the native A/B initrd prunes stale .requires links that would brick boot at "Failed to isolate default target"
 - [adr/0014-update-status-pkg-diff.md](adr/0014-update-status-pkg-diff.md) — **Proposed:** `snosi-update-status --pkg-diff` diffs local staged deployments from `packages.txt`; default status stays silent on packages
+- [adr/0015-retire-native-ab-images-and-nbc-installs.md](adr/0015-retire-native-ab-images-and-nbc-installs.md) — native A/B (`-ab`) images and nbc installs reach end of life 2026-09-30; one shared helper drives the motd line, one-time desktop toast, and `snosi-update-status` notice
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design

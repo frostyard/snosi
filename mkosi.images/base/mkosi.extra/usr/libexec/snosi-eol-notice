@@ -1,0 +1,64 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# snosi-eol-notice -- the ONE source of the end-of-life notice for the retired
+# native A/B (-ab) images and nbc-installed hosts (docs/adr/0015). Prints the
+# notice on stdout when the running system is one of them, prints nothing
+# otherwise, and always exits 0. Every consumer calls THIS script so the
+# detection predicate and the wording exist exactly once:
+#   /etc/update-motd.d/80-snosi-eol   headless/SSH/console logins (every login)
+#   /usr/libexec/snosi-eol-notify     one desktop toast per user (ack-gated)
+#   snosi-update-status               printed ahead of the update summary
+#
+# Detection reads only world-readable state (no root, no bootc CLI, so the
+# user-scope notify unit can run it):
+#   native A/B : /usr/lib/snosi/native-ab marker (docs/native-ab-contracts.md)
+#   nbc        : no composefs= on the kernel command line AND no
+#                /run/ostree-booted. Every supported bootc install is a
+#                composefs deployment; the composefs= test is the same
+#                predicate the shipped nbc-update-download units gate on
+#                (ConditionKernelCommandLine=!composefs), and the ostree
+#                check keeps an ostree-backend bootc deployment (bootc-
+#                managed, spec.image set) from being mistaken for nbc.
+# Containers are skipped outright: /proc/cmdline there is the host's.
+#
+# The SNOSI_EOL_* overrides exist for test/eol-notice-test.sh only.
+set -euo pipefail
+
+EOL_DATE=2026-09-30
+MARKER="${SNOSI_EOL_MARKER:-/usr/lib/snosi/native-ab}"
+CMDLINE="${SNOSI_EOL_CMDLINE:-/proc/cmdline}"
+OSTREE_BOOTED="${SNOSI_EOL_OSTREE_BOOTED:-/run/ostree-booted}"
+today="${SNOSI_EOL_TODAY:-$(date +%F)}"
+
+if command -v systemd-detect-virt >/dev/null 2>&1 \
+    && systemd-detect-virt --container --quiet 2>/dev/null; then
+    exit 0
+fi
+
+kind=""
+if [[ -e "$MARKER" ]]; then
+    kind="native-ab"
+elif [[ -r "$CMDLINE" ]] && ! grep -Eq '(^|[[:space:]])composefs=' "$CMDLINE" \
+    && [[ ! -e "$OSTREE_BOOTED" ]]; then
+    kind="nbc"
+fi
+[[ -n "$kind" ]] || exit 0
+
+# ISO dates compare as integers once the dashes are dropped.
+if [[ "$(tr -d - <<<"$today")" -gt "$(tr -d - <<<"$EOL_DATE")" ]]; then
+    tense="reached end of life on $EOL_DATE"
+else
+    tense="reaches end of life on $EOL_DATE"
+fi
+
+case "$kind" in
+native-ab)
+    printf '\nNOTICE: this system runs a native A/B (-ab) snosi image, which %s.\n' "$tense"
+    ;;
+nbc)
+    printf '\nNOTICE: this system was installed with nbc, which %s.\n' "$tense"
+    ;;
+esac
+printf 'These images will no longer receive updates. Please backup and install the\n'
+printf 'bootc variants for continued support.\n'
+printf 'See: https://github.com/frostyard/snosi/blob/main/docs/installing.md\n'
