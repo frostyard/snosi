@@ -57,7 +57,7 @@ keeps the relevant AppArmor profile in complain mode).
    | Option | Effect |
    | --- | --- |
    | `--domain DOMAIN` | Entra ID sign-in domain |
-   | `--map LOCAL=UPN` | make an existing local account authenticate through Entra ID under its current username (repeatable; maintains `/etc/himmelblau/user-map`) |
+   | `--map LOCAL=UPN` | make an existing local account authenticate through Entra ID under its current username (repeatable; maintains `/etc/himmelblau/user-map`). Required for browser SSO from that account, see troubleshooting |
    | `--join-type join\|register` | device registration mode |
    | `--hsm-type TYPE` | `tpm_bound_soft_if_possible` (default), `tpm` (require the TPM), `tpm_if_possible`; pick this before the first login, see troubleshooting |
    | `--allow-groups LIST` | restrict sign-in to these group object IDs / UPNs |
@@ -128,6 +128,16 @@ klist                           # Kerberos ticket after an Entra login
 
 - `systemctl status himmelblaud` says "condition not met": run the setup
   tool; the daemon is deliberately skipped until a domain is configured.
+- Browser SSO loops through Hello PIN / FIDO prompts and never loads the
+  page, and `journalctl --user -u himmelblau-broker` repeats "Silent PRT SSO
+  cookie unavailable; attempting interactive re-auth": you are logged in as a
+  plain local account. himmelblaud keys the Primary Refresh Token by Unix
+  account, and a local user has no Entra identity to cache it under, so
+  every request re-authenticates (himmelblaud logs "Broker method failed for
+  uid N: Unable to find account"). Map the account
+  (`snosi-himmelblau-setup --map LOCAL=UPN`), run `aad-tool cache-clear` so
+  the UPN resolves to the local uid, then log out and back in through Entra
+  (root-caused live 2026-09-09).
 - Changing `--hsm-type` after the daemon has already started (for example
   moving from the default soft HSM to `tpm`) makes himmelblaud fail with
   "Unable to load machine root key ... IncorrectKeyType": the machine key
