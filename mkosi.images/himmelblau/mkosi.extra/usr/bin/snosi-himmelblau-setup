@@ -1,0 +1,341 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# snosi-himmelblau-setup: configure Himmelblau (Entra ID login) on a snosi
+# machine after the himmelblau sysext is merged.
+#
+# This is the snosi replacement for the configuration half of the upstream
+# bootstrapper (`curl -fsSL https://himmelblau-idm.org/install | sh`). That
+# installer adds an APT repo, installs packages, writes /etc/himmelblau/
+# himmelblau.conf and runs `systemctl enable --now`. On snosi the packages
+# arrive as a sysext, activation is image-defined (Upholds= drop-in), and
+# runtime `systemctl enable` is forbidden, so only the configuration step
+# remains -- and it is done differently:
+#
+#   * Settings go to /etc/himmelblau/himmelblau.conf.d/50-snosi-setup.conf,
+#     a DROP-IN. himmelblau.conf(5): only the highest-priority MAIN file is
+#     parsed, so an /etc/himmelblau/himmelblau.conf would mask the deb's
+#     /usr/lib/himmelblau/himmelblau.conf and with it the Debian-required
+#     defaults (local_groups, home_attr/home_alias, use_etc_skel) that the
+#     upstream installer has to re-emit by hand. A drop-in layers on top.
+#   * Re-running the tool merges: existing keys in the drop-in are kept
+#     unless a new option overrides them, so `--map` can be added later
+#     without repeating `--domain`.
+#   * The local-account map (`--map LOCAL=UPN`) is /etc/himmelblau/user-map,
+#     one `local:upn` per line, merged by local name.
+#   * After writing, the same idempotent /etc integration the boot service
+#     runs (/usr/lib/himmelblau/himmelblau-sysext-setup) is applied and the
+#     daemons are restarted so the new settings take effect.
+#
+# HIMMELBLAU_SETUP_ROOT (test hook) prefixes every path and skips the root
+# check; test/himmelblau-sysext-setup-test.sh drives the tool through it.
+
+set -euo pipefail
+
+ROOT=${HIMMELBLAU_SETUP_ROOT:-}
+CONF_DIR="$ROOT/etc/himmelblau"
+DROPIN="$CONF_DIR/himmelblau.conf.d/50-snosi-setup.conf"
+USER_MAP="$CONF_DIR/user-map"
+USER_MAP_PATH=/etc/himmelblau/user-map
+INTEGRATE=/usr/lib/himmelblau/himmelblau-sysext-setup
+
+usage() {
+    cat <<'USAGE'
+Usage: snosi-himmelblau-setup [OPTIONS]
+
+Configure Himmelblau (Microsoft Entra ID login) on this machine. Without
+--domain on a terminal the tool asks interactively.
+
+Identity provider:
+  --domain DOMAIN          Entra ID sign-in domain (e.g. example.com)
+  --map LOCAL=UPN          Map an existing local account to an Entra UPN so
+                           that account authenticates through Entra ID
+                           (repeatable; writes /etc/himmelblau/user-map)
+  --join-type join|register
+                           Device registration mode (upstream default: join)
+  --hsm-type TYPE          tpm_bound_soft_if_possible (default) | tpm | tpm_if_possible
+
+Access policy:
+  --allow-groups LIST      pam_allow_groups: comma-separated group object IDs
+                           or UPNs permitted to sign in (default: all users)
+  --sudo-groups LIST       sudo_groups: group object IDs granted local sudo
+  --enable-hello | --disable-hello
+                           Windows Hello PIN enrollment (upstream default: on)
+  --apply-policy | --no-apply-policy
+                           Apply Intune policies for authenticated users
+
+Anything else:
+  --set KEY=VALUE          Any other [global] option from himmelblau.conf(5)
+                           (repeatable), e.g. --set enable_experimental_mfa=true
+  --unset KEY              Drop a key previously written by this tool
+
+Actions:
+  --show                   Print the current drop-in and user map, then exit
+  --no-restart             Write configuration only; skip integration/restart
+  -h, --help               This help
+
+Settings land in /etc/himmelblau/himmelblau.conf.d/50-snosi-setup.conf; the
+tool rewrites that file and never touches other drop-ins.
+USAGE
+}
+
+die() { printf 'snosi-himmelblau-setup: %s\n' "$*" >&2; exit 1; }
+info() { printf 'snosi-himmelblau-setup: %s\n' "$*"; }
+
+valid_domain() {
+    [[ $1 =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]
+}
+valid_key() { [[ $1 =~ ^[a-z][a-z0-9_]*$ ]]; }
+valid_local_user() { [[ $1 =~ ^[a-z_][a-z0-9_-]*\$?$ ]]; }
+valid_upn() { [[ $1 =~ ^[^[:space:]:@]+@[^[:space:]:@]+$ ]]; }
+valid_value() { [[ $1 != *$'\n'* && $1 != *$'\r'* ]]; }
+
+# --- current state ---------------------------------------------------------
+declare -A cfg=()
+declare -a cfg_order=()
+set_key() { # key value
+    if [[ -z ${cfg[$1]+x} ]]; then
+        cfg_order+=("$1")
+    fi
+    cfg[$1]=$2
+}
+unset_key() {
+    local k=$1 i
+    [[ -n ${cfg[$k]+x} ]] || return 0
+    unset 'cfg[$k]'
+    for i in "${!cfg_order[@]}"; do
+        [[ ${cfg_order[$i]} == "$k" ]] && unset 'cfg_order[$i]'
+    done
+    cfg_order=("${cfg_order[@]}")
+}
+
+load_dropin() {
+    [[ -f "$DROPIN" ]] || return 0
+    local line key value
+    while IFS= read -r line || [[ -n $line ]]; do
+        line=${line%%#*}
+        [[ $line =~ ^[[:space:]]*([a-z][a-z0-9_]*)[[:space:]]*=[[:space:]]*(.*)$ ]] || continue
+        key=${BASH_REMATCH[1]}
+        value=${BASH_REMATCH[2]}
+        value=${value%"${value##*[![:space:]]}"}
+        set_key "$key" "$value"
+    done <"$DROPIN"
+}
+
+declare -A maps=()
+declare -a map_order=()
+load_user_map() {
+    [[ -f "$USER_MAP" ]] || return 0
+    local line
+    while IFS= read -r line || [[ -n $line ]]; do
+        [[ $line =~ ^[[:space:]]*([^:[:space:]#]+)[[:space:]]*:[[:space:]]*([^[:space:]]+)[[:space:]]*$ ]] || continue
+        add_map "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+    done <"$USER_MAP"
+}
+add_map() { # local upn
+    if [[ -z ${maps[$1]+x} ]]; then
+        map_order+=("$1")
+    fi
+    maps[$1]=$2
+}
+
+# --- argument parsing --------------------------------------------------------
+show_only=0
+restart=1
+interactive_domain=""
+declare -a new_maps=()
+declare -a unsets=()
+declare -A overrides=()
+declare -a override_order=()
+override() { # key value
+    valid_key "$1" || die "invalid option name: $1"
+    valid_value "$2" || die "value for $1 must be a single line"
+    if [[ -z ${overrides[$1]+x} ]]; then
+        override_order+=("$1")
+    fi
+    overrides[$1]=$2
+}
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --domain)
+            [[ $# -ge 2 ]] || die "--domain needs a value"
+            override domain "${2,,}"; shift 2 ;;
+        --map)
+            [[ $# -ge 2 ]] || die "--map needs LOCAL=UPN"
+            new_maps+=("$2"); shift 2 ;;
+        --join-type)
+            [[ $# -ge 2 ]] || die "--join-type needs join|register"
+            [[ $2 == join || $2 == register ]] || die "--join-type must be join or register"
+            override join_type "$2"; shift 2 ;;
+        --hsm-type)
+            [[ $# -ge 2 ]] || die "--hsm-type needs a value"
+            case $2 in
+                tpm_bound_soft_if_possible|tpm|tpm_if_possible) ;;
+                *) die "--hsm-type must be tpm_bound_soft_if_possible, tpm or tpm_if_possible" ;;
+            esac
+            override hsm_type "$2"; shift 2 ;;
+        --allow-groups)
+            [[ $# -ge 2 ]] || die "--allow-groups needs a value"
+            override pam_allow_groups "$2"; shift 2 ;;
+        --sudo-groups)
+            [[ $# -ge 2 ]] || die "--sudo-groups needs a value"
+            override sudo_groups "$2"; shift 2 ;;
+        --enable-hello) override enable_hello true; shift ;;
+        --disable-hello) override enable_hello false; shift ;;
+        --apply-policy) override apply_policy true; shift ;;
+        --no-apply-policy) override apply_policy false; shift ;;
+        --set)
+            [[ $# -ge 2 && $2 == *=* ]] || die "--set needs KEY=VALUE"
+            override "${2%%=*}" "${2#*=}"; shift 2 ;;
+        --unset)
+            [[ $# -ge 2 ]] || die "--unset needs KEY"
+            valid_key "$2" || die "invalid option name: $2"
+            unsets+=("$2"); shift 2 ;;
+        --show) show_only=1; shift ;;
+        --no-restart) restart=0; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) usage >&2; die "unknown argument: $1" ;;
+    esac
+done
+
+if [[ -z $ROOT && $EUID -ne 0 ]]; then
+    die "must run as root (try: sudo $0 ...)"
+fi
+
+load_dropin
+load_user_map
+
+if (( show_only )); then
+    if [[ -f "$DROPIN" ]]; then
+        printf '# %s\n' "$DROPIN"; cat "$DROPIN"
+    else
+        echo "# no snosi drop-in written yet ($DROPIN)"
+    fi
+    if [[ -f "$USER_MAP" ]]; then
+        printf '\n# %s\n' "$USER_MAP"; cat "$USER_MAP"
+    fi
+    exit 0
+fi
+
+# --- interactive fallback ----------------------------------------------------
+if [[ -z ${overrides[domain]+x} && -z ${cfg[domain]+x} && ${#new_maps[@]} -eq 0 && ${#override_order[@]} -eq 0 && ${#unsets[@]} -eq 0 ]]; then
+    if [[ ! -t 0 ]]; then
+        usage >&2
+        die "--domain is required when not running on a terminal"
+    fi
+    echo "Himmelblau setup for Microsoft Entra ID"
+    echo
+    while :; do
+        read -r -p "Entra ID sign-in domain (e.g. example.com): " interactive_domain
+        interactive_domain=${interactive_domain,,}
+        valid_domain "$interactive_domain" && break
+        echo "  '$interactive_domain' is not a valid DNS domain name."
+    done
+    override domain "$interactive_domain"
+    read -r -p "Map a local account to an Entra UPN? (LOCAL=UPN, empty to skip): " answer
+    [[ -n $answer ]] && new_maps+=("$answer")
+    read -r -p "Device registration mode [join/register] (join): " answer
+    case ${answer:-join} in
+        join) ;;
+        register) override join_type register ;;
+        *) die "registration mode must be join or register" ;;
+    esac
+fi
+
+# --- validate and merge ------------------------------------------------------
+for k in "${override_order[@]}"; do
+    set_key "$k" "${overrides[$k]}"
+done
+for k in "${unsets[@]}"; do
+    unset_key "$k"
+done
+if [[ -n ${cfg[domain]+x} ]]; then
+    valid_domain "${cfg[domain]}" || die "invalid domain: ${cfg[domain]}"
+fi
+
+for spec in "${new_maps[@]}"; do
+    [[ $spec == *=* ]] || die "--map needs LOCAL=UPN, got: $spec"
+    local_user=${spec%%=*}
+    upn=${spec#*=}
+    valid_local_user "$local_user" || die "invalid local account name: $local_user"
+    valid_upn "$upn" || die "invalid UPN: $upn"
+    add_map "$local_user" "$upn"
+done
+if (( ${#map_order[@]} > 0 )); then
+    set_key user_map_file "$USER_MAP_PATH"
+fi
+
+# --- write --------------------------------------------------------------------
+write_atomic() { # path mode content-producer...
+    local path=$1 mode=$2 tmp
+    shift 2
+    mkdir -p "$(dirname "$path")"
+    tmp=$(mktemp "$(dirname "$path")/.snosi-setup.XXXXXX")
+    "$@" >"$tmp"
+    chmod "$mode" "$tmp"
+    mv -f "$tmp" "$path"
+}
+
+render_dropin() {
+    cat <<HDR
+# Written by snosi-himmelblau-setup on $(date -u +%Y-%m-%dT%H:%M:%SZ).
+# Re-run the tool to change these values; hand edits here are overwritten.
+# Additional local overrides belong in their own
+# /etc/himmelblau/himmelblau.conf.d/*.conf drop-in (see himmelblau.conf(5)).
+# The Debian defaults in /usr/lib/himmelblau/himmelblau.conf remain in force
+# because this is a drop-in, not a main file.
+[global]
+HDR
+    local k
+    if [[ -n ${cfg[domain]+x} ]]; then
+        printf 'domain = %s\n' "${cfg[domain]}"
+    fi
+    for k in "${cfg_order[@]}"; do
+        [[ $k == domain ]] && continue
+        printf '%s = %s\n' "$k" "${cfg[$k]}"
+    done
+}
+
+render_user_map() {
+    local u
+    echo "# local-account:Entra-UPN, written by snosi-himmelblau-setup (--map)"
+    for u in "${map_order[@]}"; do
+        printf '%s:%s\n' "$u" "${maps[$u]}"
+    done
+}
+
+mkdir -p "$CONF_DIR/himmelblau.conf.d"
+write_atomic "$DROPIN" 0644 render_dropin
+info "wrote $DROPIN"
+if (( ${#map_order[@]} > 0 )); then
+    write_atomic "$USER_MAP" 0644 render_user_map
+    info "wrote $USER_MAP (${#map_order[@]} mapping(s))"
+fi
+
+# --- apply --------------------------------------------------------------------
+if (( restart )); then
+    if [[ -x "$ROOT$INTEGRATE" ]]; then
+        "$ROOT$INTEGRATE"
+    else
+        info "WARNING: $INTEGRATE not found; is the himmelblau sysext merged?"
+    fi
+    if command -v systemctl >/dev/null 2>&1; then
+        info "restarting himmelblaud"
+        systemctl restart himmelblaud.service himmelblaud-tasks.service
+    fi
+    if command -v aad-tool >/dev/null 2>&1; then
+        aad-tool status || info "WARNING: aad-tool status failed; check 'journalctl -u himmelblaud'"
+    fi
+fi
+
+cat <<NEXT
+
+Next steps:
+  - Sign in with an Entra ID account: at the GDM login screen choose
+    "Not listed?" and enter the UPN (user@${cfg[domain]:-domain}); over SSH use
+    ssh 'user@${cfg[domain]:-domain}'@host and complete the MFA prompt.
+  - Mapped local accounts (--map) keep their username and now authenticate
+    through Entra ID; their local password no longer applies.
+  - Verify with: aad-tool status; aad-tool auth-test user@${cfg[domain]:-domain}
+  - Revisit settings with: snosi-himmelblau-setup --show
+NEXT

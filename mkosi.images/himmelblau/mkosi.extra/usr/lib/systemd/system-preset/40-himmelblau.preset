@@ -1,0 +1,4 @@
+enable himmelblaud.service
+enable himmelblaud-tasks.service
+enable himmelblau-hsm-pin-init.service
+enable himmelblau-sysext-setup.service

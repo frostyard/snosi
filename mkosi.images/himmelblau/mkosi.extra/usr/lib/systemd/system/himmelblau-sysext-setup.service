@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# himmelblau-sysext-setup.service: one-shot post-merge /etc integration.
+#
+# On a mutable Debian host the himmelblau deb maintainer scripts wire NSS and
+# PAM at `apt install` time. A sysext merges onto /usr at boot and no postinst
+# ever runs on the installed machine, so this unit replays exactly that
+# integration (idempotently) after reload-sysext.service has re-run sysusers
+# and tmpfiles for the merged tree, and before anything that authenticates.
+# It only ever ADDS to files under /etc; see the script for the guard rules.
+
+[Unit]
+Description=Himmelblau Sysext Post-Merge Configuration
+Documentation=man:himmelblau.conf(5) https://himmelblau-idm.org
+DefaultDependencies=no
+After=reload-sysext.service systemd-sysusers.service systemd-tmpfiles-setup.service local-fs.target
+Before=himmelblaud.service himmelblaud-tasks.service display-manager.service ssh.service
+ConditionPathExists=!/run/himmelblau-sysext-setup.done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/himmelblau/himmelblau-sysext-setup
+ExecStartPost=/usr/bin/touch /run/himmelblau-sysext-setup.done
+
+[Install]
+WantedBy=multi-user.target

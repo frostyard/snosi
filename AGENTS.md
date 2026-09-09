@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 snosi is a bootable container image build system using [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). Images are deployed via bootc/systemd-boot with atomic updates.
 
-**Outputs:** 2 OCI desktop images (snow, snowfield), 1 OCI server image (floe), and 26 sysext overlay images (1password, 1password-cli, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode).
+**Outputs:** 2 OCI desktop images (snow, snowfield), 1 OCI server image (floe), and 27 sysext overlay images (1password, 1password-cli, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, himmelblau, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode).
 
 ## Build Commands
 
@@ -14,7 +14,7 @@ Requires: just, git, python3, root/sudo access. mkosi itself is auto-bootstrappe
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 26 sysexts
+just sysexts            # Build base + all 27 sysexts
 just snow               # Build snow desktop image
 just snowfield          # Build snowfield (Surface kernel)
 just floe               # Build floe server image
@@ -671,6 +671,43 @@ udev reload above; without it dictation transcribes but inserts no text. Its
 `ydotool.service.d/10-voxtype.conf` sets `RestartSec=5s` because the deb's
 `Restart=always` at the default 100ms exhausts its start limit in half a
 second.
+
+**Himmelblau sysext (Entra ID login, 2026-09-09):** base-built (servers need
+SSH logins too; nothing links a GUI toolkit) from the upstream STABLE Debian 13
+repo (`mkosi.sandbox/etc/apt/sources.list.d/himmelblau.sources`; version
+sentinel `himmelblau` in `package-versions.json`, tracked by
+`check-packages.yml`). It ships the set the upstream `curl | sh` bootstrapper
+picks on a Debian desktop host with sshd and a browser — `himmelblau`,
+`nss-himmelblau`, `pam-himmelblau`, `himmelblau-sshd-config`,
+`himmelblau-broker`, `himmelblau-sso`, `himmelblau-sso-policies`, `o365`,
+`krb5-user` — minus `himmelblau-qr-greeter` (hard `gnome-shell` Depends, and
+its postinst compiles a dconf db under `/etc`) and `himmelblau-apparmor`
+(`/etc/apparmor.d` only; Trixie's `unix-chkpwd` profile is complain-mode).
+Two facts drive the shape and are pinned by
+`test/himmelblau-sysext-setup-test.sh` (validate.yml): (1) the deb maintainer
+scripts do ALL of the `/etc` integration (nsswitch, `pam-auth-update`, krb5
+`includedir`, GDM keyring `use_authtok`) and they run only in the build chroot,
+so `usr/lib/himmelblau/himmelblau-sysext-setup` replays them idempotently at
+boot from `himmelblau-sysext-setup.service` (Upholds= drop-in, ordered after
+`reload-sysext.service` and before `himmelblaud`/`ssh`/`display-manager`);
+it only ever ADDS to `/etc` and never runs `systemctl enable`. (2)
+`himmelblau.conf(5)` parses only the highest-priority MAIN file, so an
+`/etc/himmelblau/himmelblau.conf` masks the deb's
+`/usr/lib/himmelblau/himmelblau.conf` and the Debian-required defaults in it
+(`local_groups`, `home_attr`/`home_alias`, `use_etc_skel`). The wizard
+`snosi-himmelblau-setup` therefore writes a DROP-IN,
+`/etc/himmelblau/himmelblau.conf.d/50-snosi-setup.conf` (merging on re-run),
+plus `/etc/himmelblau/user-map` for `--map LOCAL=UPN`, then runs the
+integration and restarts the daemons. `himmelblaud` runs fine with no domain
+configured (verified in a Trixie container), so the daemons start at merge
+and the wizard is configuration only. Deb-shipped `/etc` files (sshd
+drop-in, Chromium/Chrome native-messaging host and policies) go through
+`mkosi.finalize` factory capture (fail-closed) and
+`usr/lib/tmpfiles.d/himmelblau-sysext.conf` `C` rules; the static factory
+`krb5.conf` exists because Trixie's `krb5-user` no longer creates one, and
+the same tmpfiles file recreates krb5-user's `/etc/alternatives/k*` links
+(pin the `*.mit` binaries in `required-paths.txt`, never the alternatives
+symlinks). User guide: `docs/himmelblau.md`.
 
 **Pilothouse sysext:** Snosi overrides only `pilothoused.service` `ExecStart`
 to retain the packaged Debian socket, socket-group, and sudo-group arguments

@@ -1,0 +1,38 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+set -euo pipefail
+
+# Capture ONLY the /etc files the himmelblau debs ship (the sshd drop-in from
+# himmelblau-sshd-config, the Chromium/Chrome native-messaging host from
+# himmelblau-sso, and the browser policies from himmelblau-sso-policies) into
+# /usr/share/factory/etc, where usr/lib/tmpfiles.d/himmelblau-sysext.conf's
+# `C` rules place them at boot. A sysext ships /usr only, so anything a deb
+# puts in /etc is silently dropped unless it goes through factory.
+#
+# Never capture all of /etc: for Overlay=yes images $BUILDROOT/etc is the
+# merged base view, and a full copy ships the base build's /etc/shadow and SSH
+# host keys in the published sysext (frostyard/snosi#282, fable audit C1).
+#
+# Fail closed: a missing source means an upstream packaging change that the
+# tmpfiles rule would otherwise turn into a silent no-op at boot. The factory
+# krb5.conf is static in mkosi.extra, not captured (Trixie's krb5-user no
+# longer generates /etc/krb5.conf).
+FACTORY="$BUILDROOT/usr/share/factory/etc"
+mkdir -p "$FACTORY"
+
+FACTORY_PATHS=(
+    ssh/sshd_config.d/30-himmelblau.conf
+    chromium/native-messaging-hosts/linux_entra_sso.json
+    chromium/policies/managed/himmelblau.json
+    opt/chrome/native-messaging-hosts/linux_entra_sso.json
+    opt/chrome/policies/managed/himmelblau.json
+)
+
+cd "$BUILDROOT/etc"
+for path in "${FACTORY_PATHS[@]}"; do
+    if [ ! -f "$path" ]; then
+        echo "himmelblau finalize: /etc/$path not present in buildroot; the deb payload changed" >&2
+        exit 1
+    fi
+    cp --archive --parents --update=none "$path" "$FACTORY/"
+done
