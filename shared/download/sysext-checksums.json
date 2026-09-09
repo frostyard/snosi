@@ -20,19 +20,19 @@
     "version": "1.18.2"
   },
   "microsoft-azurevpnclient": {
-    "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_3.1.0_amd64.deb",
-    "sha256": "636c829e1bc8aef3e71adc6c729971bd7c09deab2ccdb82c6c7ce4185b35e861",
-    "version": "3.1.0"
+    "url": "https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/microsoft-azurevpnclient/microsoft-azurevpnclient_4.0.0_amd64.deb",
+    "sha256": "54bf4c63f78feb560fada20cdc107543141b1744c10349cc4f5607ff4a45ab56",
+    "version": "4.0.0"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_152.0.4191.62-1_amd64.deb",
-    "sha256": "4b352cb0d81b151c10719519a1415efd92570a1c9d57f055e5e5d80f6c99ba0d",
-    "version": "152.0.4191.62-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_152.0.4191.66-1_amd64.deb",
+    "sha256": "186c19f9d6079d174efbb4ef331ccc1e11d139b6f7a8ea3b0db75f9b17e25f0d",
+    "version": "152.0.4191.66-1"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.135.0/code-server_4.135.0_amd64.deb",
-    "sha256": "f87d0d49c6c0a59d41214c9510f506e4123991f2d27b41f6d56f3f5c96458d3e",
-    "version": "4.135.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.136.2/code-server_4.136.2_amd64.deb",
+    "sha256": "607967f576db28f2cf54c6f828670cb7d4cb542876356c9f3fa05f3871c7bc97",
+    "version": "4.136.2"
   },
   "coder": {
     "url": "https://github.com/coder/coder/releases/download/v2.36.4/coder_2.36.4_linux_amd64.deb",
@@ -40,9 +40,9 @@
     "version": "2.36.4"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.14/GitHub-Copilot-linux-x64.deb",
-    "sha256": "d2ac25b55363278c7e4b50536676da827e33623123317dcc5e7e956f87e002d0",
-    "version": "1.1.14"
+    "url": "https://github.com/github/app/releases/download/v1.1.16/GitHub-Copilot-linux-x64.deb",
+    "sha256": "61b3791e1e224a609333658c91a4befeb00259b7a63e2c41e216c5c9c720eac0",
+    "version": "1.1.16"
   },
   "k3s": {
     "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.4%2Bk3s1/k3s",
