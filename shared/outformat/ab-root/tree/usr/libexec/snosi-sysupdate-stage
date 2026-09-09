@@ -58,6 +58,12 @@ SEM=/run/snosi/update-staged
 SYSUPDATE=/usr/lib/systemd/systemd-sysupdate
 ESP_UKI_DIR=/boot/EFI/Linux
 
+# Shared staged-package sidecar publisher (ADR-0014). Sourced here (publish
+# side) and by snosi-update-status (resolve side).
+STAGED_PACKAGES_LIB="${SNOSI_STAGED_PACKAGES_LIB:-/usr/lib/snosi/staged-packages.sh}"
+# shellcheck source=/dev/null
+[[ -r $STAGED_PACKAGES_LIB ]] && source "$STAGED_PACKAGES_LIB"
+
 if [[ ! -e "$MARKER" ]]; then
     echo "Not a native A/B system; nothing to do."
     exit 0
@@ -98,6 +104,37 @@ write_staged_semaphore() { # version
     mkdir -p /run/snosi
     printf 'image=%s\nversion=%s\nstaged_at=%s\n' \
         "$channel" "$1" "$(date --iso-8601=seconds)" >/run/snosi/update-staged
+}
+
+# publish_native_sidecar VERSION -- read packages.txt from the newly-labeled
+# other root slot (read-only EROFS access) and publish the ADR-0014 sidecar
+# bound to version=<14-digit>. Best-effort: a failure here never fails an
+# already-successful stage (the deployment is on disk; the next run's
+# already-staged branch repairs the sidecar), so it warns and returns 0.
+publish_native_sidecar() { # version
+    local version=$1 dev mnt pkg
+    command -v staged_packages_publish >/dev/null 2>&1 || return 0
+    dev="$(lsblk -J -o PATH,PARTLABEL 2>/dev/null | jq -r \
+        --arg label "${image_id}_${version}_r" \
+        '.. | objects | select(.partlabel? == $label) | .path' 2>/dev/null | head -1)"
+    if [[ -z $dev ]]; then
+        echo "WARNING: staged-package sidecar: no slot labeled ${image_id}_${version}_r" >&2
+        return 0
+    fi
+    mnt="$(mktemp -d)"
+    if mount -o ro "$dev" "$mnt" 2>/dev/null; then
+        pkg="$mnt/usr/share/frostyard/${image_id}.packages.txt"
+        if [[ -r $pkg ]]; then
+            staged_packages_publish version "$version" "$pkg" \
+                || echo "WARNING: could not publish the staged-package sidecar for $version" >&2
+        else
+            echo "WARNING: staged slot $version has no packages.txt at $pkg" >&2
+        fi
+        umount "$mnt" 2>/dev/null || true
+    else
+        echo "WARNING: staged-package sidecar: could not mount $dev read-only" >&2
+    fi
+    rmdir "$mnt" 2>/dev/null || true
 }
 
 # other_slot_version -- version label of the currently INACTIVE root slot
@@ -207,6 +244,9 @@ if [[ $newest_rc -ne 0 ]]; then
     if [[ -s "$SEM" ]]; then
         echo "A previously staged update is still pending a reboot."
         remote_version="$(sed -n 's/^version=//p' "$SEM")"
+        # Repair the sidecar if this run staged nothing but a pending update
+        # exists (e.g. a stager from before ADR-0014, or a lost sidecar).
+        [[ "$remote_version" =~ ^[0-9]{14}$ ]] && publish_native_sidecar "$remote_version"
         write_check staged
     else
         write_check current
@@ -243,6 +283,7 @@ if [[ "$rollback_or_staged" == "$remote_version" ]]; then
     # previous stager run already staged it and the applying reboot simply
     # hasn't happened yet -- re-assert, don't re-download.
     echo "$remote_version is already installed in the inactive slot; re-asserting staged state."
+    publish_native_sidecar "$remote_version"
     write_staged_semaphore "$remote_version"
     write_check staged
     exit 0
@@ -340,6 +381,9 @@ if [[ ${#uki_matches[@]} -eq 0 ]]; then
 fi
 echo "Post-stage check: UKI present in ESP (${uki_matches[0]})"
 
+# Publish the staged-package sidecar from the freshly-installed other slot
+# (ADR-0014), then the semaphore.
+publish_native_sidecar "$remote_version"
 write_staged_semaphore "$remote_version"
 write_check staged
 echo "Update staged; it will apply at the next reboot."

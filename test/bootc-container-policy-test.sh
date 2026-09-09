@@ -285,15 +285,31 @@ esac
 EOF
     cat >"$work/bin/podman" <<'EOF'
 #!/bin/bash
-case "$1 $2" in
-"image prune"|"pull --quiet") exit 0 ;;
-"image inspect")
-    case "$*" in
-    *'{{.Digest}}'*) printf '%s\n' "$PULLED_MANIFEST" ;;
-    *'{{.Id}}'*) printf '%s\n' "$PULLED_CONFIG_ID" ;;
-    *'org.opencontainers.image.version'*) printf '%s\n' 20260814141627 ;;
+case "$1" in
+image)
+    case "$2" in
+    prune) exit 0 ;;
+    inspect)
+        case "$*" in
+        *'{{.Digest}}'*) printf '%s\n' "$PULLED_MANIFEST" ;;
+        *'{{.Id}}'*) printf '%s\n' "$PULLED_CONFIG_ID" ;;
+        *'org.opencontainers.image.version'*) printf '%s\n' 20260814141627 ;;
+        *) exit 1 ;;
+        esac
+        ;;
     *) exit 1 ;;
     esac
+    ;;
+pull) exit 0 ;;
+# ADR-0014 packages.txt capture: bootc-update-stage runs `podman create`,
+# `podman cp <cid>:/usr/share/frostyard/. <dir>`, `podman rm -f` before it
+# stages. Serve a single fake packages.txt so the capture succeeds.
+create) printf 'fakecid\n' ;;
+rm) : ;;
+cp)
+    dest=$3
+    mkdir -p "$dest"
+    printf 'Listing... Done\nbash/now 5.2.37-2 amd64 [installed,local]\n' >"$dest/snow.packages.txt"
     ;;
 *) exit 1 ;;
 esac
@@ -305,6 +321,7 @@ EOF
         BOOTC_STATUS_BEFORE="$before" BOOTC_STATUS_AFTER="$after" \
         FIXTURE_STATE="$work/state" PULLED_MANIFEST="$manifest" \
         PULLED_CONFIG_ID=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+        SNOSI_STAGED_PACKAGES_LIB="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh" \
         SNOSI_RUN_DIR="$work/run" "$UPDATER" >"$work/output" 2>&1
     rc=$?
     set -e

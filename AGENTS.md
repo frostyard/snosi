@@ -525,6 +525,37 @@ predicate or the sentence into a second file: `test/eol-notice-test.sh`
 file or a consumer grows its own detection. Removing the native lanes and
 nbc units is a separate follow-up after the date.
 
+**Staged package delta (`snosi-update-status --pkg-diff`, ADR-0014):** the flag
+appends an `rpm-ostree db diff`-shaped Debian-package delta
+(Upgraded/Downgraded/Added/Removed) between the running image and the *locally*
+staged one; default status stays silent on packages. Both sides are the frozen
+`/usr/share/frostyard/<IMAGE_ID>.packages.txt` (core ADR-0003) — **never**
+`dpkg-query`/`dpkg -l`/`apt list` (bootc leaves `/var/lib/dpkg` at install-time
+state; native relocates it) and never the network; version ordering is
+`dpkg --compare-versions` only. The staged side is an identity-bound sidecar:
+`/run/snosi/staged-packages` symlink → write-once `staged-packages.<id>/`
+backing dir holding `identity` (exactly `digest=sha256:<hex>` **or**
+`version=<14-digit>`, same exclusive invariant as `update-staged`) and the
+staged image's `packages.txt` bytes. Publish is atomic by `mv -T` of a *fresh
+symlink* onto the live name (rename(2) of a file — never `rm` the live name
+first, never `mv -T` a directory onto it, which fails "Directory not empty").
+The ONE parser plus publish/resolve live in
+`mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh`, sourced by
+both stagers and `snosi-update-status` — do not re-inline the swap or the parser
+per transport. `bootc-update-stage` **captures the pulled image's
+`packages.txt` before `bootc switch`/`upgrade`** (a capture failure aborts the
+stage; a copy after staging cannot unstage it) and publishes the sidecar on
+both the new-stage and already-staged (repair) paths, before the post-stage
+`podman image prune`; `snosi-sysupdate-stage` reads it from the freshly-labeled
+other root slot (read-only EROFS) on the success and both re-assert paths.
+`--pkg-diff` reads the sidecar only when `identity` matches the live staged
+digest/version (a later manual stage cannot inherit an old list); on
+missing/mismatched sidecar bootc warns-and-skips (never re-pulls) while native
+falls back to one read-only mount of the other slot at query time. Sidecars die
+with `/run` on the applying reboot. `test/pkg-diff-test.sh` (validate.yml) pins
+the parser (captured real Trixie apt lines, not `name/now version` stubs), the
+differ, identity mismatch, and the cross-transport static contract.
+
 ### Native A/B Update UX (Phase 4)
 
 Native A/B images (`/usr/lib/snosi/native-ab` marker) never run bootc/nbc.

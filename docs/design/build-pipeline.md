@@ -284,9 +284,20 @@ Consumers of the update state:
   staged outside the checker via manual `bootc upgrade`); `--check` does a
   live `skopeo inspect` of the followed registry image and compares
   version labels. No-ops gracefully on nbc (non-bootc) installs.
-  `--pkg-diff` (package-level added/removed/upgraded against a *local*
-  staged image, from `packages.txt`) is proposed in
-  [ADR-0014](../adr/0014-update-status-pkg-diff.md) and is not shipped.
+  `--pkg-diff` ([ADR-0014](../adr/0014-update-status-pkg-diff.md)) appends,
+  after the status block, an `rpm-ostree db diff`-shaped Debian-package delta
+  (Upgraded/Downgraded/Added/Removed) between the running image and the
+  *locally* staged one — both sides read from the frozen
+  `/usr/share/frostyard/<IMAGE_ID>.packages.txt` (core ADR-0003), never from a
+  dpkg database or the network. The staged side is an identity-bound sidecar
+  the stagers capture at stage time (`/run/snosi/staged-packages` symlink →
+  write-once `staged-packages.<id>/` backing dir; see integration-contracts
+  §5.3). Combinable with `--check`. A missing/mismatched sidecar (staged before
+  this shipped, or a manual `bootc upgrade` with no timer run) warns and skips,
+  still exit 0. Default status stays silent on packages. The one parser plus
+  the sidecar publish/resolve live in `usr/lib/snosi/staged-packages.sh`,
+  sourced by both stagers and the status CLI; `test/pkg-diff-test.sh` pins the
+  parser, the differ, and the cross-transport static contract.
 - `bootc-update-notify.path` + `.service` (user scope) with
   `/usr/libexec/bootc-update-notify` — desktop notification. The path unit
   fires when the semaphore appears mid-session or is modified (newer image

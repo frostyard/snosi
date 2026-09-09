@@ -29,16 +29,23 @@ CHECK=/run/snosi/update-check
 SEM=/run/snosi/update-staged
 MARKER=/usr/lib/snosi/native-ab
 PUBRING=/usr/lib/systemd/import-pubring.gpg
+STAGED_PACKAGES_LIB="${SNOSI_STAGED_PACKAGES_LIB:-/usr/lib/snosi/staged-packages.sh}"
+FROSTYARD_SHARE=/usr/share/frostyard
 
 usage() {
-    echo "Usage: snosi-update-status [--check]" >&2
+    echo "Usage: snosi-update-status [--check] [--pkg-diff]" >&2
+    echo "  --check     also query the update source live (versions, never digests)" >&2
+    echo "  --pkg-diff  after the status block, show the Debian-package delta" >&2
+    echo "              between the running image and the locally staged one" >&2
     exit 2
 }
 
 LIVE=0
+PKGDIFF=0
 for arg in "$@"; do
     case "$arg" in
         --check) LIVE=1 ;;
+        --pkg-diff) PKGDIFF=1 ;;
         *) usage ;;
     esac
 done
@@ -57,12 +64,44 @@ if [[ -x /usr/libexec/snosi-eol-notice ]]; then
 fi
 
 running_version=""
+running_image_id=""
 if [[ -r /usr/lib/os-release ]]; then
     running_version=$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
+    running_image_id=$(. /usr/lib/os-release && echo "${IMAGE_ID:-}")
+fi
+
+# The --pkg-diff parser/resolver lives in one shared library (ADR-0014); source
+# it lazily so the default status path is unaffected if it is ever absent.
+STAGED_PACKAGES_OK=0
+if [[ $PKGDIFF -eq 1 ]]; then
+    if [[ -r $STAGED_PACKAGES_LIB ]]; then
+        # shellcheck source=/dev/null
+        source "$STAGED_PACKAGES_LIB"
+        STAGED_PACKAGES_OK=1
+    fi
 fi
 
 # key FILE - print the value of key= from FILE, empty if absent
 key() { sed -n "s/^$1=//p" "$2" 2>/dev/null || true; }
+
+# running_packages_file - path to the booted image's frozen package list
+# (core ADR-0003), or empty if it is missing.
+running_packages_file() {
+    local f="$FROSTYARD_SHARE/${running_image_id}.packages.txt"
+    [[ -n $running_image_id && -r $f ]] && printf '%s\n' "$f"
+}
+
+# print_pkg_diff OLD NEW - emit the "Packages:" block, or a "no changes" line.
+print_pkg_diff() { # old_file new_file
+    local out
+    out="$(pkg_diff "$1" "$2")"
+    echo "Packages:"
+    if [[ -n $out ]]; then
+        sed 's/^/  /' <<<"$out"
+    else
+        echo "  no package changes between the running and staged images"
+    fi
+}
 
 # ---------------------------------------------------------------------------
 # Native A/B backend
@@ -158,6 +197,82 @@ native_status() {
     if [[ $LIVE -eq 1 ]]; then
         native_check_live "$channel" "$image_id"
     fi
+
+    if [[ $PKGDIFF -eq 1 ]]; then
+        native_pkg_diff "$image_id"
+    fi
+}
+
+# native_other_slot IMAGE_ID -- print "<devpath>\t<version>" for the non-booted
+# root slot ("${image_id}_<version>_r"), or nothing when it is still _empty.
+# The booted slot is excluded by LABEL, never by findmnt's mount source (a
+# dm-verity root mounts from /dev/mapper/root, which never equals the partition
+# path -- the same trap the stager documents).
+native_other_slot() { # image_id
+    local image_id=$1
+    lsblk -J -o PATH,PARTLABEL 2>/dev/null | jq -r \
+        --arg running "${image_id}_${running_version}_r" --arg prefix "${image_id}_" '
+        .. | objects
+        | select(.partlabel? != null)
+        | select(.partlabel != $running)
+        | select(.partlabel | startswith($prefix))
+        | select(.partlabel | endswith("_r"))
+        | "\(.path)\t\(.partlabel | ltrimstr($prefix) | rtrimstr("_r"))"' 2>/dev/null | head -1 || true
+}
+
+# native_pkg_diff IMAGE_ID -- prefer the sidecar bound to the staged version;
+# on a missing/mismatched sidecar, fall back to reading packages.txt from the
+# other EROFS slot read-only at query time (the only filesystem this flag may
+# mount). Warn-and-skip, exit 0, if the fallback also fails. No network.
+native_pkg_diff() { # image_id
+    local image_id=$1 running backing slot dev version
+    if [[ $STAGED_PACKAGES_OK -ne 1 ]]; then
+        echo "Packages:   --pkg-diff unavailable ($STAGED_PACKAGES_LIB missing)"
+        return 0
+    fi
+    running="$(running_packages_file)"
+    if [[ -z $running ]]; then
+        echo "Packages:   running image package list not found ($FROSTYARD_SHARE/${running_image_id}.packages.txt)"
+        return 0
+    fi
+
+    slot="$(native_other_slot "$image_id")"
+    dev="${slot%%$'\t'*}"
+    version="${slot##*$'\t'}"
+    if [[ -z $version || $dev == "$version" ]]; then
+        # No non-booted _r slot carries a version: nothing is installed to diff.
+        echo "Packages:   nothing staged to diff"
+        return 0
+    fi
+    if [[ -n $running_version && ! $version > $running_version ]]; then
+        # The other slot is older/equal (a rollback candidate, not a pending
+        # update). A staged delta is forward-looking; there is nothing pending.
+        echo "Packages:   nothing staged to diff (other slot $version is not newer than running)"
+        return 0
+    fi
+
+    backing="$(staged_packages_resolve version "$version")" || backing=""
+    if [[ -n $backing ]]; then
+        print_pkg_diff "$running" "$backing/packages.txt"
+        return 0
+    fi
+
+    # Fallback: mount the other slot read-only and read its packages.txt.
+    local mnt other_pkg
+    mnt="$(mktemp -d)"
+    if mount -o ro "$dev" "$mnt" 2>/dev/null; then
+        other_pkg="$mnt/usr/share/frostyard/${image_id}.packages.txt"
+        if [[ -r $other_pkg ]]; then
+            print_pkg_diff "$running" "$other_pkg"
+            umount "$mnt" 2>/dev/null || true
+            rmdir "$mnt" 2>/dev/null || true
+            return 0
+        fi
+        umount "$mnt" 2>/dev/null || true
+    fi
+    rmdir "$mnt" 2>/dev/null || true
+    echo "Packages:   WARNING: could not read the staged image's package inventory (no sidecar, and $dev could not be read); skipping the delta"
+    return 0
 }
 
 # native_check_live channel image_id -- fetch and gpgv-verify the channel's
@@ -272,6 +387,38 @@ bootc_status() {
             echo "Registry:   $published — differs from running ${running_version:-unknown}"
         fi
     fi
+
+    if [[ $PKGDIFF -eq 1 ]]; then
+        bootc_pkg_diff "$staged_digest"
+    fi
+}
+
+# bootc_pkg_diff STAGED_DIGEST -- diff the running image against the locally
+# captured sidecar for the staged deployment (ADR-0014). Never re-pulls: a
+# missing/mismatched sidecar is warn-and-skip, exit 0. STAGED_DIGEST is the
+# bootc-reported staged imageDigest (sha256:<64hex>), the expected identity.
+bootc_pkg_diff() { # staged_digest
+    local staged_digest=$1 running backing
+    if [[ $STAGED_PACKAGES_OK -ne 1 ]]; then
+        echo "Packages:   --pkg-diff unavailable ($STAGED_PACKAGES_LIB missing)"
+        return 0
+    fi
+    running="$(running_packages_file)"
+    if [[ -z $running ]]; then
+        echo "Packages:   running image package list not found ($FROSTYARD_SHARE/${running_image_id}.packages.txt)"
+        return 0
+    fi
+    if [[ -z $staged_digest ]]; then
+        echo "Packages:   nothing staged to diff"
+        return 0
+    fi
+    backing="$(staged_packages_resolve digest "$staged_digest")" || backing=""
+    if [[ -z $backing ]]; then
+        echo "Packages:   WARNING: the staged deployment's package inventory was not captured; skipping the delta"
+        echo "            (staged before this feature shipped, or by a manual \`bootc upgrade\` with no timer run yet)"
+        return 0
+    fi
+    print_pkg_diff "$running" "$backing/packages.txt"
 }
 
 if [[ -e "$MARKER" ]]; then

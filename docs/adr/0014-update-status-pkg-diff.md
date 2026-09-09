@@ -1,7 +1,7 @@
 # 0014 — `snosi-update-status --pkg-diff` diffs local deployments from packages.txt
 
-- **Status:** Proposed
-- **Date:** 2026-09-07
+- **Status:** Accepted
+- **Date:** 2026-09-07 (accepted 2026-09-09)
 
 ## Context
 
