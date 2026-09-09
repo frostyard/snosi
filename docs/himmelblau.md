@@ -148,6 +148,25 @@ klist                           # Kerberos ticket after an Entra login
   confirm with `aad-tool compliance-check` from your session. The Ubuntu
   reference host enrolled on its first login because the upstream installer
   writes `apply_policy = true`.
+- Enrolled but still `AADSTS530003`: the device is enrolled yet Intune
+  evaluated it as non-compliant. `aad-tool compliance-check` lists the failing
+  rules. himmelblau evaluates Intune's Linux compliance settings on the
+  device (`src/policies/src/compliance_ext.rs`): the "supported Linux
+  distribution" rule compares `/etc/os-release` `ID` (`snow`, `floe`) against
+  the tenant's allowed list (only `ubuntu` and `rhel` exist in Intune's Linux
+  compliance UI), so a snosi image can only pass if the tenant admin
+  allow-lists it. Custom compliance rules run tenant-supplied discovery
+  scripts inside `himmelblaud-tasks`; `snosi-himmelblau-setup --set
+  debug=true` (and `--unset debug` afterwards) makes the tasks daemon log
+  each decoded script and its JSON output, which is how to tell a real
+  finding from a broken script. Seen live 2026-09-09: a tenant's "Microsoft
+  UEFI CA 2023 certificate is missing" rule reported Missing on a machine
+  whose Secure Boot db contains the certificate because the script runs
+  `mokutil --db | grep -q` under `set -o pipefail`; `grep -q` exits at the
+  first match, `mokutil` takes SIGPIPE, the pipeline returns 141, and the
+  cert is treated as absent on every device where more db entries follow it.
+  That is a script bug to report to its owner, not something a snosi image can
+  fix.
 - Changing `--hsm-type` after the daemon has already started (for example
   moving from the default soft HSM to `tpm`) makes himmelblaud fail with
   "Unable to load machine root key ... IncorrectKeyType": the machine key
