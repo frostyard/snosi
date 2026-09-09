@@ -19,6 +19,60 @@ set -euo pipefail
 RUN_DIR=${SNOSI_RUN_DIR:-/run/snosi}
 CHECK="$RUN_DIR/update-check"
 
+# Shared staged-package sidecar publisher (ADR-0014). Sourced here (publish
+# side) and by snosi-update-status (resolve side). SNOSI_RUN_DIR, honored
+# above, is also honored by the library for the sidecar location.
+STAGED_PACKAGES_LIB="${SNOSI_STAGED_PACKAGES_LIB:-/usr/lib/snosi/staged-packages.sh}"
+# shellcheck source=/dev/null
+[[ -r $STAGED_PACKAGES_LIB ]] && source "$STAGED_PACKAGES_LIB"
+
+# capture_pulled_packages IMAGE -- copy the pulled image's frozen package list
+# (/usr/share/frostyard/<IMAGE_ID>.packages.txt, core ADR-0003) to a private
+# temp file and print its path. MUST run before `bootc switch`/`upgrade`: once
+# a deployment is staged, a copy failure can no longer unstage it, so this
+# capture is a hard prerequisite of staging, not a post-step (ADR-0014).
+# Copies the whole frostyard dir and globs the single *.packages.txt rather
+# than parsing the image's os-release ID -- more robust, and correct even if a
+# product were renamed between versions (the diff is over bytes, not names).
+capture_pulled_packages() { # image
+    local image=$1 cid extract tmp
+    extract="$(mktemp -d)" || return 1
+    if ! cid="$(podman create --quiet "$image")"; then
+        rm -rf "$extract"
+        return 1
+    fi
+    if ! podman cp "$cid:/usr/share/frostyard/." "$extract" 2>/dev/null; then
+        podman rm -f "$cid" >/dev/null 2>&1 || true
+        rm -rf "$extract"
+        return 1
+    fi
+    podman rm -f "$cid" >/dev/null 2>&1 || true
+
+    shopt -s nullglob
+    local matches=("$extract"/*.packages.txt)
+    shopt -u nullglob
+    if [[ ${#matches[@]} -ne 1 ]]; then
+        echo "ERROR: expected exactly one *.packages.txt in the pulled image, found ${#matches[@]}" >&2
+        rm -rf "$extract"
+        return 1
+    fi
+    tmp="$(mktemp)" || { rm -rf "$extract"; return 1; }
+    cp -- "${matches[0]}" "$tmp" || { rm -rf "$extract" "$tmp"; return 1; }
+    rm -rf "$extract"
+    printf '%s\n' "$tmp"
+}
+
+# publish_pkg_sidecar DIGEST SRC -- best-effort sidecar publish. A publish
+# failure never fails the stage (the deployment is already staged by the time
+# this is called; the next timer run's pulled==staged branch repairs it).
+publish_pkg_sidecar() { # digest src
+    local digest=$1 src=$2
+    [[ -n $src && -r $src ]] || return 0
+    command -v staged_packages_publish >/dev/null 2>&1 || return 0
+    staged_packages_publish digest "$digest" "$src" \
+        || echo "WARNING: could not publish the staged-package sidecar for $digest" >&2
+}
+
 running_version=""
 if [[ -r /usr/lib/os-release ]]; then
     running_version=$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
@@ -34,8 +88,10 @@ write_check() { # outcome
 # A real staged semaphore may coexist with outcome=failed when a later check fails.
 # Any failure (podman pull, bootc, the post-stage digest verify) records
 # outcome=failed; a broken checker must not be indistinguishable from an
-# up-to-date system.
-trap '[[ $? -eq 0 ]] || write_check failed' EXIT
+# up-to-date system. The trap also removes the private packages.txt temp file
+# (ADR-0014 capture-before-stage) on every exit path.
+pkg_temp=""
+trap '[[ $? -eq 0 ]] || write_check failed; [[ -n $pkg_temp ]] && rm -f "$pkg_temp"' EXIT
 
 status=$(bootc status --format json)
 
@@ -98,14 +154,9 @@ if [[ "$pulled" == "$booted" ]]; then
     write_check current
     exit 0
 fi
-if [[ "$pulled" == "$staged" ]]; then
-    echo "$image ($pulled) is already staged; will apply at next reboot."
-    # Re-assert the semaphore: it is runtime state and this covers updates
-    # staged outside this script (e.g. a manual `bootc upgrade`).
-    write_staged_semaphore "$pulled"
-    write_check staged
-    exit 0
-fi
+# held-rollback is decided BEFORE the packages.txt capture: a rollback-equal
+# pull is never staged, so ADR-0014's "skip the copy" applies. (Checked ahead
+# of the already-staged branch too; a pulled digest cannot equal both.)
 if [[ -n "$rollback" && "$pulled" == "$rollback" ]]; then
     # The published image is the deployment the admin rolled back FROM.
     # Do not flip-flop back to it automatically (bootc would refuse anyway:
@@ -113,6 +164,27 @@ if [[ -n "$rollback" && "$pulled" == "$rollback" ]]; then
     # deployment"). Use `bootc rollback` deliberately if that is intended.
     echo "$image ($pulled) equals the rollback deployment; not re-staging automatically."
     write_check held-rollback
+    exit 0
+fi
+
+# Capture the pulled image's package list to a private temp file BEFORE any
+# `bootc switch`/`upgrade` (ADR-0014). A failure here must abort before
+# staging: once a deployment is staged, a copy failure can no longer unstage
+# it, and the next timer run would only re-assert the semaphore. This applies
+# to both the already-staged and the new-stage paths below.
+if ! pkg_temp="$(capture_pulled_packages "$image")"; then
+    echo "ERROR: could not extract packages.txt from the pulled image before staging; aborting." >&2
+    exit 1
+fi
+
+if [[ "$pulled" == "$staged" ]]; then
+    echo "$image ($pulled) is already staged; will apply at next reboot."
+    # Publish the sidecar FIRST: this branch is what repairs a prior run that
+    # staged but failed to publish it (ADR-0014). Then re-assert the semaphore
+    # (runtime state; also covers a manual `bootc upgrade`).
+    publish_pkg_sidecar "$pulled" "$pkg_temp"
+    write_staged_semaphore "$pulled"
+    write_check staged
     exit 0
 fi
 
@@ -138,10 +210,16 @@ if [[ "$staged_now" != "$pulled" ]]; then
     exit 1
 fi
 
+# Publish the staged-package sidecar bound to the staged digest, from the
+# temp captured before staging (ADR-0014), THEN write the semaphore, THEN
+# prune. Never prune before the sidecar is published.
+publish_pkg_sidecar "$pulled" "$pkg_temp"
+
+write_staged_semaphore "$pulled"
+write_check staged
+
 # The image content is copied into the composefs repository at switch time;
 # prune dangling transfer images to keep podman storage bounded.
 podman image prune -f >/dev/null || true
 
-write_staged_semaphore "$pulled"
-write_check staged
 echo "Update staged; it will apply at the next reboot."
