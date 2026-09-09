@@ -36,7 +36,6 @@ The project produces:
 | **snowfield-ab**     | Production native A/B GNOME desktop, linux-surface kernel       | GPT disk (EROFS + dm-verity) |
 | **1password**       | 1Password desktop application                                   | sysext        |
 | **1password-cli**   | 1Password CLI tool                                              | sysext        |
-| **azurevpn**        | Microsoft Azure VPN client                                      | sysext        |
 | **bitwarden**       | Bitwarden password manager desktop application                  | sysext        |
 | **chatgpt**         | ChatGPT desktop application with Codex                          | sysext        |
 | **claude-desktop**  | Claude desktop application                                      | sysext        |
@@ -222,7 +221,7 @@ sudo test/native-ab-update-test.sh \
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1password 1password-cli azurevpn bitwarden chatgpt claude-desktop code-server coder debdev dev docker edge github-copilot incus k3s lemonade localsend moonlight nix obsidian paseo pilothouse podman sunshine tailscale voxtype vscode
+  1password 1password-cli bitwarden chatgpt claude-desktop code-server coder debdev dev docker edge github-copilot incus k3s lemonade localsend moonlight nix obsidian paseo pilothouse podman sunshine tailscale voxtype vscode
                                      snow            floe
                                       │
                                   snowfield
@@ -241,7 +240,7 @@ The `base` image ([mkosi.images/base/mkosi.conf](mkosi.images/base/mkosi.conf)) 
 
 ### GUI Base Image
 
-Desktop-app sysexts (1password, azurevpn, bitwarden, chatgpt,
+Desktop-app sysexts (1password, bitwarden, chatgpt,
 claude-desktop, edge, github-copilot, localsend, moonlight, obsidian,
 sunshine, voxtype, vscode) build against `gui-base`
 ([mkosi.images/gui-base/mkosi.conf](mkosi.images/gui-base/mkosi.conf))
@@ -274,7 +273,6 @@ ships and is not inspected.
 | ----------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
 | **1password**     | 1Password desktop app                         | [mkosi.images/1password/mkosi.conf](mkosi.images/1password/mkosi.conf)         |
 | **1password-cli** | 1Password CLI tool                            | [mkosi.images/1password-cli/mkosi.conf](mkosi.images/1password-cli/mkosi.conf) |
-| **azurevpn**      | Microsoft Azure VPN client                    | [mkosi.images/azurevpn/mkosi.conf](mkosi.images/azurevpn/mkosi.conf)           |
 | **bitwarden**     | Bitwarden password manager desktop app        | [mkosi.images/bitwarden/mkosi.conf](mkosi.images/bitwarden/mkosi.conf)         |
 | **chatgpt**       | ChatGPT desktop application with Codex        | [mkosi.images/chatgpt/mkosi.conf](mkosi.images/chatgpt/mkosi.conf)             |
 | **claude-desktop**| Claude desktop application                    | [mkosi.images/claude-desktop/mkosi.conf](mkosi.images/claude-desktop/mkosi.conf) |
@@ -348,7 +346,6 @@ shared/
 │   ├── floe/mkosi.conf        ← Server packages + podman
 │   ├── snow/mkosi.conf        ← GNOME desktop packages
 │   ├── edge/mkosi.conf        ← Microsoft Edge browser
-│   ├── azurevpn/mkosi.conf    ← Azure VPN Client
 │   ├── vscode/mkosi.conf      ← Visual Studio Code
 │   ├── bitwarden/mkosi.conf   ← Bitwarden password manager
 │   ├── paseo/mkosi.conf       ← Paseo desktop app
@@ -640,7 +637,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all 27 sysexts (1password, 1password-cli, azurevpn, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode). The PR-facing root mkosi build holds only `contents: read` and no package, OIDC, or attestation write scope.
+1. Builds the base image and all 26 sysexts (1password, 1password-cli, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode). The PR-facing root mkosi build holds only `contents: read` and no package, OIDC, or attestation write scope.
 2. Outside pull requests, publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Outside pull requests, uploads package manifests for version tracking
 

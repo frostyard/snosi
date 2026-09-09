@@ -359,7 +359,6 @@ archive as well as expansion from a small gzip bomb.
 - coder .deb — deliberately tracks coder's **stable** channel (GitHub
   "latest"); mainline releases carry higher version numbers but are not
   followed
-- Microsoft Azure VPN Client
 - Microsoft Edge Stable .deb
 - GitHub Copilot desktop .deb
 - Sunshine Trixie .deb (asset `sunshine_<VER>-1+debiantrixie_amd64.deb` since v2026.906.222525; the earlier `sunshine-debian-trixie-amd64.deb` name is gone)

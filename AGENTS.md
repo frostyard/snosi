@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 snosi is a bootable container image build system using [mkosi](https://github.com/systemd/mkosi) to produce Debian Trixie-based immutable OS images and system extensions (sysexts). Images are deployed via bootc/systemd-boot with atomic updates.
 
-**Outputs:** 2 OCI desktop images (snow, snowfield), 1 OCI server image (floe), and 27 sysext overlay images (1password, 1password-cli, azurevpn, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode).
+**Outputs:** 2 OCI desktop images (snow, snowfield), 1 OCI server image (floe), and 26 sysext overlay images (1password, 1password-cli, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode).
 
 ## Build Commands
 
@@ -14,7 +14,7 @@ Requires: just, git, python3, root/sudo access. mkosi itself is auto-bootstrappe
 
 ```bash
 just                    # List targets
-just sysexts            # Build base + all 27 sysexts
+just sysexts            # Build base + all 26 sysexts
 just snow               # Build snow desktop image
 just snowfield          # Build snowfield (Surface kernel)
 just floe               # Build floe server image

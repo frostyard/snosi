@@ -524,7 +524,7 @@ expected_default_listing=$'10-root-verity.transfer\n20-root.transfer\n90-uki.tra
 assert_eq "/usr/lib/sysupdate.d/ contains exactly the OS transfers, no features" \
     "$default_target_listing" "$expected_default_listing"
 
-expected_sysext_components=(1password 1password-cli azurevpn bitwarden chatgpt
+expected_sysext_components=(1password 1password-cli bitwarden chatgpt
     claude-desktop code-server coder debdev dev docker edge github-copilot incus
     k3s lemonade nix paseo pilothouse podman sunshine tailscale vscode)
 
