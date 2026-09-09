@@ -1,0 +1,9 @@
+#!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# motd hook (headless/server logins): end-of-life notice for native A/B (-ab)
+# images and nbc installs (docs/adr/0015). Detection and wording live in
+# /usr/libexec/snosi-eol-notice, shared with the desktop notify unit and
+# snosi-update-status; this hook only execs it. Silent on supported bootc
+# installs.
+[ -x /usr/libexec/snosi-eol-notice ] || exit 0
+exec /usr/libexec/snosi-eol-notice

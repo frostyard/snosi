@@ -48,6 +48,14 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# End-of-life notice for native A/B (-ab) images and nbc installs
+# (docs/adr/0015): detection and wording live in the shared helper, which
+# prints nothing on supported bootc installs.
+if [[ -x /usr/libexec/snosi-eol-notice ]]; then
+    eol=$(/usr/libexec/snosi-eol-notice)
+    [[ -n "$eol" ]] && printf '%s\n\n' "${eol#$'\n'}"
+fi
+
 running_version=""
 if [[ -r /usr/lib/os-release ]]; then
     running_version=$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")

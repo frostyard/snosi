@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Per-user, once-per-user desktop notification that the running native A/B
+# (-ab) image or nbc install is end of life (docs/adr/0015). Runs once at
+# session start; /usr/libexec/snosi-eol-notify is ack-gated so later logins
+# no-op. Cheap pre-filter below: every supported bootc install is a
+# composefs deployment, while native A/B (roothash=) and nbc installs both
+# lack composefs=, so bootc hosts never even start this. The full predicate
+# (marker, ostree-booted, container) lives in /usr/libexec/snosi-eol-notice.
+[Unit]
+Description=Notify once that this native A/B or nbc image is end of life
+After=graphical-session.target
+ConditionKernelCommandLine=!composefs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/snosi-eol-notify
+
+# No [Install]: static /usr wants activation (graphical-session.target.wants/).

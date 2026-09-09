@@ -322,6 +322,9 @@ jobs:
       - name: Test staged-update notify unit trigger shape
         run: ./test/update-notify-units-test.sh
 
+      - name: Test native A/B / nbc end-of-life notice
+        run: ./test/eol-notice-test.sh
+
   runtime-etc-guard:
     runs-on: ubuntu-latest
     permissions:

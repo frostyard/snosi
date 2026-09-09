@@ -13,6 +13,14 @@ installer.
 
 ## Choose an installation path
 
+> **Deprecated:** the native A/B path (`snow-ab`, `snowfield-ab`, `floe-ab`)
+> and nbc-based installations reach end of life on **2026-09-30** and will
+> receive no updates after that date
+> ([ADR-0015](adr/0015-retire-native-ab-images-and-nbc-installs.md)).
+> New installs should use the bootc path; existing native A/B and nbc hosts
+> should back up and reinstall with a bootc image. Affected hosts show an
+> end-of-life notice at login and once per user on the desktop.
+
 | Path | Choose it when | Products | Target disk |
 | --- | --- | --- | --- |
 | Bootc live ISO | You want the established bootc/composefs layout and graphical installer | `snow`, `snowfield`, `floe` | At least 30 GiB |
