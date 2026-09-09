@@ -1,0 +1,57 @@
+# himmelblau sysext: daemons, NSS/PAM modules, broker, SSO host, launchers,
+# the snosi integration + setup tooling, and every factory file the tmpfiles
+# rules copy into /etc. Only delta paths belong here (base already carries
+# libsqlite3/libdbus/libssl/libtss2, so those are NOT listed).
+/usr/sbin/himmelblaud
+/usr/sbin/himmelblaud_tasks
+/usr/bin/aad-tool
+/usr/libexec/himmelblau-init-hsm-pin
+/usr/lib/himmelblau/himmelblau.conf
+/usr/lib/systemd/system/himmelblaud.service
+/usr/lib/systemd/system/himmelblaud-tasks.service
+/usr/lib/systemd/system/himmelblau-hsm-pin-init.service
+/usr/lib/systemd/system/gdm3.service.d/himmelblau-override.conf
+/usr/lib/systemd/user/himmelblau-compliance-check.timer
+/usr/lib/tmpfiles.d/himmelblaud.conf
+/usr/lib/tmpfiles.d/himmelblau-policies.conf
+# NSS: the module, its dependency that base does not carry, and its tmpfiles
+/usr/lib/x86_64-linux-gnu/libnss_himmelblau.so.2
+/usr/lib/x86_64-linux-gnu/libnss_systemd.so.2
+/usr/lib/x86_64-linux-gnu/tmpfiles.d/nss-himmelblau.conf
+# PAM: module plus the pam-auth-update profiles the setup service enables
+/usr/lib/x86_64-linux-gnu/security/pam_himmelblau.so
+/usr/share/pam-configs/himmelblau
+/usr/share/pam-configs/himmelblau-unseal
+# Browser SSO broker + native messaging host
+/usr/sbin/himmelblau_broker
+/usr/lib/systemd/user/himmelblau-broker.service
+/usr/share/dbus-1/services/com.microsoft.identity.broker1.service
+/usr/bin/linux-entra-sso
+/usr/lib/mozilla/native-messaging-hosts/linux_entra_sso.json
+/usr/share/google-chrome/extensions/jlnfnnolkbjieggibinobhkjdfbpcohn.json
+# Office 365 launchers
+/usr/bin/o365
+/usr/share/applications/o365-outlook.desktop
+/usr/share/icons/hicolor/256x256/apps/o365-outlook.png
+# Kerberos client tools. /usr/bin/kinit is an update-alternatives symlink
+# into /etc/alternatives (recreated at boot by the tmpfiles L rules), so the
+# real binaries are what the delta must carry.
+/usr/bin/kinit.mit
+/usr/bin/klist.mit
+# snosi integration: boot-time /etc integration, the setup wizard, activation
+/usr/lib/himmelblau/himmelblau-sysext-setup
+/usr/bin/snosi-himmelblau-setup
+/usr/lib/systemd/system/himmelblau-sysext-setup.service
+/usr/lib/systemd/system/multi-user.target.d/10-himmelblau.conf
+/usr/lib/systemd/system/himmelblaud.service.d/10-snosi-configured.conf
+/usr/lib/systemd/system-preset/40-himmelblau.preset
+/usr/lib/systemd/user/timers.target.wants/himmelblau-compliance-check.timer
+/usr/lib/tmpfiles.d/himmelblau-sysext.conf
+# Factory /etc payload placed by usr/lib/tmpfiles.d/himmelblau-sysext.conf
+# (test/himmelblau-sysext-setup-test.sh pins the parity between the two lists)
+/usr/share/factory/etc/krb5.conf
+/usr/share/factory/etc/ssh/sshd_config.d/30-himmelblau.conf
+/usr/share/factory/etc/chromium/native-messaging-hosts/linux_entra_sso.json
+/usr/share/factory/etc/chromium/policies/managed/himmelblau.json
+/usr/share/factory/etc/opt/chrome/native-messaging-hosts/linux_entra_sso.json
+/usr/share/factory/etc/opt/chrome/policies/managed/himmelblau.json

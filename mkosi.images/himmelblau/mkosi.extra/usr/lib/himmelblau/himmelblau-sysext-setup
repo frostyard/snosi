@@ -1,0 +1,125 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# himmelblau-sysext-setup: idempotent post-merge /etc integration for the
+# himmelblau sysext.
+#
+# On a mutable Debian host the deb maintainer scripts do this at install time
+# (nss-himmelblau.postinst edits nsswitch.conf, pam-himmelblau.postinst runs
+# pam-auth-update, appends the krb5 includedir and adds use_authtok to GDM's
+# gnome-keyring line). Those scripts run in the mkosi build chroot, where they
+# only touch the sysext delta's /etc -- which never ships -- so the installed
+# machine sees none of it. This script replays exactly that integration
+# against the live /etc overlay, and is run
+#   - at boot by himmelblau-sysext-setup.service (Upholds= from
+#     multi-user.target.d/10-himmelblau.conf), and
+#   - by snosi-himmelblau-setup after it writes local configuration.
+#
+# Rules (CLAUDE.md "Runtime service enablement changes are forbidden",
+# check-runtime-etc-guard.sh): only ADD to files under /etc, never delete or
+# rename a shipped path, never systemctl enable/disable. Every step must be
+# safe to repeat on every boot without accumulating duplicates.
+#
+# HIMMELBLAU_SETUP_ROOT is a test hook that prefixes every path
+# (test/himmelblau-sysext-setup-test.sh); it is unset in production.
+
+set -euo pipefail
+
+ROOT=${HIMMELBLAU_SETUP_ROOT:-}
+
+log() { printf 'himmelblau-sysext-setup: %s\n' "$*"; }
+
+# NSS: append `himmelblau` to the passwd/group/shadow/initgroups databases,
+# exactly as nss-himmelblau.postinst does (a line already naming it is left
+# alone; databases absent from the file, e.g. initgroups on Debian, are
+# skipped).
+setup_nsswitch() {
+    local file="$ROOT/etc/nsswitch.conf" db
+    if [[ ! -f "$file" ]]; then
+        log "WARNING: $file not found, skipping NSS integration"
+        return 0
+    fi
+    for db in passwd group shadow initgroups; do
+        if grep -Eq "^${db}:.*[[:space:]]himmelblau([[:space:]]|$)" "$file"; then
+            continue
+        fi
+        if grep -q "^${db}:" "$file"; then
+            log "adding himmelblau to the ${db} database in $file"
+            sed -i "/^${db}:/ {/himmelblau/! s/\$/ himmelblau/}" "$file"
+        fi
+    done
+}
+
+# PAM: pam-auth-update rewrites the managed blocks of /etc/pam.d/common-*
+# from the profiles in /usr/share/pam-configs (the sysext ships
+# `himmelblau`; `himmelblau-unseal` stays opt-in, as upstream leaves it).
+# Only run it when pam_himmelblau is not yet in the auth stack so a healthy
+# boot leaves the files untouched.
+setup_pam() {
+    local auth="$ROOT/etc/pam.d/common-auth"
+    if [[ -f "$auth" ]] && grep -q 'pam_himmelblau\.so' "$auth"; then
+        return 0
+    fi
+    if ! command -v pam-auth-update >/dev/null 2>&1; then
+        log "WARNING: pam-auth-update not found, skipping PAM integration"
+        return 0
+    fi
+    log "enabling the himmelblau PAM profile with pam-auth-update"
+    DEBIAN_FRONTEND=noninteractive pam-auth-update --package --enable himmelblau
+}
+
+# GDM: make pam_gnome_keyring consume the Hello PIN / password as the keyring
+# secret so the login keyring unlocks for Entra users
+# (pam-himmelblau.postinst does the same). Absent file => not a desktop.
+setup_gdm_keyring() {
+    local gdm="$ROOT/etc/pam.d/gdm-password"
+    [[ -f "$gdm" ]] || return 0
+    if grep -Eq '^[[:space:]]*auth[[:space:]]+optional[[:space:]]+pam_gnome_keyring\.so' "$gdm" &&
+       ! grep -Eq '^[[:space:]]*auth[[:space:]]+optional[[:space:]]+pam_gnome_keyring\.so.*\buse_authtok\b' "$gdm"; then
+        log "adding use_authtok to pam_gnome_keyring in $gdm"
+        sed -i -E '/^[[:space:]]*auth[[:space:]]+optional[[:space:]]+pam_gnome_keyring\.so/ {/use_authtok/! s/$/ use_authtok/;}' "$gdm"
+    fi
+}
+
+# Kerberos: himmelblaud-tasks writes the tenant realm to /etc/krb5.conf.d/.
+# tmpfiles places a factory krb5.conf when none exists; when one does exist
+# (an admin's, or a future base's) it must includedir that directory.
+setup_krb5() {
+    local conf="$ROOT/etc/krb5.conf"
+    mkdir -p "$ROOT/etc/krb5.conf.d"
+    [[ -f "$conf" ]] || return 0
+    if grep -Eq '^[[:space:]]*includedir[[:space:]]+/etc/krb5\.conf\.d/?[[:space:]]*$' "$conf"; then
+        return 0
+    fi
+    log "adding 'includedir /etc/krb5.conf.d' to $conf"
+    printf '\nincludedir /etc/krb5.conf.d\n' >>"$conf"
+}
+
+# sshd: the KbdInteractiveAuthentication drop-in arrives through tmpfiles.
+# At boot this unit orders before ssh.service, so nothing to do; when the
+# sysext is merged into a running system, sshd is already up and must
+# re-read its configuration to accept MFA prompts.
+#
+# --no-block is load-bearing: this script runs inside
+# himmelblau-sysext-setup.service, which is ordered Before=ssh.service, so a
+# blocking reload job on ssh.service is queued behind this unit's own start
+# job and never runs -- and a oneshot has no start timeout, so the unit hung
+# forever (root-caused live 2026-09-09 on the first sideload).
+reload_sshd() {
+    command -v systemctl >/dev/null 2>&1 || return 0
+    if systemctl is-active --quiet ssh.service; then
+        log "queueing ssh.service reload for the KbdInteractiveAuthentication drop-in"
+        systemctl --no-block try-reload-or-restart ssh.service || log "WARNING: ssh.service reload failed"
+    fi
+}
+
+main() {
+    log "integrating himmelblau into /etc"
+    setup_nsswitch
+    setup_pam
+    setup_gdm_keyring
+    setup_krb5
+    reload_sshd
+    log "done"
+}
+
+main "$@"

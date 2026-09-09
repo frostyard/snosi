@@ -3,3 +3,4 @@ docker-ce=5:29.8.0-1~debian.13~trixie
 1password-cli=2.39.0-1
 claude-desktop=1.49585.0
 chatgpt=26.903.61454
+himmelblau=4.0.2-debian13

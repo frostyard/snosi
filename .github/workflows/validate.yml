@@ -235,6 +235,14 @@ jobs:
         # network, or image build.
         run: ./test/sysext-udev-reload-test.sh
 
+      - name: Validate himmelblau sysext integration and setup tool
+        # Fixture suite for the himmelblau sysext's boot-time /etc integration
+        # (idempotent nsswitch/PAM/krb5/GDM-keyring replay of the deb
+        # postinsts, additions only, no runtime enable) and the
+        # snosi-himmelblau-setup drop-in writer, plus tmpfiles/factory/
+        # required-paths wiring parity. No root, network, or image build.
+        run: ./test/himmelblau-sysext-setup-test.sh
+
       - name: Validate sysext required paths finalizer
         # Fixture regression test for whitespace-preserving parsing of sysext
         # required-paths.txt entries. No root, network, or image build.

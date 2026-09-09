@@ -1,0 +1,12 @@
+# Himmelblau STABLE channel for Debian 13 (the retired 2026-07 sysext built
+# from nightly/latest, which the fable audit flagged as unpinned). The path is
+# a moving "latest" like every other external APT source here; the version is
+# tracked as a change-detection sentinel in shared/download/package-versions.json
+# by check-packages.yml. A frozen per-release path also exists
+# (stable/<version>/deb/debian13) if exact reproducibility is ever needed.
+Types: deb
+URIs: https://packages.himmelblau-idm.org/stable/latest/deb/debian13
+Suites: ./
+Architectures: amd64
+Enabled: yes
+Signed-By: /etc/apt/keyrings/himmelblau.gpg

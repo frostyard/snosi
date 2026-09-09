@@ -58,6 +58,11 @@ jobs:
               'https://persistent.oaistatic.com/codex-app-prod/linux/deb/dists/stable/main/binary-amd64/Packages.gz' \
               'chatgpt')"
             printf 'chatgpt=%s\n' "$version"
+
+            version="$(get_latest_version \
+              'https://packages.himmelblau-idm.org/stable/latest/deb/debian13/Packages.gz' \
+              'himmelblau')"
+            printf 'himmelblau=%s\n' "$version"
           } > latest-versions.txt
           cat latest-versions.txt
 

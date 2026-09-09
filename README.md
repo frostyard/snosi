@@ -54,6 +54,7 @@ The project produces:
 | **docker**          | Docker CE container runtime                                     | sysext        |
 | **edge**            | Microsoft Edge browser                                          | sysext        |
 | **github-copilot**  | GitHub Copilot agent-native desktop application                 | sysext        |
+| **himmelblau**      | Himmelblau Microsoft Entra ID login (PAM/NSS, SSO, o365)        | sysext        |
 | **incus**           | Incus container/VM manager                                      | sysext        |
 | **k3s**             | k3s lightweight Kubernetes node (server or agent)               | sysext        |
 | **lemonade**        | Lemonade local LLM server (GPU/NPU accelerated)                 | sysext        |
@@ -229,7 +230,7 @@ sudo test/native-ab-update-test.sh \
              sysexts                         profiles
     ┌────┬────┬────┬────┬────┬────┬────┬────┬────┬────┐  │
     │    │    │    │    │    │    │    │    │    │    │  ┌──┴──────┐
-  1password 1password-cli bitwarden chatgpt claude-desktop code-server coder debdev dev docker edge github-copilot incus k3s lemonade localsend moonlight nix obsidian paseo pilothouse podman sunshine tailscale voxtype vscode
+  1password 1password-cli bitwarden chatgpt claude-desktop code-server coder debdev dev docker edge github-copilot himmelblau incus k3s lemonade localsend moonlight nix obsidian paseo pilothouse podman sunshine tailscale voxtype vscode
                                      snow            floe
                                       │
                                   snowfield
@@ -291,6 +292,7 @@ ships and is not inspected.
 | **docker**        | Docker CE, containerd, buildx, compose        | [mkosi.images/docker/mkosi.conf](mkosi.images/docker/mkosi.conf)               |
 | **edge**          | Microsoft Edge browser                         | [mkosi.images/edge/mkosi.conf](mkosi.images/edge/mkosi.conf)                   |
 | **github-copilot**| GitHub Copilot agent-native desktop application | [mkosi.images/github-copilot/mkosi.conf](mkosi.images/github-copilot/mkosi.conf) |
+| **himmelblau**    | Himmelblau Microsoft Entra ID login           | [mkosi.images/himmelblau/mkosi.conf](mkosi.images/himmelblau/mkosi.conf)       |
 | **incus**         | Incus, QEMU/KVM, OVMF, virt-viewer            | [mkosi.images/incus/mkosi.conf](mkosi.images/incus/mkosi.conf)                 |
 | **k3s**           | k3s lightweight Kubernetes node (server or agent) | [mkosi.images/k3s/mkosi.conf](mkosi.images/k3s/mkosi.conf)                 |
 | **lemonade**      | Lemonade local LLM server (lemond)            | [mkosi.images/lemonade/mkosi.conf](mkosi.images/lemonade/mkosi.conf)           |
@@ -645,7 +647,7 @@ Where feasible, third-party workflow actions are pinned to specific commit SHAs 
 
 Triggered on push/PR to main, this workflow:
 
-1. Builds the base image and all 26 sysexts (1password, 1password-cli, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode). The PR-facing root mkosi build holds only `contents: read` and no package, OIDC, or attestation write scope.
+1. Builds the base image and all 27 sysexts (1password, 1password-cli, bitwarden, chatgpt, claude-desktop, code-server, coder, debdev, dev, docker, edge, github-copilot, himmelblau, incus, k3s, lemonade, localsend, moonlight, nix, obsidian, paseo, pilothouse, podman, sunshine, tailscale, voxtype, vscode). The PR-facing root mkosi build holds only `contents: read` and no package, OIDC, or attestation write scope.
 2. Outside pull requests, publishes sysexts to the Frostyard repository (Cloudflare R2) via the `frostyard/repogen` action
 3. Outside pull requests, uploads package manifests for version tracking
 
