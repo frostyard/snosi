@@ -426,7 +426,7 @@ jobs:
           persist-credentials: false
 
       - name: setup-mkosi
-        uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf
+        uses: systemd/mkosi@847d113863affa6d6ed393ae6a0b8cd5590e00d6
 
       - name: Validate mkosi configuration summaries
         run: |
