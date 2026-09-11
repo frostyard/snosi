@@ -20,24 +20,24 @@
     "version": "1.18.2"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_152.0.4191.66-1_amd64.deb",
-    "sha256": "186c19f9d6079d174efbb4ef331ccc1e11d139b6f7a8ea3b0db75f9b17e25f0d",
-    "version": "152.0.4191.66-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_153.0.4234.32-1_amd64.deb",
+    "sha256": "1e7ed943dc84d22036f906691406d2530753df1b4923277234ea1006713b97d1",
+    "version": "153.0.4234.32-1"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.136.2/code-server_4.136.2_amd64.deb",
-    "sha256": "607967f576db28f2cf54c6f828670cb7d4cb542876356c9f3fa05f3871c7bc97",
-    "version": "4.136.2"
+    "url": "https://github.com/coder/code-server/releases/download/v4.137.0/code-server_4.137.0_amd64.deb",
+    "sha256": "f0165952d918092eb321a2d4e75a1e7035807d687b698ccda63aea2bfa1c58bc",
+    "version": "4.137.0"
   },
   "coder": {
-    "url": "https://github.com/coder/coder/releases/download/v2.36.4/coder_2.36.4_linux_amd64.deb",
-    "sha256": "dd342deb35be5ba117d86e25bfe520f0e17e72bf499882779c60f90f11554c5c",
-    "version": "2.36.4"
+    "url": "https://github.com/coder/coder/releases/download/v2.36.5/coder_2.36.5_linux_amd64.deb",
+    "sha256": "b19234a4bc941773e11132030e4b5f057211f8677b05402401b3027bfa2c0684",
+    "version": "2.36.5"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.17/GitHub-Copilot-linux-x64.deb",
-    "sha256": "d03c82683606c82cd0c333a1ffa3724920e0ee914970f851aab1d7426ca27111",
-    "version": "1.1.17"
+    "url": "https://github.com/github/app/releases/download/v1.1.19/GitHub-Copilot-linux-x64.deb",
+    "sha256": "1f09db69e284d328eac1057f1d371489394ca1b9d30660c9fe2e8d8f6198efc5",
+    "version": "1.1.19"
   },
   "k3s": {
     "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.4%2Bk3s1/k3s",
@@ -50,9 +50,9 @@
     "version": "11.9.0"
   },
   "paseo": {
-    "url": "https://github.com/getpaseo/paseo/releases/download/v0.7.2/Paseo-0.7.2-amd64.deb",
-    "sha256": "5d2bc42c179bec63d752d602de7e731c9c33f9050a7a503b08cd8f50f523350d",
-    "version": "0.7.2"
+    "url": "https://github.com/getpaseo/paseo/releases/download/v0.8.0/Paseo-0.8.0-amd64.deb",
+    "sha256": "a47d048c31380c52999e5b72513c70c4b8ec62dade51d6f5a682fbc51f2aa99a",
+    "version": "0.8.0"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.9.0/frostyard-pilothouse_0.9.0_amd64.deb",
