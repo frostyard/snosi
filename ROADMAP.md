@@ -6,8 +6,9 @@ above the decision and planning records — [`docs/adr/`](docs/adr/) says *why* 
 choice was made, [`docs/plans/`](docs/plans/) says *in what order* a piece of
 work happens, and this file says *which of those matter next and why*.
 
-It is a statement of intent, not a promise of dates. Nothing here is a
-commitment to ship on a schedule.
+It is a statement of intent, not a promise of dates, except where it restates
+an Accepted support boundary. Nothing else here is a commitment to ship on a
+schedule.
 
 **Maintainers:** revise this file when a horizon item lands, is abandoned, or
 changes horizon. A roadmap that is not revised is worse than no roadmap.
@@ -23,57 +24,69 @@ Builds run continuously rather than on a named release cadence: GitHub Releases
 are a human-facing changelog and download index over signed artifacts, not
 milestone gates.
 
-The shipped surface is three image families (`snow`, `snowfield`, and
-`floe`) and a large sysext catalogue, described in [`README.md`](README.md).
+The shipped surface is four bootc products (`snow`, `snowfield`, `sundog`,
+and `floe`) and a large sysext catalogue, described in
+[`README.md`](README.md). Sundog is bootc-only.
 
-## Position: bootc is the transport; native A/B is being phased out
+## Position: bootc is the transport; native A/B and nbc are retiring
 
 **bootc is the supported transport for snosi, and the native A/B transport is
 transitional.** bootc was always the preferred model; the native A/B work was
 undertaken while bootc did not yet do what snosi needed. bootc now does, so the
 reason for carrying a second transport has expired.
 
-The phase-out window is **60 days, ending 2026-10-28**. During the window both
-transports keep working: native A/B images continue to build, publish, and
-update, and nothing installed stops receiving updates mid-window. After it,
-native A/B is not a supported way to run snosi.
+Accepted [ADR-0015](docs/adr/0015-retire-native-ab-images-and-nbc-installs.md)
+and
+[core ADR-0047](https://github.com/frostyard/core/blob/main/docs/adr/0047-retire-nbc-on-a-proportional-fast-path.md)
+set the support boundary. Native A/B and nbc support and routine publication
+end on **2026-09-30**. After that date Frostyard publishes no routine fixes,
+security updates, dependency refreshes, native images, or nbc packages.
 
-| Transport | What it is | Update origin | Status |
+Core ADR-0047 separately allows best-effort migration help through
+**2026-10-31 for the four known users**. That limited arrangement does not
+extend product support and is not a general support promise.
+
+| Path or population | What it is | Update origin | Status |
 | --- | --- | --- | --- |
-| **bootc OCI** | `snow`, `snowfield`, `floe` — OCI images consumed by bootc | GHCR | **Supported.** The transport snosi is built around. |
-| **native A/B** | `snow-ab`, `snowfield-ab`, `floe-ab` — GPT disk images, EROFS + dm-verity, Secure Boot + TPM/LUKS `/var` | Cloudflare R2 | **Phasing out by 2026-10-28.** Builds and updates during the window; not a supported target after it. |
+| **bootc OCI** | `snow`, `snowfield`, `sundog`, `floe` — OCI images consumed by bootc | GHCR | **Supported.** The transport snosi is built around; Sundog is bootc-only. |
+| **native A/B** | `snow-ab`, `snowfield-ab`, `floe-ab` — GPT disk images, EROFS + dm-verity, Secure Boot + TPM/LUKS `/var` | Cloudflare R2 | **Ends 2026-09-30.** No support or routine image publication after the cutoff. |
+| **nbc installs** | Legacy A/B-partition installs of the bootc OCI images, without bootc deployment state | GHCR through the legacy nbc updater | **Ends 2026-09-30.** No support or routine nbc package publication after the cutoff. |
 
 GHCR is authoritative for bootc OCI images. R2 remains authoritative for
-sysexts, raw installer images, and the installer ISO; it is authoritative for
-native A/B update payloads only for the duration of the window.
+sysexts, raw installer images, and the installer ISO. Retained native A/B and
+nbc artifacts after the cutoff are migration and historical recovery material,
+not supported updates.
 
-**Do not start new work whose value depends on native A/B outliving the
-window.** New capability belongs on the bootc path. Choosing a transport is no
-longer a deployment decision with two defensible answers: choose **bootc**.
+**Do not start new work whose value depends on native A/B or nbc support.**
+New capability belongs on the bootc path. Choosing a transport is no longer a
+deployment decision with two defensible answers: choose **bootc**.
 
-Two constraints still govern what the phase-out has to do, and the first is the
-reason this needs a window rather than a switch. Partition labels, sysupdate
-transfer patterns, the entry-token, and the R2 path all carry the channel name
-on installed disks, so **a native install migrates by reinstall, never by an
-update hop** — every existing native A/B install is a machine someone must
-reinstall to reach bootc, and it cannot be moved for them. Separately,
+Partition labels, sysupdate transfer patterns, the entry-token, and the R2
+path all carry the channel name on installed disks, so **a native A/B install
+migrates by reinstall, never by an update hop**. nbc installs likewise have no
+bootc deployment state and cannot be converted in place. Affected users must
+make and verify a backup, reinstall the equivalent bootc product, and restore
+their state; see
+[`docs/nbc-to-bootc-migration.md`](docs/nbc-to-bootc-migration.md). Separately,
 installed bootc systems enforce the `policy.json` baked into the image they are
 currently running, so **trust changes must be published to installed systems
 before the change that depends on them**.
 
-Those two facts mean the window is not self-executing. Before 2026-10-28 the
-project owes native A/B users, at minimum: a stated end-of-updates date for the
-R2 native payloads, a documented reinstall path from a native install to the
-equivalent bootc image, and a decision on what happens to already-published
-native artifacts (freeze in place, or withdraw). Until those exist and are
-announced, the window is an intent rather than a plan — see **Near term**.
+The cutoff is not self-executing. The public EOL notice and migration
+documentation must remain discoverable, final affected images must carry the
+notice, and retirement work must remove native A/B and nbc from supported
+surfaces while preserving history and verification material. The governing
+sequence is
+[core Plan 0006](https://github.com/frostyard/core/blob/main/docs/plans/0006-nbc-retirement-and-debian-suite-migration-fast-path.md);
+see **Near term**.
 
 The historical coexistence design is
 [`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`](docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md),
 and [`docs/plans/2026-07-13-mkosi-native-ab-root-design.md`](docs/plans/2026-07-13-mkosi-native-ab-root-design.md)
 still describes replacing bootc with native A/B. Both predate this decision and
-now record superseded direction; reconciling their `Status:` lines is tracked
-in Near term.
+now record superseded direction. Their supersession metadata points to this
+current transport position and the Accepted September 30 boundary; their
+historical bodies remain intact.
 
 See [`docs/installing.md`](docs/installing.md) to choose an image and verify
 media.
@@ -83,26 +96,22 @@ media.
 Work that is designed, has a prerequisite already merged, and is the next thing
 worth a contributor's time.
 
-- **Turn the native A/B phase-out into a plan.**
-  The decision is made (see the position above); the obligations it creates are
-  not yet written down or announced. This is the near-term item that gates the
-  others, because every native A/B install is a machine that migrates by
-  reinstall and cannot be moved automatically. It needs: a stated
-  end-of-updates date for the R2 native payloads, a documented reinstall path
-  from each `-ab` variant to its bootc equivalent, a decision on whether
-  already-published native artifacts freeze in place or are withdrawn, and a
-  user-facing announcement in [`README.md`](README.md) and
-  [`docs/installing.md`](docs/installing.md) before anyone installs a native
-  image they will have to replace. Until this lands, 2026-10-28 is a stated
-  intent rather than a commitment anyone can act on.
+- **Complete native A/B and nbc retirement.**
+  The governing decisions, September 30 cutoff, user-facing notice, and
+  reinstall guidance are in place. Remaining work follows core Plan 0006:
+  deliver the notice through final affected images, stop routine publication
+  after the cutoff, remove native A/B and nbc from supported surfaces, and
+  preserve history plus verifiable recovery artifacts. Keep the public EOL and
+  migration documentation discoverable. Best-effort help through October 31
+  remains limited to the four known users and does not extend support.
 
 - ~~**Reconcile the plan record with the transport decision.**~~ **Done.**
   [`docs/plans/2026-07-13-mkosi-native-ab-root-design.md`](docs/plans/2026-07-13-mkosi-native-ab-root-design.md)
   and
   [`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`](docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md)
   are both now marked **Superseded** as of 2026-08-29 and carry banners saying
-  so, pointing here and at frostyard/snosi#889 for the obligations that
-  replace them.
+  so, pointing to the current transport position, the Accepted September 30
+  boundary, and frostyard/snosi#889 for the obligations that replace them.
 
 - **Close the bootc update-validation prerequisites.**
   The bootc update validation plan is blocked on discrete, small prerequisites

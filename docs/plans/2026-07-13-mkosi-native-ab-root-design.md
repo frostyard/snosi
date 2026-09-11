@@ -1,8 +1,8 @@
 # Design: Replace bootc with mkosi-native A/B root updates
 
-**Status:** Superseded — 2026-08-29. snosi is not replacing bootc. bootc is the supported transport and the native A/B transport is being phased out by 2026-10-28.  
+**Status:** Superseded — 2026-08-29. snosi is not replacing bootc. bootc is the supported transport; native A/B and nbc support and routine publication end 2026-09-30.
 **Last verified:** 2026-08-29
-**Superseded by:** the transport position in [`ROADMAP.md`](../../ROADMAP.md) ("Position: bootc is the transport; native A/B is being phased out"). Phase-out obligations are tracked in frostyard/snosi#889.
+**Superseded by:** the transport position in [`ROADMAP.md`](../../ROADMAP.md) ("Position: bootc is the transport; native A/B and nbc are retiring"). Retirement obligations are tracked in frostyard/snosi#889.
 
 > **This document records superseded direction. Do not act on it.**
 >
