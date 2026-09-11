@@ -26,6 +26,8 @@ unit="$base/usr/lib/systemd/user/snosi-eol-notify.service"
 status="$base/usr/bin/snosi-update-status"
 roadmap="$root/ROADMAP.md"
 org_adrs="$root/docs/org-adrs.md"
+native_ab_plan="$root/docs/plans/2026-07-13-mkosi-native-ab-root-design.md"
+coexistence_plan="$root/docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md"
 
 test_number=0
 failures=0
@@ -54,6 +56,12 @@ check "roadmap keeps October 31 help separate from product support" \
     has "$roadmap_text" "**2026-10-31 for the four known users**. That limited arrangement does not extend product support"
 check "org ADR index records the binding retirement decision" \
     has_line "$org_adrs" "ADR-0047.*2026-09-30"
+for plan in "$native_ab_plan" "$coexistence_plan"; do
+    check "$(basename "$plan") points to the current roadmap position" \
+        has_line "$plan" "Position: bootc is the transport; native A/B and nbc are retiring"
+    check "$(basename "$plan") does not assert the superseded October 28 cutoff" \
+        no_match "$plan" "2026-10-28"
+done
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

@@ -6,8 +6,9 @@ above the decision and planning records — [`docs/adr/`](docs/adr/) says *why* 
 choice was made, [`docs/plans/`](docs/plans/) says *in what order* a piece of
 work happens, and this file says *which of those matter next and why*.
 
-It is a statement of intent, not a promise of dates. Nothing here is a
-commitment to ship on a schedule.
+It is a statement of intent, not a promise of dates, except where it restates
+an Accepted support boundary. Nothing else here is a commitment to ship on a
+schedule.
 
 **Maintainers:** revise this file when a horizon item lands, is abandoned, or
 changes horizon. A roadmap that is not revised is worse than no roadmap.
@@ -83,8 +84,9 @@ The historical coexistence design is
 [`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`](docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md),
 and [`docs/plans/2026-07-13-mkosi-native-ab-root-design.md`](docs/plans/2026-07-13-mkosi-native-ab-root-design.md)
 still describes replacing bootc with native A/B. Both predate this decision and
-now record superseded direction; reconciling their `Status:` lines is tracked
-in Near term.
+now record superseded direction. Their supersession metadata points to this
+current transport position and the Accepted September 30 boundary; their
+historical bodies remain intact.
 
 See [`docs/installing.md`](docs/installing.md) to choose an image and verify
 media.
@@ -108,8 +110,8 @@ worth a contributor's time.
   and
   [`docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`](docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md)
   are both now marked **Superseded** as of 2026-08-29 and carry banners saying
-  so, pointing here and at frostyard/snosi#889 for the obligations that
-  replace them.
+  so, pointing to the current transport position, the Accepted September 30
+  boundary, and frostyard/snosi#889 for the obligations that replace them.
 
 - **Close the bootc update-validation prerequisites.**
   The bootc update validation plan is blocked on discrete, small prerequisites
