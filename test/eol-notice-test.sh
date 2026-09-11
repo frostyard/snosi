@@ -10,6 +10,8 @@
 #     container => silent.
 #   - the wording carries the user-facing sentence and flips tense after
 #     the EOL date.
+#   - the current roadmap and org-ADR index retain the Accepted cutoff,
+#     four-product surface, and non-support migration-help boundary.
 #   - the notify unit is static-wants activated (no [Install]), pre-filtered
 #     on !composefs, and the script acks ONLY after a successful send, so
 #     each user sees exactly one toast.
@@ -22,6 +24,8 @@ notify="$base/usr/libexec/snosi-eol-notify"
 motd="$base/etc/update-motd.d/80-snosi-eol"
 unit="$base/usr/lib/systemd/user/snosi-eol-notify.service"
 status="$base/usr/bin/snosi-update-status"
+roadmap="$root/ROADMAP.md"
+org_adrs="$root/docs/org-adrs.md"
 
 test_number=0
 failures=0
@@ -37,6 +41,19 @@ lacks() { [[ "$1" != *"$2"* ]]; }
 empty() { [[ -z "$1" ]]; }
 has_line() { grep -q -- "$2" "$1"; }
 no_match() { ! grep -Eq -- "$2" "$1"; }
+
+# --- current documentation contract --------------------------------------
+roadmap_text=$(tr '\n' ' ' <"$roadmap")
+check "roadmap has the Accepted native A/B and nbc cutoff" \
+    has "$roadmap_text" "Native A/B and nbc support and routine publication end on **2026-09-30**."
+check "roadmap names all four current bootc products" \
+    has "$roadmap_text" 'four bootc products (`snow`, `snowfield`, `sundog`, and `floe`)'
+check "roadmap does not retain the superseded October 28 cutoff" \
+    no_match "$roadmap" "2026-10-28"
+check "roadmap keeps October 31 help separate from product support" \
+    has "$roadmap_text" "**2026-10-31 for the four known users**. That limited arrangement does not extend product support"
+check "org ADR index records the binding retirement decision" \
+    has_line "$org_adrs" "ADR-0047.*2026-09-30"
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
