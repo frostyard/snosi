@@ -624,10 +624,10 @@ output/
 ├── snow/                    # OCI image directory
 ├── snow.manifest            # Package manifest (JSON)
 ├── snow.vmlinuz             # Extracted kernel for boot
-├── docker.raw               # Docker sysext (erofs)
+├── docker.raw.zst           # Docker sysext (zstd-compressed erofs)
 ├── docker.manifest          # Package manifest
-├── incus.raw                # Incus sysext
-├── podman.raw               # Podman sysext
+├── incus.raw.zst            # Incus sysext
+├── podman.raw.zst           # Podman sysext
 └── ...
 ```
 
@@ -951,7 +951,7 @@ done
 
 This pattern allows configs to be "injected" into `/etc` via systemd-tmpfiles rules when the sysext is activated.
 
-**Versioned naming** is handled by the shared postoutput script — the sysext's `mkosi.conf` wires `PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh` and sets `Environment=KEYPACKAGE=incus`; the script reads the key package's version from the manifest and renames the output to `incus_<version>_<os>_<arch>.raw`. Do not create per-sysext postoutput scripts.
+**Versioned naming** is handled by the shared postoutput script — the sysext's `mkosi.conf` wires `PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh` and sets `Environment=KEYPACKAGE=incus`; the script reads the key package's version from the manifest and renames the output to `incus_<version>_<os>_<arch>.raw.zst` (every sysext sets `CompressOutput=zstd`; the suffix is preserved and updex decompresses on download). Do not create per-sysext postoutput scripts.
 
 #### Sysext Checklist
 

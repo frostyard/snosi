@@ -820,6 +820,24 @@ access for a group member, denial for a nonmember, and existing-GID preservation
 
 The shared sysext postoutput script (`shared/sysext/postoutput/sysext-postoutput.sh`) handles versioned naming and manifest processing. It requires the `KEYPACKAGE` env var set in each sysext's `mkosi.conf`. If `SYSEXT_REVISION` is also set, the version gets a `+rN` suffix — bump this to force a republish of tree/content fixes when the KEYPACKAGE version hasn't changed (publishing skips existing filenames via `skip-duplicates`, so tree fixes otherwise never reach users; remove the setting when the package version bumps). Every sysext must also ship `mkosi.images/<name>/required-paths.txt` (one absolute path per line); the shared finalize check (`shared/sysext/finalize/sysext-required-paths.sh`) fails the build if any listed path is missing from the buildroot — guard against publishing structurally broken sysexts (the 2026-07-01 incus publish shipped with no incusd/CLI/units and nothing noticed). The sibling `shared/sysext/finalize/sysext-usr-only.sh` guard fails any delta with an entry below `/opt` (the empty mountpoint directory itself is permitted; symlinks are reported, never followed). It deliberately does NOT inspect `/var`: mkosi's sysext repart definition (`sysext.repart.d/10-root.conf`) copies exactly `/usr/` and `/opt/` into the published erofs, so buildroot `/var` — dpkg logs, package caches, postinst trigger state such as `/var/lib/emacsen-common` — is inert build residue that never ships, while `/opt` does ship and is shadowed at runtime by the `/var/opt` bind mount. `test/sysext-usr-only-test.sh` pins that `CopyFiles=` set whenever the `.mkosi` checkout is present, so a mkosi bump that widens the packed tree re-opens the question instead of silently widening the payload. An earlier draft of the guard checked `/var` too and had to grow a per-package residue allowlist one CI round at a time (dpkg.log, dictionaries-common, emacsen-common, coder's preinst home); do not reintroduce that. For `Overlay=yes` images the finalize `$BUILDROOT` is the sysext DELTA (upper layer), so list only paths the sysext itself ships — packages also present in the base image never appear in the delta and will always fail the check.
 
+**Sysexts publish zstd-compressed (2026-09-14):** every sysext `mkosi.conf`
+sets `CompressOutput=zstd` + `CompressLevel=19` in `[Output]`, so the
+published object is `<name>_<version>_<os>_<arch>.raw.zst`. `CompressOutput=`
+is `SettingScope.local` in mkosi — it is NEVER inherited from the root config,
+so a new sysext must set it itself (`test/sysext-authoring-contract-test.sh`
+fails otherwise); `CompressLevel=` IS inherited, which is why it is also set
+per sysext and must never go in the root `mkosi.conf` (it would change the
+gzip level of every bootc OCI layer). Nothing downstream changed: the
+postoutput script already discovered and preserved `.raw.zst`, every
+`.transfer` already listed `.raw.zst` first, repogen v0.4.1 already globs it,
+and `frostyard-updex` (≥ 1.2.3; 2.0.0 published) decompresses in-process via
+`klauspost/compress` and strips the suffix from the target name, so nothing
+exec's a `zstd` binary — base still ships the `zstd` CLI for operators and the
+same test pins that. Compression alone republishes nothing (`skip-duplicates`
+identifies a sysext by name/version/arch regardless of suffix); each sysext
+arrives compressed with its next version or `SYSEXT_REVISION` bump. Design
+detail: `docs/design/sysexts.md` "Compressed output".
+
 ## Key Directories
 
 - `shared/download/` - Verified download system: `sysext-checksums.json` pins direct downloads consumed by sysexts, `image-checksums.json` pins direct downloads consumed by OCI profile builds, `package-versions.json` tracks external APT package version sentinels for sysexts, and `verified-download.sh` provides the `verified_download()` helper
