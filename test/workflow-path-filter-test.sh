@@ -93,6 +93,7 @@ inert_ci_paths=(
     '.github/workflows/check-dependencies.yml'
     '.github/workflows/check-packages.yml'
     '.github/workflows/claude.yml'
+    '.github/workflows/native-retention.yml'
     '.github/workflows/nightly-compliance.yml'
     '.github/workflows/scorecard.yml'
     '.github/workflows/test-install.yml'

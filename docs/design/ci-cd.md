@@ -341,6 +341,31 @@ Checkout credentials are not persisted, no environment or repository secret is
 referenced, and `cancel-in-progress: false` prevents a delayed run from being
 silently replaced by the next schedule.
 
+### native-retention.yml — Nightly R2 Retention
+
+**Trigger:** Scheduled daily at `05:15 UTC`, plus manual dispatch (`mode`:
+`execute` or `dry-run`; `keep_previous` override).
+
+Applies `docs/native-ab-contracts.md` §13 to the four native namespaces on R2
+(`os/native/v1/{floe,snow,snowfield}/x86-64/` and `isos/native/v1/`), one
+matrix job each, by calling `shared/native-ab/publish/retention.sh` with the
+same rclone environment shape as the publication jobs. The script reads and
+`gpgv`-verifies the live signed index before trusting any filename, keeps the
+current version plus the previous two, every version newer than the live one
+(in-flight promotion or withdrawn release), and every object younger than 24
+hours, then deletes the remaining payload objects, stale `.candidate/`
+scratch, and `.history/` pairs whose payload is gone. It re-reads the live
+index immediately before deleting and aborts if a promotion has landed in the
+meantime, so an overlapping `build-native-images.yml` run is never raced.
+See `docs/native-ab-publication.md` "Retention policy application" for the
+full keep/refuse rules and the manual invocation.
+
+Default permissions are empty and each job receives only `contents: read`.
+Only the repo-level `NATIVE_R2_*` secrets are referenced -- no signing key,
+no environment secret -- and `cancel-in-progress: false` keeps a delayed run
+from being replaced by the next schedule. `test/native-ab-retention-test.sh`
+covers the script in `validate.yml`.
+
 ### check-dependencies.yml — External Dependency Updates
 
 **Trigger:** Weekly (Monday 9am UTC), manual dispatch

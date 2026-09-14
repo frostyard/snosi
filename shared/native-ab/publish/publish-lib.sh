@@ -416,3 +416,62 @@ candidate_object_names() { # prepared-dir
 candidate_object_sha256() { # prepared-dir name
     awk -v n="$2" '$2 == n {print $1}' "$1/SHA256SUMS"
 }
+
+# ---------------------------------------------------------------------------
+# Listing and deletion (retention.sh)
+# ---------------------------------------------------------------------------
+
+# dest_list_objects prefix -- one line per object under DEST/prefix
+# (recursive), tab-separated: "<mtime epoch seconds>\t<size bytes>\t<relpath>"
+# where relpath is relative to DEST root (i.e. it starts with prefix). Only
+# objects (never directory markers); local ".meta.json" sidecars are listed
+# too and simply ride along with whatever decision their object gets.
+# Prints nothing (exit 0) when the prefix holds no objects, on every backend
+# (bucket backends have no real directories, see dest_object_exists).
+dest_list_objects() { # prefix
+    local prefix="${1%/}"
+    case "$DEST_KIND" in
+    local)
+        [[ -d "$DEST_LOCAL_ROOT/$prefix" ]] || return 0
+        find "$DEST_LOCAL_ROOT/$prefix" -type f -printf '%T@\t%s\t%P\n' |
+            awk -F'\t' -v p="$prefix" 'BEGIN{OFS="\t"} {sub(/\..*$/, "", $1); print $1, $2, p "/" $3}'
+        ;;
+    rclone)
+        # lsf prints the modtime as RFC3339 in the local zone; convert to
+        # epoch with date(1) so the caller compares plain integers.
+        rclone lsf -R --files-only --format tsp --separator $'\t' "$DEST_RCLONE_TARGET/$prefix" 2>/dev/null |
+            while IFS=$'\t' read -r t s p; do
+                printf '%s\t%s\t%s\n' "$(date -d "$t" +%s)" "$s" "$prefix/$p"
+            done
+        ;;
+    *)
+        echo "Error: dest_list_objects called before dest_parse" >&2
+        exit 1
+        ;;
+    esac
+}
+
+# dest_delete_listed listfile -- delete every object named in listfile (one
+# DEST-relative relpath per line). Local: rm each file plus its ".meta.json"
+# sidecar if present. rclone: a single `rclone delete --files-from` batch
+# (no --rmdirs; bucket backends have no directories to remove). Fails (non-
+# zero) if the backend reports any error, so the caller never reports a
+# partial run as clean.
+dest_delete_listed() { # listfile
+    local listfile="$1" rel
+    [[ -s "$listfile" ]] || return 0
+    case "$DEST_KIND" in
+    local)
+        while IFS= read -r rel; do
+            [[ -n "$rel" ]] || continue
+            rm -f "${DEST_LOCAL_ROOT:?}/$rel" "${DEST_LOCAL_ROOT:?}/$rel.meta.json"
+            # Bucket backends have no directories; mirror that by dropping
+            # directories the deletion emptied (never the DEST root itself).
+            (cd "$DEST_LOCAL_ROOT" && rmdir -p --ignore-fail-on-non-empty "$(dirname "$rel")" 2>/dev/null) || true
+        done <"$listfile"
+        ;;
+    rclone)
+        rclone delete --files-from-raw "$listfile" "$DEST_RCLONE_TARGET"
+        ;;
+    esac
+}

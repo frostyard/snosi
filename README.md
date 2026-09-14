@@ -715,6 +715,7 @@ installation or the root update service.
 | `check-dependencies.yml` | Weekly | Checks pinned direct downloads and inline image-tool pins, opens target-specific PRs |
 | `check-packages.yml` | Daily | Checks external APT package versions for sysexts, updates `package-versions.json`, opens PRs |
 | `nightly-compliance.yml` | Nightly / manual | Re-runs secretless security and publication policy contracts to detect compliance drift |
+| `native-retention.yml` | Nightly / manual | Applies the native A/B retention rule (current + previous 2 per product, stale candidates, orphaned history) to R2 via `retention.sh` |
 | `validate.yml` | PR/push | shellcheck (all shebang-discovered scripts, `-S warning`) + guard fixture suites + `mkosi summary` validation for every profile |
 | `test-install.yml` | Manual | Signature-verified bootc installation test in QEMU/KVM |
 | `scorecard.yml` | Weekly | OpenSSF supply-chain security analysis |
