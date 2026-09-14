@@ -120,6 +120,14 @@ jobs:
         # in CI, matching every other QEMU harness in this repo.
         run: ./test/native-publication-pipeline-test.sh
 
+      - name: Validate native A/B retention script
+        # shared/native-ab/publish/retention.sh (docs/native-ab-contracts.md
+        # §13, run nightly by native-retention.yml) against a synthetic
+        # local-directory namespace: keep window, stale-candidate and
+        # history pruning, grace, ISO namespace, and every fail-closed
+        # refusal. Ephemeral signing key, no root, no network.
+        run: ./test/native-ab-retention-test.sh
+
       - name: Validate native promotion rclone installation
         # Fresh promotion runners must refresh APT before installing rclone;
         # stale hosted-runner indexes can reference mirror revisions already removed.

@@ -1,0 +1,95 @@
+name: Native Retention
+
+# Nightly application of docs/native-ab-contracts.md §13 ("keep current +
+# previous 2 stable versions per product") to the native A/B and installer
+# ISO namespaces on R2, via shared/native-ab/publish/retention.sh. Before
+# this existed nothing ever deleted a promoted build or a failed run's
+# .candidate/ scratch, and the bucket reached 2.48 TB (2026-09-14) for a
+# ~50 GiB live set. See docs/native-ab-publication.md "Retention policy
+# application" for what the script keeps, what it refuses, and how to run
+# it by hand.
+#
+# Runs after the 04:30 UTC nightly-compliance window and well clear of the
+# usual build-native-images.yml activity; the script's own 24h grace and its
+# pre-delete index re-check make an overlapping promotion abort this job,
+# never the promotion.
+
+on:
+  schedule:
+    - cron: "15 5 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "execute deletes; dry-run only prints the plan"
+        type: choice
+        options:
+          - execute
+          - dry-run
+        default: execute
+      keep_previous:
+        description: "versions to keep besides the live one (§13 default 2)"
+        type: string
+        default: "2"
+
+permissions: {}
+
+concurrency:
+  group: native-retention
+  cancel-in-progress: false
+
+jobs:
+  retention:
+    runs-on: ubuntu-latest
+    # Bounds R2 credential exposure if a listing or delete stalls.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - product: floe
+            dest_path: os/native/v1/floe/x86-64
+          - product: snow
+            dest_path: os/native/v1/snow/x86-64
+          - product: snowfield
+            dest_path: os/native/v1/snowfield/x86-64
+          - product: native-installer
+            dest_path: isos/native/v1
+    env:
+      PRODUCT: ${{ matrix.product }}
+      DEST_PATH: ${{ matrix.dest_path }}
+      MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'execute' }}
+      KEEP_PREVIOUS: ${{ github.event_name == 'workflow_dispatch' && inputs.keep_previous || '2' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install rclone
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rclone
+
+      - name: Apply retention policy
+        # Same rclone env shape as build-native-images.yml's publication
+        # steps; the R2 token is authorization only, never a substitute for
+        # gpgv on the live index, which retention.sh performs itself against
+        # the committed pubring before trusting a single filename.
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.NATIVE_R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.NATIVE_R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_R2_ACL: private
+          RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+          NATIVE_R2_BUCKET: ${{ secrets.NATIVE_R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          [[ -n "$NATIVE_R2_BUCKET" ]] || { echo "NATIVE_R2_BUCKET secret is not set" >&2; exit 1; }
+          args=(--keep-previous "$KEEP_PREVIOUS" --dest-path "$DEST_PATH")
+          [[ "$MODE" != execute ]] || args+=(--execute)
+          ./shared/native-ab/publish/retention.sh "${args[@]}" \
+            "$PRODUCT" "rclone:r2:$NATIVE_R2_BUCKET"

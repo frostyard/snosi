@@ -331,23 +331,60 @@ ISO promotion, `build-installer-iso.yml` runs
 
 ## Retention policy application
 
-Per `docs/native-ab-contracts.md` §13 and the plan's "R2 Retention And Cost
-Control" (not yet automated by these scripts -- apply manually via `rclone`
-lifecycle rules or a scheduled job until a dedicated retention script
-exists):
+`docs/native-ab-contracts.md` §13 is applied nightly by
+`.github/workflows/native-retention.yml` (05:15 UTC, plus manual dispatch
+with an `execute`/`dry-run` mode and a `keep_previous` override), one matrix
+job per namespace (`floe`, `snow`, `snowfield`, and the installer ISO via
+`--dest-path isos/native/v1`), each a thin caller of
+`shared/native-ab/publish/retention.sh`. Until it existed nothing ever
+deleted a promoted build or a failed run's `.candidate/` scratch, and the
+bucket reached 2.48 TB on 2026-09-14 for a live set of roughly 50 GiB (a
+one-off prune that day applied the same rule by hand).
 
-- Keep the current + previous 2 stable versions' immutable objects per
-  product.
-- Retain withdrawn versions' objects for 90 days after withdrawal.
-- Retain full installer disk images (`*.disk.raw.xz`) for **less** time than
-  root/verity update objects.
-- Only delete after both the rollback window and the offline-install window
-  have passed.
-- `promote.sh`'s `.history/<version>/` archive (signed index pairs only,
-  tiny) is not subject to the same size-driven pressure as the multi-
-  gigabyte payload objects, but should still be pruned once a version's
-  payload objects themselves are deleted (an archived index pointing at
-  already-deleted objects has no withdrawal value).
+```console
+$ shared/native-ab/publish/retention.sh floe rclone:r2:frostyardrepo              # dry run, prints the plan
+$ shared/native-ab/publish/retention.sh --execute floe rclone:r2:frostyardrepo    # delete
+$ shared/native-ab/publish/retention.sh --dest-path isos/native/v1 --execute native-installer rclone:r2:frostyardrepo
+```
+
+What the script does, per namespace:
+
+- Reads the live `SHA256SUMS` + `.gpg` from the storage backend (not the
+  edge) and `gpgv`-verifies the pair against the committed pubring before
+  trusting a single filename (§7). It refuses -- deleting nothing -- when
+  the pair is missing or does not verify, when the index advertises more
+  than one version, or when it names an object that is not actually
+  present.
+- Keeps the current version plus the `--keep-previous` newest older
+  versions (default 2, i.e. §13's "current + previous 2"), every object
+  named by the live index, and anything younger than `--grace-hours`
+  (default 24) so an in-progress publication run is never raced.
+- Keeps every version **newer** than the live one and reports it: that is
+  either a promotion in flight (payload copied, index not yet swapped) or a
+  withdrawn release, which §13 retains for 90 days. Deciding when a
+  withdrawn version's objects go is an operator call, made by hand.
+- Deletes payload objects of versions outside the keep window, stale
+  `.candidate/<version>/` directories (a run that died between
+  `publish-candidate.sh` and `promote.sh`; `promote.sh`'s own purge is
+  best-effort), and `.history/<version>/` archived index pairs whose
+  payload is gone (an archived index pointing at deleted objects has no
+  withdrawal value). Objects it cannot classify are left alone and listed.
+- Nothing is deleted without `--execute`. With it, the live index is re-read
+  immediately before deletion and must be byte-identical to the one the
+  plan was built from; a promotion landing in between aborts the run
+  untouched, and the next night picks it up.
+
+`test/native-ab-retention-test.sh` (wired into `validate.yml`) drives the
+script against a synthetic namespace on a local directory dest and, when
+rclone is installed, again through the rclone backend.
+
+Still manual, from §13 and the plan's "R2 Retention And Cost Control":
+
+- Withdrawn versions' objects: retained 90 days after withdrawal, then
+  removed by hand (see above).
+- Full installer disk images (`*.disk.raw.xz`) may be retained for **less**
+  time than root/verity update objects; the script currently treats all
+  seven objects of a version alike.
 - Record compressed bytes and estimated R2 storage/read cost per release
   (plan) -- `publication-info.json`'s `artifacts.*.size` fields are the
   source for this.
@@ -492,7 +529,7 @@ would, per the "never trust local disk" property described above.
 | `NATIVE_SECURE_BOOT_CERTIFICATE` | `native-build` | mkosi build step only | `mkosi.crt` | Public half of the above; also needs MOK enrollment on every installed machine before rotation. |
 | `NATIVE_PCR_SIGNING_KEY` | `native-build` | mkosi build step only | `.snosi-private/pcr-signing.key` | PCR 11 signing key. Rotation: dual-signed transition UKIs, `PCR_SIGNING_KEY_PREVIOUS` -- see CLAUDE.md "Native A/B Prototype" rotation rules. |
 | `NATIVE_PCR_SIGNING_CERTIFICATE` | `native-build` | mkosi build step only | `.snosi-private/pcr-signing.crt` | Public half of the above. |
-| `NATIVE_R2_ACCOUNT_ID` | (repo-level) | `publish-candidate.sh`, `promote.sh` (via `rclone`) | `RCLONE_CONFIG_R2_ENDPOINT` env var | Upload authorization only -- never a substitute for the OpenPGP signature (`docs/native-ab-contracts.md` SS7). |
+| `NATIVE_R2_ACCOUNT_ID` | (repo-level) | `publish-candidate.sh`, `promote.sh`, `retention.sh` (via `rclone`) | `RCLONE_CONFIG_R2_ENDPOINT` env var | Upload authorization only -- never a substitute for the OpenPGP signature (`docs/native-ab-contracts.md` SS7). |
 | `NATIVE_R2_ACCESS_KEY_ID` | (repo-level) | same | `RCLONE_CONFIG_R2_ACCESS_KEY_ID` env var | Same scope. Use a dedicated R2 API token scoped only to the native publication bucket/prefix -- do not reuse the `R2_ACCESS_KEY_ID` token `build.yml`/`build-images.yml` already use for sysexts/manifests. |
 | `NATIVE_R2_SECRET_ACCESS_KEY` | (repo-level) | same | `RCLONE_CONFIG_R2_SECRET_ACCESS_KEY` env var | Same scope. |
 | `NATIVE_R2_BUCKET` | (repo-level) | publication jobs and redirect-Worker preflight | `rclone:r2:<bucket>` dest argument / deploy assertion | Finalized bucket name behind `repository.frostyard.org` (`frostyardrepo`). The Worker config must match this secret; CI verifies the named bucket exists before Wrangler can auto-provision resources. |
