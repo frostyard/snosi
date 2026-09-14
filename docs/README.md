@@ -67,6 +67,7 @@ categorization candidate for this directory)*
 - [plans/2026-07-17-native-boot-validation-design.md](plans/2026-07-17-native-boot-validation-design.md) / [plan](plans/2026-07-17-native-boot-validation-plan.md)
 - [plans/2026-07-20-update-api-daemon-design.md](plans/2026-07-20-update-api-daemon-design.md)
 - [plans/2026-08-26-cayo-floe-rename-plan.md](plans/2026-08-26-cayo-floe-rename-plan.md) — ordered server-product rename across snosi and downstream repos
+- [plans/2026-09-13-sysext-ghcr-migration-plan.md](plans/2026-09-13-sysext-ghcr-migration-plan.md) — move sysext hosting from R2 to GHCR (updex `Type=oci`, signed index, retention)
 - [plans/ab-deploy-checklist.md](plans/ab-deploy-checklist.md) — native A/B production-deploy checklist
 
 ### Contracts and runbooks (indexed in place)
