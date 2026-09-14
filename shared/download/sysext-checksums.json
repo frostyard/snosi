@@ -35,9 +35,9 @@
     "version": "2.36.5"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.19/GitHub-Copilot-linux-x64.deb",
-    "sha256": "1f09db69e284d328eac1057f1d371489394ca1b9d30660c9fe2e8d8f6198efc5",
-    "version": "1.1.19"
+    "url": "https://github.com/github/app/releases/download/v1.1.20/GitHub-Copilot-linux-x64.deb",
+    "sha256": "add3cd7f49fcbe29736a440f39ba74976e226a3dda9448cb567283bc5f576eff",
+    "version": "1.1.20"
   },
   "k3s": {
     "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.4%2Bk3s1/k3s",
