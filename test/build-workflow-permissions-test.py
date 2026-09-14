@@ -68,4 +68,33 @@ for forbidden in ("packages: write", "id-token: write", "attestations: write"):
     if any(forbidden in line for line in build):
         fail(f"PR-facing build job restored forbidden grant {forbidden!r}")
 
+# The publish-to-r2 action pin and the repogen binary it downloads are two
+# separate pins. The action's repogen-version input defaults to "latest",
+# which floated to v0.5.0 on 2026-09-14 and broke every publish (its sysext
+# digest reconciliation hard-fails rebuilt, non-reproducible bytes before
+# --skip-duplicates runs). Require an explicit tag equal to the release named
+# in the action pin's trailing comment, so the binary can only move together
+# with a reviewed action bump.
+USES_PATTERN = re.compile(
+    r"^\s+uses: frostyard/repogen/\.github/actions/publish-to-r2@[0-9a-f]{40}"
+    r"\s+# (v\d+\.\d+\.\d+)\s*$"
+)
+VERSION_PATTERN = re.compile(r"^\s+repogen-version:\s*(\S+)\s*$")
+uses_matches = [USES_PATTERN.match(line) for line in build]
+uses_matches = [match for match in uses_matches if match]
+if len(uses_matches) != 1:
+    fail(
+        "build job must use exactly one commit-pinned publish-to-r2 action "
+        "with a trailing '# vX.Y.Z' release comment"
+    )
+action_release = uses_matches[0].group(1)
+version_values = [
+    match.group(1) for match in (VERSION_PATTERN.match(line) for line in build) if match
+]
+if version_values != [action_release]:
+    fail(
+        "publish-to-r2 step must set repogen-version to the action pin's own "
+        f"release {action_release!r} (never 'latest' or absent); found {version_values}"
+    )
+
 print("build-workflow-permissions-test: PASSED")
