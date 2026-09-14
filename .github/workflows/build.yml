@@ -212,6 +212,15 @@ jobs:
           r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           r2-bucket: frostyardrepo
+          # The action pin above is v0.4.1, but its repogen-version input
+          # defaults to "latest", which resolved to v0.5.0 on 2026-09-14 and
+          # failed every run: v0.5.0's sysext digest reconciliation runs
+          # before --skip-duplicates and hard-fails any already-published
+          # identity whose rebuilt bytes differ, and mkosi output is not
+          # byte-reproducible. Pin the binary to the action's own release
+          # until the publisher only hands repogen identities absent from the
+          # published index (test/build-workflow-permissions-test.py pins it).
+          repogen-version: v0.4.1
           skip-duplicates: true
           gpg-private-key: ${{ secrets.REPOGEN_GPG_KEY }}
           packages-dir: ./output/sysexts

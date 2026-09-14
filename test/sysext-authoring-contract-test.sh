@@ -18,7 +18,7 @@ validation_error() {
 validate_inventory() {
     local root=$1
     local config config_path name required_paths metadata_dir
-    local expected_transfer expected_feature file remainder component
+    local expected_transfer expected_feature file remainder component base_config
     local -a configs key_packages transfers features metadata_files
     local -A components=() orphan_reported=()
 
@@ -66,6 +66,13 @@ validate_inventory() {
                 validation_error "$name: mkosi.conf is missing finalizer $file"
         done
 
+        # Published sysexts are .raw.zst. CompressOutput= is SettingScope.local
+        # in mkosi (never inherited from the root config), so every sysext must
+        # set it itself; a bare .raw would silently republish uncompressed.
+        grep -Eq '^[[:space:]]*CompressOutput[[:space:]]*=[[:space:]]*zstd[[:space:]]*$' \
+            "$config_path" ||
+            validation_error "$name: mkosi.conf must set CompressOutput=zstd"
+
         metadata_dir="mkosi.images/base/mkosi.extra/usr/lib/sysupdate.$name.d"
         expected_transfer="$metadata_dir/$name.transfer"
         expected_feature="$metadata_dir/$name.feature"
@@ -85,6 +92,22 @@ validate_inventory() {
             validation_error "$name: expected exactly one matching $expected_feature"
         fi
     done
+
+    # updex decompresses .raw.zst in-process (klauspost/compress), but the
+    # image must still carry the zstd CLI so an operator can unpack a
+    # published sysext by hand. Packages= lists are multi-line in mkosi.conf:
+    # the first token follows "Packages=", continuation lines are indented.
+    base_config="mkosi.images/base/mkosi.conf"
+    if ! git -C "$root" ls-files --error-unmatch -- "$base_config" >/dev/null 2>&1; then
+        validation_error "base: missing tracked $base_config"
+    elif ! awk '
+        { line = $0 }
+        /^[[:space:]]*Packages[[:space:]]*=/ { sub(/^[[:space:]]*Packages[[:space:]]*=/, "", line); inpkg = 1 }
+        !/^[[:space:]]*Packages[[:space:]]*=/ && !/^[[:space:]]+[^[:space:]]/ { inpkg = 0 }
+        inpkg { n = split(line, t, /[[:space:]]+/); for (i = 1; i <= n; i++) if (t[i] == "zstd") found = 1 }
+        END { exit !found }' "$root/$base_config"; then
+        validation_error "base: mkosi.conf must list the zstd package (sysexts publish as .raw.zst)"
+    fi
 
     mapfile -t metadata_files < <(
         git -C "$root" ls-files -- \
@@ -114,12 +137,20 @@ write_valid_fixture() {
     cat >"$root/mkosi.images/fixture/mkosi.conf" <<'EOF'
 [Output]
 Overlay=yes
+CompressOutput=zstd
 
 [Content]
 FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh
 
 [Build]
 Environment=KEYPACKAGE=fixture-package
+EOF
+    mkdir -p "$root/mkosi.images/base"
+    cat >"$root/mkosi.images/base/mkosi.conf" <<'EOF'
+[Content]
+Packages=erofs-utils
+         zstd
+         curl
 EOF
     printf '/usr/bin/fixture\n' >"$root/mkosi.images/fixture/required-paths.txt"
     cat >"$metadata_dir/fixture.transfer" <<'EOF'
@@ -187,6 +218,14 @@ run_negative_fixture() {
                 "$metadata_dir/sysupdate.fixture.d/fixture.transfer"
             git -C "$root" add "$metadata_dir/sysupdate.fixture.d/fixture.transfer"
             ;;
+        uncompressed-output)
+            sed -i '/^CompressOutput=/d' "$root/mkosi.images/fixture/mkosi.conf"
+            git -C "$root" add mkosi.images/fixture/mkosi.conf
+            ;;
+        base-without-zstd)
+            sed -i '/^[[:space:]]*zstd$/d' "$root/mkosi.images/base/mkosi.conf"
+            git -C "$root" add mkosi.images/base/mkosi.conf
+            ;;
         orphan-metadata)
             mkdir -p "$metadata_dir/sysupdate.orphan.d"
             printf '[Feature]\nDescription=Orphan\n' \
@@ -236,6 +275,8 @@ run_negative_fixture missing-usr-only-finalizer "sysext-usr-only.sh"
 run_negative_fixture mismatched-feature "transfer must select Features=fixture"
 run_negative_fixture unsigned-transfer "transfer must set Verify=true"
 run_negative_fixture orphan-metadata "orphan component-scoped sysext metadata"
+run_negative_fixture uncompressed-output "must set CompressOutput=zstd"
+run_negative_fixture base-without-zstd "must list the zstd package"
 
 # A GdkPixbuf loaders.cache is authoritative for the whole merged /usr. Prove
 # the shared finalizer accepts a cache that registers SVG and rejects both
