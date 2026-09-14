@@ -331,10 +331,65 @@ The shared postoutput script (`shared/sysext/postoutput/sysext-postoutput.sh`) h
 4. Appends `+r{SYSEXT_REVISION}` when `SYSEXT_REVISION` is set in the image's
    `[Build] Environment` (see below)
 5. Maps Debian release to VERSION_ID: forky → 14, trixie → 13, bookworm → 12, bullseye → 11, buster → 10
-6. Renames the output image: `{IMAGE_ID}_{KEYVERSION}_{OS_VERSION}_{ARCH}.{ext}` (ext may be `raw`, `raw.gz`, `raw.xz`, etc.)
-   - Example: `docker_5+29.3.0_13_x86-64.raw`
+6. Renames the output image: `{IMAGE_ID}_{KEYVERSION}_{OS_VERSION}_{ARCH}.{ext}`,
+   preserving whatever compression suffix mkosi produced (`raw.zst` for every
+   tracked sysext, see below; `raw`, `raw.gz`, `raw.xz` are also discovered)
+   - Example: `docker_5+29.3.0_13_x86-64.raw.zst`
 7. Annotates manifest with `.config.key_package` and `.config.key_version`
 8. Creates unversioned symlink for systemd-sysupdate MatchPattern
+
+### Compressed output: every sysext publishes as `.raw.zst`
+
+Every tracked sysext `mkosi.conf` sets `CompressOutput=zstd` and
+`CompressLevel=19` in `[Output]`, so mkosi writes `<name>.raw.zst` instead of
+a bare erofs `.raw`, and the versioned object that reaches R2 is
+`<name>_<version>_<os>_<arch>.raw.zst`. Electron-sized payloads shrink to
+roughly a third; the object store bill tracks cumulative never-pruned bytes,
+so this is the single largest lever on it.
+
+Facts that shape the wiring, each pinned by
+`test/sysext-authoring-contract-test.sh` (validate.yml) unless noted:
+
+- **`CompressOutput=` is per-image, not inherited.** In the pinned mkosi it is
+  `SettingScope.local`: never passed from the root `mkosi.conf` to subimages,
+  so it must be repeated in each sysext's own `[Output]` (there is no shared
+  sysext `mkosi.conf` fragment today). The contract test fails any
+  `Overlay=yes` image without `CompressOutput=zstd`. `CompressLevel=` IS
+  inherited (`SettingScope.inherit`), which is exactly why it is set per
+  sysext too and never in the root config: the root value would also change
+  the gzip level of every bootc OCI layer, whose digests the secure-build
+  contracts pin.
+- **Level 19** is zstd's highest non-`--ultra` level, the same choice Fedora
+  RPM makes for publish-once/download-many artifacts. It costs CI minutes on
+  the 4-vCPU `ubuntu-latest` runner (mkosi passes `-T0`), nothing at runtime.
+- **Nothing downstream needed a change.** `sysext-postoutput.sh` already
+  iterated `raw raw.gz raw.xz raw.zst ...` and keeps the suffix
+  (`test/sysext-postoutput-test.sh` "discovers a compressed raw.zst output");
+  every `<name>.transfer` already listed `.raw.zst` FIRST in both Source and
+  Target `MatchPattern`; repogen's `publish-to-r2` action at the pinned
+  `ea8cd1f` (v0.4.1) globs `*.raw.zst`, parses name/version/os/arch after
+  stripping the suffix, and `skip-duplicates` identifies a sysext by name, version, and
+  architecture regardless of suffix (`internal/utils/package_identity.go`),
+  so a version already published as `.raw` is never re-uploaded as
+  `.raw.zst`.
+- **The client decompresses in-process.** `frostyard-updex` (2.0.0 in the
+  Frostyard stable suite; ≥ 1.2.3 required) detects the suffix
+  (`download/download.go`), streams through `klauspost/compress/zstd`
+  (`download/decompress.go`), and, because every Target pattern is a
+  compressed variant, strips the suffix from the on-disk name
+  (`updex/install.go` `buildTargetFilename`, since #128) so
+  `/var/lib/extensions.d/<name>_<v>_<os>_<arch>.raw` holds the erofs bytes
+  and `CurrentSymlink=<name>.raw` resolves to a dissectable image. No `zstd`
+  binary is exec'd.
+- **Base still ships the `zstd` CLI** (`mkosi.images/base/mkosi.conf`
+  `Packages=`) so an operator can `unzstd` a published object by hand; the
+  contract test fails if it is dropped. The mkosi tools tree also carries
+  `zstd` (`mkosi-tools/mkosi.conf`), which is what compresses at build time.
+
+Turning compression on therefore republishes nothing by itself: each sysext
+arrives compressed with its next KEYPACKAGE or `SYSEXT_REVISION` bump.
+Existing `.raw` objects stay valid; the transfer patterns accept both, and a
+mixed `SHA256SUMS` is normal during the transition.
 
 ### SYSEXT_REVISION: republishing content fixes
 
