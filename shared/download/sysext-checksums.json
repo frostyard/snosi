@@ -35,9 +35,9 @@
     "version": "2.36.5"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.20/GitHub-Copilot-linux-x64.deb",
-    "sha256": "add3cd7f49fcbe29736a440f39ba74976e226a3dda9448cb567283bc5f576eff",
-    "version": "1.1.20"
+    "url": "https://github.com/github/app/releases/download/v1.1.21/GitHub-Copilot-linux-x64.deb",
+    "sha256": "36bf67a5b293b09d5b11579ef864bd13d0141a13fb16929995f98115fdfdef31",
+    "version": "1.1.21"
   },
   "k3s": {
     "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.4%2Bk3s1/k3s",
@@ -60,8 +60,8 @@
     "version": "0.9.0"
   },
   "sunshine": {
-    "url": "https://github.com/LizardByte/Sunshine/releases/download/v2026.906.222525/sunshine_2026.906.222525-1+debiantrixie_amd64.deb",
-    "sha256": "c87f226920ad83055a898be1f0c7540307593e92d8b0baf1f076909758db8ca0",
-    "version": "2026.906.222525"
+    "url": "https://github.com/LizardByte/Sunshine/releases/download/v2026.914.233613/sunshine_2026.914.233613-1+debiantrixie_amd64.deb",
+    "sha256": "a86f858cbae57f60ecebd445402ee0295c1c057b857bd45d44c2ea2d255cbbfb",
+    "version": "2026.914.233613"
   }
 }
