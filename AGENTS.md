@@ -657,11 +657,16 @@ v2026.906.222525 (2026-09-08) the release asset is
 the new shape), the tray is Qt6 instead of GTK3/appindicator (so `Packages=`
 carries the Qt6 libs plus `qt6-qpa-plugins`/`qt6-wayland`, which are
 libqt6gui6 Recommends mkosi never installs but without which QGuiApplication
-aborts the process), and upstream's CPack Depends still names
-`libqt5widgets5, libqt5svg5` that the binary never links. The postinst strips
-exactly that pair from the control file before `dpkg -i` and fails closed if
-it is absent, so an upstream packaging fix forces the workaround's deliberate
-removal; `test/sunshine-capabilities-test.sh` fixtures both branches.
+aborts the process). Through v2026.906.222525 upstream's CPack Depends also
+named `libqt5widgets5, libqt5svg5` that the binary never links, and the
+postinst stripped that pair from the control file and rebuilt the deb before
+`dpkg -i`; v2026.914.233613 (2026-09-15) fixed the Depends to
+`libqt6widgets6, libqt6svg6`, the fail-closed guard fired as designed on the
+checksum-update PR, and the strip-and-rebuild workaround was removed. The
+postinst now installs the pristine deb after `assert_deb_dependencies_satisfied`
+and fails closed if any `libqt5` reference reappears in Depends;
+`test/sunshine-capabilities-test.sh` fixtures the clean install, the Qt5
+tripwire, and the unsatisfied-dependency branch.
 
 **Voxtype sysext:** AI voice dictation for Wayland from the Frostyard APT
 repository, bundling its own text-output chain (`wtype` for wlroots/Hyprland,
