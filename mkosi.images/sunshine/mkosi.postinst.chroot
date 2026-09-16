@@ -13,44 +13,21 @@ DEBS=$(mktemp -d)
 trap 'rm -rf "$DEBS"' EXIT
 verified_download "sunshine" "$DEBS/sunshine.deb"
 
-# Upstream's CPack Depends (cmake/packaging/linux.cmake) appends the Qt5
-# branch of TRAY_QT_VERSION -- "libqt5widgets5, libqt5svg5" -- while the
-# shipped binary links Qt6 only (readelf DT_NEEDED: libQt6Widgets/Gui/Core,
-# nothing from Qt5; the Qt6 entries dpkg-shlibdeps added later in the same
-# line are the real ones). dpkg enforces every Depends entry, so installing
-# as-is would drag ~35 MB of never-loaded Qt5 into the delta. Strip exactly
-# that pair and rebuild the deb (edge does the same for its postinst hooks).
-# Fail closed if the pair is absent: upstream fixed its packaging, so delete
-# this block rather than letting a silent no-op hide the change.
-# The raw field keeps CMake's line-continuation indentation (runs of spaces
-# between entries; dpkg-deb --field normalizes them away), so match on
-# whitespace runs rather than an exact substring.
-dpkg-deb -R "$DEBS/sunshine.deb" "$DEBS/unpacked"
-control="$DEBS/unpacked/DEBIAN/control"
-bogus_qt5='libqt5widgets5,[[:space:]]*libqt5svg5,[[:space:]]*'
-if ! grep -Eq "$bogus_qt5" "$control"; then
-    printf 'Sunshine control no longer lists the bogus Qt5 Depends pair (/%s/); remove this workaround\n' \
-        "$bogus_qt5" >&2
+# Upstream's CPack Depends listed "libqt5widgets5, libqt5svg5" from the Qt5
+# branch of TRAY_QT_VERSION through v2026.906.222525 while the binary linked
+# Qt6 only; v2026.914.233613 fixed it to "libqt6widgets6, libqt6svg6" and the
+# control-file strip-and-rebuild workaround was removed. dpkg enforces every
+# Depends entry, so a Qt5 reference returning would drag ~35 MB of never-loaded
+# Qt5 into the delta: fail closed instead of silently growing the sysext.
+depends=$(dpkg-deb --field "$DEBS/sunshine.deb" Depends)
+if grep -Eq 'libqt5' <<<"$depends"; then
+    printf 'Sunshine control references Qt5 again (%s); the binary links Qt6 only, do not add Qt5 to Packages=\n' \
+        "$depends" >&2
     exit 1
 fi
-sed -E -i "s/$bogus_qt5//" "$control"
-if grep -Eq 'libqt5' "$control"; then
-    printf 'Sunshine control still references Qt5 after the strip: %s\n' \
-        "$(dpkg-deb --field "$DEBS/sunshine.deb" Depends)" >&2
-    exit 1
-fi
-# Upstream ships its maintainer scripts mode 0644 (every release so far).
-# dpkg -i tolerates that, but dpkg-deb -b refuses to pack it, so restore the
-# mode dpkg itself would have applied before rebuilding.
-for script in preinst postinst prerm postrm; do
-    if [[ -f "$DEBS/unpacked/DEBIAN/$script" ]]; then
-        chmod 0755 "$DEBS/unpacked/DEBIAN/$script"
-    fi
-done
-dpkg-deb -b "$DEBS/unpacked" "$DEBS/sunshine-fixed.deb" >/dev/null
-assert_deb_dependencies_satisfied "$DEBS/sunshine-fixed.deb"
+assert_deb_dependencies_satisfied "$DEBS/sunshine.deb"
 
-dpkg -i "$DEBS/sunshine-fixed.deb"
+dpkg -i "$DEBS/sunshine.deb"
 
 # libcap2-bin is supplied by base; fail closed if it no longer provides getcap.
 if command -v getcap >/dev/null; then
