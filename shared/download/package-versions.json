@@ -2,7 +2,7 @@
   "code": "1.138.0-1789458761",
   "docker-ce": "5:29.8.1-1~debian.13~trixie",
   "1password-cli": "2.39.0-1",
-  "claude-desktop": "2.110.1",
-  "chatgpt": "26.911.61220",
-  "himmelblau": "4.0.3-debian13"
+  "claude-desktop": "2.2553.1",
+  "chatgpt": "26.915.31945",
+  "himmelblau": "4.0.4-debian13"
 }
