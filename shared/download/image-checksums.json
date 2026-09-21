@@ -5,9 +5,9 @@
     "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
   },
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/d797f6b3d244/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/b41c8e7b3588/install.sh",
     "sha256": "71d25d14c32edd7adeaf4413ba671b28474ea08e4f6662cb1a73e85ff0eba368",
-    "version": "d797f6b3d244"
+    "version": "b41c8e7b3588"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
