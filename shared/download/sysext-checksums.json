@@ -5,9 +5,9 @@
     "version": "8.12.36"
   },
   "bitwarden": {
-    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.8.0/Bitwarden-2026.8.0-amd64.deb",
-    "sha256": "720ecc392eef1992780af2aaabd4733916807155c8ee217ed67f3f93287bb415",
-    "version": "2026.8.0"
+    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.9.0/Bitwarden-2026.9.0-amd64.deb",
+    "sha256": "51066f8fbaf4546626a2e77a9c0d3abfeef7a13685aca046cb30e07ebf3cf979",
+    "version": "2026.9.0"
   },
   "obsidian": {
     "url": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.13.7/obsidian_1.13.7_amd64.deb",
@@ -20,24 +20,24 @@
     "version": "1.18.2"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_153.0.4234.32-1_amd64.deb",
-    "sha256": "1e7ed943dc84d22036f906691406d2530753df1b4923277234ea1006713b97d1",
-    "version": "153.0.4234.32-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_153.0.4234.48-1_amd64.deb",
+    "sha256": "255359428f05f71cd63692a6265c0e2a745fff08ae0e4261f9cfed51d808102f",
+    "version": "153.0.4234.48-1"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.137.0/code-server_4.137.0_amd64.deb",
-    "sha256": "f0165952d918092eb321a2d4e75a1e7035807d687b698ccda63aea2bfa1c58bc",
-    "version": "4.137.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.138.0/code-server_4.138.0_amd64.deb",
+    "sha256": "044eddb4871c9ab7e3a26e23bb472c8fbfedb2723fa2db7c964d903b491ff643",
+    "version": "4.138.0"
   },
   "coder": {
-    "url": "https://github.com/coder/coder/releases/download/v2.36.5/coder_2.36.5_linux_amd64.deb",
-    "sha256": "b19234a4bc941773e11132030e4b5f057211f8677b05402401b3027bfa2c0684",
-    "version": "2.36.5"
+    "url": "https://github.com/coder/coder/releases/download/v2.36.6/coder_2.36.6_linux_amd64.deb",
+    "sha256": "7c44d865693b6ebdbc6ff41ecfa1de1fea0f13f0e44d2e3d88beb66f814be0d5",
+    "version": "2.36.6"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.22/GitHub-Copilot-linux-x64.deb",
-    "sha256": "dc299f26931cf9621d49ffb840207d428d6041e866c912f9e1e212ef7cc9892b",
-    "version": "1.1.22"
+    "url": "https://github.com/github/app/releases/download/v1.1.23/GitHub-Copilot-linux-x64.deb",
+    "sha256": "1d63672c49623f31b3abc6324a27191cd26ace852bfbd3f1b1159d0b0de90663",
+    "version": "1.1.23"
   },
   "k3s": {
     "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.4%2Bk3s1/k3s",
