@@ -50,9 +50,9 @@
     "version": "11.9.0"
   },
   "paseo": {
-    "url": "https://github.com/getpaseo/paseo/releases/download/v0.8.0/Paseo-0.8.0-amd64.deb",
-    "sha256": "a47d048c31380c52999e5b72513c70c4b8ec62dade51d6f5a682fbc51f2aa99a",
-    "version": "0.8.0"
+    "url": "https://github.com/getpaseo/paseo/releases/download/v0.9.0/Paseo-0.9.0-amd64.deb",
+    "sha256": "c6cf852829ec8b5267e72f2017cf2abcd4653cb2166c043183f3f6590710c12b",
+    "version": "0.9.0"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.9.0/frostyard-pilothouse_0.9.0_amd64.deb",
