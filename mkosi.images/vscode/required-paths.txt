@@ -3,5 +3,5 @@
 /usr/bin/code
 # Desktop integration: launcher entry and app icon (see docs/design/sysexts.md
 # "Desktop Applications in Sysexts")
-/usr/share/applications/code.desktop
+/usr/share/applications/com.microsoft.VSCode.desktop
 /usr/share/pixmaps/vscode.png
