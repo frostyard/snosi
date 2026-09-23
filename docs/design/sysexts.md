@@ -318,7 +318,7 @@ access for a group member, denial for a nonmember, and existing-GID preservation
 
 ### vscode
 - No `mkosi.extra/` — the Microsoft `code` deb installs natively under `/usr` (`/usr/share/code` + `/usr/bin/code` symlink), so no relocation is needed
-- Reuses `shared/packages/vscode/mkosi.postinst.d/vscode.chroot` to add `inode/directory` to code.desktop's MimeType
+- Reuses `shared/packages/vscode/mkosi.postinst.d/vscode.chroot` to add `inode/directory` to `com.microsoft.VSCode.desktop`'s MimeType
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in; the deliverables are the `.desktop` entry and icon (see Desktop Applications in Sysexts below)
 
 ## Version Extraction and Naming

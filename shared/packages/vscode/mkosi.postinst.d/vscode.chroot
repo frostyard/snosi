@@ -10,4 +10,4 @@ else
     SUDO="sudo"
 fi
 
-${SUDO} sed -i 's|^MimeType=application/x-code-workspace;$|MimeType=application/x-code-workspace;inode/directory;|' /usr/share/applications/code.desktop
+${SUDO} sed -i 's|^MimeType=application/x-code-workspace;$|MimeType=application/x-code-workspace;inode/directory;|' /usr/share/applications/com.microsoft.VSCode.desktop
