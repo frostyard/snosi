@@ -3,6 +3,6 @@
   "docker-ce": "5:29.8.1-1~debian.13~trixie",
   "1password-cli": "2.39.0-1",
   "claude-desktop": "2.7032.0",
-  "chatgpt": "26.917.62051",
+  "chatgpt": "26.917.71314",
   "himmelblau": "4.0.4-debian13"
 }
