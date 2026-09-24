@@ -45,14 +45,14 @@
     "version": "1.36.4+k3s1"
   },
   "lemonade": {
-    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v11.9.0/lemonade-server_11.9.0-debian13_amd64.deb",
-    "sha256": "e42b4883e6bb1acec2677ace22071c1bc098ac31264322117b2e4523f347712a",
-    "version": "11.9.0"
+    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v2026.39.1/lemonade-server_2026.39.1-debian13_amd64.deb",
+    "sha256": "cf68457d9a046ba376f3d5363f91a2d81769c9ec8aadb69f1bcfe249b6d7e227",
+    "version": "2026.39.1"
   },
   "paseo": {
-    "url": "https://github.com/getpaseo/paseo/releases/download/v0.9.1/Paseo-0.9.1-amd64.deb",
-    "sha256": "5b7eccf45c8ce14ce058bab1bef4ce7f4c07ad26d33f5755b9f39c76b98f21bd",
-    "version": "0.9.1"
+    "url": "https://github.com/getpaseo/paseo/releases/download/v0.9.2/Paseo-0.9.2-amd64.deb",
+    "sha256": "848a86d424d98e40b3157cfb93804fad93a599b0fdfec1dfffe78cd9e7feeac3",
+    "version": "0.9.2"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.9.0/frostyard-pilothouse_0.9.0_amd64.deb",
