@@ -3,11 +3,13 @@
 
 > **End-of-life notice (2026-09-30):** the native A/B images (`snow-ab`,
 > `snowfield-ab`, `floe-ab`) and installations made with `nbc` are
-> deprecated and will be unavailable after **2026-09-30**. These images will
-> no longer receive updates. Please backup and install the bootc variants
+> deprecated and will no longer receive updates or routine publication after
+> **2026-09-30**. End of support does not itself remove published artifacts;
+> disposal is separately gated. Please back up and install the bootc variants
 > (`snow`, `snowfield`, `floe`) for continued support. See
 > [docs/installing.md](docs/installing.md) and
-> [ADR-0015](docs/adr/0015-retire-native-ab-images-and-nbc-installs.md).
+> [ADR-0015](docs/adr/0015-retire-native-ab-images-and-nbc-installs.md) and
+> proposed [ADR-0017](docs/adr/0017-gate-native-ab-and-nbc-disposal.md).
 
 A bootable container image build system using [mkosi](https://github.com/systemd/mkosi) for creating Debian-based bootable containers and system extensions (sysexts).
 

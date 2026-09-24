@@ -15,6 +15,13 @@ bootc-only publication boundary).
 
 ## Workflows
 
+The [proposed retirement plan](../plans/2026-09-24-native-ab-nbc-retirement-plan.md)
+inventories native OS and NBC workflow consumers before any implementation.
+`native-retention.yml` presently schedules destructive retention for three
+OS prefixes **and** the live Firn ISO; any later pause must isolate the OS
+legs and preserve ISO publication/retention. `test/retirement-plan-test.py`
+in `validate.yml` pins the planning boundary; it is not an R2 inventory.
+
 ### build.yml — Sysext Build and Publish
 
 **Trigger:** Push/PR to main, manual dispatch. Push/PR events ignore

@@ -55,6 +55,13 @@ Snowfield hardware gates remain blocked.
 
 ## Outputs
 
+The supported bootc-only direction and proposed native A/B/nbc disposal
+boundary are tracked in [ADR-0017](../adr/0017-gate-native-ab-and-nbc-disposal.md)
+and its [phased plan](../plans/2026-09-24-native-ab-nbc-retirement-plan.md).
+The native mechanics below document still-present code and historical
+validation, not a new support promise. Firn's ISO shares native-named build
+and signing inputs; they must not be deleted with the A/B profiles.
+
 ### Desktop Images (OCI, pushed to ghcr.io)
 
 | Image | Kernel | Extras |

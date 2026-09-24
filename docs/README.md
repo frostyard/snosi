@@ -35,6 +35,7 @@ states intent; the categories below hold the record.
 - [adr/0014-update-status-pkg-diff.md](adr/0014-update-status-pkg-diff.md) — **Proposed:** `snosi-update-status --pkg-diff` diffs local staged deployments from `packages.txt`; default status stays silent on packages
 - [adr/0015-retire-native-ab-images-and-nbc-installs.md](adr/0015-retire-native-ab-images-and-nbc-installs.md) — native A/B (`-ab`) images and nbc installs reach end of life 2026-09-30; one shared helper drives the motd line, one-time desktop toast, and `snosi-update-status` notice
 - [adr/0016-name-kde-bootc-product-sundog.md](adr/0016-name-kde-bootc-product-sundog.md) — the KDE Plasma product is Sundog, carries Snow's immutable desktop opinions through a Wayland/SDDM/Flatpak translation, and remains bootc-only
+- [adr/0017-gate-native-ab-and-nbc-disposal.md](adr/0017-gate-native-ab-and-nbc-disposal.md) — **Proposed:** separate post-cutoff support from conditional artifact retention and exact-object disposal authorization
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design
@@ -68,6 +69,7 @@ categorization candidate for this directory)*
 - [plans/2026-07-17-native-boot-validation-design.md](plans/2026-07-17-native-boot-validation-design.md) / [plan](plans/2026-07-17-native-boot-validation-plan.md)
 - [plans/2026-07-20-update-api-daemon-design.md](plans/2026-07-20-update-api-daemon-design.md)
 - [plans/2026-08-26-cayo-floe-rename-plan.md](plans/2026-08-26-cayo-floe-rename-plan.md) — ordered server-product rename across snosi and downstream repos
+- [plans/2026-09-24-native-ab-nbc-retirement-plan.md](plans/2026-09-24-native-ab-nbc-retirement-plan.md) — **Proposed:** shared Firn boundary, read-only disposal worksheet, review and production gates
 - [plans/ab-deploy-checklist.md](plans/ab-deploy-checklist.md) — native A/B production-deploy checklist
 
 ### Contracts and runbooks (indexed in place)
