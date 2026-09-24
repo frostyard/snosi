@@ -344,6 +344,9 @@ jobs:
       - name: Test native A/B / nbc end-of-life notice
         run: ./test/eol-notice-test.sh
 
+      - name: Test gated retirement decision and plan
+        run: python3 ./test/retirement-plan-test.py
+
       - name: Test --pkg-diff parser, sidecar, and stager contract
         run: ./test/pkg-diff-test.sh
 

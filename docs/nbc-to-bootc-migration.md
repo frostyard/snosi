@@ -66,10 +66,12 @@ secure fresh installation only after that separately gated path is supported;
 do not treat this migration procedure, ESP repair, or MOK/TPM recovery as a
 conversion method.
 
-Installer media: the bootc-installer live ISO (frostyard forks of
-`bootc-installer`/`fisherman`; ISO built from `frostyard/dakota-iso` — see the
-migration record for build instructions). The installer verifies the image
-with cosign and pins the install to the resolved digest.
+Installer media: the current **Firn** ISO, verified with the signed index and
+ISO checksum as described in [installing.md](installing.md). Firn verifies a
+bootc image against the shipped Cosign key and repository identity and pins
+the install to the resolved digest. The historical migration record describes
+earlier media, not the currently supported installer. A catalog `:latest`
+entry is not itself evidence of a published signed image or live secure install.
 
 ### Disk sizing preconditions
 
@@ -99,11 +101,12 @@ external storage (not the target disk):
 
 Verify the backup is readable from another machine **before** proceeding.
 
-## 4. Reinstall via the bootc installer ISO
+## 4. Reinstall via the Firn ISO
 
-1. Boot the live ISO, run the installer, select the matching image variant
-   (keep snow → snow, snowloaded → snowloaded, etc. so installed package
-   expectations match).
+1. Boot the verified Firn ISO and select the corresponding supported bootc
+   product (`snow`, `snowfield`, `floe`, or `sundog`). Check availability and
+   signed publication before wiping; legacy variants such as snowloaded are
+   not current picker choices.
 2. Let the installer complete (cosign-verified, digest-pinned install to
    disk) and reboot into the installed system.
 3. Complete first-boot setup (user creation).
@@ -193,9 +196,15 @@ the update-test matrix):
   ref/digest (or wait for the *next* published image, which the updater will
   stage normally).
 
-**Backing out of the migration entirely:** reinstall nbc media and restore
-from the same backup set. Treat this as a last resort — it re-enters the
-system being retired.
+**Backing out of the migration entirely:** do not assume old nbc media or
+artifacts remain available. If a verified offline copy was preserved for this
+host, a separately assessed last-resort reinstall with the same backup set
+re-enters an unsupported system; otherwise recover by repairing/repeating the
+Firn bootc install or restoring a pre-migration disk image. Check media,
+recovery credentials and rollback feasibility *before* wiping. Proposed
+[ADR-0017](adr/0017-gate-native-ab-and-nbc-disposal.md) and the
+[disposal plan](plans/2026-09-24-native-ab-nbc-retirement-plan.md) require this
+dependency to be surfaced before any separately authorized deletion.
 
 ## Remaining validation before fleet-wide migration
 

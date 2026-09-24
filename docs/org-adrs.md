@@ -28,6 +28,12 @@ The ones that bind snosi:
 - [ADR-0041 — Retire copilot-review-apply where Snowcat gates review](https://github.com/frostyard/core/blob/main/docs/adr/0041-retire-copilot-review-apply-where-snowcat-gates-review.md) — Copilot review findings route to people; Snosi retains only the `ai-fix-requested` issue handoff
 - [ADR-0046 — Rename the cayo server image to floe](https://github.com/frostyard/core/blob/main/docs/adr/0046-rename-cayo-server-image-to-floe.md) — sequences the bootc trust cutover, requires native reinstall, and freezes the old GHCR and R2 artifacts
 - [ADR-0047 — Retire NBC on a proportional four-user fast path](https://github.com/frostyard/core/blob/main/docs/adr/0047-retire-nbc-on-a-proportional-fast-path.md) — ends native A/B and nbc support and routine publication on 2026-09-30; limits best-effort migration help through 2026-10-31 to four known users without extending support
+- [ADR-0048 — Publish Debian packages to explicit codenames](https://github.com/frostyard/core/blob/main/docs/adr/0048-publish-debian-packages-to-explicit-codenames.md) — independently protects signed `stable` and referenced package bytes through at least 2027-09-30
+- [ADR-0050 — Replace NBC/native-A/B retention date with a completion condition](https://github.com/frostyard/core/blob/main/docs/adr/0050-replace-nbc-retention-date-with-a-completion-condition.md) — Accepted; outside-`stable` artifacts remain subject to four-user disposition and documentation completion
+
+Proposed [ADR-0052 — Remove NBC/native-A/B artifact retention gates](https://github.com/frostyard/core/blob/main/docs/adr/0052-remove-nbc-artifact-retention-gates.md)
+is **not yet operative**. If accepted it removes the NBC-specific retention
+obligation but does not authorize deletion or relax ADR-0048.
 
 When changing behavior covered by one of these, update or supersede the ADR
 in frostyard/core first, then change this repo in the same effort.

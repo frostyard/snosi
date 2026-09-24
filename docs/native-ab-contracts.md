@@ -436,6 +436,14 @@ for the full sizing procedure, including the verity:root ratio rule.
 
 ## 13. Retention
 
+These rules describe the still-present native publication path; the retirement
+decision does not itself delete published objects. Core ADR-0050 currently
+governs outside-`stable` retention; proposed core ADR-0052 would remove the
+NBC/native-A/B-specific post-cutoff retention obligation. Signed `stable` and
+referenced bytes remain separately protected (core ADR-0048). See
+[ADR-0017](adr/0017-gate-native-ab-and-nbc-disposal.md) and its
+[disposal plan](plans/2026-09-24-native-ab-nbc-retirement-plan.md).
+
 - Keep current + previous 2 stable versions per product.
 - Withdrawn versions: retained 90 days.
 - Full installer disk images: retained for **less** time than root update
@@ -445,9 +453,11 @@ for the full sizing procedure, including the verity:root ratio rule.
 
 ## 14. bootc support overlap
 
-bootc publication continues unchanged. No retirement decision before the
-plan's Phase 11 review, and never less than 12 months after the first stable
-native promotion.
+The earlier Phase 11 and 12-month overlap prerequisites were superseded by
+[ADR-0015](adr/0015-retire-native-ab-images-and-nbc-installs.md) and core
+ADR-0047: native A/B and nbc support and routine publication end on
+2026-09-30; bootc publication continues. Disposal is separate and gated by
+proposed ADR-0017 and the linked plan above, not this historical overlap rule.
 
 ## 15. Static publication guard
 

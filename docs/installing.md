@@ -1,8 +1,10 @@
 # Installing published Snosi images
 
-Firn is the supported installer for every published Snosi image family. One
-x86-64 ISO installs both bootc/composefs images and native A/B images. Legacy
-per-family installer paths are not supported alternatives.
+Firn is the supported installer for published Snosi images. The current x86-64
+ISO still offers bootc/composefs and deprecated native A/B entries; the
+proposed [retirement plan](plans/2026-09-24-native-ab-nbc-retirement-plan.md) removes
+only the A/B choices after review. Legacy per-family installer paths are not
+supported alternatives.
 
 Installation erases the selected target disk. Back up anything you need and
 verify that the backup is readable from another machine before booting the
@@ -17,6 +19,13 @@ installer.
 > New installs should use a bootc image; existing native A/B and nbc hosts
 > should back up and reinstall with a bootc image. Affected hosts show an
 > end-of-life notice at login and once per user on the desktop.
+
+> End of support does not itself delete artifacts. Proposed
+> [ADR-0017](adr/0017-gate-native-ab-and-nbc-disposal.md) describes a future
+> no-NBC-specific-retention posture conditional on core ADR-0052 acceptance;
+> core ADR-0050 currently still governs outside-`stable` retention and signed
+> `stable` and referenced deb bytes remain protected separately. Existing
+> debs may stay published without support.
 
 The same Firn image picker offers all current products:
 
@@ -192,11 +201,11 @@ sudo snosi-update-status --check
 systemctl list-timers snosi-sysupdate-stage.timer
 ```
 
-Published native images write a signed update to the inactive root and verity
-slots and apply it at the next natural reboot. `snosi-update-status` reports the
-running, staged, and rollback versions. Use the systemd-boot menu to select the
-previous version when an explicit rollback is needed; boot counting falls back
-automatically after repeated failed boots.
+Until the cutoff, published native images write a signed update to the inactive
+root and verity slots and apply it at the next natural reboot.
+`snosi-update-status` reports the running, staged, and rollback versions. Use
+the systemd-boot menu to select the previous version when an explicit rollback
+is needed; boot counting falls back automatically after repeated failed boots.
 
 For bootc migration-specific backup and failure guidance, see the
 [nbc to bootc migration runbook](nbc-to-bootc-migration.md). The native image,

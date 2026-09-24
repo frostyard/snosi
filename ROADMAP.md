@@ -53,9 +53,14 @@ extend product support and is not a general support promise.
 | **nbc installs** | Legacy A/B-partition installs of the bootc OCI images, without bootc deployment state | GHCR through the legacy nbc updater | **Ends 2026-09-30.** No support or routine nbc package publication after the cutoff. |
 
 GHCR is authoritative for bootc OCI images. R2 remains authoritative for
-sysexts, raw installer images, and the installer ISO. Retained native A/B and
-nbc artifacts after the cutoff are migration and historical recovery material,
-not supported updates.
+sysexts, raw installer images, and the installer ISO. Native A/B and nbc
+artifacts are not supported updates after the cutoff. Proposed
+[ADR-0017](docs/adr/0017-gate-native-ab-and-nbc-disposal.md) and core
+ADR-0052 would remove any NBC/native-A/B-specific post-cutoff artifact-retention
+obligation; **until core ADR-0052 is Accepted**, Accepted core ADR-0050's
+outside-`stable` completion conditions still apply. Already-published debs
+may remain without a support promise. Signed `stable` and every referenced
+package byte remain protected by core ADR-0048, independent of NBC retirement.
 
 **Do not start new work whose value depends on native A/B or nbc support.**
 New capability belongs on the bootc path. Choosing a transport is no longer a
@@ -75,8 +80,9 @@ before the change that depends on them**.
 The cutoff is not self-executing. The public EOL notice and migration
 documentation must remain discoverable, final affected images must carry the
 notice, and retirement work must remove native A/B and nbc from supported
-surfaces while preserving history and verification material. The governing
-sequence is
+surfaces without mutating signed stable or referenced bytes. Retain Git
+history, source tags and provenance manifest; an artifact-retention obligation
+is governed separately as above. The governing sequence is
 [core Plan 0006](https://github.com/frostyard/core/blob/main/docs/plans/0006-nbc-retirement-and-debian-suite-migration-fast-path.md);
 see **Near term**.
 
@@ -101,7 +107,10 @@ worth a contributor's time.
   reinstall guidance are in place. Remaining work follows core Plan 0006:
   deliver the notice through final affected images, stop routine publication
   after the cutoff, remove native A/B and nbc from supported surfaces, and
-  preserve history plus verifiable recovery artifacts. Keep the public EOL and
+  preserve history without assuming all old binaries must be retained. Follow
+  the [gated disposal plan](docs/plans/2026-09-24-native-ab-nbc-retirement-plan.md)
+  for the exact-object inventory, shared ISO exclusion, reviews, and separate
+  deletion authorization. Keep the public EOL and
   migration documentation discoverable. Best-effort help through October 31
   remains limited to the four known users and does not extend support.
 
