@@ -405,6 +405,9 @@ jobs:
         run: sudo ./test/task2-recovery-key-bytes-test.sh
       - name: Validate Task 3 console recovery pump
         run: python3 ./test/task3-console-pump-test.py
+      - name: Validate manual Snow bootc lab manifest contract
+        # Shape and spec fixtures only; no VM, signing credentials or registry writes.
+        run: python3 ./test/bootc-secure-lab-manifest-test.py
       - name: Validate bootc secure package cleanup
         run: ./test/bootc-secure-package-cleanup-test.sh
       - name: Validate bootc container policy

@@ -50,9 +50,11 @@ states intent; the categories below hold the record.
 
 ### Specs
 
-*(none yet — new contracts start from [specs/TEMPLATE.md](specs/TEMPLATE.md);
+- [specs/bootc-secure-lab-handoff.md](specs/bootc-secure-lab-handoff.md) — planned manual Snow bootc Firn install → signed update → rollback manifest and lab evidence contract; fixture coverage is not live proof
+
+New contracts start from [specs/TEMPLATE.md](specs/TEMPLATE.md);
 [native-ab-contracts.md](native-ab-contracts.md) below is spec-natured and a
-categorization candidate for this directory)*
+categorization candidate for this directory.
 
 ### Plans
 

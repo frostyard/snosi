@@ -81,6 +81,8 @@ test/
 ├── bootc-install-test.sh      # Orchestrator script (headless, for CI)
 ├── bootc-update-test.sh       # Update/rollback orchestrator (headless)
 ├── bootc-container-policy-test.sh # OCI policy contract; RUN_LIVE=1 proves signed Floe pull then containers-storage consumption
+├── bootc-secure-lab-manifest.py # Offline shape-only manual preflight for the secure lab handoff manifest
+├── bootc-secure-lab-manifest-test.py # CI fixtures for the secure lab manifest parser and spec obligations
 ├── native-ab-update-test.sh   # Native A/B N through N+3 QEMU test
 ├── native-boot-smoke-test.sh  # boot-validation smoke gate: disk artifact boots to multi-user.target (build-native-images.yml promotion gate)
 ├── native-iso-boot-smoke-test.sh # boot-validation smoke gate: installer ISO reaches a serial login prompt (same promotion gate)
@@ -338,6 +340,19 @@ enforced-Secure-Boot E2E and the lab `run-firn-install-tests` matrix own fresh
 install-and-boot evidence. Snosi workflows must not clone Dakota, pin its
 deleted adapters, or wrap Firn in the retired Task 9 protocol. Snowfield still
 requires its explicit representative Surface hardware gate.
+
+The [manual Snow bootc lab handoff](../specs/bootc-secure-lab-handoff.md) is a
+planned first increment of Firn-native Snosi lifecycle proof: one closed JSON
+manifest with immutable signed N/N+1 refs and a tagged updater target, passed
+unchanged to `test/bootc-secure-lab-manifest.py` before VM creation. The
+`test/bootc-secure-lab-manifest-test.py` fixture runs in `validate.yml` without
+root, network, real artifacts or VM; it pins the parser and essential spec
+obligations only. The downstream manual lab must authenticate both images and
+the ISO, install with Firn, stage through the shipped bootc updater, and prove
+N → N+1 → N across fresh secure TPM-unlocked boots with persistence. Until a
+sanitized lab record tied to the manifest SHA-256 is retained, live signed
+update/rollback are BLOCKED/unproven; neither fixture nor Firn's fresh-install
+E2E is lifecycle evidence. This does not replace the separate Snowfield gate.
 
 ## Task 9 Secure Update Harness
 
