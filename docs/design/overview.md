@@ -427,7 +427,7 @@ gates itself on `rd.etc.overlay`; failure must be fatal because a host-service
 fallback would break true first-boot identity. Its dracut module explicitly
 depends on `systemd-veritysetup`; otherwise `roothash` leaves
 `/dev/mapper/root` unresolved. The image finalizer masks both sysupdate timers
-in `/etc`; this survives first-boot preset population even though initrd PID 1
+in `/etc` on every image (bootc too, which has no default sysupdate target); this survives first-boot preset population even though initrd PID 1
 starts before the real-root preset policy is visible. Administrators can still
 run updates manually or explicitly unmask the timers in the overlay. Separately,
 `shared/outformat/ab-root/tree/usr/lib/systemd/{system,user}/` masks the legacy
