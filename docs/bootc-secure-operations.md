@@ -30,6 +30,14 @@ representative Snowfield hardware results. Do not use an image unless inspection
 the `io.snosi.bootc.secureboot-assembly` label equals `assembly.compatibility`
 in `shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json`.
 
+The [manual Snow bootc lab handoff](specs/bootc-secure-lab-handoff.md) specifies
+a **planned**, non-release-gating first Firn-native N → signed N+1 → rollback N
+proof. Its CI manifest fixture is shape-only; no actual N/N+1 producer or
+retained VM result is supplied here. Update and rollback remain BLOCKED/unproven
+until independent cryptographic, stage, fresh-boot, TPM and persistence evidence
+is retained. This narrow run cannot clear recovery, rotation, reconciliation,
+Snowfield hardware, or production-support gates.
+
 ## Trust Boundaries
 
 The trust chain is Microsoft UEFI db to Debian shim, then an enrolled MOK to
