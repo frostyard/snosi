@@ -281,10 +281,17 @@ grep -q '^disable systemd-sysupdate.timer$' \
     "$ab/tree/usr/lib/systemd/system-preset/00-native-ab.preset"
 grep -q '^disable systemd-sysupdate-reboot.timer$' \
     "$ab/tree/usr/lib/systemd/system-preset/00-native-ab.preset"
-grep -q 'ln -sf /dev/null /etc/systemd/system/systemd-sysupdate.timer' \
-    "$root/shared/outformat/image/finalize/mkosi.finalize.chroot"
-grep -q 'ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-reboot.timer' \
-    "$root/shared/outformat/image/finalize/mkosi.finalize.chroot"
+# Masked on EVERY image (bootc too), not only native: bootc images ship no
+# default sysupdate target, so the upstream preset-enabled timers fail with
+# "No transfer definitions found." Column-0 anchoring rejects a mask nested
+# inside a conditional block.
+for timer in systemd-sysupdate.timer systemd-sysupdate-reboot.timer; do
+    if ! grep -qx "ln -sf /dev/null /etc/systemd/system/$timer" \
+        "$root/shared/outformat/image/finalize/mkosi.finalize.chroot"; then
+        echo "image finalize must mask $timer unconditionally" >&2
+        exit 1
+    fi
+done
 
 # ---------------------------------------------------------------------------
 # Native updater isolation: bootc and nbc units must never activate on native

@@ -36,10 +36,15 @@ echo "uninitialized" > /etc/machine-id
 # knob: our own stager (usr/libexec/snosi-sysupdate-stage) replaces upstream's
 # fetch+apply+immediate-reboot behavior permanently, on every native image,
 # publication-enabled or not.
-if [[ -e /usr/lib/snosi/native-ab ]]; then
-  ln -sf /dev/null /etc/systemd/system/systemd-sysupdate.timer
-  ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-reboot.timer
-fi
+# The masks apply to EVERY image, bootc included: bootc OS updates belong to
+# bootc-update-stage.timer and sysexts update through updex's per-component
+# sysupdate.<name>.d/ directories, so no default /usr/lib/sysupdate.d target
+# exists there and the upstream preset-enabled timers only fail with
+# "No transfer definitions found." (observed on a bootc Floe host). Masks are
+# kept by the enablement strip (presets cannot recreate them), and an /etc
+# mask overrides existing installs' persisted .wants links.
+ln -sf /dev/null /etc/systemd/system/systemd-sysupdate.timer
+ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-reboot.timer
 
 # Native /var factory state: the installer creates a fresh per-machine /var,
 # so nothing written to image /var at build time survives (see CLAUDE.md
