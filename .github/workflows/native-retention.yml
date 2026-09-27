@@ -15,8 +15,14 @@ name: Native Retention
 # never the promotion.
 
 on:
-  schedule:
-    - cron: "15 5 * * *"
+  # Schedule paused until 2026-10-01. The job reads repo-level
+  # secrets.NATIVE_R2_*, which do not exist (the R2 secrets are environment
+  # secrets in native-build/native-promotion), so every scheduled run failed
+  # at the NATIVE_R2_BUCKET guard and deleted nothing. Re-enable only together
+  # with a credential fix and the retirement plan's OS-namespace deletion gate
+  # (docs/plans/2026-09-24-native-ab-nbc-retirement-plan.md).
+  # schedule:
+  #   - cron: "15 5 * * *"
   workflow_dispatch:
     inputs:
       mode:
