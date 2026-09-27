@@ -73,10 +73,14 @@ stale until rechecked. An unresolved disposition or stale last-resort nbc
 reinstall instruction must be surfaced before authorization; under Accepted
 ADR-0050 it remains a retention gate until core ADR-0052 is Accepted.
 
-`native-retention.yml` currently schedules **execute** for floe, snow,
-snowfield OS prefixes **and** the ISO namespace; `retention.sh` keeps live
-plus two older versions (and 24-hour grace), not complete history. Propose
-pausing/reconciling only its three OS legs during review by a separately
+`native-retention.yml` defines **execute** retention for floe, snow,
+snowfield OS prefixes **and** the ISO namespace; its nightly schedule is
+paused until 2026-10-01, and no run has yet reached `retention.sh` because
+the job's repo-level `NATIVE_R2_*` secrets do not exist (they are
+environment secrets only). `retention.sh` keeps live
+plus two older versions (and 24-hour grace), not complete history. Before
+the schedule is restored, fix the credentials and pause or reconcile only its
+three OS legs during review by a separately
 approved workflow change; keep the ISO leg operational. A live retention run
 can change the object list between inventory and approval. Re-list and
 re-verify before any deletion request.

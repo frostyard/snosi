@@ -331,8 +331,12 @@ ISO promotion, `build-installer-iso.yml` runs
 
 ## Retention policy application
 
-`docs/native-ab-contracts.md` §13 is applied nightly by
-`.github/workflows/native-retention.yml` (05:15 UTC, plus manual dispatch
+`docs/native-ab-contracts.md` §13 is applied by
+`.github/workflows/native-retention.yml` (nightly 05:15 UTC schedule paused
+until 2026-10-01 because the job's repo-level `NATIVE_R2_*` secrets do not
+exist; restoring it requires fixing those credentials AND the retirement
+plan's OS-namespace deletion gate. Manual dispatch, which also fails at the
+bucket guard until the credentials exist,
 with an `execute`/`dry-run` mode and a `keep_previous` override), one matrix
 job per namespace (`floe`, `snow`, `snowfield`, and the installer ISO via
 `--dest-path isos/native/v1`), each a thin caller of

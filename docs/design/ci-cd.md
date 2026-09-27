@@ -17,8 +17,9 @@ bootc-only publication boundary).
 
 The [proposed retirement plan](../plans/2026-09-24-native-ab-nbc-retirement-plan.md)
 inventories native OS and NBC workflow consumers before any implementation.
-`native-retention.yml` presently schedules destructive retention for three
-OS prefixes **and** the live Firn ISO; any later pause must isolate the OS
+`native-retention.yml` defines destructive retention for three OS prefixes
+**and** the live Firn ISO (its schedule is paused until 2026-10-01; see
+below); any later OS-only pause must isolate the OS
 legs and preserve ISO publication/retention. `test/retirement-plan-test.py`
 in `validate.yml` pins the planning boundary; it is not an R2 inventory.
 
@@ -350,8 +351,15 @@ silently replaced by the next schedule.
 
 ### native-retention.yml — Nightly R2 Retention
 
-**Trigger:** Scheduled daily at `05:15 UTC`, plus manual dispatch (`mode`:
-`execute` or `dry-run`; `keep_previous` override).
+**Trigger:** Manual dispatch only (`mode`: `execute` or `dry-run`;
+`keep_previous` override). The daily `05:15 UTC` schedule is paused until
+2026-10-01: the job reads repo-level `secrets.NATIVE_R2_*`, but those secrets
+exist only in the `native-build`/`native-promotion` environments, so every
+scheduled run failed at the `NATIVE_R2_BUCKET` guard before `retention.sh`
+ran. Re-enabling needs a credential fix and must respect the retirement
+plan's OS-namespace deletion gate. Manual dispatch remains selectable but
+also fails at the same guard until the credentials exist, so it is not a
+working retention path today.
 
 Applies `docs/native-ab-contracts.md` §13 to the four native namespaces on R2
 (`os/native/v1/{floe,snow,snowfield}/x86-64/` and `isos/native/v1/`), one
