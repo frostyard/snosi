@@ -5,19 +5,19 @@
     "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
   },
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/e53db71afc38/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/0a396a4ee5b5/install.sh",
     "sha256": "f31a38f097f3b5bbfdc110658e4a9876d0c023ccc9ef2e70527f5b8a762e505e",
-    "version": "e53db71afc38"
+    "version": "0a396a4ee5b5"
   },
   "hotedge": {
-    "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/5411c3802803dbaafc6d8014b3a983027dab4704",
-    "sha256": "d31eaba29d43ba257a7454916a4028315cba502dc34cd3add1f2b89f1bba0282",
-    "version": "5411c3802803dbaafc6d8014b3a983027dab4704"
+    "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/8869f0923582404def36f756c1a19fa8bdd3d7cf",
+    "sha256": "7cd0b86fd9de1008b040ca649316e1c02b0122e772fb089f34c5936b84340ad0",
+    "version": "8869f0923582404def36f756c1a19fa8bdd3d7cf"
   },
   "logomenu": {
-    "url": "https://codeload.github.com/frostyard/logomenu/tar.gz/ae0ea469beaa7ce0cdc1fb8be26fc50c13d4fcbf",
-    "sha256": "d11cc67b6003a295d17249b9ab08ea59d5b6a4e2301d784c51b5344e561f10c0",
-    "version": "ae0ea469beaa7ce0cdc1fb8be26fc50c13d4fcbf"
+    "url": "https://codeload.github.com/frostyard/logomenu/tar.gz/b11e1c5fc1d941537387b619515ceaa423e923b5",
+    "sha256": "056eb8915525f10dc3dcb0ec066165a451b9f27dd4d33bc639c3073d8c4c6866",
+    "version": "b11e1c5fc1d941537387b619515ceaa423e923b5"
   },
   "bazaar": {
     "url": "https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/3bb9134985343ffd1993520eb37c90e113bfb09b",
