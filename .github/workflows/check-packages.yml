@@ -121,3 +121,40 @@ jobs:
             **Please verify the builds work before merging.**
           branch: auto-update-packages
           delete-branch: true
+
+  # The secure bootc, production native A/B, and installer compositions take
+  # their whole systemd family from unpinned <pkg>/forky selections, so a Forky
+  # migration changes every later build with no repository change. The
+  # sentinel records the systemd source version whose AGENTS.md recheck
+  # obligations were last discharged; a newer one opens a PR naming them.
+  check-forky-systemd:
+    runs-on: ubuntu-latest
+    # Bound repository-write token exposure if the Debian mirror stalls.
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check Forky systemd source version
+        id: forky
+        # The PR body goes to RUNNER_TEMP so it never lands in the commit.
+        run: ./shared/download/check-forky-systemd.sh "$RUNNER_TEMP/forky-systemd-pr-body.md"
+
+      - name: Create Pull Request
+        if: steps.forky.outputs.has_update == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          # See check-packages above: only a WORKFLOW_PAT-created PR runs the
+          # image builds that exercise the new family.
+          token: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
+          add-paths: shared/download/forky-versions.json
+          commit-message: "chore: acknowledge Forky systemd ${{ steps.forky.outputs.latest }}"
+          title: "chore: Forky systemd moved to ${{ steps.forky.outputs.latest }} (rechecks required)"
+          body-path: ${{ runner.temp }}/forky-systemd-pr-body.md
+          branch: auto-update-forky-systemd
+          delete-branch: true

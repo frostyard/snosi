@@ -7,6 +7,9 @@ on:
       # Image-only direct-download metadata should rebuild OCI profiles, not
       # the base+sysext publishing workflow.
       - "shared/download/image-checksums.json"
+      # The Forky systemd sentinel concerns only the secure OCI, native, and
+      # installer profiles; base and sysexts never install from Forky.
+      - "shared/download/forky-versions.json"
       # These paths cannot affect base/sysext composition or publication.
       - "**/*.md"
       - ".agents/**"
@@ -50,6 +53,7 @@ on:
     branches: [main]
     paths-ignore:
       - "shared/download/image-checksums.json"
+      - "shared/download/forky-versions.json"
       # These paths cannot affect base/sysext composition or publication.
       - "**/*.md"
       - ".agents/**"

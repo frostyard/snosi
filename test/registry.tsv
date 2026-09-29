@@ -48,6 +48,7 @@ brew-installer-retry-test.sh	unwired	-
 build-workflow-permissions-test.py	ci	validate.yml
 floe-ab-install-spike.sh	nested	native-ab-secure-boot-test.sh
 check-dependencies-workflow-token-test.sh	ci	validate.yml
+check-forky-systemd-test.sh	ci	validate.yml
 check-mkosi-pin-test.sh	unwired	-
 check-profile-dependencies-local-mkosi-test.sh	ci	validate.yml
 copilot-automation-secret-test.py	ci	validate.yml

@@ -564,10 +564,105 @@ one explicit metadata file.
 ### package-versions.json
 
 Tracks APT-based external package versions for sysexts (`code`, `docker-ce`,
-`1password-cli`, `claude-desktop`) separately from download checksums. Updated daily by
+`1password-cli`, `claude-desktop`, `chatgpt`, `himmelblau`) separately from
+download checksums. Updated daily by
 `check-packages.yml`. This file is only a rebuild sentinel; it does not pin
 what mkosi installs from APT. Edge is NOT tracked here — it is pinned as a
 direct `.deb` in `sysext-checksums.json` and updated by `check-dependencies.yml`.
+
+### forky-versions.json
+
+Records the Debian Forky `systemd` **source** version whose recheck
+obligations were last discharged. Its shape is `{"systemd": "<version>"}`.
+Unlike `package-versions.json`, it does not trigger a rebuild. It is an
+acknowledgment record, and no build reads it.
+
+**Why it exists.** Four compositions select the whole systemd family as
+unpinned `<pkg>/forky` packages from an isolated low-priority Forky sandbox
+(`shared/{bootc-secure,native-ab-secure}/package-manager/`):
+
+| Composition | Consumers |
+|-------------|-----------|
+| `shared/bootc-secure/mkosi.conf` | floe, snow, snowfield, sundog (bootc) |
+| `shared/native-ab-secure/mkosi.conf` | floe-ab, snow-ab, snowfield-ab |
+| `shared/firn-installer/mkosi.conf` | Firn installer ISO |
+| `shared/native-installer/mkosi.conf` | legacy native installer ISO |
+
+The family therefore changes whenever Debian migrates systemd into Forky, with
+no repository change. AGENTS.md attaches recheck obligations to that event, but
+before this sentinel nothing noticed it. On 2026-09-28 Forky moved
+261.2-1 -> 262-1. The only signal was native A/B CI failing on a hardcoded
+`libsystemd-shared-261.so` (PR 1017). In main run 36479923888, Floe's
+`secure-build` installed and published 262-1, while Snow, Snowfield, and Sundog
+installed 261.2-1 from a lagging deb.debian.org backend.
+
+**How it is checked.** The daily `check-forky-systemd` job in
+`check-packages.yml` runs `shared/download/check-forky-systemd.sh
+"$RUNNER_TEMP/forky-systemd-pr-body.md"`, which:
+
+1. Reads the sentinel and fails closed unless `.systemd` is a string in Debian
+   version grammar (`[epoch:]upstream[-revision]`).
+2. Fetches `https://deb.debian.org/debian/dists/forky/main/source/Sources.gz`
+   through `latest-apt-version.sh`. The helper's `Package:`/`Version:` stanza
+   parsing is identical for a Sources index. Forky's index decompresses to
+   ~60 MiB, over the helper's 50 MiB default, so the script raises only the
+   decompressed cap, to 128 MiB, for this one fetch. The 60-second transfer
+   limit and 50 MiB compressed cap (index ~15 MiB) are unchanged.
+3. Compares with `dpkg --compare-versions`:
+   - **equal:** no-op.
+   - **strictly newer:** writes the PR body, then rewrites the sentinel.
+   - **older:** emits a `::warning::` and changes nothing. The CDN backends
+     sync independently, so an older reading is a stale mirror, not a
+     downgrade.
+4. Emits `has_update`, `previous`, and `latest` step outputs.
+
+Every failure (download, missing `systemd`, a served or committed value
+outside the version grammar) exits non-zero with the sentinel, body, and
+outputs untouched.
+
+The job then opens the PR with `peter-evans/create-pull-request` on branch
+`auto-update-forky-systemd`. `add-paths` limits the commit to the sentinel.
+The body stays in `RUNNER_TEMP` and never enters the commit. The body is a
+checklist of the three obligations:
+
+1. **Task 4 bwrap build/root check.** Build a secure bootc image on the new
+   family, then run `bootc --version` and `bootc container --help` in a bwrap
+   root containing only that output. Record the result as the AGENTS.md Task 4
+   paragraph's "Last repeated" entry.
+2. **Issue 517 dracut drop-in.** Confirm the `gpt-auto-root-luks` udev rules
+   still ship in `90-image-dissect.rules`, and that
+   `shared/bootc-secure/tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf`
+   still installs the file that carries them. The drop-in becomes redundant
+   once the image dracut is 108 or newer.
+3. **NvPCR masks.** Compare the new family's `/usr/lib/nvpcr/*.nvpcr`
+   definitions and writer units against
+   `shared/{bootc-secure,native-ab-secure}/finalize/disable-nvpcr.chroot`.
+   Since 262, the masks are needed because NvPCRs are created in the initrd
+   under a write policy that needs the definitions inside the UKI and a
+   `ukify --sign-initrd-pcrs` initrd policy. Snosi UKIs carry neither.
+
+Merge the PR only after all three pass. Merging records the acknowledgment.
+
+**Seed value.** The committed seed is 262-1. PR 1018 recorded the 262-1
+rechecks in AGENTS.md before this sentinel existed.
+
+**Trigger wiring.** `build-images.yml` and `build-native-images.yml` do NOT
+ignore the sentinel. A `WORKFLOW_PAT`-created PR therefore runs
+`mechanics-build` (all four bootc profiles) and native `build-pr`
+(`test/native-ab-secure-artifact-test.sh`) on the new family. Merging it
+rebuilds the bootc and native images on the acknowledged family, which
+re-converges a mixed run like 36479923888. `build.yml` (sysexts never install
+from Forky) and `test-bootc-secure.yml` (fixture contracts do not read it)
+ignore it. `test/workflow-path-filter-test.sh` pins both choices.
+
+**Test.** `test/check-forky-systemd-test.sh` (validate.yml) drives the script
+through the real helper with a PATH-stubbed curl. It covers the
+newer/unchanged/stale/`dpkg`-ordering/epoch paths, every fail-closed path, and
+a >50 MiB fixture that the helper default rejects and the script accepts. It
+checks that every repository path in the generated body exists. It derives the
+Forky consumer set from every `*.conf` that selects `systemd/forky`, so the
+body must name each consumer. It also pins the job's 15-minute timeout,
+exact `contents`/`pull-requests` write scope, and PR plumbing.
 
 ### update-checksums.sh
 

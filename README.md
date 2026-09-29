@@ -343,6 +343,7 @@ shared/
 │   ├── sysext-checksums.json ← Pinned direct downloads consumed by sysext builds
 │   ├── image-checksums.json  ← Pinned direct downloads consumed by OCI profile builds
 │   ├── package-versions.json ← External APT package version sentinels for sysexts
+│   ├── forky-versions.json   ← Acknowledged Forky systemd family version (recheck sentinel)
 │   └── verified-download.sh  ← verified_download() helper
 ├── kernel/
 │   ├── backports/mkosi.conf   ← Trixie backports kernel + firmware
@@ -715,7 +716,7 @@ installation or the root update service.
 | `build-native-images.yml` | Push/PR/repository dispatch/manual | Builds, verifies, and publishes the native A/B product images |
 | `build-installer-iso.yml` | Relevant main pushes/repository dispatch/manual | Independently builds, boot-verifies, and publishes the Firn installer ISO |
 | `check-dependencies.yml` | Weekly | Checks pinned direct downloads and inline image-tool pins, opens target-specific PRs |
-| `check-packages.yml` | Daily | Checks external APT package versions for sysexts, updates `package-versions.json`, opens PRs |
+| `check-packages.yml` | Daily | Checks external APT package versions for sysexts, updates `package-versions.json`, opens PRs; separately opens a recheck PR when Forky's systemd family moves past `forky-versions.json` |
 | `nightly-compliance.yml` | Nightly / manual | Re-runs secretless security and publication policy contracts to detect compliance drift |
 | `native-retention.yml` | Nightly / manual | Applies the native A/B retention rule (current + previous 2 per product, stale candidates, orphaned history) to R2 via `retention.sh` |
 | `validate.yml` | PR/push | shellcheck (all shebang-discovered scripts, `-S warning`) + guard fixture suites + `mkosi summary` validation for every profile |
@@ -1033,6 +1034,9 @@ shared/download/
 ├── sysext-checksums.json     # Direct downloads consumed by mkosi.images/* sysexts
 ├── image-checksums.json      # Direct downloads consumed by OCI profile builds
 ├── package-versions.json     # APT package version sentinels for sysexts
+├── forky-versions.json       # Acknowledged Forky systemd source version
+├── check-forky-systemd.sh    # Forky systemd sentinel check (check-packages.yml)
+├── latest-apt-version.sh     # Bounded APT index fetch: newest version of a package
 └── update-checksums.sh       # Manual helper to update an existing checksum key
 ```
 
@@ -1155,11 +1159,25 @@ using `GITHUB_TOKEN`.
 
 The `.github/workflows/check-packages.yml` workflow runs daily for external APT
 packages consumed by sysexts (`code`, `docker-ce`, `1password-cli`,
-`claude-desktop`, `chatgpt`). It updates
+`claude-desktop`, `chatgpt`, `himmelblau`). It updates
 `package-versions.json`, which is only a change-detection sentinel; mkosi still
 resolves the package from APT during the sysext build. The job has a 15-minute
 timeout so a stalled external APT request cannot retain repository write
 permissions for GitHub Actions' six-hour default.
+
+The same workflow's `check-forky-systemd` job watches Debian Forky's `systemd`
+source version. The secure bootc, production native A/B, and installer
+compositions take their systemd family from unpinned `<pkg>/forky` selections,
+so that family changes with no repository change. When Forky's version moves
+past `shared/download/forky-versions.json`, the job opens a PR that updates
+the sentinel. Its body lists the recheck obligations from `AGENTS.md`:
+
+- the Task 4 bwrap build/root check;
+- the Issue 517 dracut drop-in;
+- the NvPCR masks.
+
+Merge it only after those rechecks pass. See `docs/design/build-pipeline.md`
+("forky-versions.json").
 
 To check manually or trigger an update PR, use the "Run workflow" button in GitHub Actions.
 

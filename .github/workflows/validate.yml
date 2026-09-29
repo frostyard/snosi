@@ -204,6 +204,14 @@ jobs:
         # malformed gzip rejection, and Debian version selection.
         run: ./test/latest-apt-version-test.sh
 
+      - name: Validate Forky systemd family sentinel
+        # PATH-stubbed Sources.gz fixtures drive check-forky-systemd.sh through
+        # the real bounded helper: newer/unchanged/stale-mirror/fail-closed
+        # paths, the >50 MiB index cap, the PR body's three recheck
+        # obligations against a derived systemd/forky consumer set, and the
+        # check-packages.yml job's token scope and timeout. No root or network.
+        run: ./test/check-forky-systemd-test.sh
+
       - name: Validate update-checksums split-file selection
         # shared/download/update-checksums.sh resolves an existing key by
         # searching sysext-checksums.json then image-checksums.json relative to
