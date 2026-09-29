@@ -66,9 +66,9 @@ and signing inputs; they must not be deleted with the A/B profiles.
 
 | Image | Kernel | Extras |
 |-------|--------|--------|
-| **snow** | backports | GNOME desktop, podman, flatpak |
-| **snowfield** | linux-surface | GNOME desktop (Surface devices) |
-| **sundog** | backports | KDE Plasma Wayland, SDDM/Breeze, Flatpak-first Discover |
+| **snow** | backports | GNOME desktop, podman, flatpak, VM runtime (qemu, OVMF) |
+| **snowfield** | linux-surface | GNOME desktop (Surface devices), same package set as snow |
+| **sundog** | backports | KDE Plasma Wayland, SDDM/Breeze, Flatpak-first Discover, VM runtime (qemu, OVMF) |
 
 Sundog is deliberately bootc-only. It translates Snow's workstation policy to
 Plasma—Wayland as the sole offered session, tuned power policy, Flathub,

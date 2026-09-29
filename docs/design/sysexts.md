@@ -35,7 +35,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **edge** | microsoft-edge-stable | Microsoft Edge browser (pinned .deb via verified_download, relocated from /opt) |
 | **github-copilot** | github | GitHub Copilot desktop app (official pinned .deb via verified_download; Tauri; native /usr layout) |
 | **himmelblau** | himmelblau | Himmelblau Microsoft Entra ID login: PAM/NSS modules, TPM-backed HSM PIN, sshd MFA drop-in, browser SSO broker, o365 launchers (upstream stable Debian 13 apt repo); configured with `snosi-himmelblau-setup` |
-| **incus** | incus | Incus container/VM manager, QEMU/KVM, dnsmasq, OVMF, virt-viewer |
+| **incus** | incus | Incus container/VM manager (Frostyard rebuild of Zabbly's deb, which bundles its own qemu/OVMF/swtpm/virtiofsd under `/usr/incus`), dnsmasq, virt-viewer; still carries unused Debian qemu/OVMF until #1014 |
 | **k3s** | k3s | k3s lightweight Kubernetes node — pinned static binary via `verified_download()` from k3s-io/k3s GitHub releases, dpkg-registered through a build-local stub deb |
 | **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
@@ -841,6 +841,46 @@ closure) and dev (81 of the same). `debdev`, `podman`, `nix`, `pilothouse`,
 empty — they link nothing the accidental desktop had supplied. `paseo` looked
 suspect but had already been republished at 0.7.0 after the base change, so it
 self-healed through an ordinary version bump.
+
+## The VM Runtime Belongs to the Desktop Images (#1011)
+
+Snow (and snowfield, which shares its package set) and sundog ship
+`qemu-system-x86`, `qemu-utils` and `ovmf` next to `systemd-container`
+(`shared/packages/snow/mkosi.conf`, `shared/packages/sundog/mkosi.conf`), so
+`systemd-vmspawn` works with no sysext merged. nsl and mkosi's VM mode depend
+on it. `ovmf` supplies the `/usr/share/qemu/firmware/*.json` descriptors
+vmspawn selects firmware from; with none present,
+`systemd-vmspawn --firmware=describe --secure-boot=no` fails with "Failed to
+find OVMF config". `qemu-utils` and `ovmf` are only Recommends of
+`qemu-system-x86`, and mkosi never installs Recommends, so both are listed.
+Floe has none of this: the incus deb bundles its own qemu, OVMF, swtpm and
+virtiofsd under `/usr/incus`, and `/usr/incus/lib/systemd/incusd` puts
+`/usr/incus/bin` first on `PATH` with `INCUS_EDK2_PATH=/usr/incus/share/qemu/`.
+
+Before this, desktop hosts got a usable qemu only as a side effect of the incus
+sysext, whose `qemu-kvm`/`qemu-utils`/`ovmf`/`ipxe-qemu` packages date from
+when incus came from Debian and are unused by the bundled incus. Snow itself
+shipped only `qemu-system-arm`: `qemu-block-extra` depends on
+`qemu-system-any | qemu-utils`, and apt satisfied that with the aarch64
+emulator. #1013 dropped `qemu-block-extra` and the Gluster, iSCSI and blkio
+driver libraries the `# diffoscope diffs` parity list pinned alongside it
+(`libgfapi0`, `libgfrpc0`, `libgfxdr0`, `libglusterfs0`, `libiscsi7`,
+`libblkio1`); nothing else on snow uses them.
+
+Rejected alternative: a shared `virt` sysext enabled by several updex features
+(`Features=incus nsl`). updex's OR-logic `Features=` handles the download
+side, but keeping qemu out of the incus delta would mean building incus
+against base plus virt, freezing the incus delta against virt's closure (the
+previous section's failure, one layer deeper). systemd-sysext has no
+dependency concept, nsl is not a sysext, and incus does not need the runtime.
+
+Sysexts must not ship Debian qemu. A sysext delta is built against `base`,
+which has no qemu, so any qemu package in it overlays the image's copy on the
+desktops. Once the image moves to a newer qemu point release, the older
+sysext binary would sit over the image's newer `qemu-system-common` and
+`qemu-system-data`, and qemu refuses to load modules from a different build.
+The incus sysext still carries its leftover copy until #1014 removes it; #1015
+adds the build guard.
 
 ## Adding a New Sysext
 
