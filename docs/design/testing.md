@@ -305,16 +305,19 @@ unlock chain:
    discovery.
 2. **udev rule presence (the actual issue-517 defect):** the unpacked
    `usr/lib/udev/rules.d/` must contain a rule with
-   `SYMLINK+="gpt-auto-root-luks"`. systemd 261 moved the gpt-auto symlink
+   `SYMLINK+="gpt-auto-root-luks"`. systemd 258 moved the gpt-auto symlink
    rules from `99-systemd.rules` (in dracut's hardcoded install list) to
-   `90-image-dissect.rules` (not in it), so Forky-family initramfses lost
+   `90-image-dissect.rules`, which Trixie's dracut 106 does not install
+   (dracut-ng added it in 108), so Forky-family initramfses lost
    the only rule that materializes the device the generated unit binds to:
    the generator ran, the unit existed, nothing ever activated it, and
    secure installs died in emergency mode with `cryptsetup.target` reached
    empty. The product fix is the
    `shared/bootc-secure/tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf`
    `install_items+=` drop-in; this assertion fails any future initramfs that
-   regresses it (e.g. dracut or systemd moving the rules again).
+   regresses it (e.g. dracut or systemd moving the rules again). Re-checked
+   for Forky systemd 262-1 on 2026-09-29: the rules file is byte-identical to
+   261.2-1 and this assertion passed on a locally assembled floe UKI.
 
 The fixture mode covers the positive path, the missing-rule diagnosis
 (`FIXTURE_OMIT_GPT_AUTO_RULE=1`), the unpack-failure diagnosis, and that
@@ -638,10 +641,13 @@ N+3 UKI at `+0-3`. Successful boots must not leave TPM setup or NvPCR units
 failed.
 
 Durable test keys belong under `.snosi-private`, not `.mkosi-private`; mkosi
-removes the latter during `clean -ff`. The secure profile masks systemd 261's
-unused NvPCR definitions and product/login writers because its anchor credential
-cannot migrate between PCR signing keys. Signed-PCR LUKS unlock and TPM SRK setup
-remain enabled.
+removes the latter during `clean -ff`. The secure profile masks the unused
+NvPCR definitions and product/login writers. Under systemd 261 the reason was
+that the anchor credential cannot migrate between PCR signing keys. systemd 262
+removed the anchor, but its initrd write-policy NvPCRs need the definitions in
+the UKI plus a `ukify --sign-initrd-pcrs` policy, which snosi UKIs do not carry.
+So the masks remain (re-checked 2026-09-29). Signed-PCR LUKS unlock and TPM SRK
+setup remain enabled.
 
 `native-ab-secure-boot-test.sh` (Phase 5) is a FULLY AUTOMATED end-to-end QEMU
 harness for a production native profile (`PROFILE`, default `snow-ab`; also

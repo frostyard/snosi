@@ -50,6 +50,15 @@ authoritative. The `installer` object defines the requirements below.
 
 - Install provenance records the versions **detected on the medium**, not the
   values declared here, so "what actually ran" is answerable after the fact.
+- **Current consumer (checked 2026-09-29):** Firn, the only supported secure
+  installer (core ADR-0031), implements none of the version policy above. Per
+  firn ADR-0014, `internal/secureboot/contract.go` reads only `schema`, the
+  `installer.oci` capability label and value, the `installer.secure_boot`
+  chain shape, and `mok_certificate`. It never reads
+  `installer.minimum_versions`. The floor-plus-warning behaviour described here
+  belonged to the retired adapter. The systemd floor stays at `261.1-3`. The
+  image's own Forky systemd family is validated separately: most recently
+  `262-1` on 2026-09-29 (see the Task 4 paragraph in `AGENTS.md`).
 - The target disk must be at least `32212254720` bytes (30 GiB). This covers
   the online pull, OCI cache, and deployed composefs state; it is not a claim
   about the eventual steady-state free space.

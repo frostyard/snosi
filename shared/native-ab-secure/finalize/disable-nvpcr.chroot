@@ -5,6 +5,12 @@ set -euo pipefail
 # systemd 261 cannot migrate its NvPCR anchor credential between PCR signing
 # keys. The secure profile does not consume NvPCR attestation, so keep SRK and
 # signed-PCR LUKS support while disabling the stale-anchor consumers.
+#
+# systemd 262 removed the anchor secret. It now requires the definitions inside
+# the UKI and an initrd-phase signed PCR policy (ukify --sign-initrd-pcrs),
+# which these UKIs do not carry, so the masks are still required. The unit and
+# definition names are unchanged. See
+# shared/bootc-secure/finalize/disable-nvpcr.chroot.
 mkdir -p /etc/nvpcr /etc/systemd/system
 for definition in /usr/lib/nvpcr/*.nvpcr; do
     [[ -e "$definition" ]] || continue

@@ -25,8 +25,17 @@ The adapter relies on all of the following observed behavior:
    key, and four PCR policies per signer.
 4. `bootc install to-filesystem` consumes the resulting image as a Type #2 UKI
    deployment without raw `linux` or `initrd` BLS fallback.
-5. Forky `systemd-ukify 261.1-3` ships executable `/usr/bin/ukify` (package
-   SHA-256 `817b8ea0a8953f9fb4b42d91f04ed1511bbb1e76cee466497dfb955cb246aa34`).
+5. Forky `systemd-ukify` ships executable `/usr/bin/ukify`. The package is
+   not version-pinned: the secure fragment selects `systemd-ukify/forky`, so the
+   candidate gets whatever Forky carries at build time, and nothing checks its
+   version or hash. Observed versions: `261.1-3` when this contract was written
+   (package SHA-256
+   `817b8ea0a8953f9fb4b42d91f04ed1511bbb1e76cee466497dfb955cb246aa34`, recorded
+   history only) and `262-1` since 2026-09-28. On 2026-09-29, 262-1's
+   `ukify build` passed local secure assembly plus
+   `test/bootc-secure-artifact-test.sh` on floe. Protected main run
+   36479923888 had already done the same for floe on 2026-09-28. systemd 262
+   changes only `ukify inspect --json` output, which this path does not use.
 6. Direct ukify runs inside the chunked first-pass candidate; that candidate's
    bootc remains storage-digest authority.
 7. Final host byte comparisons depend on first-pass `cp -a` identity.
