@@ -18,9 +18,9 @@ FACTORY_PATHS=(
     libvirt
     profile.d/vte-2.91.sh
     profile.d/vte.csh
-    qemu-ifdown
-    qemu-ifup
 )
+# /etc/qemu-ifup and /etc/qemu-ifdown belong to qemu-system-common, which the
+# base image now ships (#1011), so every product's /etc already has them.
 
 cd "$BUILDROOT/etc"
 for path in "${FACTORY_PATHS[@]}"; do

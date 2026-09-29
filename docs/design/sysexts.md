@@ -36,7 +36,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **gitdesktop** | git-desktop | GitDesktop keyboard-first Git client (pinned upstream .deb via verified_download from theBGuy/GitDesktop GitHub releases; Tauri; native /usr layout) |
 | **github-copilot** | github | GitHub Copilot desktop app (official pinned .deb via verified_download; Tauri; native /usr layout) |
 | **himmelblau** | himmelblau | Himmelblau Microsoft Entra ID login: PAM/NSS modules, TPM-backed HSM PIN, sshd MFA drop-in, browser SSO broker, o365 launchers (upstream stable Debian 13 apt repo); configured with `snosi-himmelblau-setup` |
-| **incus** | incus | Incus container/VM manager (Frostyard rebuild of Zabbly's deb, which bundles its own qemu/OVMF/swtpm/virtiofsd under `/usr/incus`), dnsmasq, virt-viewer; still carries unused Debian qemu/OVMF until #1014 |
+| **incus** | incus | Incus container/VM manager (Frostyard rebuild of Zabbly's deb, which bundles its own qemu/OVMF/swtpm/virtiofsd under `/usr/incus`), dnsmasq, virt-viewer. Ships no Debian qemu (r4, #1014) |
 | **k3s** | k3s | k3s lightweight Kubernetes node — pinned static binary via `verified_download()` from k3s-io/k3s GitHub releases, dpkg-registered through a build-local stub deb |
 | **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
