@@ -82,6 +82,12 @@ desktop-sysext GUI closure—without creating a native A/B channel. See
 |-------|--------|--------|
 | **floe** | backports | Headless server, podman |
 
+Every product also carries the base image's VM runtime (`qemu-system-x86`,
+`qemu-utils`, `ovmf`) alongside `systemd-container`, so `systemd-vmspawn`
+works with no sysext merged. See
+[sysexts.md](sysexts.md#the-vm-runtime-belongs-to-the-base-image-1011) for
+why it lives in base.
+
 ### Native A/B Prototype
 
 The frozen naming/path/policy contract for the eventual production native A/B
@@ -550,7 +556,11 @@ writer units. None of the three production profiles use NvPCR attestation, so th
 shared fragment's finalize
 script masks all packaged NvPCR definitions and the product/login writers while
 retaining SRK setup and signed-PCR LUKS unlock. A fresh new-only build and sole
-fresh-key TPM token booted without those failures.
+fresh-key TPM token booted without those failures. systemd 262 (Forky,
+2026-09-28) replaced the anchor secret with initrd-only write policies. Those
+need the definitions in the UKI and a `ukify --sign-initrd-pcrs` initrd policy,
+neither of which snosi ships, so the same masks stay in place. The unit and
+definition names are unchanged (re-checked 2026-09-29).
 
 The shared `shared/native-ab-secure/mkosi.conf` fragment upgrades the complete exact-version systemd family to Forky
 261+ using its own `SandboxTrees=` APT source pinned at priority 50. The

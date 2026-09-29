@@ -112,11 +112,13 @@ check 'PR body states the version change' body_has '**261.2-1 -> 262-1**'
 check 'PR body names the Task 4 bwrap build/root check' body_has '**Bootc secure composition (Task 4): bwrap build/root check.**'
 check 'PR body names bootc --version and bootc container --help' \
     body_has '`bootc --version` and `bootc container --help`'
+check 'PR body asks for the Task 4 "Last repeated" record' body_has '"Last repeated" entry in AGENTS.md'
 check 'PR body names the Issue 517 dracut drop-in re-check' body_has '**Issue 517: dracut gpt-auto udev drop-in.**'
 check 'PR body names 90-image-dissect.rules' body_has '/usr/lib/udev/rules.d/90-image-dissect.rules'
 check 'PR body names the NvPCR mask re-check' body_has '**NvPCR masks.**'
 check 'PR body names the bootc NvPCR finalize' body_has '`shared/bootc-secure/finalize/disable-nvpcr.chroot`'
 check 'PR body names the native NvPCR finalize' body_has '`shared/native-ab-secure/finalize/disable-nvpcr.chroot`'
+check 'PR body gives the systemd 262 NvPCR reason' body_has '`ukify --sign-initrd-pcrs` initrd policy'
 check 'PR body lists exactly three recheck items' test "$(grep -c '^- \[ \] ' "$work/body.md")" -eq 3
 check 'PR body links the new changelog' \
     body_has 'https://metadata.ftp-master.debian.org/changelogs/main/s/systemd/systemd_262-1_changelog'
@@ -240,6 +242,7 @@ done < <(grep -oE '`[^`]*/mkosi\.conf`' "$work/generated-body.md" | tr -d '`' | 
 agents="$ROOT_DIR/AGENTS.md"
 check 'AGENTS.md keeps the Task 4 bootc secure composition section' grep -qF '**Bootc secure composition (Task 4' "$agents"
 check 'AGENTS.md keeps the Task 4 build/root recheck rule' grep -qF 'Repeat that build/root check when either the' "$agents"
+check 'AGENTS.md keeps the Task 4 "Last repeated" record' grep -qF '**Last repeated' "$agents"
 check 'AGENTS.md keeps the Issue 517 section' grep -qF '**Issue 517' "$agents"
 check 'AGENTS.md documents the Forky systemd sentinel' grep -qF 'shared/download/forky-versions.json' "$agents"
 

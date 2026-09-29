@@ -39,8 +39,8 @@ grep -Fq 'Error: failed to unpack the UKI initramfs with lsinitrd' \
 grep -Fq "ExecStart=/usr/bin/systemd-cryptsetup attach 'root' '/dev/gpt-auto-root-luks' '' ''" \
     "$artifact_validator"
 
-# Issue 517: systemd 261 moved the gpt-auto-root/-luks udev symlink rules into
-# 90-image-dissect.rules, which dracut does not install by default. The secure
+# Issue 517: systemd 258 moved the gpt-auto-root/-luks udev symlink rules into
+# 90-image-dissect.rules, which Trixie's dracut 106 does not install. The secure
 # tree must force it into the initramfs, and the artifact validator must fail
 # any initramfs that cannot create /dev/gpt-auto-root-luks.
 gpt_auto_dracut_conf="$tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf"
@@ -83,7 +83,8 @@ done
 # "Failed to acquire anchor secret: Object is remote" -- and they cannot be
 # masked because SRK setup is required. Removing the DEFINITIONS is what stops
 # anything asking for an anchor at all, which is why native does both and this
-# must too.
+# must too. systemd 262 removed the anchor but still needs the masks: see the
+# finalize script.
 nvpcr_finalize="$root/shared/bootc-secure/finalize/disable-nvpcr.chroot"
 [[ -x "$nvpcr_finalize" ]] || {
     echo "bootc secure must ship an executable disable-nvpcr finalize script" >&2

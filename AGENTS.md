@@ -49,25 +49,63 @@ certificate and RSA-2048 PCR public key at `/usr/lib/snosi/`. Its schema-1
 and installer tasks; schema 1 pins its encrypted root mapper as `root`, which
 the reconciler and deferred installer must use. It is not a signed-UKI production path: do not add private
 key material or claim Secure Boot support until Tasks 5 onward pass.
-Task 8a extends schema 1's additive `installer` object with the exact installer
-contract now consumed by Firn: pinned versions, 1 GiB ESP and 30
+Task 8a extends schema 1's additive `installer` object with the installer
+contract: pinned versions, 1 GiB ESP and 30
 GiB online-install disk floors, immutable Cosign acceptance, DPS LUKS2/Btrfs,
 Type #2-only bootc options, MOK/TPM/recovery policy, provenance, restage, and
 ESP repair. `/usr/lib/snosi/bootc-secure.json` is the machine-readable
 installer contract; `docs/bootc-secure-install-contract.md` retains the retired
-Task 9 adapter protocol for compatibility and fixture history.
+Task 9 adapter protocol for compatibility and fixture history. **Firn reads
+only a small part of this contract** (firn ADR-0014,
+`internal/secureboot/contract.go`, checked 2026-09-29): `schema == 1`, the
+`installer.oci` capability label and value, the `installer.secure_boot`
+shim/second-stage/MokManager shape, and `mok_certificate`. It never reads
+`installer.minimum_versions`. So `minimum_versions.systemd` (`261.1-3`) is a
+documented floor that no installer enforces. Within snosi, only
+`minimum_versions.bootc` has a machine consumer: `compatibility.sh` and
+`assemble-uki.sh` require it to equal `assembly.bootc_version`. The systemd
+floor stays at `261.1-3`, which 262-1 satisfies. Record newly validated systemd
+versions in the Task 4 paragraph below, not by raising the floor.
 The Forky systemd family is a deliberate cross-suite compatibility risk with
 Frostyard's bootc/libostree debs, not an inferred package guarantee. Task 4
 validated one real Cayo build with bootc 1.16.3, libostree 2026.2, and systemd
 261.1-3, then ran `bootc --version` and `bootc container --help` in a bwrap
 root containing only that output. Repeat that build/root check when either the
 Frostyard debs or the selected systemd family changes. The Forky systemd family
-sentinel below detects the second case.
+sentinel below detects the second case. **Last repeated
+2026-09-29 for Forky's 261.2-1 → 262-1 move:** a local `just floe` build installed
+bootc 1.16.8-frostyard202608140040, libostree 2026.3-frostyard202608140040,
+and the whole systemd family at 262-1. `bootc --version`, `bootc container
+--help`, the hidden `compute-composefs-digest-from-storage --help`, and
+`ostree --version` all ran in a bwrap root containing only `output/floe`, and
+`ldd` found no unresolved libraries for bootc, ostree, or libostree. The full
+secure assembly (`buildah-package.sh` with `SNOSI_BOOTC_SECURE=1` and
+disposable MOK/PCR credentials) and `test/bootc-secure-artifact-test.sh` with
+`SNOSI_REQUIRE_GPT_AUTO_VALIDATION=1` then passed on that output. CI had already published one 262-based
+image: main run 36479923888 on 2026-09-28 built floe `secure-build` against
+262-1, which passed artifact validation and was promoted, while the snow,
+snowfield, and sundog builds in the same run still got 261.2-1 from the mirror.
+None of these checks boots a 262 image. That proof belongs to Firn's lab matrix
+(core ADR-0031).
+The NvPCR masks (`disable-nvpcr.chroot` in both `shared/bootc-secure` and
+`shared/native-ab-secure`) still apply on 262. `systemd-tpm` 262-1 ships the
+same `/usr/lib/nvpcr/{hardware,login,verity}.nvpcr` (plus `cryptsetup.nvpcr` in
+`systemd-cryptsetup`) and byte-identical `systemd-pcrproduct.service`,
+`systemd-pcrlogin@.service`, and `systemd-tpm2-setup{,-early}.service`. The one
+data change is `hardware.nvpcr` gaining `"orderly": false`. The reason for the
+masks has changed, though: 262 has no anchor secret. It creates NvPCRs in the
+initrd under a write policy, which needs the definitions inside the UKI and a
+`ukify --sign-initrd-pcrs` initrd policy. Snosi's UKIs carry neither (and the
+pinned mkosi does not pass that flag). Per the 262 NEWS, an NvPCR that was
+not initialized in the initrd fails at runtime when something tries to extend
+it, so unmasked consumers would be expected to fail on every boot. That is
+inferred from the NEWS and source, not observed on a booted 262 image.
 **Issue 517 (2026-08-06) — Forky udev moved the gpt-auto symlink rules out of
 dracut's reach:** systemd 257 shipped the udev rules creating
 `/dev/gpt-auto-root[-luks]` in `99-systemd.rules` (which dracut installs by
-name); systemd 261 moved them into `90-image-dissect.rules`, which dracut
-106's hardcoded rules list does not install. The initrd's
+name); by Forky's systemd 261 they had moved into `90-image-dissect.rules`
+(upstream split them in 258), which dracut 106's hardcoded rules list does not
+install. The initrd's
 `systemd-gpt-auto-generator` still unconditionally writes
 `systemd-cryptsetup@root.service` bound to `/dev/gpt-auto-root-luks` (the
 generator does not probe the disk; udev's blkid builtin sets
@@ -82,9 +120,18 @@ initramfs validation now fails any UKI whose unpacked initramfs has no udev
 rule creating `gpt-auto-root-luks`, and `test/bootc-secure-static-test.sh`
 pins the drop-in. Native A/B profiles are unaffected (verity root via UKI
 `roothash=`, explicit `systemd-cryptsetup attach` for `var` — no gpt-auto
-dependency). Upstream dracut-ng (as of 2026-08) still lacks
-`90-image-dissect.rules` in `01systemd-udevd`; re-check this drop-in when
-dracut or the Forky systemd family changes.
+dependency). Two corrections from the 2026-09-29 re-check. First, upstream
+dracut-ng has installed `90-image-dissect.rules` since release **108**
+(2025-08-04, commit fa17b6fb0e in `modules.d/11systemd-udevd`; the
+`01systemd-udevd` module was renumbered in 2025-06). Second, upstream split
+the rules out in systemd **258**; snosi first saw it on the 257 → 261 jump. The
+drop-in stays because the images use Trixie's dracut 106. It becomes redundant,
+but not harmful, once the image dracut is 108 or newer. Forky's systemd 262-1
+ships `90-image-dissect.rules` in `udev`, byte-identical to 261.2-1. The 262
+floe initramfs contains that rule file and `libsystemd-shared-262.so`, and
+`test/bootc-secure-artifact-test.sh`'s gpt-auto validation passed on the
+assembled UKI. Re-check this drop-in when dracut or the Forky systemd family
+changes.
 
 **Forky systemd family sentinel (2026-09-29):** the `<pkg>/forky`
 selections in `shared/bootc-secure/mkosi.conf`,
@@ -93,9 +140,8 @@ selections in `shared/bootc-secure/mkosi.conf`,
 floats with Forky and changes with no repository change. Before this sentinel,
 nothing detected such a change. Forky moved 261.2-1 -> 262-1 on 2026-09-28, and
 the only signal was native A/B CI failing on a hardcoded
-`libsystemd-shared-261.so` (PR 1017). Main run 36479923888 published Floe on
-262-1, while Snow, Snowfield, and Sundog got 261.2-1 from a lagging
-deb.debian.org backend in the same run.
+`libsystemd-shared-261.so` (PR 1017). The same move produced the mixed-version
+run 36479923888 described in the Task 4 paragraph above.
 `shared/download/forky-versions.json` records the `systemd` SOURCE version
 whose recheck obligations were last discharged. It pins nothing, and no build
 reads it. The daily `check-forky-systemd` job in `check-packages.yml` runs
@@ -107,15 +153,17 @@ sentinel and opens a PR on branch `auto-update-forky-systemd`. The PR body
 lists the obligations as a checklist. An OLDER reading means a stale CDN
 backend, so the job warns and never opens a downgrade PR. Merge that PR only
 after all three rechecks pass on the new version:
-(1) the Task 4 bwrap build/root check above;
+(1) the Task 4 bwrap build/root check above, recorded as its "Last repeated"
+entry;
 (2) the Issue 517 dracut drop-in re-check above;
 (3) the NvPCR masks in
-`shared/{bootc-secure,native-ab-secure}/finalize/disable-nvpcr.chroot`. The
-masks exist because systemd 261 cannot migrate its NvPCR anchor between PCR
-signing keys. Confirm that still holds, and that no new
-`/usr/lib/nvpcr/*.nvpcr` definition or NvPCR writer unit escapes the masks.
-The sentinel was seeded at 261.2-1, not 262-1, because no 262-1 recheck is
-recorded, so the first scheduled run opens that PR. `build-images.yml` and
+`shared/{bootc-secure,native-ab-secure}/finalize/disable-nvpcr.chroot`. Since
+262, the masks exist because NvPCRs are created in the initrd under a write
+policy that snosi UKIs cannot satisfy (see the Task 4 paragraph above). Confirm
+that still holds, that the definition and unit names are unchanged, and that no
+new `/usr/lib/nvpcr/*.nvpcr` definition or NvPCR writer unit escapes the masks.
+The sentinel is seeded at 262-1, the version whose rechecks PR 1018 recorded.
+`build-images.yml` and
 `build-native-images.yml` deliberately trigger on the sentinel. Its PR builds
 the secure profiles on the new family, and merging it rebuilds them on the
 acknowledged one. `build.yml` and `test-bootc-secure.yml` ignore the sentinel,
@@ -155,8 +203,13 @@ in-root kernel/initrd paths, copies their bytes to mode-0644 `linux`/`initrd`
 work inputs, and passes only those fixed work paths to ukify. It compares both
 work inputs against the canonical protected rootfs originals after execution,
 then compares final UKI sections against those same originals. The candidate
-supplies pinned systemd-ukify 261.1-3 and its dependencies; no host ukify is
-accepted. The disposable container and mounts never enter a layer. Host
+supplies its own `systemd-ukify` and dependencies; no host ukify is accepted.
+That ukify is NOT version-pinned. It is whatever `systemd-ukify/forky`
+resolves to at build time: 261.1-3 when Task 5 was written, 262-1 as of
+2026-09-28. Nothing checks its version or package hash. The 262 NEWS changes
+`ukify inspect --json` output, which snosi does not consume; `ukify build`
+worked unchanged in local and CI 262 assembly on 2026-09-28/29. The disposable
+container and mounts never enter a layer. Host
 `.linux`/`.initrd` byte checks remain valid because first-pass packaging is a
 byte-identical `cp -a` snapshot.
 Candidate execution drops all Linux capabilities and runs as the common numeric
@@ -310,7 +363,7 @@ installer and assembly contracts rather than replacing them. Operations and
 documentation contracts are complete; live release evidence remains BLOCKED.
 
 **Persistent custom kernel arguments (`snosi-kargs`, issue 601, 2026-08-08):**
-secure bootc and production native A/B profiles ship systemd 261's addon stub,
+secure bootc and production native A/B profiles ship Forky systemd's (261+) addon stub,
 `systemd-ukify`, `sbsigntool`, and OpenSSL. The base
 `usr/bin/snosi-kargs` CLI stores state and optional machine-local signing
 material under `/var/lib/snosi/kargs/`, builds an addon by invoking `ukify
@@ -830,6 +883,33 @@ manifest minus its published `.raw`) with every other pre-change sysext's
 current manifest; for #771 that was exactly `incus` and `dev`. Full pattern
 and the procedure: `docs/design/sysexts.md` "A Sysext Delta Is Only Valid
 Against the Base It Was Built On".
+
+**The base image owns the VM runtime (#1011, 2026-09-29):**
+`mkosi.images/base/mkosi.conf` ships `qemu-system-x86`, `qemu-utils` and
+`ovmf` next to `virtiofsd`, so every product's `systemd-vmspawn` (nsl, mkosi's
+VM mode) works with no sysext merged; `ovmf` provides the
+`/usr/share/qemu/firmware/*.json` descriptors vmspawn picks firmware from.
+`qemu-utils` and `ovmf` are only Recommends of `qemu-system-x86`, which mkosi
+never installs, so both are listed. It is in base rather than the product
+sets because base is every sysext's build base: a sysext that pulls Debian
+qemu has it omitted from its delta, so it cannot overlay the image's copy
+(after the next qemu point release, a stale sysext binary would run against
+the image's newer `qemu-system-common`/`qemu-system-data` modules). Incus
+ignores it: the Frostyard incus deb bundles its own qemu/OVMF/swtpm/virtiofsd
+under `/usr/incus`. Deltas published before this change still carry qemu (the
+incus sysext's pre-Zabbly leftovers go in #1014; the build guard is #1015),
+and removing any of these packages from base later is a base shrink requiring
+`SYSEXT_REVISION` bumps. Growth has a mirror-image effect: base gained 24
+packages, and the next incus, dev and podman publishes omit the ones they
+used to carry, so incus must not republish until hosts run the new images
+(an older floe or sundog would lack its bundled qemu's libraries). Until this change, hosts got x86 qemu only from the
+incus sysext, and snow itself shipped just `qemu-system-arm`, which apt
+picked for `qemu-block-extra`'s `qemu-system-any` dependency (dropped with the
+Gluster/iSCSI/blkio driver libraries the diffoscope parity list pinned for
+it, #1013). A shared `virt` sysext enabled by multiple updex features was
+rejected: it would freeze incus's delta against a second independently
+published base. Full rationale: `docs/design/sysexts.md` "The VM Runtime
+Belongs to the Base Image".
 
 Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var` at runtime. Configs needed in `/etc` must be:
 

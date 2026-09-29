@@ -58,8 +58,8 @@ validate_gpt_auto_cryptsetup() (
     }
 
     # The generated unit binds to /dev/gpt-auto-root-luks, which only a udev
-    # rule creates. systemd 261 moved that rule from 99-systemd.rules into
-    # 90-image-dissect.rules, which dracut does not install by default; a
+    # rule creates. systemd 258 moved that rule from 99-systemd.rules into
+    # 90-image-dissect.rules, which Trixie's dracut 106 does not install; a
     # dracut.conf.d drop-in in shared/bootc-secure/tree forces it in. Without
     # it the unit sits unactivated and boot dies in emergency mode (issue 517).
     grep -Frqs 'SYMLINK+="gpt-auto-root-luks"' "$initrd_root/usr/lib/udev/rules.d" || {

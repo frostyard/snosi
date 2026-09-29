@@ -627,20 +627,24 @@ checklist of the three obligations:
 
 1. **Task 4 bwrap build/root check.** Build a secure bootc image on the new
    family, then run `bootc --version` and `bootc container --help` in a bwrap
-   root containing only that output.
+   root containing only that output. Record the result as the AGENTS.md Task 4
+   paragraph's "Last repeated" entry.
 2. **Issue 517 dracut drop-in.** Confirm the `gpt-auto-root-luks` udev rules
    still ship in `90-image-dissect.rules`, and that
    `shared/bootc-secure/tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf`
-   still installs the file that carries them.
+   still installs the file that carries them. The drop-in becomes redundant
+   once the image dracut is 108 or newer.
 3. **NvPCR masks.** Compare the new family's `/usr/lib/nvpcr/*.nvpcr`
    definitions and writer units against
    `shared/{bootc-secure,native-ab-secure}/finalize/disable-nvpcr.chroot`.
+   Since 262, the masks are needed because NvPCRs are created in the initrd
+   under a write policy that needs the definitions inside the UKI and a
+   `ukify --sign-initrd-pcrs` initrd policy. Snosi UKIs carry neither.
 
 Merge the PR only after all three pass. Merging records the acknowledgment.
 
-**Seed value.** The committed seed is 261.2-1, not the current 262-1,
-because no 262-1 recheck is recorded. The first scheduled run therefore opens
-the 262-1 recheck PR.
+**Seed value.** The committed seed is 262-1. PR 1018 recorded the 262-1
+rechecks in AGENTS.md before this sentinel existed.
 
 **Trigger wiring.** `build-images.yml` and `build-native-images.yml` do NOT
 ignore the sentinel. A `WORKFLOW_PAT`-created PR therefore runs
