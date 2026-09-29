@@ -60,7 +60,14 @@ lsinitrd "$initrd" > "$listing"
 
 grep -q 'usr/bin/systemd-cryptsetup$' "$listing"
 grep -q 'libcryptsetup-token-systemd-tpm2\.so$' "$listing"
-grep -q 'libsystemd-shared-261\.so$' "$listing"
+# The private library is named after the systemd major version, which moves
+# with the Forky family (261 -> 262 on 2026-09-28), so derive it from the
+# manifest rather than pinning it.
+systemd_major=${systemd_version%%[!0-9]*}
+if ! grep -q "libsystemd-shared-${systemd_major}\.so$" "$listing"; then
+    echo "Error: initrd lacks libsystemd-shared-${systemd_major}.so for systemd $systemd_version" >&2
+    exit 1
+fi
 grep -q 'libtss2-esys\.so' "$listing"
 if grep -q 'libsystemd-shared-257\.so' "$listing"; then
     echo "Error: systemd 257 private library leaked into the secure initrd" >&2
