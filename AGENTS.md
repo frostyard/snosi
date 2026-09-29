@@ -854,14 +854,23 @@ qemu has it omitted from its delta, so it cannot overlay the image's copy
 (after the next qemu point release, a stale sysext binary would run against
 the image's newer `qemu-system-common`/`qemu-system-data` modules). Incus
 ignores it: the Frostyard incus deb bundles its own qemu/OVMF/swtpm/virtiofsd
-under `/usr/incus`. Deltas published before this change still carry qemu (the
-incus sysext's pre-Zabbly leftovers go in #1014; the build guard is #1015),
-and removing any of these packages from base later is a base shrink requiring
+under `/usr/incus`, and incus r4 (#1014) dropped the Debian `qemu-kvm`/
+`qemu-utils`/`ovmf`/`ipxe-qemu`/`qemu-system-gui`/`qemu-system-modules-spice`
+left over from when incus came from Debian (its r3 delta overlaid base's copy).
+**Every sysext runs `shared/sysext/finalize/sysext-no-base-owned.sh`** (#1015),
+which fails the build if the delta contains any glob in
+`shared/sysext/base-owned-paths.txt` (qemu binaries, modules, firmware); a hit
+means the sysext pulled a family member base lacks, apt upgraded a base
+package into the delta, or base dropped it -- re-triage, never delete the
+pattern. `test/sysext-no-base-owned-test.sh` (validate.yml) fixtures it and
+`test/sysext-authoring-contract-test.sh` requires the finalizer. Removing any
+of these packages from base later is a base shrink requiring
 `SYSEXT_REVISION` bumps. Growth has a mirror-image effect: base gained 24
 packages, and the next incus, dev and podman publishes omit the ones they
 used to carry, so incus must not republish until hosts run the new images
-(an older floe or sundog would lack its bundled qemu's libraries). Until this change, hosts got x86 qemu only from the
-incus sysext, and snow itself shipped just `qemu-system-arm`, which apt
+(an older floe or sundog would lack its bundled qemu's libraries). Until this
+change, hosts got x86 qemu only from the incus sysext's leftovers, and snow
+itself shipped just `qemu-system-arm`, which apt
 picked for `qemu-block-extra`'s `qemu-system-any` dependency (dropped with the
 Gluster/iSCSI/blkio driver libraries the diffoscope parity list pinned for
 it, #1013). A shared `virt` sysext enabled by multiple updex features was

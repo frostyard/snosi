@@ -332,6 +332,9 @@ jobs:
       - name: Test gui-base sysext divergent-lib contract
         run: ./test/sysext-divergent-libs-test.sh
 
+      - name: Test base-owned VM runtime sysext guard
+        run: ./test/sysext-no-base-owned-test.sh
+
       - name: Test Sundog KDE bootc profile contract
         run: ./test/sundog-profile-test.sh
 
