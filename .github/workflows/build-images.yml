@@ -12,6 +12,9 @@ on:
       - "shared/download/package-versions.json"
       - "latest-versions.txt"
       - "shared/download/sysext-checksums.json"
+      # shared/download/forky-versions.json is deliberately NOT ignored: its
+      # PR builds the secure profiles on the new Forky systemd family, and
+      # merging it rebuilds these images on the acknowledged family.
       # Documentation, agent context, and the standalone redirect worker do
       # not change image inputs or the image validation scripts.
       - "**/*.md"
@@ -56,6 +59,9 @@ on:
       - "shared/download/package-versions.json"
       - "latest-versions.txt"
       - "shared/download/sysext-checksums.json"
+      # shared/download/forky-versions.json is deliberately NOT ignored: its
+      # PR builds the secure profiles on the new Forky systemd family, and
+      # merging it rebuilds these images on the acknowledged family.
       # Documentation, agent context, and the standalone redirect worker do
       # not change image inputs or the image validation scripts.
       - "**/*.md"

@@ -1380,6 +1380,15 @@ Docker, 1Password) are tracked separately in
 `shared/download/package-versions.json`, checked daily by `check-packages.yml`.
 This file is only a rebuild sentinel; mkosi still resolves packages from APT.
 
+`shared/download/forky-versions.json` records the Debian Forky `systemd`
+source version whose AGENTS.md recheck obligations were last discharged. The
+secure bootc, production native A/B, and installer compositions take the whole
+systemd family from unpinned `<pkg>/forky` selections. `check-packages.yml`'s
+`check-forky-systemd` job opens a PR when Forky's version moves past the
+sentinel, and the PR body lists the three rechecks (Task 4 bwrap build/root
+check, Issue 517 dracut drop-in, NvPCR masks). See
+[build-pipeline.md](build-pipeline.md) "forky-versions.json".
+
 Current sysext checksum-managed downloads are 1Password, Bitwarden,
 Microsoft Edge, code-server, coder, GitHub Copilot, Lemonade, Paseo, Pilothouse,
 and Sunshine. Current image checksum-managed downloads are Homebrew
@@ -1486,7 +1495,7 @@ Target-image APT repositories are configured in `mkosi.sandbox/etc/apt/` with GP
 | `build-installer-iso.yml` | Relevant main pushes/repository_dispatch/dispatch | Firn installer ISO build, public-origin boot verification, and protected index promotion |
 | `deploy-native-installer-redirect.yml` | Main changes under the Worker / dispatch | Test and deploy the R2-index-derived stable installer redirect |
 | `check-dependencies.yml` | Weekly (Mon 9am UTC) | Check external downloads and inline OCI tool pins, create PRs |
-| `check-packages.yml` | Daily (8am UTC) | Check APT package version updates, create PRs |
+| `check-packages.yml` | Daily (8am UTC) | Check APT package version updates and the Forky systemd family sentinel, create PRs |
 | `validate.yml` | PR/push/dispatch | shellcheck + mkosi summary validation + profile dependency guard |
 | `test-install.yml` | Manual dispatch | Bootc install test in QEMU/KVM |
 | `scorecard.yml` | Weekly | OpenSSF supply-chain security analysis |

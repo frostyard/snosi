@@ -181,6 +181,20 @@ for event in push pull_request; do
         "$WORKFLOWS/test-bootc-secure.yml" "$event" '**/*.md'
 done
 
+# The Forky systemd sentinel (shared/download/forky-versions.json) records an
+# acknowledged family version that no build reads. Its PR must still build the
+# secure bootc and native profiles on the new family, and merging it rebuilds
+# them on the acknowledged family. Sysexts never install from Forky.
+forky_sentinel='shared/download/forky-versions.json'
+for event in push pull_request; do
+    for name in build-images.yml build-native-images.yml; do
+        assert_not_ignored "$name $event still triggers on the Forky systemd sentinel" \
+            "$WORKFLOWS/$name" "$event" "$forky_sentinel"
+    done
+    assert_ignored "build.yml $event ignores the Forky systemd sentinel" \
+        "$WORKFLOWS/build.yml" "$event" "$forky_sentinel"
+done
+
 if [[ -f "$WORKFLOWS/claude.yml" || -f "$WORKFLOWS/claude-code-review.yml" ]]; then
     pass 'ACMM GitHub Actions AI integration workflow exists'
 else
@@ -202,6 +216,7 @@ bootc_contract_ignored_paths=(
     'latest-versions.txt'
     'shared/download/sysext-checksums.json'
     'shared/download/image-checksums.json'
+    'shared/download/forky-versions.json'
 )
 for event in push pull_request; do
     for path in "${bootc_contract_ignored_paths[@]}"; do

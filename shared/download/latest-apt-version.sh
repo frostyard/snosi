@@ -1,9 +1,11 @@
 #!/bin/bash
 # Fetch a bounded APT Packages.gz index and print the newest package version.
+# A Sources.gz index works unchanged (same Package:/Version: stanza fields), in
+# which case the version is the source package's.
 set -euo pipefail
 
 usage() {
-    echo "usage: $0 <Packages.gz URL> <package>" >&2
+    echo "usage: $0 <Packages.gz or Sources.gz URL> <package>" >&2
     exit 2
 }
 

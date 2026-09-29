@@ -35,7 +35,8 @@ on:
       - ".github/renovate.json5"
       - ".github/copilot-instructions.md"
       - ".github/pull_request_template.md"
-      # Agent context, top-level docs, and sysext dependency metadata feed no
+      # Agent context, top-level docs, and sysext/image dependency metadata
+      # (including the Forky systemd sentinel, which nothing reads) feed no
       # bootc secure contract. docs/** stays a trigger: bootc-secure-docs-test
       # and the installer-contract test validate docs/bootc-secure-*.md.
       - ".agents/**"
@@ -50,6 +51,7 @@ on:
       - "latest-versions.txt"
       - "shared/download/sysext-checksums.json"
       - "shared/download/image-checksums.json"
+      - "shared/download/forky-versions.json"
   push:
     branches: [main]
     paths-ignore:
@@ -82,7 +84,8 @@ on:
       - ".github/renovate.json5"
       - ".github/copilot-instructions.md"
       - ".github/pull_request_template.md"
-      # Agent context, top-level docs, and sysext dependency metadata feed no
+      # Agent context, top-level docs, and sysext/image dependency metadata
+      # (including the Forky systemd sentinel, which nothing reads) feed no
       # bootc secure contract. docs/** stays a trigger: bootc-secure-docs-test
       # and the installer-contract test validate docs/bootc-secure-*.md.
       - ".agents/**"
@@ -97,6 +100,7 @@ on:
       - "latest-versions.txt"
       - "shared/download/sysext-checksums.json"
       - "shared/download/image-checksums.json"
+      - "shared/download/forky-versions.json"
   workflow_dispatch:
     inputs:
       run_snowfield_hardware:

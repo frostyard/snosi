@@ -27,7 +27,9 @@ in `validate.yml` pins the planning boundary; it is not an R2 inventory.
 
 **Trigger:** Push/PR to main, manual dispatch. Push/PR events ignore
 `shared/download/image-checksums.json` when that is the only changed path;
-image-only direct-download updates should rebuild OCI profiles instead.
+image-only direct-download updates should rebuild OCI profiles instead. They
+also ignore the Forky systemd sentinel `shared/download/forky-versions.json`,
+because base and sysexts never install from Forky.
 
 Builds the base image and all 23 sysexts, and publishes to the Frostyard
 repository on Cloudflare R2 only for non-pull-request events. The build job
@@ -78,6 +80,10 @@ expensive workflow's ignore list, including negative assertions for the
 load-bearing triggers (`build.yml` for `build-native-images.yml` via
 `bootstrap-mkosi.sh`; `build-images.yml` and `docs/**` for
 `test-bootc-secure.yml` via the publication guard and docs contracts).
+`shared/download/forky-versions.json` deliberately triggers this workflow and
+`build-native-images.yml`. A Forky systemd sentinel PR thereby builds the
+secure profiles on the new family, and merging it rebuilds them on the
+acknowledged family. The same test pins that non-ignore.
 
 Both the PR `mechanics-build` path and protected `secure-build` path iterate
 the four bootc profiles (floe, snow, snowfield, sundog); only the latter can
@@ -458,6 +464,8 @@ Checks for version updates to external APT packages installed by sysext images:
 - docker-ce
 - 1password-cli
 - claude-desktop
+- chatgpt
+- himmelblau
 
 The job-level 15-minute timeout bounds the lifetime of its `contents: write`
 and `pull-requests: write` token if an external APT request stalls.
@@ -474,6 +482,30 @@ during the sysext build.
    Truncated, malformed, and oversized indexes fail closed.
 2. Compares against `shared/download/package-versions.json`
 3. If changed: updates `package-versions.json`, creates a sysext package-version PR
+
+**Second job: `check-forky-systemd`.** The same workflow runs a separate job
+for the Debian Forky systemd family. The secure bootc, production native A/B,
+Firn installer, and legacy native installer compositions select that family
+through unpinned `<pkg>/forky` packages. The job has the same conventions:
+`timeout-minutes: 15`, and a job-scoped `contents: write` +
+`pull-requests: write` token under workflow-level `permissions: {}`.
+
+1. `shared/download/check-forky-systemd.sh` reads Forky's main
+   `source/Sources.gz` through `latest-apt-version.sh`. Its decompressed cap is
+   raised to 128 MiB for this index only, because Forky's is ~60 MiB.
+2. It compares the `systemd` source version with
+   `shared/download/forky-versions.json` using `dpkg --compare-versions`. An
+   older reading only warns, because it is a stale CDN backend.
+3. If the version is strictly newer, the script rewrites the sentinel, and the
+   job opens PR branch `auto-update-forky-systemd`. `add-paths` limits the
+   commit to the sentinel. The body, generated into `RUNNER_TEMP`, lists the
+   three AGENTS.md recheck obligations: the Task 4 bwrap build/root check, the
+   Issue 517 dracut drop-in, and the NvPCR masks.
+
+Merging that PR records that the rechecks were done. Full design, seed
+rationale, and trigger wiring are in `docs/design/build-pipeline.md`
+("forky-versions.json"). `test/check-forky-systemd-test.sh` (validate.yml)
+is the fixture contract.
 
 ### ai-fix-requested.yml — Copilot Issue Handoff
 
