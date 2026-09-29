@@ -842,45 +842,84 @@ empty — they link nothing the accidental desktop had supplied. `paseo` looked
 suspect but had already been republished at 0.7.0 after the base change, so it
 self-healed through an ordinary version bump.
 
-## The VM Runtime Belongs to the Desktop Images (#1011)
+## The VM Runtime Belongs to the Base Image (#1011)
 
-Snow (and snowfield, which shares its package set) and sundog ship
-`qemu-system-x86`, `qemu-utils` and `ovmf` next to `systemd-container`
-(`shared/packages/snow/mkosi.conf`, `shared/packages/sundog/mkosi.conf`), so
-`systemd-vmspawn` works with no sysext merged. nsl and mkosi's VM mode depend
-on it. `ovmf` supplies the `/usr/share/qemu/firmware/*.json` descriptors
-vmspawn selects firmware from; with none present,
+`mkosi.images/base/mkosi.conf` ships `qemu-system-x86`, `qemu-utils` and
+`ovmf` next to `virtiofsd`, so every product (floe, snow, snowfield, sundog)
+has a working `systemd-vmspawn` (from `systemd-container`, also in every
+product) with no sysext merged. nsl and mkosi's VM mode depend on it. `ovmf`
+supplies the `/usr/share/qemu/firmware/*.json` descriptors vmspawn selects
+firmware from; with none present,
 `systemd-vmspawn --firmware=describe --secure-boot=no` fails with "Failed to
 find OVMF config". `qemu-utils` and `ovmf` are only Recommends of
 `qemu-system-x86`, and mkosi never installs Recommends, so both are listed.
-Floe has none of this: the incus deb bundles its own qemu, OVMF, swtpm and
-virtiofsd under `/usr/incus`, and `/usr/incus/lib/systemd/incusd` puts
-`/usr/incus/bin` first on `PATH` with `INCUS_EDK2_PATH=/usr/incus/share/qemu/`.
 
-Before this, desktop hosts got a usable qemu only as a side effect of the incus
-sysext, whose `qemu-kvm`/`qemu-utils`/`ovmf`/`ipxe-qemu` packages date from
-when incus came from Debian and are unused by the bundled incus. Snow itself
-shipped only `qemu-system-arm`: `qemu-block-extra` depends on
+**Why base, not the product package sets:** base is also the build base of
+every sysext (and of gui-base). A sysext that pulls Debian qemu packages has
+them omitted from its delta, so it cannot shadow the image's copy. A delta
+qemu over the image's would be a real failure: after the image moves to a
+newer qemu point release, the stale sysext binary sits over the image's newer
+`qemu-system-common`/`qemu-system-data`, and qemu refuses to load modules from
+a different build. Base placement also keeps one definition instead of copies
+per product.
+
+**Incus ignores it.** The Frostyard incus deb bundles its own qemu, OVMF,
+swtpm and virtiofsd under `/usr/incus`; `/usr/incus/lib/systemd/incusd` puts
+`/usr/incus/bin` first on `PATH` and sets
+`INCUS_EDK2_PATH=/usr/incus/share/qemu/`. The lab host's incus lanes likewise
+mount only `/usr/incus`, never the host's `/usr/bin/qemu-*` or
+`/usr/share/OVMF`.
+
+**What this means for sysexts:**
+
+- Deltas published before this change still carry whatever qemu they pulled.
+  The incus sysext (r3) ships Debian `qemu-kvm`, `qemu-utils`, `ovmf`,
+  `ipxe-qemu`, `qemu-system-gui` and `qemu-system-modules-spice` from the era
+  when incus came from Debian. They overlay base's copy until #1014 removes
+  them and bumps `SYSEXT_REVISION`.
+- Growing base changes what future deltas omit. This change adds 24
+  packages to base (~129 MB): the five top-level ones (`qemu-system-x86`,
+  `qemu-utils`, `ovmf`, `ipxe-qemu`, `seabios`), `qemu-system-common`,
+  `qemu-system-data`, and libraries such as `libslirp0`, `libfdt1`,
+  `libpmem1`, `libnuma1` and `libasound2t64`. Checked against the published
+  base-built sysexts on 2026-09-29, only three carry any of them: incus (23 of
+  the 24), dev (`libasound2t64`, `libasound2-data`) and podman (`libslirp0`).
+  Their next publish omits those packages, so a host that merges the new
+  sysext while still on an image built before this change lacks them. For
+  podman that never matters (every product ships `slirp4netns`, which depends
+  on `libslirp0`). For dev it matters only on an older floe, the one product
+  without ALSA. For incus it matters on an older floe or sundog, where the
+  bundled qemu would lose libraries such as `libusbredirparser1t64` and
+  `libnuma1`. That is why #1014, and any incus version bump, should publish
+  only after these images have reached users.
+- Removing any of these packages from base later is a base SHRINK: bump
+  `SYSEXT_REVISION` on every sysext published against it (see "A Sysext Delta
+  Is Only Valid Against the Base It Was Built On").
+
+**History:** before this, hosts got a usable x86 qemu only as a side effect of
+the incus sysext's leftover packages. Snow itself shipped only
+`qemu-system-arm`: `qemu-block-extra` depends on
 `qemu-system-any | qemu-utils`, and apt satisfied that with the aarch64
 emulator. #1013 dropped `qemu-block-extra` and the Gluster, iSCSI and blkio
 driver libraries the `# diffoscope diffs` parity list pinned alongside it
 (`libgfapi0`, `libgfrpc0`, `libgfxdr0`, `libglusterfs0`, `libiscsi7`,
 `libblkio1`); nothing else on snow uses them.
 
-Rejected alternative: a shared `virt` sysext enabled by several updex features
-(`Features=incus nsl`). updex's OR-logic `Features=` handles the download
-side, but keeping qemu out of the incus delta would mean building incus
-against base plus virt, freezing the incus delta against virt's closure (the
-previous section's failure, one layer deeper). systemd-sysext has no
-dependency concept, nsl is not a sysext, and incus does not need the runtime.
+**Rejected alternatives:**
 
-Sysexts must not ship Debian qemu. A sysext delta is built against `base`,
-which has no qemu, so any qemu package in it overlays the image's copy on the
-desktops. Once the image moves to a newer qemu point release, the older
-sysext binary would sit over the image's newer `qemu-system-common` and
-`qemu-system-data`, and qemu refuses to load modules from a different build.
-The incus sysext still carries its leftover copy until #1014 removes it; #1015
-adds the build guard.
+- A shared `virt` sysext enabled by several updex features
+  (`Features=incus nsl`). updex's OR-logic `Features=` handles the download
+  side, but keeping qemu out of the incus delta would mean building incus
+  against base plus virt, freezing the incus delta against virt's closure (the
+  previous section's failure, one layer deeper). systemd-sysext has no
+  dependency concept, nsl is not a sysext, and incus does not need the
+  runtime.
+- Desktop product package sets only. That left floe's `systemd-vmspawn`
+  without an emulator once #1014 removed incus's accidental copy, needed a
+  second copy of the list, and left the shadowing hazard to a guard alone.
+
+#1015 adds a build guard that fails any sysext delta shipping the VM runtime
+anyway, as a backstop to the omission.
 
 ## Adding a New Sysext
 

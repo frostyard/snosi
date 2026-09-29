@@ -790,25 +790,32 @@ current manifest; for #771 that was exactly `incus` and `dev`. Full pattern
 and the procedure: `docs/design/sysexts.md` "A Sysext Delta Is Only Valid
 Against the Base It Was Built On".
 
-**The desktop images own the VM runtime (#1011, 2026-09-29):** snow (and
-snowfield) and sundog ship `qemu-system-x86`, `qemu-utils` and `ovmf` next to
-`systemd-container`, so `systemd-vmspawn` (nsl, mkosi's VM mode) works with no
-sysext merged; `ovmf` provides the `/usr/share/qemu/firmware/*.json`
-descriptors vmspawn picks firmware from. `qemu-utils` and `ovmf` are only
-Recommends of `qemu-system-x86`, which mkosi never installs, so both are
-listed. Floe has none: the incus deb bundles its own qemu/OVMF/swtpm/virtiofsd
-under `/usr/incus`. Until then, desktops got qemu only from the incus sysext's
-leftover Debian packages (unused by the bundled incus), and snow itself
-shipped just `qemu-system-arm`, which apt picked for `qemu-block-extra`'s
-`qemu-system-any` dependency (dropped with the Gluster/iSCSI/blkio driver
-libraries the diffoscope parity list pinned for it, #1013). Sysexts must not ship Debian
-qemu: a base-built delta overlays the image's copy, and after the next qemu
-point release the stale sysext binary would run against the image's newer
-`qemu-system-common`/`qemu-system-data` modules. The incus sysext's copy goes
-in #1014 and the build guard in #1015. A shared `virt` sysext enabled by
-multiple updex features was rejected: it would freeze incus's delta against a
-second independently published base. Full rationale: `docs/design/sysexts.md`
-"The VM Runtime Belongs to the Desktop Images".
+**The base image owns the VM runtime (#1011, 2026-09-29):**
+`mkosi.images/base/mkosi.conf` ships `qemu-system-x86`, `qemu-utils` and
+`ovmf` next to `virtiofsd`, so every product's `systemd-vmspawn` (nsl, mkosi's
+VM mode) works with no sysext merged; `ovmf` provides the
+`/usr/share/qemu/firmware/*.json` descriptors vmspawn picks firmware from.
+`qemu-utils` and `ovmf` are only Recommends of `qemu-system-x86`, which mkosi
+never installs, so both are listed. It is in base rather than the product
+sets because base is every sysext's build base: a sysext that pulls Debian
+qemu has it omitted from its delta, so it cannot overlay the image's copy
+(after the next qemu point release, a stale sysext binary would run against
+the image's newer `qemu-system-common`/`qemu-system-data` modules). Incus
+ignores it: the Frostyard incus deb bundles its own qemu/OVMF/swtpm/virtiofsd
+under `/usr/incus`. Deltas published before this change still carry qemu (the
+incus sysext's pre-Zabbly leftovers go in #1014; the build guard is #1015),
+and removing any of these packages from base later is a base shrink requiring
+`SYSEXT_REVISION` bumps. Growth has a mirror-image effect: base gained 24
+packages, and the next incus, dev and podman publishes omit the ones they
+used to carry, so incus must not republish until hosts run the new images
+(an older floe or sundog would lack its bundled qemu's libraries). Until this change, hosts got x86 qemu only from the
+incus sysext, and snow itself shipped just `qemu-system-arm`, which apt
+picked for `qemu-block-extra`'s `qemu-system-any` dependency (dropped with the
+Gluster/iSCSI/blkio driver libraries the diffoscope parity list pinned for
+it, #1013). A shared `virt` sysext enabled by multiple updex features was
+rejected: it would freeze incus's delta against a second independently
+published base. Full rationale: `docs/design/sysexts.md` "The VM Runtime
+Belongs to the Base Image".
 
 Sysexts can ONLY provide files under `/usr`. They cannot modify `/etc` or `/var` at runtime. Configs needed in `/etc` must be:
 

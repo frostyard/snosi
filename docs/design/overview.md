@@ -66,9 +66,9 @@ and signing inputs; they must not be deleted with the A/B profiles.
 
 | Image | Kernel | Extras |
 |-------|--------|--------|
-| **snow** | backports | GNOME desktop, podman, flatpak, VM runtime (qemu, OVMF) |
-| **snowfield** | linux-surface | GNOME desktop (Surface devices), same package set as snow |
-| **sundog** | backports | KDE Plasma Wayland, SDDM/Breeze, Flatpak-first Discover, VM runtime (qemu, OVMF) |
+| **snow** | backports | GNOME desktop, podman, flatpak |
+| **snowfield** | linux-surface | GNOME desktop (Surface devices) |
+| **sundog** | backports | KDE Plasma Wayland, SDDM/Breeze, Flatpak-first Discover |
 
 Sundog is deliberately bootc-only. It translates Snow's workstation policy to
 Plasma—Wayland as the sole offered session, tuned power policy, Flathub,
@@ -81,6 +81,12 @@ desktop-sysext GUI closure—without creating a native A/B channel. See
 | Image | Kernel | Extras |
 |-------|--------|--------|
 | **floe** | backports | Headless server, podman |
+
+Every product also carries the base image's VM runtime (`qemu-system-x86`,
+`qemu-utils`, `ovmf`) alongside `systemd-container`, so `systemd-vmspawn`
+works with no sysext merged. See
+[sysexts.md](sysexts.md#the-vm-runtime-belongs-to-the-base-image-1011) for
+why it lives in base.
 
 ### Native A/B Prototype
 
