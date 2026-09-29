@@ -82,6 +82,12 @@ desktop-sysext GUI closure—without creating a native A/B channel. See
 |-------|--------|--------|
 | **floe** | backports | Headless server, podman |
 
+Every product also carries the base image's VM runtime (`qemu-system-x86`,
+`qemu-utils`, `ovmf`) alongside `systemd-container`, so `systemd-vmspawn`
+works with no sysext merged. See
+[sysexts.md](sysexts.md#the-vm-runtime-belongs-to-the-base-image-1011) for
+why it lives in base.
+
 ### Native A/B Prototype
 
 The frozen naming/path/policy contract for the eventual production native A/B
