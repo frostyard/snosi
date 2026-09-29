@@ -34,6 +34,10 @@ capture only tmpfiles-referenced factory `/etc` values. Shipped runtime units
 must not delete `/etc` paths or self-disable: use a `/var` run-once marker;
 `check-runtime-etc-guard.sh` enforces this. Do not ship `RequiredBy=` or
 `.requires/` enablement (`check-required-by-guard.sh`).
+Base owns the host VM runtime (`qemu-system-x86`, `qemu-utils`, `ovmf`);
+every sysext runs `shared/sysext/finalize/sysext-no-base-owned.sh`, which
+fails a delta that ships any glob in `shared/sysext/base-owned-paths.txt`.
+Incus uses its bundled `/usr/incus` qemu, not Debian's.
 The Frostyard repository key must be the content of
 `/usr/lib/systemd/import-pubring.pgp`: `systemd-container/forky` overwrites
 the base copy, so `shared/bootc-secure/mkosi.conf` restores it. Build-time enablement
