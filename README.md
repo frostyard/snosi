@@ -639,7 +639,7 @@ output/
 External repositories are configured in `mkosi.sandbox/etc/apt/` for packages not in Debian:
 
 - **Docker**: docker.com official repository
-- **Incus**: Debian trixie (no external repo)
+- **Incus**: Frostyard repository (a rebuild of Zabbly's packages that bundles its own qemu and OVMF under `/usr/incus`)
 - **linux-surface**: Surface kernel packages
 - **Frostyard**: Custom packages (nbc, chairlift, updex)
 

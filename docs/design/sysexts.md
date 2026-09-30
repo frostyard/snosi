@@ -35,7 +35,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **edge** | microsoft-edge-stable | Microsoft Edge browser (pinned .deb via verified_download, relocated from /opt) |
 | **github-copilot** | github | GitHub Copilot desktop app (official pinned .deb via verified_download; Tauri; native /usr layout) |
 | **himmelblau** | himmelblau | Himmelblau Microsoft Entra ID login: PAM/NSS modules, TPM-backed HSM PIN, sshd MFA drop-in, browser SSO broker, o365 launchers (upstream stable Debian 13 apt repo); configured with `snosi-himmelblau-setup` |
-| **incus** | incus | Incus container/VM manager (Frostyard rebuild of Zabbly's deb, which bundles its own qemu/OVMF/swtpm/virtiofsd under `/usr/incus`), dnsmasq, virt-viewer; still carries unused Debian qemu/OVMF until #1014 |
+| **incus** | incus | Incus container/VM manager (Frostyard rebuild of Zabbly's deb, which bundles its own qemu/OVMF/swtpm/virtiofsd under `/usr/incus`), dnsmasq, virt-viewer. Ships no Debian qemu (r4, #1014) |
 | **k3s** | k3s | k3s lightweight Kubernetes node — pinned static binary via `verified_download()` from k3s-io/k3s GitHub releases, dpkg-registered through a build-local stub deb |
 | **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
@@ -65,7 +65,7 @@ Format=sysext
 Bootable=no
 BaseTrees=%O/base
 PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh
-FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh
+FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh,%D/shared/sysext/finalize/sysext-no-base-owned.sh
 
 Packages=<package-list>
 
@@ -873,10 +873,12 @@ mount only `/usr/incus`, never the host's `/usr/bin/qemu-*` or
 **What this means for sysexts:**
 
 - Deltas published before this change still carry whatever qemu they pulled.
-  The incus sysext (r3) ships Debian `qemu-kvm`, `qemu-utils`, `ovmf`,
+  The incus sysext's r3 shipped Debian `qemu-kvm`, `qemu-utils`, `ovmf`,
   `ipxe-qemu`, `qemu-system-gui` and `qemu-system-modules-spice` from the era
-  when incus came from Debian. They overlay base's copy until #1014 removes
-  them and bumps `SYSEXT_REVISION`.
+  when incus came from Debian, overlaying base's copy. r4 (#1014) drops them
+  from `Packages=`, stops capturing `/etc/qemu-ifup`/`qemu-ifdown` (they now
+  come from base's `qemu-system-common`), and bumps `SYSEXT_REVISION` so the
+  corrected delta publishes.
 - Growing base changes what future deltas omit. This change adds 24
   packages to base (~129 MB): the five top-level ones (`qemu-system-x86`,
   `qemu-utils`, `ovmf`, `ipxe-qemu`, `seabios`), `qemu-system-common`,
@@ -918,14 +920,29 @@ driver libraries the `# diffoscope diffs` parity list pinned alongside it
   without an emulator once #1014 removed incus's accidental copy, needed a
   second copy of the list, and left the shadowing hazard to a guard alone.
 
-#1015 adds a build guard that fails any sysext delta shipping the VM runtime
-anyway, as a backstop to the omission.
+**Build guard (#1015):** base placement makes deltas omit the runtime in the
+common case. `shared/sysext/finalize/sysext-no-base-owned.sh`, wired into
+every sysext's `FinalizeScripts=`, is the backstop for the cases it misses: it
+fails the build if the delta contains any glob in
+`shared/sysext/base-owned-paths.txt` (`usr/bin/qemu-*`, `usr/bin/kvm`,
+`usr/lib/qemu/`, `usr/lib/x86_64-linux-gnu/qemu/`, `usr/share/qemu/`,
+`usr/share/OVMF/`, `usr/share/ovmf/`, `usr/share/seabios/`). A match means
+the sysext pulled a family member base lacks (another emulator,
+`qemu-system-gui`/`-modules-*`, `qemu-block-extra`, whose modules are locked to
+one qemu build), apt upgraded a base package into the delta, or base stopped
+shipping it. The incus bundle under `/usr/incus` matches none of the globs. A
+pattern without wildcards (`bin/kvm`) is checked for existence explicitly,
+since the shell yields it even when absent. `test/sysext-no-base-owned-test.sh`
+(validate.yml) fixtures pass/fail per family, the incus bundle, dangling
+symlinks, the empty-list refusal, base still shipping the runtime, and wiring
+in every sysext; `test/sysext-authoring-contract-test.sh` requires the
+finalizer for any new sysext.
 
 ## Adding a New Sysext
 
 1. Create `mkosi.images/<name>/mkosi.conf` following the pattern above
 2. Set `KEYPACKAGE` to the primary package name
-3. Wire `sysext-usr-only.sh`, `sysext-required-paths.sh`, and `sysext-strip-icon-cache.sh` through `FinalizeScripts=`, then create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in); the shared checks fail the build on `/opt` payload or a missing manifest path
+3. Wire `sysext-usr-only.sh`, `sysext-required-paths.sh`, `sysext-strip-icon-cache.sh`, and `sysext-no-base-owned.sh` through `FinalizeScripts=`, then create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in); the shared checks fail the build on `/opt` payload or a missing manifest path
 4. Add any extra files in `mkosi.images/<name>/mkosi.extra/`
 5. If configs needed in `/etc`: create `mkosi.finalize` to capture ONLY the needed paths to `/usr/share/factory/etc/` (never all of `/etc` — see Constraints), add tmpfiles.d rules
 6. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/` (its own component directory — do not add to the shared `sysupdate.d/`)
