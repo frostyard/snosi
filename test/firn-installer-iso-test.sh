@@ -17,4 +17,12 @@ grep -Fqx 'SandboxTrees=%D/shared/bootc-secure/package-manager' \
     exit 1
 }
 
+conf="$root/shared/firn-installer/mkosi.conf"
+pinned=$(grep -cx 'Packages=frostyard-firn=0.6.0' "$conf" || true)
+any=$(grep -cE '^Packages=frostyard-firn([[:space:]]|=|$)' "$conf" || true)
+if [[ $pinned -ne 1 || $any -ne 1 ]]; then
+    echo 'Firn ISO must pin exactly one Packages=frostyard-firn=0.6.0 and no unpinned frostyard-firn' >&2
+    exit 1
+fi
+
 echo 'Firn ISO static sandbox contract passed'
