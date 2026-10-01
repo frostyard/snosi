@@ -94,9 +94,8 @@ cache/cups/rss	discard
 cache/debconf/**	discard
 cache/dictionaries-common/**	discard
 cache/fontconfig/**	discard
-# Unlike current snow builds, sundog man-db pre-generates its cat-page
-# cache tree at build (mandb trigger); regenerated at runtime by
-# man-db.timer / on-demand man.
+# man-db's postinst/trigger generates this cache (also pulled into the base
+# by Debian fish). man-db.service recreates it and runs mandb at runtime.
 cache/man/**	discard
 cache/PackageKit/downloads	discard
 cache/swcatalog/cache/C-local-metainfo.xb	discard
@@ -121,6 +120,8 @@ lib/git	discard
 # LibreOffice bundled-extension preregistration; per-user state is
 # rebuilt by LO itself on first start.
 lib/machines	discard
+# auto-update caches a debconf choice for dpkg triggers; runtime mandb does
+# not need it. Cover both an empty directory and its populated shape.
 lib/man-db*	discard
 lib/pam/**	discard
 lib/portables	discard

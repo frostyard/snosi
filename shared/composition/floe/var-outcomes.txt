@@ -133,13 +133,12 @@ cache/apt/srcpkgcache.bin	discard
 cache/cracklib/**	discard
 cache/debconf/**	discard
 cache/ldconfig/aux-cache	discard
+# Debian fish depends on man-db, whose postinst/trigger generates this cache.
+# man-db.service recreates the cache directory and runs mandb at runtime.
+cache/man/**	discard
 cache/realmd	discard
 cache/swcatalog/cache/C-local-metainfo.xb	discard
 lib/apt/extended_states	discard
-# No man-db state under floe's /var at build time: recent man-db no longer
-# pre-generates the cat-page cache (cache/man) at build, and this server
-# image builds no man-db index (lib/man-db) either — both are regenerated
-# at runtime by man-db.timer / on-demand `man`. (Snow keeps lib/man-db.)
 lib/cni/networks	discard
 lib/containers/storage/tmp	discard
 lib/dahdi/digium-firm/Makefile	discard
@@ -160,6 +159,9 @@ lib/confexts	discard
 lib/git	discard
 lib/grub/ucf/grub.previous	discard
 lib/machines	discard
+# auto-update caches a debconf choice for dpkg triggers; runtime mandb does
+# not need it. Cover both an empty directory and its populated shape.
+lib/man-db*	discard
 # pam-auth-update's own bookkeeping of which profiles it has configured;
 # not consulted by PAM at authentication time.
 lib/pam/**	discard
