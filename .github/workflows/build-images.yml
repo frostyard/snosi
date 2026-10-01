@@ -313,6 +313,16 @@ jobs:
             done
           '
 
+      - name: Refuse images containing frostyard-nbc
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          set -euo pipefail
+          status_file=$(mktemp)
+          sudo podman run --rm --entrypoint cat "$IMAGE:${{ steps.version.outputs.tag }}" /var/lib/dpkg/status > "$status_file"
+          ./test/check-no-nbc-package.sh "$status_file"
+          echo '- Package inventory: frostyard-nbc not installed.' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Setup Syft
         id: setup-syft
         uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
