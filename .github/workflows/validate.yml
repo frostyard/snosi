@@ -244,6 +244,9 @@ jobs:
           ./test/wifi-backend-test.sh
           ./test/socat-package-test.sh
 
+      - name: NBC package gate fixture
+        run: bash ./test/check-no-nbc-package-test.sh
+
       - name: Test ssh account provisioning
         run: sudo python3 ./test/openssh-agent-group-test.py
 
