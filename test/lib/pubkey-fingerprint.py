@@ -14,8 +14,7 @@
 # This is the exact byte string whose SHA256 appears as the "pkfp" value in
 # a UKI's .pcrsig JSON section, and is what systemd-cryptenroll stores
 # (indirectly, via the same key) as the TPM2 token's public-key identity.
-# Used by test/native-ab-secure-artifact-test.sh, test/native-ab-secure-
-# update-test.sh, and test/native-ab-secure-rotation-test.sh so those tests
+# Public-key fingerprint helper retained for secure artifact checks so tests
 # work for both the legacy RSA-4096 key and the current ECC P-256 key
 # (RSA-4096 trips systemd issue #30546 / Esys_LoadExternal TPM_RC_VALUE
 # during TPM auto-unlock).

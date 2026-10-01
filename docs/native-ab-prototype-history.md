@@ -1,5 +1,9 @@
 # Native A/B prototype & installer history
 
+> **Historical native A/B prototype journal.** Native OS and installer lanes
+> were removed by [ADR-0018](adr/0018-remove-native-ab-and-nbc-lanes.md).
+> Firn ISO publication remains active. Paths below are not runnable steps.
+
 > Extracted from `AGENTS.md` (see snosi#727) to keep the top-level agent
 > instructions focused. This document is the historical build journal and
 > phase-by-phase narrative for the native A/B products and the installer ISO.

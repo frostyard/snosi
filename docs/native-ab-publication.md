@@ -1,5 +1,10 @@
 # Native A/B Publication Runbook
 
+> **Historical native OS publication.** Native OS publication and automatic
+> retention were removed by [ADR-0018](adr/0018-remove-native-ab-and-nbc-lanes.md).
+> The installer ISO publication scripts, signed `isos/native/v1/` index and
+> stable redirect described below remain in use. Do not run native OS commands.
+
 Operational procedure for publishing native A/B (`floe-ab`, `snow-ab`,
 `snowfield-ab`) images to production. This is the human-facing companion to
 `docs/native-ab-contracts.md` (frozen names/paths/policy) and the plan's

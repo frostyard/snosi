@@ -93,7 +93,6 @@ inert_ci_paths=(
     '.github/workflows/check-dependencies.yml'
     '.github/workflows/check-packages.yml'
     '.github/workflows/claude.yml'
-    '.github/workflows/native-retention.yml'
     '.github/workflows/nightly-compliance.yml'
     '.github/workflows/scorecard.yml'
     '.github/workflows/test-install.yml'
@@ -106,7 +105,7 @@ inert_ci_paths=(
     '.github/renovate.json5'
 )
 
-for name in build-images.yml build-native-images.yml build.yml; do
+for name in build-images.yml build.yml; do
     workflow="$WORKFLOWS/$name"
     for event in push pull_request; do
         for path in "${common_ignored_paths[@]}"; do
@@ -115,7 +114,7 @@ for name in build-images.yml build-native-images.yml build.yml; do
     done
 done
 
-for name in build-images.yml build-native-images.yml build.yml test-bootc-secure.yml; do
+for name in build-images.yml build.yml test-bootc-secure.yml; do
     workflow="$WORKFLOWS/$name"
     for event in push pull_request; do
         for path in "${inert_ci_paths[@]}"; do
@@ -124,17 +123,6 @@ for name in build-images.yml build-native-images.yml build.yml test-bootc-secure
     done
 done
 
-iso_only_paths=(
-    'mkosi.profiles/firn-installer/**'
-    'shared/firn-installer/**'
-    'test/native-iso-boot-smoke-test.sh'
-)
-for event in push pull_request; do
-    for path in "${iso_only_paths[@]}"; do
-        assert_ignored "build-native-images.yml $event ignores ISO-only $path" \
-            "$WORKFLOWS/build-native-images.yml" "$event" "$path"
-    done
-done
 
 installer_iso_inputs=(
     '.github/workflows/build-installer-iso.yml'
@@ -153,7 +141,7 @@ installer_iso_inputs=(
     'shared/native-ab/keys/import-pubring.gpg'
     'shared/native-ab/keys/mok-2026.crt'
     'shared/native-ab/publish/**'
-    'shared/native-ab-secure/package-manager/**'
+    'shared/bootc-secure/package-manager/**'
     'test/lib/vm.sh'
     'test/native-iso-boot-smoke-test.sh'
 )
@@ -164,15 +152,40 @@ for path in "${installer_iso_inputs[@]}"; do
         "$WORKFLOWS/build-installer-iso.yml" push "$path"
 done
 
+# A stale ISO input silently suppresses rebuilds; a stale run-step path fails
+# only after the publication workflow starts. Check both against the checkout.
+if python3 - "$ROOT_DIR" "$WORKFLOWS/build-installer-iso.yml" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+root = Path(sys.argv[1])
+workflow = Path(sys.argv[2]).read_text()
+paths = re.findall(r'\./(?:shared|test)/[A-Za-z0-9_./-]+', workflow)
+paths += re.findall(r'^\s+- "((?:shared|test)/[^"]+)"$', workflow, re.M)
+missing = []
+for path in paths:
+    path = path.removeprefix('./')
+    # A trailing /** denotes a directory, not a concrete file.
+    fixed = path[:-3] if path.endswith('/**') else path
+    if not (root / fixed).exists():
+        missing.append(path)
+if missing:
+    print('missing installer workflow inputs: ' + ', '.join(sorted(set(missing))), file=sys.stderr)
+    sys.exit(1)
+PY
+then
+    pass 'installer ISO workflow script references and input paths exist'
+else
+    fail 'installer ISO workflow script references and input paths exist'
+fi
+
 # Load-bearing triggers that must never be ignored:
 # - build.yml carries the canonical mkosi pin read by
-#   shared/native-ab/ci/bootstrap-mkosi.sh (used by both native build
-#   workflows).
+#   shared/native-ab/ci/bootstrap-mkosi.sh (used by the installer ISO build).
 # - check-bootc-publication-guard.sh validates build-images.yml on every
 #   test-bootc-secure contracts run.
 for event in push pull_request; do
-    assert_not_ignored "build-native-images $event still triggers on build.yml (mkosi pin source)" \
-        "$WORKFLOWS/build-native-images.yml" "$event" '.github/workflows/build.yml'
     assert_not_ignored "bootc contracts $event still trigger on build-images.yml (publication guard input)" \
         "$WORKFLOWS/test-bootc-secure.yml" "$event" '.github/workflows/build-images.yml'
     assert_not_ignored "bootc contracts $event still trigger on docs/** (bootc-secure docs contracts)" \
@@ -183,14 +196,11 @@ done
 
 # The Forky systemd sentinel (shared/download/forky-versions.json) records an
 # acknowledged family version that no build reads. Its PR must still build the
-# secure bootc and native profiles on the new family, and merging it rebuilds
-# them on the acknowledged family. Sysexts never install from Forky.
+# secure bootc profiles on the new family. Sysexts never install from Forky.
 forky_sentinel='shared/download/forky-versions.json'
 for event in push pull_request; do
-    for name in build-images.yml build-native-images.yml; do
-        assert_not_ignored "$name $event still triggers on the Forky systemd sentinel" \
-            "$WORKFLOWS/$name" "$event" "$forky_sentinel"
-    done
+    assert_not_ignored "build-images.yml $event still triggers on the Forky systemd sentinel" \
+        "$WORKFLOWS/build-images.yml" "$event" "$forky_sentinel"
     assert_ignored "build.yml $event ignores the Forky systemd sentinel" \
         "$WORKFLOWS/build.yml" "$event" "$forky_sentinel"
 done

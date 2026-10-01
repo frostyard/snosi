@@ -2,7 +2,7 @@
 # Fixture suite for the ADR-0014 staged-package inventory library
 # (mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh): the ONE
 # apt-list parser and package differ used by `snosi-update-status --pkg-diff`,
-# plus the identity-bound sidecar publish/resolve used by both stagers.
+# plus identity-bound sidecar publish/resolve used by the bootc stager.
 #
 # The parser/diff fixtures are real Debian Trixie `apt list --installed` lines
 # (arch-qualified names, "<suite>,now" and bare "now" lines, "Listing... Done"
@@ -156,13 +156,12 @@ newdir="$(staged_packages_resolve digest "$digest")" || newdir=""
 is "$(cat "${newdir:-/dev/null}/identity" 2>/dev/null)" "digest=$digest" \
    'after the swap, resolve reads the new generation identity'
 
-# --- static contract (source-level, both stagers + status CLI) -------------
+# --- static contract (source-level, bootc stager + status CLI) ---------------
 #
 # ADR-0014 pins these as source invariants so the two transport paths cannot
 # drift (this subsystem's recurring failure mode).
 
 bootc_stage="$root/mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage"
-native_stage="$root/shared/outformat/ab-root/tree/usr/libexec/snosi-sysupdate-stage"
 status_cli="$root/mkosi.images/base/mkosi.extra/usr/bin/snosi-update-status"
 
 # The bootc stager captures packages.txt BEFORE staging: the capture_pulled_packages
@@ -194,18 +193,10 @@ else
     fail 'bootc: the sidecar is published before the post-stage podman prune'
 fi
 
-# The native stager publishes/repairs the sidecar on the success path AND both
-# re-assert branches: at least three publish_native_sidecar call sites.
-if [[ "$(grep -c 'publish_native_sidecar ' "$native_stage")" -ge 3 ]]; then
-    ok 'native: success and both re-assert paths publish the sidecar'
-else
-    fail 'native: success and both re-assert paths publish the sidecar'
-fi
-
 # Atomic swap lives in the ONE library, not re-inlined per stager: neither
 # stager touches the published symlink name directly (the only permitted
 # mention is the `staged-packages.sh` library path in the source line).
-inlined="$(grep -hE 'staged-packages' "$bootc_stage" "$native_stage" | grep -vE 'staged-packages\.sh' || true)"
+inlined="$(grep -hE 'staged-packages' "$bootc_stage" | grep -vE 'staged-packages\.sh' || true)"
 if [[ -n $inlined ]]; then
     fail 'the staged-packages symlink is owned by the library, not re-inlined in a stager' "$inlined"
 else

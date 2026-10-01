@@ -4,7 +4,7 @@
 > Implementation and fixture contracts are complete, but production support is
 > withheld pending update, recovery, rotation, reconciliation, and
 > representative Snowfield hardware evidence. Firn owns fresh secure bootc
-> installation and its E2E/lab matrix is the installation evidence source.
+> installation; its E2E/lab matrix is planned, not completed installation evidence.
 > Fixture success is not live lifecycle evidence.
 
 This is the normative operator entry point for the secure bootc path. It applies
@@ -21,9 +21,10 @@ handoff).
 ## Support Status
 
 Secure image assembly, static contracts, fixture contracts, and CI mechanics are
-implemented. Firn is the sole secure bootc installer under core ADR-0031, with
-fresh-install evidence supplied by its enforced-Secure-Boot E2E and the lab
-matrix. Production support still requires authorized signed secure N/N+1/N+2
+implemented. Firn is the sole secure bootc installer under core ADR-0031.
+Fresh-install evidence is pending: its enforced-Secure-Boot E2E and minideb
+lab installs will run after the Firn release is pinned; none exists yet.
+Production support still requires authorized signed secure N/N+1/N+2
 and transition OCI artifacts, a Firn-native Snosi lifecycle lane, and
 representative Snowfield hardware results. Do not use an image unless inspection confirms
 `io.snosi.bootc.secureboot-capable=true` and

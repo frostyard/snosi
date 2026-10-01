@@ -11,7 +11,6 @@ mistakes in this repository come from ignoring.
 | Prompt | Use it for |
 |--------|-----------|
 | [`add-sysext.md`](add-sysext.md) | Adding or changing a system extension under `mkosi.images/` |
-| [`native-ab-change.md`](native-ab-change.md) | Touching the native A/B profiles, channels, or update path |
 | [`update-docs.md`](update-docs.md) | Bringing `CLAUDE.md`, `README.md`, and `docs/` back in sync with code |
 | [`triage-ci-failure.md`](triage-ci-failure.md) | Investigating a failed workflow run |
 
@@ -20,5 +19,5 @@ mistakes in this repository come from ignoring.
 - Prompts describe *how to work here*, not project status; keep status in
   `CLAUDE.md` and `docs/`.
 - Keep each prompt self-contained and under roughly one screen.
-- When a contract changes (for example `docs/native-ab-contracts.md`), update
+- When a live contract changes (for example `docs/bootc-secure-operations.md`), update
   the prompt that points at it in the same pull request.

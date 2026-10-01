@@ -10,10 +10,10 @@ cp "$repo_root/check-profile-dependencies.sh" "$scratch/"
 # The guard discovers its inputs from the repo layout rather than hardcoded
 # lists, so the fixture reproduces that layout in miniature: one bootc image
 # profile (composes shared/bootc-secure/mkosi.conf, so it is discovered) plus a
-# native A/B profile that must NOT be discovered, and two sysext images plus the
+# an unrelated installer profile that must NOT be discovered, and two sysext images plus the
 # base OS image that must NOT be treated as a sysext.
 mkdir -p "$scratch/mkosi.profiles/floe" \
-         "$scratch/mkosi.profiles/floe-ab" \
+          "$scratch/mkosi.profiles/firn-installer" \
          "$scratch/mkosi.images/base" \
          "$scratch/mkosi.images/dev" \
          "$scratch/mkosi.images/chatgpt"
@@ -22,9 +22,9 @@ cat >"$scratch/mkosi.profiles/floe/mkosi.conf" <<'EOF'
 [Include]
 Include=%D/shared/bootc-secure/mkosi.conf
 EOF
-cat >"$scratch/mkosi.profiles/floe-ab/mkosi.conf" <<'EOF'
+cat >"$scratch/mkosi.profiles/firn-installer/mkosi.conf" <<'EOF'
 [Include]
-Include=%D/shared/native-ab-secure/mkosi.conf
+Include=%D/shared/firn-installer/mkosi.conf
 EOF
 printf '[Output]\nFormat=directory\n' >"$scratch/mkosi.images/base/mkosi.conf"
 printf '[Output]\nFormat=sysext\n' >"$scratch/mkosi.images/dev/mkosi.conf"
@@ -40,7 +40,7 @@ chmod +x "$scratch/path/mkosi"
 
 # Positive case: every discovered profile depends only on base, so the guard
 # must succeed. The stub also asserts it is only ever invoked for the discovered
-# bootc image profile (floe) and never for the excluded native A/B profile.
+# bootc image profile (floe) and never for the installer profile.
 cat >"$scratch/.mkosi/bin/mkosi" <<'EOF'
 #!/bin/bash
 prev=""
@@ -49,8 +49,8 @@ for arg in "$@"; do
     if [[ "$prev" == "--profile" ]]; then profile="$arg"; fi
     prev="$arg"
 done
-if [[ "$profile" == "floe-ab" ]]; then
-    echo "guard discovered an excluded native A/B profile: $profile" >&2
+if [[ "$profile" == "firn-installer" ]]; then
+    echo "guard discovered an excluded installer profile: $profile" >&2
     exit 1
 fi
 if [[ "$*" == *"summary"* ]]; then

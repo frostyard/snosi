@@ -45,18 +45,6 @@ else
     exit 1
 fi
 
-native_harness="$ROOT_DIR/test/native-ab-secure-boot-test.sh"
-# The literal shell source/call forms are the structural sharing contract.
-# shellcheck disable=SC2016
-grep -Fq 'source "$SCRIPT_DIR/lib/secure-vm.sh"' "$native_harness"
-# shellcheck disable=SC2016
-grep -Fq 'secure_vm_prepare_ovmf "$wd"' "$native_harness"
-# shellcheck disable=SC2016
-grep -Fq 'secure_vm_enroll_mok "$wd/OVMF_VARS.fd" "$cert"' "$native_harness"
-# shellcheck disable=SC2016
-grep -Fq 'secure_vm_start_swtpm "$wd"' "$native_harness"
-echo "ok - native secure-boot harness consumes the shared lifecycle helpers"
-
 grep -Fq 'secure_vm_start_swtpm_paths()' "$ROOT_DIR/test/lib/secure-vm.sh"
 # shellcheck disable=SC2016 # Match the literal backwards-compatible delegate.
 grep -Fq 'secure_vm_start_swtpm_paths "$workdir/tpm" "$workdir/tpm/swtpm-ctrl.sock" "$workdir/tpm/swtpm.pid"' "$ROOT_DIR/test/lib/secure-vm.sh"

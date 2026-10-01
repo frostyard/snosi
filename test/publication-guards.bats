@@ -36,18 +36,6 @@ refute_output_contains() {
     fi
 }
 
-make_native_fixture() {
-    mkdir -p "$FIXTURE/shared/native-ab/keys" "$FIXTURE/.github/workflows"
-    cp -a "$REPO_ROOT/mkosi.profiles" "$FIXTURE/"
-    cp -a "$REPO_ROOT/shared/native-ab-secure" "$FIXTURE/shared/"
-    cp "$REPO_ROOT/shared/native-ab/keys/import-pubring.gpg" \
-        "$FIXTURE/shared/native-ab/keys/"
-    cp "$REPO_ROOT/.github/workflows/build-native-images.yml" \
-        "$FIXTURE/.github/workflows/"
-    cp "$REPO_ROOT/.github/workflows/build-installer-iso.yml" \
-        "$FIXTURE/.github/workflows/"
-}
-
 initialize_fixture_repository() {
     git -C "$FIXTURE" init --quiet
     git -C "$FIXTURE" add .
@@ -76,51 +64,6 @@ initialize_fixture_repository() {
 
     assert_status 0
     assert_output_contains "passing assertions, 0 failures"
-}
-
-@test "native guard accepts secure production profiles and an unpublishable raw profile" {
-    make_native_fixture
-
-    run env SNOSI_NATIVE_GUARD_ROOT="$FIXTURE" \
-        "$REPO_ROOT/check-native-publication-guard.sh"
-
-    assert_status 0
-    assert_output_contains "floe-ab/mkosi.conf satisfies the native publication guard"
-    assert_output_contains "floe-ab-raw/mkosi.conf remains unpublishable"
-}
-
-@test "native guard rejects a missing Secure Boot marker" {
-    make_native_fixture
-    sed -i '/^SecureBoot=yes$/d' "$FIXTURE/shared/native-ab-secure/mkosi.conf"
-
-    run env SNOSI_NATIVE_GUARD_ROOT="$FIXTURE" \
-        "$REPO_ROOT/check-native-publication-guard.sh"
-
-    assert_status 1
-    assert_output_contains "missing SecureBoot=yes"
-}
-
-@test "native guard rejects publication markers on the raw development profile" {
-    make_native_fixture
-    printf '\nSecureBoot=yes\n' >>"$FIXTURE/mkosi.profiles/floe-ab-raw/mkosi.conf"
-
-    run env SNOSI_NATIVE_GUARD_ROOT="$FIXTURE" \
-        "$REPO_ROOT/check-native-publication-guard.sh"
-
-    assert_status 1
-    assert_output_contains "raw dev fixture must never carry publication markers"
-}
-
-@test "native guard rejects a pull request job that can access production secrets" {
-    make_native_fixture
-    sed -i "s/if: github.event_name == 'pull_request'/if: github.event_name != 'pull_request'/" \
-        "$FIXTURE/.github/workflows/build-native-images.yml"
-
-    run env SNOSI_NATIVE_GUARD_ROOT="$FIXTURE" \
-        "$REPO_ROOT/check-native-publication-guard.sh"
-
-    assert_status 1
-    assert_output_contains "build-pr must run only on pull requests"
 }
 
 @test "runtime etc guard accepts marker files, explicit allowances, and build-time mutations" {

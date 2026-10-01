@@ -29,15 +29,10 @@ echo "uninitialized" > /etc/machine-id
 # Keep unattended UPSTREAM sysupdate masked even on first boot, where initrd
 # PID 1 may apply presets before the real-root preset policy is visible.
 # Administrators can still run systemd-sysupdate manually, or explicitly
-# unmask the timers in the persistent /etc overlay. Unlike the
-# snosi-sysupdate-stage.timer static-link activation knob (Phase 4,
-# shared/outformat/ab-root/finalize/mkosi.finalize.chroot,
-# SNOSI_NATIVE_AUTOSTAGE=1), these two masks are NEVER conditional on that
-# knob: our own stager (usr/libexec/snosi-sysupdate-stage) replaces upstream's
-# fetch+apply+immediate-reboot behavior permanently, on every native image,
-# publication-enabled or not.
-# The masks apply to EVERY image, bootc included: bootc OS updates belong to
-# bootc-update-stage.timer and sysexts update through updex's per-component
+# unmask the timers in the persistent /etc overlay. These upstream sysupdate
+# timer masks are unconditional, independent of bootc-update-stage.timer's
+# enablement. Bootc OS updates belong to bootc-update-stage.timer; sysexts
+# update through updex's per-component
 # sysupdate.<name>.d/ directories, so no default /usr/lib/sysupdate.d target
 # exists there and the upstream preset-enabled timers only fail with
 # "No transfer definitions found." (observed on a bootc Floe host). Masks are
@@ -79,7 +74,7 @@ fi
 # compiled dictionaries belong to the immutable root: relocate exactly like
 # dpkg above, leaving the same relative symlink so the whole lookup chain
 # (dict-dir symlink -> /var/lib/aspell -> relocated file) keeps resolving.
-# 00-snosi-aspell.conf (ab-root tree) recreates the /var/lib/aspell symlink
+# The retired native tree recreated the /var/lib/aspell symlink
 # on a fresh /var. Every image has the directory (base ships the aspell.conf
 # tmpfiles rule) but only images with aspell-en installed (snow/snowfield)
 # have content in it; relocating floe's empty directory too keeps one shape
@@ -117,8 +112,7 @@ fi
 #   - wants/requires entries whose target unit is MASKED in the image
 #     (preset-all skips masked units; a dangling wants for a masked unit
 #     is inert anyway) — masks in /etc AND masks shipped under
-#     /usr/lib/systemd (the native ab-root tree masks the bootc/nbc
-#     updater units there)
+#     /usr/lib/systemd
 #   - entries whose symlink dangles: the unit file is no longer shipped
 #     at all (e.g. a profile-stage systemd upgrade dropping a unit that
 #     base's preset pass had enabled — Forky 261 removed run-lock.mount)
@@ -151,11 +145,8 @@ for scope in system user; do
     done
 done
 # Drop entries first-boot presets cannot recreate: links that resolve to
-# /dev/null (the unit path itself became a mask — e.g. the native ab-root
-# tree masks bootc-update-stage.timer/nbc-update-download.timer in
-# /usr/lib/systemd, invisible to the /etc scan above) and dangling links
-# (the unit file is gone — e.g. the native secure profiles' Forky systemd
-# upgrade removed run-lock.mount after base's preset pass enabled it).
+# /dev/null (the unit path itself became a mask, invisible to the /etc scan
+# above) and dangling links (the unit file is gone).
 # Checking the recorded symlink itself, rather than looking the unit name
 # up across the search path, keeps template instances (foo@bar.service ->
 # foo@.service) resolving naturally.

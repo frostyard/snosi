@@ -88,70 +88,8 @@ jobs:
         # visible failure when the organization secret is unavailable.
         run: python3 ./test/copilot-automation-secret-test.py
 
-      - name: Validate native A/B invariants
-        run: ./test/native-ab-static-test.sh
-
       - name: Validate TSS user initrd integration
         run: ./test/tss-user-initrd-static-test.sh
-
-      - name: Validate frozen native A/B contracts
-        # docs/native-ab-contracts.md is the source of truth for native A/B
-        # naming, paths, and policy; this is its executable form. No root,
-        # no network, no image build. Also runs test/native-publish-test.sh
-        # internally (below is a standalone run for clearer CI attribution
-        # if only the publisher's naming drifts).
-        run: ./test/native-ab-contracts-test.sh
-
-      - name: Validate native A/B publication naming pipeline
-        # shared/native-ab/publish/prepare-native-publication.sh turns
-        # mkosi's internal split outputs into the frozen public §4 names.
-        # Fixture GPT via truncate+sfdisk script mode -- no root, no
-        # network, no image build.
-        run: ./test/native-publish-test.sh
-
-      - name: Validate native A/B publication and signing pipeline
-        # shared/native-ab/publish/{publish-candidate,verify-remote,promote,
-        # withdraw}.sh (Phase 7) against a synthetic fixture, a local
-        # directory dest, and a local HTTP origin (test/lib/range-http-
-        # server.py). Uses the committed DEV signing key/pubring (dev-only,
-        # never production material). No root, no network beyond localhost,
-        # no image build. The real-build QEMU rehearsal (test/native-ab-
-        # publication-test.sh) needs root/KVM and is intentionally not run
-        # in CI, matching every other QEMU harness in this repo.
-        run: ./test/native-publication-pipeline-test.sh
-
-      - name: Validate native A/B retention script
-        # shared/native-ab/publish/retention.sh (docs/native-ab-contracts.md
-        # §13, run nightly by native-retention.yml) against a synthetic
-        # local-directory namespace: keep window, stale-candidate and
-        # history pruning, grace, ISO namespace, and every fail-closed
-        # refusal. Ephemeral signing key, no root, no network.
-        run: ./test/native-ab-retention-test.sh
-
-      - name: Validate native promotion rclone installation
-        # Fresh promotion runners must refresh APT before installing rclone;
-        # stale hosted-runner indexes can reference mirror revisions already removed.
-        run: python3 test/native-rclone-install-test.py
-
-      - name: Validate native A/B publication guard
-        # A profile literally named floe-ab, snow-ab, or snowfield-ab is
-        # production-facing (docs/native-ab-contracts.md §15) and must never
-        # be publishable without shim/Secure Boot/PCR signing/NvPCR/pubring
-        # markers; the raw dev fixture must never gain them either.
-        run: ./check-native-publication-guard.sh
-
-      - name: Validate snosi-install CLI installer
-        # shared/native-installer/tree/usr/libexec/snosi-install (Task 8.2):
-        # index parsing/verification (good/tampered signed SHA256SUMS over a
-        # local HTTP origin + ephemeral gpg key), disk-refusal filters
-        # (fixture `lsblk -b -J -O` JSON), name derivation, the full
-        # --non-interactive argument validation matrix, streamed-verify
-        # mismatch handling (small fixture "disk image"), and --restage-mok
-        # argument handling. No root, no network beyond localhost, no image
-        # build, no real block device. Full end-to-end disk-write/LUKS/TPM/
-        # MOK behavior needs a real product build and install target (Task
-        # 8.3), intentionally out of scope for this fast per-PR check.
-        run: ./test/snosi-install-test.sh
 
       - name: Validate installer catalog shape
         # shared/firn-installer/catalog.json replaces firn's builtin catalog
@@ -160,27 +98,12 @@ jobs:
         # per frostyard/snosi#789) is pinned here instead.
         run: ./test/firn-catalog-test.sh
 
-      - name: Validate snosi-setup GUI model
-        # Pure-python test of setup_gui/model.py (validation, argv assembly,
-        # proto-1 event parsing, disk-list/typed-confirm handling) against an
-        # embedded --print-defaults fixture plus a live-drift check against
-        # the real snosi-install. No GTK, no display, no root.
-        run: python3 ./test/snosi-setup-model-test.py
+      - name: Validate Firn ISO Forky sandbox
+        run: ./test/firn-installer-iso-test.sh --static
 
-      - name: Validate snosi-setup GUI pages
-        # Widget-level regression test of setup_gui/pages.py (Features page
-        # keeps Next enabled -- the page is entirely optional). Requires
-        # GTK4/libadwaita + a display; skips cleanly (exit 0) where either
-        # is missing (stock runners), and runs for real on GTK-equipped
-        # hosts (pages.py syntax is covered by the model test's py_compile).
-        run: python3 ./test/snosi-setup-pages-test.py
-
-      - name: Validate snosi-firstboot provisioning script
-        # Fixture test with PATH-stubbed updex/flatpak: feature enablement
-        # fan-out, flathub remote + deduplicated core set, retry semantics
-        # (any failure -> exit 1, no done marker -> the unit retries next
-        # boot), and the no-op paths. No root, no network, no image build.
-        run: ./test/snosi-firstboot-test.sh
+      - name: Validate installer ISO publication pipeline
+        # Ephemeral OpenPGP key, local Range-capable HTTP origin, no R2 writes.
+        run: ./test/iso-publication-pipeline-test.sh
 
       - name: Validate snosi-etc-diff drift tooling
         # Static, non-root regression test driving the real script against
@@ -316,6 +239,7 @@ jobs:
         run: |
           ./test/runtime-etc-guard-test.sh
           ./test/duplicate-packages-test.sh
+          bash ./test/no-nbc-test.sh
           ./test/base-hardware-utils-test.sh
           ./test/wifi-backend-test.sh
           ./test/socat-package-test.sh
@@ -329,10 +253,8 @@ jobs:
       - name: Test memberships account provisioning
         run: sudo python3 ./test/service-account-memberships-test.py
 
-      - name: Test RequiredBy guard and initrd requires-pruning fixtures
-        run: |
-          ./test/required-by-guard-test.sh
-          ./test/etc-overlay-prune-test.sh
+      - name: Test RequiredBy guard
+        run: ./test/required-by-guard-test.sh
 
       - name: Test geoclue account provisioning
         run: sudo python3 ./test/geoclue-state-scope-test.py
@@ -348,9 +270,6 @@ jobs:
 
       - name: Test staged-update notify unit trigger shape
         run: ./test/update-notify-units-test.sh
-
-      - name: Test native A/B / nbc end-of-life notice
-        run: ./test/eol-notice-test.sh
 
       - name: Test gated retirement decision and plan
         run: python3 ./test/retirement-plan-test.py
@@ -395,6 +314,8 @@ jobs:
 
       - name: Validate bootc secure CI wiring
         run: ./test/bootc-secure-ci-test.sh
+      - name: Validate bootc secure static contract and sysupdate masks
+        run: ./test/bootc-secure-static-test.sh
       - name: Validate bootc publication guard
         run: ./check-bootc-publication-guard.sh
       - name: Validate bootc publication guard fixtures

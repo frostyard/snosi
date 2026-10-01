@@ -31,8 +31,6 @@ make_fixture() {
         mkdir -p "$fixture/mkosi.profiles/$profile"
         printf 'Include=%%D/shared/bootc-secure/mkosi.conf\n' >"$fixture/mkosi.profiles/$profile/mkosi.conf"
     done
-    mkdir -p "$fixture/mkosi.profiles/floe-ab"
-    printf 'Include=%%D/shared/outformat/ab-root/mkosi.conf\n' >"$fixture/mkosi.profiles/floe-ab/mkosi.conf"
 
     : >"$fixture/cosign.pub"
     : >"$fixture/shared/native-ab/keys/mok-2026.crt"
@@ -205,7 +203,6 @@ assert_guard() {
 
 unchanged() { :; }
 remove_secure_include() { rm "$1/mkosi.profiles/floe/mkosi.conf"; }
-add_native_secure_include() { printf 'Include=%%D/shared/bootc-secure/mkosi.conf\n' >>"$1/mkosi.profiles/floe-ab/mkosi.conf"; }
 remove_required_file() { rm "$2/$1"; }
 remove_environment() { perl -0pi -e 's/    environment: native-build\n//' "$1/.github/workflows/build-images.yml"; }
 permit_pull_request() { perl -0pi -e "s/github\.event_name != 'pull_request'/github.event_name == 'pull_request'/" "$1/.github/workflows/build-images.yml"; }
@@ -325,7 +322,6 @@ corrupt_release_resolver_arguments() {
 
 assert_guard 'baseline secure publication fixture passes' 0 unchanged
 assert_guard 'missing bootc secure include fails' 1 remove_secure_include
-assert_guard 'native secure include fails' 1 add_native_secure_include
 for required in \
     cosign.pub \
     shared/native-ab/keys/mok-2026.crt \

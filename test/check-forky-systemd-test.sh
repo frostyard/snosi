@@ -117,7 +117,10 @@ check 'PR body names the Issue 517 dracut drop-in re-check' body_has '**Issue 51
 check 'PR body names 90-image-dissect.rules' body_has '/usr/lib/udev/rules.d/90-image-dissect.rules'
 check 'PR body names the NvPCR mask re-check' body_has '**NvPCR masks.**'
 check 'PR body names the bootc NvPCR finalize' body_has '`shared/bootc-secure/finalize/disable-nvpcr.chroot`'
-check 'PR body names the native NvPCR finalize' body_has '`shared/native-ab-secure/finalize/disable-nvpcr.chroot`'
+check 'PR body excludes retired native NvPCR finalize' \
+    test "$(grep -c 'shared/native-ab-secure/finalize/disable-nvpcr.chroot' "$work/body.md" || true)" -eq 0
+check 'PR body excludes retired native build-pr lane' \
+    test "$(grep -c 'build-native-images.yml' "$work/body.md" || true)" -eq 0
 check 'PR body gives the systemd 262 NvPCR reason' body_has '`ukify --sign-initrd-pcrs` initrd policy'
 check 'PR body lists exactly three recheck items' test "$(grep -c '^- \[ \] ' "$work/body.md")" -eq 3
 check 'PR body links the new changelog' \
@@ -230,9 +233,13 @@ mapfile -t consumers < <(cd "$ROOT_DIR" &&
     grep -rlE '^[[:space:]]*(Packages=)?[[:space:]]*systemd/forky[[:space:]]*$' \
         --include='*.conf' shared mkosi.profiles mkosi.images | sort)
 check 'at least one composition selects systemd/forky' test "${#consumers[@]}" -gt 0
+check 'only bootc secure and Firn select the Forky family' \
+    test "${consumers[*]}" = 'shared/bootc-secure/mkosi.conf shared/firn-installer/mkosi.conf'
 for conf in "${consumers[@]}"; do
     check "PR body names Forky consumer $conf" grep -qF "\`$conf\`" "$work/generated-body.md"
 done
+check 'PR body excludes retired Forky consumers' \
+    test "$(grep -Ec 'shared/(native-ab-secure|native-installer)/mkosi.conf' "$work/generated-body.md" || true)" -eq 0
 while IFS= read -r conf; do
     check "$conf still selects systemd/forky and udev/forky" \
         selects_forky_family "$ROOT_DIR/$conf"

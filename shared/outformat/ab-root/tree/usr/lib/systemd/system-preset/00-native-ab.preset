@@ -1,3 +1,0 @@
-# Native OS updates remain manual until signed publication and rollback tests pass.
-disable systemd-sysupdate.timer
-disable systemd-sysupdate-reboot.timer
