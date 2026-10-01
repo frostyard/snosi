@@ -27,4 +27,12 @@ else
     printf 'ok - no tracked base nbc-update-download units remain\n'
 fi
 
+# frostyard-nbc shipped the 95etc-overlay dracut module; no tracked tree does.
+if git ls-files -z '*.chroot' '*.conf' | xargs -0 -r grep -lE -- '--add[[:space:]]+etc-overlay|add_dracutmodules.*etc-overlay' 2>/dev/null; then
+    printf 'not ok - a build step still requests the NBC etc-overlay dracut module\n'
+    failures=$((failures + 1))
+else
+    printf 'ok - no build step requests the NBC etc-overlay dracut module\n'
+fi
+
 ((failures == 0))
