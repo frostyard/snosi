@@ -10,6 +10,16 @@ tree="$root/shared/bootc-secure/tree"
 package_manager="$root/shared/bootc-secure/package-manager"
 artifact_validator="$root/test/bootc-secure-artifact-test.sh"
 
+# Upstream sysupdate timers have no default OS transfer on bootc images.
+# Both masks must be unconditional, not hidden in a branch.
+for timer in systemd-sysupdate.timer systemd-sysupdate-reboot.timer; do
+    if ! grep -Fqx "ln -sf /dev/null /etc/systemd/system/$timer" \
+        "$root/shared/outformat/image/finalize/mkosi.finalize.chroot"; then
+        echo "image finalize must mask $timer unconditionally" >&2
+        exit 1
+    fi
+done
+
 # Live validation executes the candidate image's pinned bootc through Podman;
 # it must not depend on an independently installed host bootc.
 grep -Fq 'for command in buildah jq objcopy objdump openssl podman sbverify; do' \
@@ -53,16 +63,13 @@ grep -Fq 'no udev rule creating /dev/gpt-auto-root-luks' "$artifact_validator"
 # systemd 261 cannot migrate its NvPCR anchor between PCR signing keys, and a
 # replaced TPM makes the anchor unreadable outright. The secure bootc profiles
 # do not consume NvPCR attestation, so the stale-anchor consumers are masked --
-# exactly as shared/native-ab-secure/finalize/disable-nvpcr.chroot already does
-# for the native profiles.
+# on the bootc profiles.
 #
 # Unmasked, they fail permanently after a TPM replacement:
 #     TPM key integrity check failed. Key most likely does not belong to this TPM.
 # leaving a recovered system degraded forever. Observed on run 31235071207.
-# The native decision simply had not been carried across to bootc.
 #
-# Masks are /dev/null symlinks in the shipped tree, the same mechanism ab-root
-# uses for the bootc/nbc updater units. SRK setup and the signed-PCR-11 LUKS
+# Masks are /dev/null symlinks in the shipped tree. SRK setup and the signed-PCR-11 LUKS
 # path are deliberately NOT masked -- those are load-bearing.
 for masked in systemd-pcrproduct.service 'systemd-pcrlogin@.service'; do
     mask="$tree/usr/lib/systemd/system/$masked"
@@ -82,8 +89,7 @@ done
 # live run. systemd-tpm2-setup{,-early} also reach for the anchor --
 # "Failed to acquire anchor secret: Object is remote" -- and they cannot be
 # masked because SRK setup is required. Removing the DEFINITIONS is what stops
-# anything asking for an anchor at all, which is why native does both and this
-# must too. systemd 262 removed the anchor but still needs the masks: see the
+# anything asking for an anchor at all. systemd 262 removed the anchor but still needs the masks: see the
 # finalize script.
 nvpcr_finalize="$root/shared/bootc-secure/finalize/disable-nvpcr.chroot"
 [[ -x "$nvpcr_finalize" ]] || {
@@ -215,17 +221,10 @@ grep -Fq '/usr/lib/snosi/bootc/systemd-bootx64.efi' "$root/shared/bootc-secure/a
 grep -Fq 'snosi_esp_resolve "$RUN_DIR" root' "$reconciler"
 grep -Fq '/usr/lib/snosi/esp.sh' "$reconciler"
 
-# Only OCI bootc profiles consume the fragment. Native A/B, including the raw
-# fixture, must remain entirely independent of its packages and trust files.
+# All OCI bootc profiles consume the fragment.
 for profile in floe snow snowfield sundog; do
     grep -q '^Include=%D/shared/bootc-secure/mkosi.conf$' \
         "$root/mkosi.profiles/$profile/mkosi.conf"
-done
-for profile in floe-ab-raw floe-ab snow-ab snowfield-ab; do
-    if grep -q 'shared/bootc-secure' "$root/mkosi.profiles/$profile/mkosi.conf"; then
-        echo "native profile $profile must not include the bootc secure fragment" >&2
-        exit 1
-    fi
 done
 
 # The install and update harnesses must not carry private copies of these.

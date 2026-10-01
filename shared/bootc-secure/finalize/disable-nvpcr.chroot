@@ -7,9 +7,6 @@ set -euo pipefail
 # consumers while keeping SRK setup and the signed-PCR-11 LUKS path, which are
 # load-bearing.
 #
-# This mirrors shared/native-ab-secure/finalize/disable-nvpcr.chroot. The
-# decision was made for native and simply never carried across to bootc.
-#
 # Masking the two consumer UNITS is not sufficient, which is how the first
 # attempt at this failed. systemd-tpm2-setup{,-early} also reach for the anchor:
 #

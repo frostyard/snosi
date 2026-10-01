@@ -293,7 +293,7 @@ vm_start() {
     # that layout (root-caused 2026-07-18 via guest journal: plymouth-start
     # "code=killed, status=11/SEGV" -> degraded -> smoke gate failure on
     # every desktop image). Same virtio-gpu + -vga none idiom as
-    # test/native-ab-secure-boot-test.sh's vm_start_secure.
+    # Secure VM callers use the shared VM lifecycle helpers.
     qemu-system-x86_64 \
         -machine q35 \
         -enable-kvm -cpu host \

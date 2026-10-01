@@ -147,19 +147,19 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server`, `coder`, `edge`, `bitwarden`, `github-copilot`, `paseo`, and `sunshine` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb`; its Tauri payload already has a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, shared with the loaded profiles so the two never drift. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
+`code-server`, `coder`, `edge`, `bitwarden`, `github-copilot`, `paseo`, and `sunshine` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb`; its Tauri payload already has a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, used by the Edge sysext. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
 
 ## Sysext-Specific Extra Files
 
-Some sysexts include extra files via `mkosi.extra/`:
+Some sysexts include extra files via their own `mkosi.images/<name>/mkosi.extra/`:
 
 ### 1password
 - Desktop app installed from a pinned `.deb` (`sysext-checksums.json`) via `verified_download()` in `mkosi.images/1password/mkosi.postinst.chroot` — NOT `Packages=1password` from the apt repo, because the deb postinst unconditionally curls its signing key and dpkg maintainer scripts run in the buildroot without DNS; the script strips the `installAutoupdateChannel` call and the helper-binary `chgrp` lines from the postinst (edge-style `dpkg-deb -R`/`-b` repack — the chgrps target dynamic GIDs that get re-pinned anyway and EINVAL in rootless builds) and keeps the rest of the offline `installFiles` half. The deb tracks the same `downloads.1password.com` stable channel as 1password-cli
 - The deb installs to `/opt/1Password`, relocated to `/usr/lib/1Password` with `/usr/bin/1password` and `/usr/bin/op-ssh-sign` symlinks and a desktop-file `Exec=` rewrite; the deb's `Depends` are kept explicit in `Packages=` so `dpkg -i` configures cleanly (base currently satisfies all but gnupg2)
 - Ships SUID `chrome-sandbox` (Electron) and hicolor icons → `sysext-strip-icon-cache.sh` required; rootless dev builds drop the SUID bit, publish only from CI
-- The deb postinst creates `onepassword`/`onepassword-mcp` groups and setgid's `1Password-BrowserSupport`/`1password-mcp`; the chroot `/etc/group` is stripped from the delta, so the postinst pins the GIDs (1936/1938 — 1937 reserved for onepassword-cli) to match the shipped `mkosi.extra/usr/lib/sysusers.d/1password.conf`, which recreates the groups at boot via `reload-sysext.service`
+- The deb postinst creates `onepassword`/`onepassword-mcp` groups and setgid's `1Password-BrowserSupport`/`1password-mcp`; the chroot `/etc/group` is stripped from the delta, so the postinst pins the GIDs (1936/1938 — 1937 reserved for onepassword-cli) to match the shipped `mkosi.images/1password/mkosi.extra/usr/lib/sysusers.d/1password.conf`, which recreates the groups at boot via `reload-sysext.service`
 - The polkit system-auth policy is regenerated with `unix-group:onepassword` as owner — the deb template fills in build-time human users, of which the chroot has none; users join the `onepassword` group to enable CLI/SSH-agent system-auth integration
-- `/etc/1password/custom_allowed_browsers` uses the factory pattern: captured by `mkosi.finalize`, injected at boot by `mkosi.extra/usr/lib/tmpfiles.d/1password.conf`
+- `/etc/1password/custom_allowed_browsers` uses the factory pattern: captured by `mkosi.finalize`, injected at boot by `mkosi.images/1password/mkosi.extra/usr/lib/tmpfiles.d/1password.conf`
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
 
 ### bitwarden
@@ -228,7 +228,7 @@ and checks fresh and previously root-owned Coder homes.
 ### edge
 - No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/edge/`)
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
-- The postinst repoints the update-alternatives symlinks (`/usr/bin/microsoft-edge`, `x-www-browser`, `gnome-www-browser`) at the real binary: their `/etc/alternatives` targets ship in profile images but are stripped from sysexts, so they would dangle on target systems
+- The postinst repoints the update-alternatives symlinks (`/usr/bin/microsoft-edge`, `x-www-browser`, `gnome-www-browser`) at the real binary: their `/etc/alternatives` targets are stripped from sysexts, so they would dangle on target systems
 - Its icons are hicolor symlinks created by the relocation script — visibility depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below), so on images that still ship `icon-theme.cache` the Edge icon renders generic
 
 ### github-copilot
@@ -419,15 +419,13 @@ own component directory at
 > repository.frostyard.org does). emdash was registered this way until 2026-07-07,
 > when it was retired.
 
-> Note: each sysext gets its OWN `sysupdate.<name>.d/` directory — never add
-> sysext transfer/feature files to the shared `sysupdate.d/` target, which is
-> reserved for native-profile OS transfers (see `docs/native-ab-contracts.md`
-> §6). systemd-sysupdate version-locks all enabled transfers sharing one
-> definitions directory, so mixing sysext and OS versions in the same
-> directory would corrupt version resolution for both. This per-component
-> layout requires `frostyard-updex` component discovery
-> (`feat/sysupdate-components`); do not publish base images built after this
-> migration until that updex release reaches the Frostyard APT repo.
+Each sysext gets its own `sysupdate.<name>.d/` directory; do not place sysext
+transfer/feature files in the shared `sysupdate.d/` target. The OS transfers
+that formerly used that target were removed by
+[ADR-0018](../adr/0018-remove-native-ab-and-nbc-lanes.md), but
+systemd-sysupdate still version-locks enabled transfers sharing a definitions
+directory. Component discovery requires a compatible `frostyard-updex`
+release before an image depending on this layout is published.
 
 ### Transfer file (`<name>.transfer`)
 
@@ -459,10 +457,8 @@ CurrentSymlink=<name>.raw
 `Verify=true` makes systemd-sysupdate authenticate the component's detached
 `SHA256SUMS.gpg` before trusting the hashes in `SHA256SUMS`. Repogen signs each
 manifest with the Frostyard repository key. The base image ships that
-repository-only key at both systemd vendor-keyring names. Native A/B profiles
-overlay `shared/sysext/keys/import-pubring.gpg`, which combines it with the
-separate native OS-update key because systemd has one vendor keyring for all
-transfers. The `gpg` package is a runtime dependency of this verification and
+repository-only key at both systemd vendor-keyring names. The `gpg` package is
+a runtime dependency of this verification and
 must remain in the base package set. Publish and backfill signatures for every
 component before shipping an image that enables verification.
 

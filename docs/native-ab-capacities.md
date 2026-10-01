@@ -1,5 +1,9 @@
 # Native A/B Capacity Measurements (Phase 3 / Task 3.2)
 
+> **Historical native OS capacity measurements.** Profiles were removed by
+> [ADR-0018](adr/0018-remove-native-ab-and-nbc-lanes.md). These figures
+> are not bootc/Firn target sizing guidance.
+
 This document records the measurements behind the per-product channel
 partition sizes in `shared/native-ab/channels/<product>/mkosi.repart/`. It
 is the AI-facing companion to `docs/native-ab-contracts.md` §12 (which

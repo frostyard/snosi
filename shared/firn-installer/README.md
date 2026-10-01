@@ -1,11 +1,11 @@
 # firn-installer — the single installer ISO
 
 Successor to `shared/native-installer` per firn's ADR-0010: **one**
-installer ISO for all snosi image families, with
+installer ISO for all four snosi bootc products, with
 [firn](https://github.com/frostyard/firn)'s TUI as the kiosk frontend
 (no cage/GTK/python — a single static Go binary on tty1 and ttyS0) and
-a package payload satisfying firn's step-declared tool preflight for
-both the bootc and native A/B install families.
+a package payload for firn's bootc installer steps. `mokutil` and `flatpak`
+remain in the ISO payload until the Firn release pin.
 
 ## The firn binary comes from the frostyard apt repo
 
@@ -30,8 +30,8 @@ FIRN_SRC=/path/to/firn just firn-installer
 **wholesale** override of its compiled-in picker list (firn ADR-0010:
 the catalog is media payload). Adding a product to the installer is
 therefore a snosi change: add the entry here — every product must be
-listed, and entries must satisfy firn's `checkCatalog` (bootc: `ref` +
-`cosign_pub_key`, no `product`; ab: `product`, no `ref`/key). The
+listed, and bootc entries must satisfy firn's `checkCatalog` (`ref` +
+`cosign_pub_key`, no `product`). The
 pinned `cosign` CLI (scripts/build/cosign.chroot) and
 `/usr/lib/snosi/cosign.pub` back the bootc entries' signature
 verification — firn's preflight requires both.

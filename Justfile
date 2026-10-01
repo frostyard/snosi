@@ -31,20 +31,7 @@ sundog: ensure-mkosi
 floe: ensure-mkosi
     sudo PATH="$PATH" {{just}} _floe
 
-floe-ab: ensure-mkosi
-    sudo PATH="$PATH" {{just}} _floe-ab
-
-snow-ab: ensure-mkosi
-    sudo PATH="$PATH" {{just}} _snow-ab
-
-snowfield-ab: ensure-mkosi
-    sudo PATH="$PATH" {{just}} _snowfield-ab
-
-native-installer-iso: ensure-mkosi
-    sudo PATH="$PATH" {{just}} _native-installer-iso
-
-# Single-installer ISO for all image families (firn ADR-0010, successor to
-# native-installer; see shared/firn-installer/README.md). The firn binary is
+# Firn installer ISO (see shared/firn-installer/README.md). The firn binary is
 # built from a sibling firn checkout by _firn-binary, which runs as the
 # invoking user BEFORE sudo (same reasoning as ensure-mkosi: the artifact
 # must not be root-owned, and root has no Go toolchain/module cache).
@@ -133,8 +120,8 @@ run-qemu image="output/snow":
 # Runs as the invoking user (before sudo) so the checkout is not root-owned.
 # Delegates to shared/native-ab/ci/bootstrap-mkosi.sh, the single
 # implementation of "how mkosi gets bootstrapped from build.yml's pin" also
-# used by .github/workflows/build-native-images.yml's build jobs -- see that
-# script's header and shared/native-ab/ci/check-mkosi-pin.sh ("Mkosi Pin
+# used by the installer ISO workflow -- see that script's header and
+# shared/native-ab/ci/check-mkosi-pin.sh ("Mkosi Pin
 # Governance": "CI must derive local and workflow mkosi from the same
 # commit and fail if they diverge").
 [private]
@@ -171,23 +158,6 @@ _sundog: _clean
 [private]
 _floe: _clean
     {{mkosi}} --profile floe build
-
-[private]
-_floe-ab: _clean
-    {{mkosi}} --profile floe-ab build
-
-[private]
-_snow-ab: _clean
-    {{mkosi}} --profile snow-ab build
-
-[private]
-_snowfield-ab: _clean
-    {{mkosi}} --profile snowfield-ab build
-
-[private]
-_native-installer-iso: _clean
-    {{mkosi}} --profile native-installer build
-    ./shared/native-installer/tools/build-iso.sh output/native-installer output "$(date -u +%Y%m%d%H%M%S)"
 
 # Build the firn TUI binary into shared/firn-installer/tree/usr/bin/firn
 # (gitignored; the image postinst refuses to build without it -- see

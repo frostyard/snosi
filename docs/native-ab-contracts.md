@@ -1,11 +1,18 @@
 # Native A/B Contracts (Frozen, Phase 0)
 
-**Status:** Frozen. This document is the normative source of truth for native
+> **Historical native OS contract.** The native A/B profiles and publisher were
+> removed by [ADR-0018](adr/0018-remove-native-ab-and-nbc-lanes.md). §7's
+> public keys at `shared/native-ab/keys/` remain in use by bootc lab consumers,
+> secure composition and Firn. The ISO publication path `isos/native/v1/` and
+> redirect remain active. Other native OS requirements below are historical.
+
+**Historical status:** The following was the normative source of truth for native
 A/B naming, paths, and policy. It defines values; it does not discuss
 rationale — see `docs/plans/2026-07-14-bootc-native-ab-coexistence-plan.md`
 for the design narrative and phased rollout that this freeze unblocks.
 
-Every value below is validated statically by `test/native-ab-contracts-test.sh`.
+The historical OS values below are no longer validated by the removed
+`test/native-ab-contracts-test.sh`; §7 public keys remain live.
 That test is the executable form of this document. If the two disagree, the
 test is currently wrong (fix it) unless a value here was deliberately changed
 (update both in the same commit).

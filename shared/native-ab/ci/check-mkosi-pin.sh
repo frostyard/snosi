@@ -7,9 +7,8 @@
 #
 # .github/workflows/build.yml's `uses: systemd/mkosi@<sha>` line is this
 # repo's single source of truth for the pinned mkosi commit -- Justfile's
-# `mkosi_commit` (used by `just ensure-mkosi`, and therefore every local
-# `just floe-ab`/`snow-ab`/`snowfield-ab`/etc. build) greps it directly, and
-# The native image and installer ISO workflow build jobs bootstrap mkosi via
+# bootstrap-mkosi.sh (used by `just ensure-mkosi`) greps it directly, and
+# the installer ISO workflow build jobs bootstrap mkosi via
 # shared/native-ab/ci/bootstrap-mkosi.sh, which greps the SAME line -- so there
 # is exactly one implementation of "how mkosi gets bootstrapped", not a second
 # copy that could silently diverge. This script is the explicit regression
@@ -21,11 +20,11 @@
 #      a format this repo treats as part of the published image contract,
 #      per the plan's "Treat the mkosi commit as part of the published
 #      image format, not merely a build tool version").
-#   2. Neither build-native-images.yml nor build-installer-iso.yml carries a
+#   2. build-installer-iso.yml does not carry a
 #      conflicting literal `systemd/mkosi@<sha>` pin. This is the specific
 #      defect this whole mechanism exists to prevent -- e.g. someone later
 #      copy-pastes a `uses: systemd/mkosi@...` step from build-images.yml into
-#      either workflow, pinned to whatever commit build-images.yml happens to
+#      that workflow, pinned to whatever commit build-images.yml happens to
 #      carry at that moment, silently reintroducing a second,
 #      independently-updated pin.
 #   3. If a local mkosi checkout is present (i.e. this is running after
@@ -54,7 +53,6 @@ mkosi_checkout="${1:-$root_dir/.mkosi}"
 
 build_yml="$root_dir/.github/workflows/build.yml"
 build_workflows=(
-    "$root_dir/.github/workflows/build-native-images.yml"
     "$root_dir/.github/workflows/build-installer-iso.yml"
 )
 

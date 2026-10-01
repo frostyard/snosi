@@ -1,774 +1,147 @@
-# Build Pipeline
+# Build pipeline
 
-Decision records shaping this document:
-[ADR-0002](../adr/0002-ship-no-enablement-symlinks-in-etc.md) (enablement
-symlinks stripped from `/etc`),
-[ADR-0003](../adr/0003-runtime-etc-mutation-ban.md) (runtime `/etc` guard),
-[ADR-0004](../adr/0004-sysext-authoring-rules.md) (package relocation,
-factory-`/etc` capture),
+Decisions: [ADR-0001](../adr/0001-var-factory-state-outcome-maps.md)
+(`/var` inventory), [ADR-0002](../adr/0002-ship-no-enablement-symlinks-in-etc.md)
+(presets), [ADR-0004](../adr/0004-sysext-authoring-rules.md) (sysexts),
 [ADR-0005](../adr/0005-profiles-as-transport-kernel-selectors.md)
-(`Dependencies=` reset, profile checks),
-[ADR-0006](../adr/0006-name-triggered-publication-guards.md) (publication
-guards), [ADR-0009](../adr/0009-snosi-env-var-classes.md) (test-hook
-gating), [ADR-0012](../adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md)
-(chunkah xattrs), and
-[ADR-0016](../adr/0016-name-kde-bootc-product-sundog.md) (Sundog's KDE
-bootc-only product boundary).
-
-## Script Execution Order
-
-Each image build runs four phases of scripts sequentially:
-
-### 1. BuildScripts (in chroot)
-
-Download and install items not available as Debian packages. These run inside the chroot with network access.
-
-Per-product BuildScripts/PostInstallationScripts/FinalizeScripts/PostOutputScripts
-live in `shared/composition/<product>/mkosi.conf` (`shared/composition/floe`,
-`shared/composition/snow`, `shared/composition/sundog`) and are `Include=`d by
-every profile that ships that product's payload — the bootc profiles
-(`floe`/`snow`/`snowfield`/`sundog`) and the native A/B profiles
-(`floe-ab-raw`, `floe-ab`, `snow-ab`, `snowfield-ab`) alike — so the two
-transports cannot drift apart. Sundog intentionally has no native A/B profile.
-See CLAUDE.md "Configuration Composition" for the ordering rules that apply
-when editing these fragments.
-
-**All profiles (shared):**
-
-| Script | Location | Purpose |
-|--------|----------|---------|
-| `brew.chroot` | `shared/scripts/build/` | Downloads Homebrew installer via `verified_download()`, runs in non-interactive mode, creates `$DESTDIR/usr/share/homebrew.tar.zst` (installed into the image by mkosi), sets `user.component=linuxbrew` xattr for chunkah |
-
-The base package set in `mkosi.images/base/mkosi.conf` explicitly includes
-`pciutils` and `usbutils`, making `lspci` and `lsusb` available in every product
-rather than depending on a desktop package's transitive dependencies.
-
-**GNOME desktop profiles (snow/snowfield) only:**
-
-| Script | Location | Purpose |
-|--------|----------|---------|
-| `hotedge.chroot` | `shared/snow/scripts/build/` | Downloads Hotedge GNOME extension (hot corners) from GitHub via `verified_download()`, installs to `$DESTDIR/usr/share/gnome-shell/extensions/` |
-| `logomenu.chroot` | `shared/snow/scripts/build/` | Downloads Logomenu GNOME extension from GitHub via `verified_download()`, installs extension + GLib schema into `$DESTDIR` |
-| `bazaar.chroot` | `shared/snow/scripts/build/` | Downloads pinned Bazaar Companion GNOME extension tarball from GitHub via `verified_download()`, installs its `src/` into `$DESTDIR`, patches metadata.json for shell version "48". Build scripts install via `$DESTDIR` only — never into `$SRCDIR`/the tree overlays (#293) |
-| `surface-cert.chroot` | `shared/snow/scripts/build/` | Downloads Linux Surface secure boot certificate via `verified_download()`, installs to `/usr/share/linux-surface-secureboot/` |
-
-**ostree + bootc — Frostyard debs (no longer built in-tree):**
-
-bootc and ostree install as regular APT packages from the Frostyard repository (`frostyard.sources` in `mkosi.sandbox/etc/apt/`): `bootc` and `libostree-1-1` (which ships the library AND the ostree CLI, and `Provides: ostree, libostree-dev`). They are built and published by [frostyard/bootc-debian](https://github.com/frostyard/bootc-debian), whose `build.sh` mirrors the former in-tree mkosi BuildScript exactly — same pinned upstream tarballs (sha256-verified in that repo's `download/checksums.json`), same pinned Rust toolchain (Debian Trixie's rustc 1.85 is too old to build bootc 1.16.x), same configure/make invocations. Debian Trixie ships no bootc package and only ostree 2025.2 (too old for current bootc), hence the external packaging.
-
-- **Versions:** deb versions carry a `-frostyard<timestamp>` suffix so rebuilds of the same upstream version sort newer in apt. Upstream releases are tracked weekly by bootc-debian's own `check-dependencies.yml`; snosi's dependency check does not cover ostree/bootc.
-- **Publish → rebuild:** bootc-debian's Build workflow publishes the debs and then dispatches a snosi image build, so new bootc/ostree versions roll into images automatically.
-- **Runtime lib pinning:** the debs declare only a partial `Depends` list; base `Packages=` keeps the full set of runtime link deps explicit (`libfuse3-4`, `libsoup-3.0-0`, `liblzma5`, `libzstd1`, `libmount1`, `libselinux1`, `libcom-err2`, `libext2fs2t64`, plus the declared ones). Do not remove them from `Packages=` just because apt does not demand them.
-- **History (until 2026-07):** both were compiled from source during the base image build via `shared/bootc/build/bootc.chroot` (BuildScript + `BuildPackages=` overlay deps + rustup toolchain + ostree double-install + stub-deb dpkg registration in `shared/bootc/postinst/bootc-register.chroot`). All of that machinery was removed when the deb path landed; see git history if the in-tree build ever needs resurrecting.
-
-**Bootc secure composition (Task 4):** the four OCI profiles include
-`shared/bootc-secure/mkosi.conf` immediately after the bootc runtime package
-fragment. It owns an isolated, low-priority Forky APT sandbox and an explicit,
-ABI-coherent Forky systemd family, avoiding accidental Trixie/Forky library
-mixes in systemd-boot, cryptsetup, and TPM tooling. It adds
-`lockdown=integrity` through
-`/usr/lib/bootc/kargs.d/10-lockdown.toml`, not mkosi `KernelCommandLine=`:
-these directory-format profiles do not have an mkosi-built UKI for that setting
-to affect. Pinned bootc 1.16.8 loads sorted `*.toml` files from that directory;
-the strict schema is `kargs = ["..."]` with optional
-`match-architectures = ["x86_64"]`. The fragment also carries explicit
-MOK/recovery/TPM/UKI tools and the public-only native MOK certificate plus
-RSA-2048 PCR signing public key. The image contract is
-`/usr/lib/snosi/bootc-secure.json` (schema 1). Task 5 adds
-`shared/bootc-secure/assemble-uki.sh`, called only through
-`buildah-package.sh` when `SNOSI_BOOTC_SECURE=1`: the pristine first OCI package
-is chunked before its candidate bootc obtains bootc 1.16.8's hidden storage
-digest. That chunked candidate is digest authority; the adapter injects a
-MOK-signed UKI plus the ESP copy of systemd-boot under `/boot`. Before that first package, it
-places the same signed systemd-boot source at
-`/usr/lib/snosi/bootc/systemd-bootx64.efi`; this is required because an
-installed ESP mount shadows `/boot`, and it is deliberately present before the
-digest is calculated. The preflight version gate uses bare-name
-`mount`/`mountpoint`/`chroot`/`umount`: it refuses a missing or pre-mounted
-`$ROOTFS_DIR/proc`, bind-mounts only host `/proc`, runs `/usr/bin/bootc
---version` against target libraries, and always unmounts before
-`--prepare-systemd-boot-source`. Bare names are load-bearing for the non-root
-PATH fixtures. This gate is not digest authority; exactly two storage digest
-probes run bootc inside candidate OCI images: the chunked candidate before
-assembly and the final image after assembly. The final image inherits the
-chunked candidate's layers and receives only the `/boot` overlay; its probe must
-retain the exact digest. Protected builds never chunk after assembly. This is a
-fail-closed maintained compatibility contract, not
-an upstream interface; see `docs/bootc-secure-assembly-compatibility.md` for
-the mandatory revalidation triggers. Private keys remain caller-owned and must
-not enter this fragment, its tree, OCI layers, labels, logs, or retained temp
-state. Direct ukify runs as `/usr/bin/ukify` in the first-pass candidate with
-`--network=none`, `--cap-drop=all`, `--security-opt label=type:unconfined_t`,
-a fixed entrypoint, and the common numeric credential owner via `--user`.
-Mismatched owners fail before Podman. Protected run 30579247524 then exposed
-that this unprivileged, capability-free candidate cannot read a mode-restricted
-in-image initramfs. The assembler canonicalizes the discovered in-root
-kernel/initrd paths, stages byte-identical mode-0644 copies as fixed
-`/run/snosi-ukify-work/linux` and `/run/snosi-ukify-work/initrd` arguments, and
-mounts each caller credential read-only at fixed `/run/snosi-ukify-*` paths.
-It gives the candidate exactly one writable `/run/snosi-ukify-work` mount. The
-work directory is scanned for caller credentials both before and after candidate
-execution; its staged inputs must compare with the canonical protected rootfs
-sources after execution, and final UKI sections compare with those originals.
-The authoritative active and optional previous PCR public identities stay in the
-unmounted gate directory; their work copies must also match after candidate
-execution. This fixture-covered fix has no live protected-build success claim:
-the failed run did not reach validation, push, signing, or promotion. Native A/B
-profiles do not include it and continue using `shared/native-ab-secure/`
-independently.
-
-**Bootc shim second-stage reconciliation (Task 7):** the secure tree ships
-`snosi-bootc-bootloader-reconcile.service` with a static
-`/usr/lib/systemd/system/multi-user.target.wants/` link and no `[Install]`
-section. The service locates the one ESP on the disk containing the booted
-encrypted root, mounts it temporarily only if needed, verifies the immutable
-`/usr` source and temporary copy against the committed MOK, syncs, atomically
-replaces `EFI/BOOT/grubx64.efi`, and restores the exact old file on a failed
-post-replacement sync. It does not touch shim `BOOTX64.EFI`, MokManager
-`mmx64.efi`, or `/etc`; it accepts a valid signed stage from a rollback boot.
-Schema 1 pins `encrypted_root_mapper` to `root`; the reconciler's
-`cryptsetup status root` lookup and future installer must not independently
-choose a mapper name.
-Task 8a extends that same schema with an `installer` object: exact pinned
-bootc/Cosign/systemd versions, 1 GiB ESP and 30 GiB target-disk floors, OCI
-capability/policy requirements, DPS LUKS2/Btrfs layout, Type #2-only bootc
-options, and the signed-PCR recovery policy. The normative cross-repository
-consumer contract is `docs/bootc-secure-install-contract.md`; it does not
-implement Fisherman, bootc-installer, or Dakota in this repository.
-An existing `ro` ESP mount is refused before any remount or write. The real
-Cayo Buildah proof validates immutable-source assembly/retention and signer
-binding, not runtime reconciliation on an installed FAT ESP; that execution is
-deferred to the Task 9 secure-install runtime harness.
-
-**Persistent kernel arguments (issue 601):** base `mkosi.extra` ships
-`usr/bin/snosi-kargs` and the shared `usr/lib/snosi/esp.sh`. The ESP helper is
-also sourced by `snosi-bootc-bootloader-reconcile`, preventing the two runtime
-writers from developing different ESP discovery or read-only-mount policy.
-Resolution prefers `bootctl --print-esp-path` (native resolves `/boot`) and
-falls back to the bootc encrypted-root backing disk's single ESP.
-
-`snosi-kargs` persists one token per line under `/var/lib/snosi/kargs/`, invokes
-`ukify build --cmdline ... --output ...` with **no `--linux` argument** (the
-switch that selects `addonx64.efi.stub`), signs with either an enrolled local
-MOK or caller-provided offline key/certificate, verifies with `sbverify`, and
-same-filesystem atomically replaces
-`loader/addons/50-snosi-cmdline-local.addon.efi`. A failed post-replacement sync
-restores the old artifact. `revert` first renames to a dotfile, which
-systemd-stub skips, before removal. Secure Boot state and MOK enrollment are
-fail-closed; unsigned output is accepted only with Secure Boot disabled.
-
-Arguments are append-only and measured into PCR 12, while native and bootc LUKS
-policies bind signed PCR 11 only. The CLI refuses root, verity, LUKS, init, and
-emergency-shell arguments plus whitespace/quotes unless `--force` receives its
-exact interactive typed confirmation. The local-key path deliberately warns
-that disk-resident MOK authority can sign arbitrary EFI binaries and may also
-enter kernel module trust depending on shim/kernel MOK routing; offline signing
-is the narrower option. `test/snosi-kargs-test.sh` is the non-root PATH-stubbed
-contract. The native secure QEMU harness now requires PCR 11 to remain stable,
-PCR 12 to change, TPM unlock to survive, a corrupt addon to be skipped without
-bricking, and the global addon to survive sysupdate. Bootc deployment-update persistence
-stays `BLOCKED:` until a Firn-native Snosi lifecycle lane and authorized
-artifacts exist.
-
-**Protected bootc publication and evidence boundary (Task 10):**
-`build-images.yml` keeps pull-request builds to local mechanics images labelled
-`io.snosi.bootc.secureboot-capable=false`; they receive no secrets and never
-publish. Protected `secure-build` jobs use the four `NATIVE_*` signing secrets
-only for local assembly and validation. The supplied MOK and PCR public
-identities must byte-match `shared/native-ab/keys/mok-2026.crt` and
-`shared/native-ab/keys/pcr-signing-2026.pub`; private material is deleted before
-registry publication. The protected job pushes an immutable version tag,
-validates that exact digest remotely (including its signature, secure labels,
-restrictive policy copy, and artifact), and only then moves `latest`; a failed
-immutable candidate cannot change `latest`. This is CI scaffolding and fixture
-coverage, not production Secure Boot evidence: the 2026-07-27 `latest` images
-were inspected without `io.snosi.bootc.secureboot-capable`, so they cannot feed
-the retired Task 9 live mode. Firn's E2E/lab matrix owns fresh-install
-evidence; update, recovery, rotation, reconciliation, and Snowfield hardware
-evidence remain BLOCKED pending authorized signed secure
-N/N+1/N+2/transition fixtures and the appropriate lifecycle or hardware lane.
-Build-specific secure composition and publication mechanics stay in this
-document; the normative operational recovery and evidence rules are in
-[`docs/bootc-secure-operations.md`](../bootc-secure-operations.md).
-
-**OCI signature policy (Task 6):** the secure bootc tree supplies
-`/etc/containers/policy.json`, which defaults to `reject` and has one
-`sigstoreSigned` rule, using `/usr/lib/snosi/cosign.pub`, for each exact
-`ghcr.io/frostyard/{cayo,floe,snow,snowfield}` repository. The exact Cayo scope
-remains through Phase 5 of the rename plan so late Cayo hosts can migrate.
-Cosign v2.6.1 signatures
-record only the repository identity, so `matchRepository` is required; using
-tag-exact identity would reject valid published images. The accompanying
-`registries.d/frostyard.yaml` enables Sigstore attachments for GHCR, without
-which containers/image ignores Cosign's registry signatures. The secure
-installer no longer bypasses fetch verification. Test rootfs fixtures retain a
-separate disposable permissive policy mounted only for that fixture; registry
-tests use an isolated HOME containing the restrictive policy and attachment
-configuration, never a changed host policy. `bootc-update-stage` keeps its
-Podman-to-containers-storage workaround and staged-storage-digest comparison;
-the empty `containers-storage` policy scope alone accepts already-local images,
-after Podman's signed `docker` pull. It does not weaken registry scopes.
-a failed Podman pull (including policy rejection) clears any stale staged
-semaphore and its existing EXIT trap records `outcome=failed`.
-
-**Forky compatibility evidence and limit:** Frostyard's `bootc` and
-`libostree-1-1` debs are built independently of the Forky systemd family, so
-their coexistence is a compatibility risk, not a package-manager proof. Task 4
-ran a full `just cayo` build resolving bootc `1.16.3-frostyard202607061837`,
-libostree `2026.2-frostyard202607061837`, and the selected systemd family at
-`261.1-3`; it then ran `bootc --version` and `bootc container --help` under
-`bwrap --ro-bind output/cayo /`, preventing host libraries from satisfying the
-commands. This is evidence for that exact combination only. Re-run the build
-and isolated-root command check whenever bootc-debian, libostree, or the Forky
-selection changes; do not treat the low APT pin or a host-side `ldd` result as
-runtime compatibility validation.
-
-**Server payload (floe, floe-ab-raw, floe-ab):** Only `brew.chroot` (no desktop build scripts) — all three consume it via `shared/composition/floe/mkosi.conf`.
-
-### 2. PostInstallationScripts (after packages)
-
-Run after all APT packages are installed. Handle relocation, branding, service enablement.
-
-**Base image postinstall** (`mkosi.images/base/mkosi.postinst.chroot`):
-
-Runs during the base image build (not during profile builds). Handles:
-- Sets home directory path to `/var/home` in `/etc/default/useradd`
-- Enables systemd mount units (home, root, srv, mnt, media, opt, usr-local)
-- Removes bls-garbage-collect service
-
-**Base update services** (`mkosi.images/base/mkosi.extra/usr/lib/systemd/`):
-
-The base overlay ships `bootc-update-stage.service` and `bootc-update-stage.timer`, enabled by `system-preset/04-bootc-update.preset`. That preset also disables upstream `bootc-fetch-apply-updates.timer`: upstream's timer is currently inert on composefs deployments because it is gated on `/run/ostree-booted`, and its intended behavior includes applying updates with an immediate reboot. The custom service runs `/usr/libexec/bootc-update-stage`, which:
-- exits cleanly when the system is not bootc-managed,
-- prunes stale transfer images before pulling to avoid `/var` exhaustion,
-- pulls the followed image with `podman` so containers policy is enforced,
-- resolves the pulled identity from Podman's registry manifest digest
-  (`podman image inspect .Digest`), not the normally different local
-  config/image ID (`.Id`); bootc 1.16.8 records the manifest digest in
-  `imageDigest` even when it consumes the pull through `containers-storage`,
-- stages it with `bootc upgrade` when the spec already follows
-  `containers-storage` (the steady state after the first staged update) or
-  `bootc switch --transport containers-storage` otherwise — switch to an
-  identical spec is a SILENT no-op in bootc <= 1.16.3 and left installs
-  unable to take a second update (root-caused 2026-07-06),
-- verifies the staged digest equals the pulled digest (fails loudly on any
-  future silent no-op),
-- writes the reboot-pending semaphore `/run/snosi/update-staged`
-  (image/digest/timestamp; also re-asserted when an update is found already
-  staged, covering manual `bootc upgrade`; /run placement means the applying
-  reboot clears it),
-- writes the check-result file `/run/snosi/update-check` on EVERY run —
-  `outcome=current|staged|held-rollback|failed`, `checked_at`, `image`,
-  `running_version`, `remote_version` (the image's
-  `org.opencontainers.image.version` label, which matches os-release
-  `IMAGE_VERSION`; the only cross-transport identity since digests differ
-  between registry/ISO/podman transports). An EXIT trap records
-  `outcome=failed` on any error, so a silently broken checker is
-  distinguishable from an up-to-date machine (the visibility gap that hid
-  the bootc second-update bug), and
-- prunes dangling transfer images after the switch.
-
-Do not use `spec.bootOrder` or `status.rollbackQueued` as the update-success
-test. They describe bootloader ordering, not whether the image import and
-deployment stage succeeded, and bootc 1.16.8 can correctly report
-`bootOrder=rollback`, `rollbackQueued=true`, and a non-null `.status.staged`
-at the same time. Do not clear or "repair" that state merely because an
-update was staged. The stager's current/staged success contract is manifest
-digest continuity: the pulled `.Digest` equals bootc's booted or staged
-`imageDigest`; reboot selection remains separate operator/bootloader state.
-
-Consumers of the update state:
-- `/etc/update-motd.d/86-bootc-update-staged` — SSH/console logins (all
-  images, including headless floe). Staged semaphore wins; otherwise it
-  prints one line per check outcome ("snosi VERSION is up to date
-  (checked TIME)", a FAILED warning pointing at the journal, or the
-  held-rollback note). Silent when no check has run this boot.
-- `snosi-update-status` (root CLI, base `usr/bin/`) — running version,
-  followed image, last-check outcome, staged deployment (also shown when
-  staged outside the checker via manual `bootc upgrade`); `--check` does a
-  live `skopeo inspect` of the followed registry image and compares
-  version labels. No-ops gracefully on nbc (non-bootc) installs.
-  `--pkg-diff` ([ADR-0014](../adr/0014-update-status-pkg-diff.md)) appends,
-  after the status block, an `rpm-ostree db diff`-shaped Debian-package delta
-  (Upgraded/Downgraded/Added/Removed) between the running image and the
-  *locally* staged one — both sides read from the frozen
-  `/usr/share/frostyard/<IMAGE_ID>.packages.txt` (core ADR-0003), never from a
-  dpkg database or the network. The staged side is an identity-bound sidecar
-  the stagers capture at stage time (`/run/snosi/staged-packages` symlink →
-  write-once `staged-packages.<id>/` backing dir; see integration-contracts
-  §5.3). Combinable with `--check`. A missing/mismatched sidecar (staged before
-  this shipped, or a manual `bootc upgrade` with no timer run) warns and skips,
-  still exit 0. Default status stays silent on packages. The one parser plus
-  the sidecar publish/resolve live in `usr/lib/snosi/staged-packages.sh`,
-  sourced by both stagers and the status CLI; `test/pkg-diff-test.sh` pins the
-  parser, the differ, and the cross-transport static contract.
-- `bootc-update-notify.path` + `.service` (user scope) with
-  `/usr/libexec/bootc-update-notify` — desktop notification. The path unit
-  fires when the semaphore appears mid-session or is modified (newer image
-  re-staged), and PathExists= also triggers at session start when the file
-  already exists; the helper is ack-gated per staged digest (same pattern as
-  snosi-etc-drift-notify) so users see one notification per staged update,
-  not one per login or trigger. The toast requires the `notify-send` CLI from
-  `libnotify-bin` (the graphical package sets `shared/packages/snow/mkosi.conf`
-  for snow+snowfield and `shared/packages/sundog/mkosi.conf` for sundog; not
-  floe) — the transitively-present `libnotify4` is just the
-  library and does not ship the CLI, so without the package the helper
-  `command -v notify-send || exit 0`s into a silent no-op (this affects
-  snosi-etc-drift-notify too). Both units set `StartLimitIntervalSec=0`: the
-  stager writes the semaphore in several syscalls, so a single staging emits a
-  burst of PathModified triggers that otherwise trips systemd's default 5/10s
-  start-limit and permanently fails the `.path` watcher (`unit-start-limit-hit`,
-  observed on the first real desktop bootc host 2026-07-07); the per-digest ack
-  keeps the repeat triggers harmless.
-
-**End-of-life notice for native A/B and nbc hosts (ADR-0015, 2026-09-08):**
-`/usr/libexec/snosi-eol-notice` (base `usr/libexec/`) is the single owner of
-both the detection predicate and the wording: native A/B when
-`/usr/lib/snosi/native-ab` exists, nbc when the kernel command line has no
-`composefs=` AND `/run/ostree-booted` is absent (the same `!composefs`
-predicate the nbc timer units gate on; the ostree check excludes an
-ostree-backend bootc deployment), silent in containers and on every bootc
-install, tense flips after 2026-09-30. Three consumers delegate to it and
-carry no detection of their own: `/etc/update-motd.d/80-snosi-eol` (execs
-it), the user-scope `snosi-eol-notify.service` (static
-`graphical-session.target.wants/` link, no `[Install]`,
-`ConditionKernelCommandLine=!composefs` pre-filter) running
-`/usr/libexec/snosi-eol-notify` (one critical-urgency toast per user,
-tense-neutral title "This OS image is being retired" over the helper text
-with its motd-style leading blank line stripped, ack-gated on `NOTICE_ID`
-in `~/.local/state/snosi/eol-notice.ack` -- bump only for a substantive
-wording change, never for the post-date tense flip -- ack written only
-after a successful `notify-send`, same daemon-race retry as
-`bootc-update-notify`), and `snosi-update-status` (prints it first).
-`test/eol-notice-test.sh` (validate.yml) pins the predicate against fixture
-command lines, the single-source rule (the EOL sentence may exist in exactly
-one shipped file), the unit shape, and the once-per-user ack.
-
-**Recommends-split companion binaries (recurring pattern):** the image build
-installs without Recommends, so a transitively-pulled library package can ship
-config that references a helper binary living in a Recommends-only companion
-package — which silently never installs. Two confirmed instances: `libnotify4`
-vs `libnotify-bin` (above), and `libmtp-common` (pulled via `gvfs-backends` →
-`libmtp9t64`) whose udev rule `69-libmtp.rules` calls
-`/usr/lib/udev/mtp-probe` from the never-installed `libmtp-runtime` — every
-USB hotplug logged a udev-worker "Failed to find and pin callout binary"
-error and MTP devices missed `ID_MTP_DEVICE` tagging, breaking gvfs MTP
-automount (root-caused live on a snow-ab install 2026-07-20; fixed by adding
-`libmtp-runtime` to the graphical package set). When a shipped udev rule,
-unit, or script references a binary, verify the binary's owning package is
-actually in the package set — `Recommends:` in a dependent package is not
-enough.
-
-This mirrors the previous nbc-style download-only semantics: the staged deployment applies at the next normal reboot. The podman transfer path is also the current workaround for bootc registry-transport composefs pull failures noted in `docs/plans/2026-07-03-bootc-update-validation-plan.md`.
-
-Runtime units shipped in `mkosi.extra/` must not self-disable, call `systemctl preset`, or otherwise delete shipped `/etc` state. For run-once behavior, use a persistent `/var` marker (`ConditionPathExists=!/var/lib/<unit>.done` and a final `touch`) so bootc can merge `/etc` cleanly when the next staged deployment finalizes.
-
-**Kernel postinstall (all profiles):**
-- `shared/kernel/scripts/postinst/mkosi.postinst.chroot` — Builds initramfs via dracut, detects kernel version, generates `/usr/lib/modules/$VERSION/initramfs.img`, copies vmlinuz
-
-**Common postinstall logic** (`shared/scripts/common-postinst.sh`):
-
-Both snow and floe postinstall scripts source this shared script after setting `OS_PRETTY_NAME` and `OS_NAME`. It handles:
-- Updates `/usr/lib/os-release` (PRETTY_NAME, NAME, ID, ID_LIKE, VERSION_ID, SYSEXT_LEVEL, BUILD_ID)
-- Generates package list to `/usr/share/frostyard/`
-- Writes build date
-- Cleans apt caches
-- Creates sysext infrastructure dirs (`/var/lib/extensions`, `/var/lib/confexts`, `/usr/lib/extension-release.d`)
-
-**Desktop postinstall:**
-- `shared/snow/scripts/postinstall/snow.postinst.chroot` — Sources `common-postinst.sh` with OS_PRETTY_NAME="Snow Linux", enables GDM, creates user service symlinks for gnome-remote-desktop and gnome-remote-desktop-handover (explicitly removes gnome-remote-desktop-headless due to `Conflicts=` with the non-headless variant), removes fish desktop entry
-
-**Server postinstall:**
-- `shared/floe/scripts/postinstall/floe.postinst.chroot` — Sources `common-postinst.sh` with OS_PRETTY_NAME="Floe Linux" (no additional steps beyond common logic)
-
-**App package-set postinstall scripts (now consumed only by the app sysext builds — the loaded variants that used them were retired 2026-07):**
-
-| Script | Location | Purpose |
-|--------|----------|---------|
-| `edge.chroot` | `shared/packages/edge/mkosi.postinst.d/` | Downloads Edge .deb via `verified_download()`, strips `install_key`/`install_deb822_sources` from its `DEBIAN/postinst` (those call `apt-config` and break inside the chroot), installs the patched deb, relocates `/opt/microsoft/msedge` → `/usr/lib/microsoft-edge`, creates symlinks, patches icon paths |
-| `bitwarden.chroot` | `shared/packages/bitwarden/mkosi.postinst.d/` | Downloads Bitwarden .deb via `verified_download()`, relocates `/opt/Bitwarden` → `/usr/lib/Bitwarden`, sets SUID on chrome-sandbox |
-| `vscode.chroot` | `shared/packages/vscode/mkosi.postinst.d/` | Patches desktop entry to add inode/directory MIME type |
-
-
-### 3. FinalizeScripts (pre-output)
-
-Prepare the image for output. Run after postinstall, before the image format is written.
-
-**Image finalize** (`shared/outformat/image/finalize/mkosi.finalize.chroot`):
-- Removes `/boot`, `/home`, `/root`, `/srv` (recreates empty)
-- Creates `/sysroot` and `/nix` mountpoints (nix sysext bind-mount)
-- Writes `/etc/machine-id` as the literal `uninitialized` (machine-id(5) golden-image value) and removes SSH host keys. **First boot is real:** every install's first boot satisfies `ConditionFirstBoot=`, PID 1 applies system presets, and `preset-global.service` (base `mkosi.extra`, from ParticleOS) applies user-scope presets. `systemd-firstboot.service` is preset-disabled so nothing prompts on console. (Until 2026-07 the file shipped *empty*, which only means "generate an ID" and suppressed first-boot semantics entirely.) The `sshd-keygen.service.d` drop-in that keys on missing host keys is kept — it also covers key deletion on installed systems.
-- Strips ALL unit enablement symlinks (`.wants`/`.requires` entries + `[Install]` aliases, system and user scope) from `/etc` — mkosi ran `preset-all`/`--global preset-all` just before finalize; first boot recreates the same symlinks from the same preset policy as **runtime-created** state, so a later admin `systemctl disable` deletes runtime paths instead of image-shipped ones (which would break bootc's `/etc` merge at update finalize — the crash needs a *symlink* counterpart in the new deployment; deletions of shipped regular files merge fine, as `persistence-write.sh`'s `/etc/issue.net` check proves). Masks (`/dev/null`) and linked units (dracut) are kept. Stripped links are recorded in `/usr/share/snosi/enablement-manifest.txt`; `test/tests/05-firstboot-presets.sh` verifies first-boot parity against it.
-- Compiles GLib schemas and dconf databases
-- Sets file xattrs: `user.component=<package_name>` for every installed file — used by chunkah for layer optimization
-
-**Base image finalize** (`mkosi.images/base/mkosi.finalize.chroot`):
-- Masks `systemd-networkd-wait-online.service`
-
-**Sysext finalize** (per-sysext `mkosi.finalize` scripts):
-- Captures `/etc` configs to `/usr/share/factory/etc/` for tmpfiles-based injection at boot
-- Used by: docker, incus, nix, tailscale
-- Capture ONLY the specific paths referenced by the sysext's tmpfiles.d `C` directives — never all of `/etc`. With `Overlay=yes` the buildroot `/etc` is the merged base view, so a full capture ships the base image's `/etc/shadow` and SSH host keys in the published sysext (frostyard/snosi#282)
-
-### 4. PostOutputScripts (after image creation)
-
-Run after the image directory/file is created. Handle manifest processing and packaging.
-
-**Image manifest** (`shared/manifest/postoutput/mkosi.postoutput`):
-- Copies manifest to versioned filename: `$IMAGE_ID.$IMAGE_VERSION.manifest.json`
-
-**Sysext postoutput** (`shared/sysext/postoutput/sysext-postoutput.sh`):
-- Reads `KEYPACKAGE` env var, extracts version from manifest JSON
-- Maps Debian release to VERSION_ID (forky → 14, trixie → 13, bookworm → 12, bullseye → 11, buster → 10)
-- Handles Debian epoch notation: `5:1.2.3` → `5+1.2.3`
-- Renames sysext to versioned name: `{IMAGE_ID}_{KEYVERSION}_{OS_VERSION}_{ARCH}.{ext}` (ext may be raw, raw.gz, raw.xz, etc.)
-- Annotates manifest with key_package and key_version
-- Creates symlink for systemd-sysupdate MatchPattern matching
-
-## Output Organization
-
-After `mkosi build` completes, the output directory contains all images, sysexts, and manifests flat in `output/`. Two root scripts organize them for publishing:
-
-Root `mkosi.conf` intentionally lists `base` plus all sysexts in `Dependencies=` so plain `mkosi build` and `just sysexts` produce the sysext publishing set. Profile configs clear that inherited collection with an empty `Dependencies=` assignment and then add `Dependencies=base`; without the reset, mkosi appends list settings and profile builds would rebuild every sysext. CI enforces this with `check-profile-dependencies.sh`.
-
-Root `mkosi.conf` also configures mkosi's build tooling bootstrap with `ToolsTree=default` and `ToolsTreeSandboxTrees=mkosi.tools.sandbox`. Keep package-manager settings for that tools tree in `mkosi.tools.sandbox/`; the regular `mkosi.sandbox/` tree only affects target-image APT operations. Network hardening that should protect both surfaces, such as APT retries/timeouts, needs matching files in both trees.
-
-### sysextmv.sh
-
-Moves sysext files matching `{image_id}_{version}_{os_version}_{arch}.{ext}` into `output/sysexts/`, organized by sysext name (e.g., `output/sysexts/docker/`). This structure is required by the `frostyard/repogen` action for R2 publishing.
-
-### manifestmv.sh
-
-Moves manifest JSON files into `output/manifests/` for separate upload to R2.
-
-### check-duplicate-packages.sh
-
-Pre-build validation script (run in CI before `mkosi build`). Checks for duplicate package entries across mkosi configs to prevent conflicts.
-
-### check-profile-dependencies.sh
-
-Config sanity check used by `validate.yml`. It runs `mkosi -f --profile <profile> summary` for every profile and fails if any profile summary includes one of the sysext image dependencies from root `mkosi.conf`. This protects the required `Dependencies=` reset pattern in profile configs.
-
-### check-runtime-etc-guard.sh
-
-Runtime payload guard used by `validate.yml`. It scans tracked files in `mkosi.extra/` and `shared/**/tree/` for guest-side service enablement mutations (`systemctl enable/disable/revert/unmask/preset`, `deb-systemd-helper`) and deletion/rename patterns targeting `/etc`. Build-time scripts are intentionally outside the scan because build-time enablement is the correct way to define image service state.
-
-### check-native-publication-guard.sh
-
-Static publication guard used by `validate.yml`, enforcing `docs/native-ab-contracts.md` §15. For every `mkosi.profiles/<name>` directory literally named `floe-ab`, `snow-ab`, or `snowfield-ab` (the production native profile names), it requires the profile's `mkosi.conf` (plus `shared/native-ab-secure/**` content, if the conf references that path) to carry `ShimBootloader=signed`, `SecureBoot=yes`, `SignExpectedPcr=yes`, a reference to the NvPCR-disable finalize script, an include of the ab-root outformat fragment, and the committed update pubring at `shared/native-ab/keys/import-pubring.gpg`; it also requires the profile's own conf to carry no `KernelModules=` final-root filter. All three production profiles (`floe-ab`, `snow-ab`, `snowfield-ab`) exist as of Task 3.2 and pass this guard. Independently, it hard-fails if `mkosi.profiles/floe-ab-raw` — the permanent, never-published raw dev fixture — ever picks up any of the Shim/SecureBoot/SignExpectedPcr markers, since that would make it indistinguishable from a production profile.
-
-**CI usage in build.yml:**
-```bash
-./check-duplicate-packages.sh    # Validate
-sudo -E mkosi build              # Build
-sudo ./sysextmv.sh               # Organize sysexts
-sudo ./manifestmv.sh             # Organize manifests
-```
-
-## Package Relocation
-
-Packages that install to `/opt` must be relocated to `/usr/lib/<package>` because `/opt` is a writable bind mount that gets shadowed by sysext overlays on an immutable system.
-
-### Pattern
-
-```bash
-# 1. Move the installation directory
-mv /opt/<vendor>/<package> /usr/lib/<package>
-
-# 2. Create binary symlinks
-ln -sf /usr/lib/<package>/<binary> /usr/bin/<binary>
-
-# 3. Fix icon/desktop paths if GUI app
-# 4. Fix RPATH if shared libraries reference /opt paths (use patchelf)
-# 5. Set SUID bits if needed (e.g., chrome-sandbox)
-```
-
-### Current Relocations
-
-| Package | From | To | Extra Steps |
-|---------|------|----|-------------|
-| Microsoft Edge | `/opt/microsoft/msedge` | `/usr/lib/microsoft-edge` | Icon symlinks, gnome-control-center default-apps patch |
-| Bitwarden | `/opt/Bitwarden` | `/usr/lib/Bitwarden` | SUID on chrome-sandbox (4755), desktop entry path update |
-
-## OCI Image Packaging
-
-After mkosi produces a directory image, two scripts handle OCI packaging:
-
-### buildah-package.sh
-
-Creates OCI container images from the directory output.
-
-```bash
-buildah-package.sh <rootfs-dir> <image-ref> [label=value ...]
-```
-
-Uses `buildah mount` + `cp -a` + `buildah commit` instead of `buildah COPY` to preserve all file metadata (SUID bits, xattrs, capabilities, ACLs, hardlinks). This works around buildah#4463 which drops SUID bits during COPY. In protected secure mode it first packages and chunks a pristine candidate, seals that chunked candidate's digest into the UKI, then derives the final image from it with only `/boot` overlaid. The final candidate must return the same digest in the second of exactly two digest probes; no protected post-assembly chunking is permitted.
-
-### chunkah-package.sh
-
-Optimizes OCI image layers using [chunkah](https://quay.io/jlebon/chunkah).
-
-- Reads the built image via `podman inspect`
-- Mounts into chunkah container
-- Runs `chunkah build --prune /sysroot/ --max-layers $MAX_LAYERS` (default 128)
-- Uses `user.component` xattrs (set during finalize) to group files into efficient layers
-- Removes ostree-specific labels from output
-
-For protected secure packaging, changing chunkah, the Buildah derivation, or
-the `/boot` exclusion requires the full bootc secure compatibility
-revalidation; these are digest-binding behavior, not independent optimization
-details.
-
-## Verified Download System
-
-External resources are managed through `shared/download/` with metadata split
-by the build artifact that must be rebuilt when a dependency changes:
-
-### sysext-checksums.json
-
-Pins URL + SHA256 for direct downloads consumed by sysext builds. Current
-consumers are 1Password, Bitwarden, Edge, code-server, coder,
-GitHub Copilot, Lemonade, Paseo, Pilothouse, and Sunshine.
-Updates to this file should trigger `build.yml` and skip the OCI image matrix.
-
-### image-checksums.json
-
-Pins URL + SHA256 for direct downloads consumed by OCI profile builds. Current
-consumers include Homebrew, Surface secure boot cert, Hotedge, Logomenu, and
-Bazaar Companion. Updates to this file should trigger `build-images.yml` and
-skip the sysext publishing workflow.
-
-Both checksum files use the same schema:
-
-```json
-{
-  "bitwarden": {
-    "url": "https://...",
-    "sha256": "abc123...",
-    "version": "2026.2.1"
-  }
-}
-```
-
-### verified-download.sh
-
-Provides `verified_download(key, output_path)`:
-1. Searches `sysext-checksums.json` and `image-checksums.json` via jq
-2. Downloads with curl + retries
-3. Validates SHA256 post-download
-4. Fails the build on missing keys or checksum mismatch
-
-Set `CHECKSUMS_FILE` only when a script must intentionally restrict lookup to
-one explicit metadata file.
-
-### package-versions.json
-
-Tracks APT-based external package versions for sysexts (`code`, `docker-ce`,
-`1password-cli`, `claude-desktop`, `chatgpt`, `himmelblau`) separately from
-download checksums. Updated daily by
-`check-packages.yml`. This file is only a rebuild sentinel; it does not pin
-what mkosi installs from APT. Edge is NOT tracked here — it is pinned as a
-direct `.deb` in `sysext-checksums.json` and updated by `check-dependencies.yml`.
-
-### forky-versions.json
-
-Records the Debian Forky `systemd` **source** version whose recheck
-obligations were last discharged. Its shape is `{"systemd": "<version>"}`.
-Unlike `package-versions.json`, it does not trigger a rebuild. It is an
-acknowledgment record, and no build reads it.
-
-**Why it exists.** Four compositions select the whole systemd family as
-unpinned `<pkg>/forky` packages from an isolated low-priority Forky sandbox
-(`shared/{bootc-secure,native-ab-secure}/package-manager/`):
-
-| Composition | Consumers |
-|-------------|-----------|
-| `shared/bootc-secure/mkosi.conf` | floe, snow, snowfield, sundog (bootc) |
-| `shared/native-ab-secure/mkosi.conf` | floe-ab, snow-ab, snowfield-ab |
-| `shared/firn-installer/mkosi.conf` | Firn installer ISO |
-| `shared/native-installer/mkosi.conf` | legacy native installer ISO |
-
-The family therefore changes whenever Debian migrates systemd into Forky, with
-no repository change. AGENTS.md attaches recheck obligations to that event, but
-before this sentinel nothing noticed it. On 2026-09-28 Forky moved
-261.2-1 -> 262-1. The only signal was native A/B CI failing on a hardcoded
-`libsystemd-shared-261.so` (PR 1017). In main run 36479923888, Floe's
-`secure-build` installed and published 262-1, while Snow, Snowfield, and Sundog
-installed 261.2-1 from a lagging deb.debian.org backend.
-
-**How it is checked.** The daily `check-forky-systemd` job in
-`check-packages.yml` runs `shared/download/check-forky-systemd.sh
-"$RUNNER_TEMP/forky-systemd-pr-body.md"`, which:
-
-1. Reads the sentinel and fails closed unless `.systemd` is a string in Debian
-   version grammar (`[epoch:]upstream[-revision]`).
-2. Fetches `https://deb.debian.org/debian/dists/forky/main/source/Sources.gz`
-   through `latest-apt-version.sh`. The helper's `Package:`/`Version:` stanza
-   parsing is identical for a Sources index. Forky's index decompresses to
-   ~60 MiB, over the helper's 50 MiB default, so the script raises only the
-   decompressed cap, to 128 MiB, for this one fetch. The 60-second transfer
-   limit and 50 MiB compressed cap (index ~15 MiB) are unchanged.
-3. Compares with `dpkg --compare-versions`:
-   - **equal:** no-op.
-   - **strictly newer:** writes the PR body, then rewrites the sentinel.
-   - **older:** emits a `::warning::` and changes nothing. The CDN backends
-     sync independently, so an older reading is a stale mirror, not a
-     downgrade.
-4. Emits `has_update`, `previous`, and `latest` step outputs.
-
-Every failure (download, missing `systemd`, a served or committed value
-outside the version grammar) exits non-zero with the sentinel, body, and
-outputs untouched.
-
-The job then opens the PR with `peter-evans/create-pull-request` on branch
-`auto-update-forky-systemd`. `add-paths` limits the commit to the sentinel.
-The body stays in `RUNNER_TEMP` and never enters the commit. The body is a
-checklist of the three obligations:
-
-1. **Task 4 bwrap build/root check.** Build a secure bootc image on the new
-   family, then run `bootc --version` and `bootc container --help` in a bwrap
-   root containing only that output. Record the result as the AGENTS.md Task 4
-   paragraph's "Last repeated" entry.
-2. **Issue 517 dracut drop-in.** Confirm the `gpt-auto-root-luks` udev rules
-   still ship in `90-image-dissect.rules`, and that
-   `shared/bootc-secure/tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf`
-   still installs the file that carries them. The drop-in becomes redundant
-   once the image dracut is 108 or newer.
-3. **NvPCR masks.** Compare the new family's `/usr/lib/nvpcr/*.nvpcr`
-   definitions and writer units against
-   `shared/{bootc-secure,native-ab-secure}/finalize/disable-nvpcr.chroot`.
-   Since 262, the masks are needed because NvPCRs are created in the initrd
-   under a write policy that needs the definitions inside the UKI and a
-   `ukify --sign-initrd-pcrs` initrd policy. Snosi UKIs carry neither.
-
-Merge the PR only after all three pass. Merging records the acknowledgment.
-
-**Seed value.** The committed seed is 262-1. PR 1018 recorded the 262-1
-rechecks in AGENTS.md before this sentinel existed.
-
-**Trigger wiring.** `build-images.yml` and `build-native-images.yml` do NOT
-ignore the sentinel. A `WORKFLOW_PAT`-created PR therefore runs
-`mechanics-build` (all four bootc profiles) and native `build-pr`
-(`test/native-ab-secure-artifact-test.sh`) on the new family. Merging it
-rebuilds the bootc and native images on the acknowledged family, which
-re-converges a mixed run like 36479923888. `build.yml` (sysexts never install
-from Forky) and `test-bootc-secure.yml` (fixture contracts do not read it)
-ignore it. `test/workflow-path-filter-test.sh` pins both choices.
-
-**Test.** `test/check-forky-systemd-test.sh` (validate.yml) drives the script
-through the real helper with a PATH-stubbed curl. It covers the
-newer/unchanged/stale/`dpkg`-ordering/epoch paths, every fail-closed path, and
-a >50 MiB fixture that the helper default rejects and the script accepts. It
-checks that every repository path in the generated body exists. It derives the
-Forky consumer set from every `*.conf` that selects `systemd/forky`, so the
-body must name each consumer. It also pins the job's 15-minute timeout,
-exact `contents`/`pull-requests` write scope, and PR plumbing.
-
-### update-checksums.sh
-
-Helper for manual updates to existing checksum keys. It updates whichever split
-checksum file already contains the key:
-```bash
-./update-checksums.sh <key> <url> [version]
-```
-
-Selection rules, locked in by `test/update-checksums-split-test.sh` (fixture
-test, wired into `validate.yml`; the read side is covered by
-`test/verified-download-split-checksums-test.sh`):
-
-- The search is ordered — `sysext-checksums.json` first, then
-  `image-checksums.json` — and stops at the first file that `has()` the key,
-  so exactly one file is ever rewritten and the siblings stay byte-identical.
-- A key present in neither file is an error (`Key '...' not found in split
-  checksum metadata`); the script never creates a key through the search path.
-- `CHECKSUMS_FILE` short-circuits the search entirely: it rewrites that one
-  file (creating the key if absent) and does not require either default file to
-  exist.
-- A *missing* default file is a hard error, not a skip — but only if the search
-  actually reaches it. A sysext key still resolves when `image-checksums.json`
-  is absent (the loop breaks first), while an image key is unreachable when
-  `sysext-checksums.json` is absent. This asymmetry is current behavior; the
-  test pins it so a deliberate change to it is visible rather than accidental.
-- Any failure before the `jq` rewrite (unfetchable URL, missing file, unknown
-  key) leaves every metadata file untouched.
-
-## Tree Overlays
-
-Each profile has filesystem overlays (ExtraTrees) that are merged into the image:
-
-### Base NFS service accounts
-
-`mkosi.images/base/mkosi.conf` installs `nfs-common`, which depends on
-`rpcbind`. Debian's package postinst scripts create `statd` and `_rpc` in
-the build-time `/etc`; installed machines with persistent account databases
-can still lack them. Base therefore ships `usr/lib/sysusers.d/nfs-common.conf`
-and `rpcbind.conf` to create missing accounts at boot, with dynamically
-allocated UIDs, primary group `nogroup`, and `/usr/sbin/nologin`, matching
-Debian's account setup. Existing identities are preserved.
-
-The directory rules already exist: base's `usr/lib/tmpfiles.d/nfs-common.conf`
-creates `/var/lib/nfs/{sm,sm.bak,state}`, while Debian's packaged
-`rpcbind.conf` creates `/run/rpcbind`. Sysusers supplies their missing owners
-before tmpfiles runs; no additional tmpfiles rule or service is needed.
-Keep these definitions in base so Floe, Snow, and Snowfield inherit them.
-`sudo bash test/nfs-system-accounts-test.sh` (also run by `validate.yml`)
-reproduces the missing-owner failures in disposable roots, then checks account
-creation, directory ownership, idempotence, and preservation of existing
-identities and NFS state using real systemd tools.
-
-### shared/snow/tree/
-
-Service group membership uses `m USER GROUP`: saned joins scanner,
-cups-pk-helper joins lpadmin, and usbmux joins plugdev. The latter two use
-Debian-compatible primary groups for newly created accounts; `m` also repairs
-existing accounts without renumbering them. Keep base/Snow usbmux copies in sync.
-`test/service-account-memberships-test.py` checks fresh and existing identities.
-
-
-Desktop configuration overlay:
-- APT sources for Docker, backports
-- dconf/GLib schema overrides for GNOME defaults
-- GDM configuration
-- Flatpak remote (Flathub)
-- systemd units: mount units (home, root, srv, opt, usr-local), service overrides, presets
-- dracut configs: TPM, bootc, systemd
-- tmpfiles.d and sysusers.d definitions
-- Flatpak sandbox overrides
-
-### shared/floe/tree/
-
-Geoclue state provisioning is Snow-only, alongside `geoclue-2.0` and its
-sysusers definition. Base and Floe must not carry a tmpfiles rule referencing
-the absent geoclue account. `test/geoclue-state-scope-test.py` checks scope and
-real desktop state-directory ownership.
-
-
-Server configuration overlay:
-- APT sources for Docker
-- NetworkManager: no Wi-Fi backend override — floe uses NetworkManager's
-  default `wpa_supplicant` backend, matching the `wpasupplicant` package that
-  base installs. An early Cayo overlay shipped
-  `etc/NetworkManager/conf.d/iwd.conf` with `wifi.backend=iwd` while no product
-  installs `iwd`, pointing NetworkManager at an absent backend (frostyard/snosi#805,
-  removed 2026-08). `test/wifi-backend-test.sh` (validate.yml) fails the build
-  if any shipped payload tree selects a `wifi.backend=` whose implementing
-  package is not in that payload's closure (base plus the product's package
-  set); selecting `iwd` therefore requires installing `iwd` first.
-- systemd mounts and presets (no desktop services)
-- sysusers/tmpfiles for avahi, dnsmasq, docker, incus
-
-## /etc Drift Tooling and Preset Reconciliation (base mkosi.extra)
-
-Base recreates the `_ssh` group using `g _ssh /usr/bin/ssh-agent`, deriving
-the GID from the immutable setgid binary. Never replace this with an arbitrary
-dynamic or hardcoded GID. Existing group identities and the binary remain
-unchanged; `test/openssh-agent-group-test.py` exercises both cases.
-
-
-- `usr/bin/snosi-etc-diff` — root CLI; resolves the pristine image `/etc` tree via `resolve_pristine()`, which branches on the native A/B marker `/usr/lib/snosi/native-ab`: on bootc/composefs it bind-mounts `/` (submount-free) to reach the pristine image `/etc` hidden under the writable `/etc` bind mount; on native A/B it uses `/.etc.lower` directly (the EROFS root's canonical pristine tree — live `/etc` there is an overlay whose lowerdir *is* `/.etc.lower`, so the bind-mount trick would instead expose `/.etc.lower` plus an empty `/etc` mountpoint dir and misreport the entire lower tree as drift; fails loudly if the marker is present but `/.etc.lower` is missing/not-a-directory). Everything downstream — list/diff/restore — reads from `$PRISTINE` and is identical between the two sources. Then reports `M`(odified)/`D`(eleted) — and `A`(dded) with `--added` — relative to it. `--machine` emits tab-separated lines. With explicit `PATH...` arguments it shows the *actual* difference (unified diff for regular files, symlink targets, permission/ownership lines; ignore globs do not apply), and `--restore PATH...` copies the pristine image version back over the live `/etc` (content+perms+ownership; refuses paths the image doesn't ship and live-dir/image-file type mismatches). The human list mode ends with a resolution footer (inspect / accept-via-ignore / revert) so the report is actionable, not just a path list. Ignore globs: `usr/lib/snosi/etc-diff.ignore` (image defaults, tuned against a live install) plus optional `/etc/snosi/etc-diff.ignore` (this optional path is read as `$LIVE_ETC/snosi/etc-diff.ignore`, so it resolves correctly under test hooks too); reviewed for native A/B (2026-07-14) — no composefs-specific globs exist to remove, and the overlay's upper/work dirs live under `/var/lib/snosi/etc-overlay`, not `/etc`, so nothing new needs ignoring. `SNOSI_ETC_DIFF_LIVE_ETC`/`SNOSI_ETC_DIFF_PRISTINE_ETC` (undocumented in `--help`) are test hooks: setting BOTH bypasses detection entirely and relaxes the `EUID==0` requirement, letting `test/snosi-etc-diff-test.sh` drive fixture trees non-root, no bind mount, no image build.
-- `preset-reconcile.service` → `usr/libexec/preset-reconcile` — closes the "new image preset policy never reaches existing installs" gap: diffs the image's enablement manifest against `/var/lib/snosi/enablement-manifest.applied`; entries ADDED to policy are preset (creates-only; masked units skipped, so admin masks win; admin disables of pre-existing policy are never re-applied), entries REMOVED are written to `/var/lib/snosi/preset-removals` for the drift report (never auto-disabled), then the applied snapshot is updated. Gated on the enablement marker so first boot/migration initialize the model first. Newly enabled units take effect at the next boot (runs after the boot transaction on purpose).
-- `snosi-etc-drift-report.service` → `usr/libexec/snosi-etc-drift-report` — per boot, writes `M`/`D` diff entries plus `P`(olicy removal) lines to `/var/lib/snosi/etc-drift.report` with a sha256 in `etc-drift.hash`; removes both when clean.
-- `snosi-etc-drift-notify.service` (user scope, `graphical-session.target`) → one `notify-send` per report *change*, gated by comparing the report hash against `$XDG_STATE_HOME/snosi/etc-drift.ack`.
-- `etc/update-motd.d/85-snosi-etc-drift` — headless equivalent: one summary line at login when the report is non-empty.
-
-All verified functionally on a live spike-image install (2026-07-05): diff correctly isolated one real drift entry (`gdm3/daemon.conf`) after ignore tuning; reconciler initialize/add/remove/steady paths all exercised (preset recreated a removed enablement symlink; removals recorded, never disabled).
+(composition), [ADR-0012](../adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md)
+(OCI chunking), and [ADR-0018](../adr/0018-remove-native-ab-and-nbc-lanes.md)
+(bootc-only output). Removed native mechanisms are recorded in
+[prototype history](../native-ab-prototype-history.md).
+
+## Configuration and script phases
+
+The root `mkosi.conf` depends on `base` and all sysexts for `just sysexts`.
+Each of the four bootc profiles clears inherited `Dependencies=` before
+adding `Dependencies=base`. Profiles include
+`shared/packages/bootc/mkosi.conf`, `shared/bootc-secure/mkosi.conf`, their
+product composition and kernel fragments, and
+`shared/outformat/image/mkosi.conf`. `shared/composition/floe/`,
+`shared/composition/snow/` and `shared/composition/sundog/` collect package,
+tree and script inputs; Snowfield shares Snow's composition with the Surface
+kernel. Include order controls mkosi list-valued settings (`Packages=`,
+`FinalizeScripts=`, etc.): confirm a changed order with `mkosi summary`.
+`check-profile-dependencies.sh` guards against rebuilding sysexts for every
+profile. mkosi's `ToolsTree=default` uses `mkosi.tools.sandbox/`; target APT
+settings use `mkosi.sandbox/`. Network retry/timeouts need both trees.
+
+Image builds have four phases, in order:
+
+1. **BuildScripts:** `shared/scripts/build/brew.chroot` installs Homebrew;
+   Snow/Snowfield also run verified Hotedge, Logomenu, Bazaar Companion and
+   Surface certificate downloads through `shared/snow/scripts/build/`.
+   Downloads use `shared/download/verified-download.sh` and pinned SHA-256
+   metadata, not unchecked network content. Frostyard's `bootc` and
+   `libostree-1-1` arrive as debs from the configured APT source, not an
+   in-tree source build.
+2. **PostInstallationScripts:** kernel dracut postinstall, shared
+   `shared/scripts/common-postinst.sh`, and the product's setup prepare
+   os-release, package inventory and service state. Package `/opt` payloads
+   destined for immutable images or sysexts must be relocated under `/usr`.
+3. **FinalizeScripts:** `shared/outformat/image/finalize/mkosi.finalize.chroot`
+   normalizes the image, writes `/etc/machine-id` as `uninitialized`, removes
+   SSH host keys, strips `/etc` enablement symlinks, records
+   `/usr/share/snosi/enablement-manifest.txt` and sets `user.component`
+   xattrs for OCI chunking. Presets recreate links on true first boot.
+   `shared/composition/var-audit.finalize` audits per-product `/var` outcome
+   maps and rejects unclassified or stale entries.
+4. **PostOutputScripts:** `shared/manifest/postoutput/mkosi.postoutput`
+   records the image manifest; sysext postoutput scripts derive versioned
+   names. `sysextmv.sh` and `manifestmv.sh` arrange CI publication output.
+
+The base includes `pciutils`/`usbutils` and NFS account sysusers definitions
+for `_rpc` and `statd`. `test/nfs-system-accounts-test.sh` verifies fresh
+and existing account/state handling. Sysext factory `/etc` captures must
+match only tmpfiles `C` targets; copying the buildroot's full `/etc` would
+publish sensitive base state. See [sysext design](sysexts.md).
+
+## Secure bootc assembly
+
+`shared/bootc-secure/mkosi.conf` selects a coherent Forky systemd family
+from an isolated low-priority APT source. Its schema-1 image contract is
+`shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json`; Firn consumes
+the secure installation subset. The fragment supplies lockdown bootc kargs,
+MOK/PCR public identities and the required initramfs tooling. Private keys
+remain caller-owned. `build-images.yml` checks supplied credentials against
+`shared/native-ab/keys/mok-2026.crt` and
+`shared/native-ab/keys/pcr-signing-2026.pub`; external lab bootc consumers
+also depend on that path.
+
+Protected `shared/outformat/image/buildah-package.sh` packaging first chunks
+the pristine OCI candidate with `chunkah-package.sh`. Candidate-image bootc
+computes the storage composefs digest; `shared/bootc-secure/assemble-uki.sh`
+uses that digest to build a MOK-signed UKI and signed bootloader stage. The
+final image inherits the chunked layers with only `/boot` overlaid, and a
+second digest probe must agree. No post-assembly chunk pass is permitted.
+The assembler runs ukify inside the pinned candidate, offline, with
+read-only credential binds, a public-only writable work area and no retained
+private material. See the
+[compatibility contract](../bootc-secure-assembly-compatibility.md) for
+revalidation triggers and [secure operations](../bootc-secure-operations.md)
+for support/evidence limits.
+
+Forky can change independently of the Frostyard bootc/libostree debs. The
+daily `shared/download/forky-versions.json` sentinel creates a review PR
+when Debian's systemd source advances. Rebuild a secure profile and execute
+`bootc --version` plus `bootc container --help` in its isolated root; also
+recheck the Issue 517 `90-image-dissect.rules` inclusion through
+`shared/bootc-secure/tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf`
+and NvPCR masks in `shared/bootc-secure/finalize/disable-nvpcr.chroot`.
+`test/check-forky-systemd-test.sh` enforces the sentinel consumer and PR
+obligations. Signed-PCR-11 LUKS unlock is retained while unused NvPCR writers
+are masked. The most recent build-root compatibility recheck is in `AGENTS.md`.
+
+## Runtime update and policy
+
+The base's `bootc-update-stage.timer` invokes
+`mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage`: it uses
+Podman to pull under restrictive containers/image policy, prunes stale
+transfer images before pulling, stages through bootc without forcing reboot,
+and verifies the staged digest equals the pulled manifest digest. It writes
+`/run/snosi/update-check` on each run and `/run/snosi/update-staged` on a
+successful stage. Outcomes include `current`, `staged`, `held-rollback` and
+`failed`. The motd hook, desktop notification and `snosi-update-status`
+consume this state; the desktop helper is ack-gated per digest and requires
+`libnotify-bin` on graphical products. `snosi-update-status --check` compares
+the followed registry image's version label; `--pkg-diff` compares the
+running inventory with the *local* staged inventory, without reading the
+network or a mutable dpkg database.
+
+The `mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh` sidecar
+library writes an identity-bound, write-once package inventory and atomically
+swaps its `/run/snosi/staged-packages` symlink. The sole shipped producer uses
+`digest=sha256:...`; its `version=<14-digit>` parser remains a shared-library
+API and is covered by `test/pkg-diff-test.sh`, not a native OS updater.
+Missing or mismatched sidecars warn and skip package diff without changing
+ordinary status. `bootc-update-stage` captures the image package list before
+staging; a capture failure cannot leave a falsely successful stage.
+
+Runtime `/etc` deletions and unit self-disablement break the bootc deployment
+merge. Use a persistent `/var` run-once marker instead; the image finalize
+keeps masks but removes build-time enablement links from `/etc`, leaving
+first-boot presets to recreate them. `check-runtime-etc-guard.sh` and
+`check-required-by-guard.sh` prevent these regressions. The base's
+`snosi-etc-diff` compares live `/etc` with the booted image's pristine tree;
+`preset-reconcile.service` applies newly added enablement policy without
+re-enabling units an administrator disabled.
+
+`snosi-kargs` builds one MOK-signed, append-only global ESP cmdline addon for
+secure bootc installations. It is measured into PCR 12 and excluded from the
+signed-PCR-11 unlock policy; consult [the operator contract](../snosi-kargs.md).
+The Snow Plymouth theme and bounded DRM/fbcon barrier ship from
+`shared/snow/tree/`, including
+`shared/snow/tree/usr/lib/systemd/system/plymouth-start.service.d/10-wait-drm.conf`.
+Firn supplies the bootc installation kernel arguments.
+
+## Publication input metadata
+
+`shared/download/sysext-checksums.json` pins direct sysext downloads and
+triggers sysext builds. `shared/download/image-checksums.json` pins OCI
+profile downloads and triggers image builds. `package-versions.json` tracks
+external sysext APT changes as a review sentinel, not an APT version pin;
+`forky-versions.json` records the last acknowledged Forky systemd source
+version. The weekly dependency and daily package workflows open PRs, never
+auto-merge. The retained ISO publish scripts in `shared/native-ab/publish/`
+promote a signed Firn index at `isos/native/v1/` using a protected signing
+credential; ISO retention is not automated.
+See [CI/CD](ci-cd.md) for publication gates.

@@ -3,6 +3,10 @@
 - **Status:** Accepted
 - **Date:** 2026-09-08
 
+> Implementation status: [ADR-0018](0018-remove-native-ab-and-nbc-lanes.md)
+> removes the build/runtime lanes and EOL helper from new images. This accepted
+> record describes the original cutoff and notices on already-published images.
+
 ## Context
 
 Snosi ships two transports for the same three products. The bootc/composefs

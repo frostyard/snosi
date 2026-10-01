@@ -36,7 +36,6 @@ on:
       - ".github/workflows/check-dependencies.yml"
       - ".github/workflows/check-packages.yml"
       - ".github/workflows/claude.yml"
-      - ".github/workflows/native-retention.yml"
       - ".github/workflows/nightly-compliance.yml"
       - ".github/workflows/scorecard.yml"
       - ".github/workflows/test-install.yml"
@@ -50,7 +49,6 @@ on:
       # Sibling push/PR workflows validate their own files; nothing in this
       # workflow reads them. build.yml is deliberately NOT ignored anywhere:
       # it is the canonical mkosi pin source.
-      - ".github/workflows/build-native-images.yml"
       - ".github/workflows/test-bootc-secure.yml"
       - ".github/workflows/validate.yml"
   pull_request:
@@ -83,7 +81,6 @@ on:
       - ".github/workflows/check-dependencies.yml"
       - ".github/workflows/check-packages.yml"
       - ".github/workflows/claude.yml"
-      - ".github/workflows/native-retention.yml"
       - ".github/workflows/nightly-compliance.yml"
       - ".github/workflows/scorecard.yml"
       - ".github/workflows/test-install.yml"
@@ -97,7 +94,6 @@ on:
       # Sibling push/PR workflows validate their own files; nothing in this
       # workflow reads them. build.yml is deliberately NOT ignored anywhere:
       # it is the canonical mkosi pin source.
-      - ".github/workflows/build-native-images.yml"
       - ".github/workflows/test-bootc-secure.yml"
       - ".github/workflows/validate.yml"
   workflow_dispatch:

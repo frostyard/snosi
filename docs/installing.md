@@ -1,10 +1,9 @@
 # Installing published Snosi images
 
-Firn is the supported installer for published Snosi images. The current x86-64
-ISO still offers bootc/composefs and deprecated native A/B entries; the
-proposed [retirement plan](plans/2026-09-24-native-ab-nbc-retirement-plan.md) removes
-only the A/B choices after review. Legacy per-family installer paths are not
-supported alternatives.
+Firn is the supported installer for published Snosi images. The x86-64 ISO
+offers only bootc/composefs Snow, Snowfield, Floe and Sundog choices
+([ADR-0018](adr/0018-remove-native-ab-and-nbc-lanes.md)). Its retained
+`isos/native/v1/` URL is a publication namespace, not an A/B installer.
 
 Installation erases the selected target disk. Back up anything you need and
 verify that the backup is readable from another machine before booting the
@@ -12,35 +11,28 @@ installer.
 
 ## Choose an image
 
-> **Deprecated:** the native A/B path (`snow-ab`, `snowfield-ab`, `floe-ab`)
-> and nbc-based installations reach end of life on **2026-09-30** and will
-> receive no updates after that date
-> ([ADR-0015](adr/0015-retire-native-ab-images-and-nbc-installs.md)).
-> New installs should use a bootc image; existing native A/B and nbc hosts
-> should back up and reinstall with a bootc image. Affected hosts show an
-> end-of-life notice at login and once per user on the desktop.
+> Native A/B and nbc hosts receive no new updates after **2026-09-30**.
+> Back up and reinstall with a bootc image. Previously published images may
+> contain the original [ADR-0015](adr/0015-retire-native-ab-images-and-nbc-installs.md)
+> EOL notice; newly built bootc images do not ship that notice.
 
-> End of support does not itself delete artifacts. Proposed
-> [ADR-0017](adr/0017-gate-native-ab-and-nbc-disposal.md) describes a future
-> no-NBC-specific-retention posture conditional on core ADR-0052 acceptance;
-> core ADR-0050 currently still governs outside-`stable` retention and signed
-> `stable` and referenced deb bytes remain protected separately. Existing
-> debs may stay published without support.
+> Source removal deletes no R2 objects. Future published-object disposal
+> requires the separate exact-object gate in
+> [ADR-0018](adr/0018-remove-native-ab-and-nbc-lanes.md).
 
 The same Firn image picker offers all current products:
 
 | Family | Products | Update model | Target disk guidance |
 | --- | --- | --- | --- |
 | bootc | `snow`, `snowfield`, `sundog`, `floe` | Atomic bootc/composefs deployments | Use at least 30 GiB |
-| Native A/B (deprecated) | `snow-ab`, `snowfield-ab`, `floe-ab` | Signed systemd-sysupdate A/B slots | Current minimum is 15.5 GiB for Floe and 21.5 GiB for Snow or Snowfield |
 
 Use a larger disk when possible. Applications, containers, Flatpaks, home
-directories, and update state all consume mutable disk space. Firn derives the
-native A/B minimum from the selected release artifact and refuses an
-undersized target rather than relying only on the figures above.
+directories, and update state all consume mutable disk space.
 
 - **Snow** is the general-purpose GNOME desktop.
-- **Snowfield** is the GNOME desktop for Microsoft Surface devices.
+- **Snowfield** is the GNOME desktop for Microsoft Surface devices; its
+  representative Surface hardware installation is **untested**. Its former
+  hardware gate was waived for inclusion in the bootc-only catalog.
 - **Sundog** is the bootc-only KDE Plasma desktop
   ([ADR-0016](adr/0016-name-kde-bootc-product-sundog.md)).
 - **Floe** is the headless server image.
@@ -99,9 +91,8 @@ printf '%s  %s\n' "$expected" snosi-installer.iso |
 ```
 
 Stop if the fingerprint, OpenPGP signature, or SHA-256 check fails. Firn also
-verifies the selected payload before writing it: bootc images use the committed
-Cosign key and exact repository identity; native A/B artifacts use the signed
-index and artifact checksum.
+verifies the selected bootc payload against the committed Cosign key and exact
+repository identity before writing it.
 
 ## Write and boot the installer
 
@@ -138,18 +129,17 @@ such as `/dev/sdb`, not a partition such as `/dev/sdb1`.
 ## Install with Firn
 
 Firn starts automatically as a terminal wizard on the local display and the
-serial console. It uses the same flow for both image families while applying
-the correct storage and trust pipeline for the selected product.
+serial console. It applies the bootc storage and trust pipeline.
 
-1. Select the bootc or native A/B family, then select the product.
+1. Select the bootc product.
 2. Ensure networking is available if the selected payload or optional
    applications must be downloaded. The medium provides NetworkManager and
    `nmcli` for console network configuration.
 3. Select the target disk by its path, model, serial, size, and transport.
    Firn refuses the installer medium, mounted or ambiguous disks, and targets
-   that cannot hold the selected native A/B release.
+   that cannot hold the selected bootc installation.
 4. Choose the filesystem and explicitly choose encryption, TPM unlock, and MOK
-   enrollment settings offered for the detected hardware and image family.
+   enrollment settings offered for the detected hardware.
 5. Configure hostname, locale, timezone, keyboard, optional SSH keys, the first
    user and groups, and optional system Flatpaks.
 6. Review the generated recipe. Confirm erasure by typing the exact target-disk
@@ -193,21 +183,7 @@ sudo bootc rollback
 sudo systemctl reboot
 ```
 
-For a native A/B image, confirm the system and sysupdate timer:
-
-```bash
-systemctl is-system-running
-sudo snosi-update-status --check
-systemctl list-timers snosi-sysupdate-stage.timer
-```
-
-Until the cutoff, published native images write a signed update to the inactive
-root and verity slots and apply it at the next natural reboot.
-`snosi-update-status` reports the running, staged, and rollback versions. Use
-the systemd-boot menu to select the previous version when an explicit rollback
-is needed; boot counting falls back automatically after repeated failed boots.
-
 For bootc migration-specific backup and failure guidance, see the
 [nbc to bootc migration runbook](nbc-to-bootc-migration.md). The native image,
-partition, update, and boot contracts are documented in
+partition, update, and boot contracts are retained as history in
 [Native A/B Contracts](native-ab-contracts.md).

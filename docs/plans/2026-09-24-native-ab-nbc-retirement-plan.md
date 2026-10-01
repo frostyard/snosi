@@ -1,6 +1,6 @@
 # Plan: Native A/B and nbc retirement without losing bootc installation
 
-**Status:** Proposed
+**Status:** Superseded by [ADR-0018](../adr/0018-remove-native-ab-and-nbc-lanes.md)
 **Last verified:** 2026-09-24
 
 This is a reviewable sequence, not production authority. It implements the

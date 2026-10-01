@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # Fixture regression test for shared/native-ab/ci/check-mkosi-pin.sh, the
-# Mkosi Pin Governance guard run as a real CI step at seven sites in
-# build-native-images.yml and build-installer-iso.yml. That script's whole
+# Mkosi Pin Governance guard run by build-installer-iso.yml. That script's whole
 # reason to exist is its *failure* branches -- rejecting a non-full-SHA pin
 # and catching a build workflow that reintroduces a second, independently
 # updated `systemd/mkosi@<sha>` pin -- yet in CI it only ever runs against the
@@ -36,14 +35,13 @@ PIN_B="fedcba9876543210fedcba9876543210fedcba98"
 
 # Build a throwaway repo layout and symlink the real script into it so that
 # its `dirname/../../..` root_dir resolves to the fixture, not this repo.
-# Args: <dir> <build.yml pin line> <native pin line> <installer pin line>
+# Args: <dir> <build.yml pin line> <installer pin line>
 # A pin arg of "-" means "emit no systemd/mkosi line at all".
 make_fixture() {
-    local dir=$1 build_pin=$2 native_pin=$3 installer_pin=$4
+    local dir=$1 build_pin=$2 installer_pin=$3
     mkdir -p "$dir/.github/workflows" "$dir/shared/native-ab/ci"
     ln -s "$SCRIPT" "$dir/shared/native-ab/ci/check-mkosi-pin.sh"
     emit_workflow "$dir/.github/workflows/build.yml" "$build_pin"
-    emit_workflow "$dir/.github/workflows/build-native-images.yml" "$native_pin"
     emit_workflow "$dir/.github/workflows/build-installer-iso.yml" "$installer_pin"
 }
 
@@ -69,7 +67,7 @@ run_guard() {
 
 # 1. Happy path: valid full-SHA pin, build workflows carry no pin of their own.
 f="$work/happy"
-make_fixture "$f" "$PIN_A" "-" "-"
+make_fixture "$f" "$PIN_A" "-"
 run_guard "$f"
 if [[ $RC -eq 0 ]] && grep -Fq 'Mkosi pin governance check passed.' <<<"$OUT"; then
     pass 'valid full-SHA pin with no build-workflow pins passes'
@@ -79,7 +77,7 @@ fi
 
 # 2. Build workflows may repeat the SAME pin without tripping the guard.
 f="$work/matching"
-make_fixture "$f" "$PIN_A" "$PIN_A" "$PIN_A"
+make_fixture "$f" "$PIN_A" "$PIN_A"
 run_guard "$f"
 if [[ $RC -eq 0 ]] && grep -Fq 'Mkosi pin governance check passed.' <<<"$OUT"; then
     pass 'build workflows repeating the identical pin pass'
@@ -87,19 +85,9 @@ else
     fail 'build workflows repeating the identical pin pass'
 fi
 
-# 3. Core defect: a build workflow reintroduces a divergent pin -> fail.
-f="$work/divergent-native"
-make_fixture "$f" "$PIN_A" "$PIN_B" "-"
-run_guard "$f"
-if [[ $RC -ne 0 ]] && grep -Fq 'does not match' <<<"$OUT"; then
-    pass 'divergent pin in build-native-images.yml is rejected'
-else
-    fail 'divergent pin in build-native-images.yml is rejected'
-fi
-
-# 3b. The same divergence in the installer-iso workflow must also fail.
+# 3. A divergent installer-iso workflow pin must fail.
 f="$work/divergent-installer"
-make_fixture "$f" "$PIN_A" "-" "$PIN_B"
+make_fixture "$f" "$PIN_A" "$PIN_B"
 run_guard "$f"
 if [[ $RC -ne 0 ]] && grep -Fq 'does not match' <<<"$OUT"; then
     pass 'divergent pin in build-installer-iso.yml is rejected'
@@ -109,7 +97,7 @@ fi
 
 # 4. A short (non-40-char) SHA is not an acceptable pin.
 f="$work/short"
-make_fixture "$f" "0123abc" "-" "-"
+make_fixture "$f" "0123abc" "-"
 run_guard "$f"
 if [[ $RC -ne 0 ]] && grep -Fq 'not a full 40-character commit SHA' <<<"$OUT"; then
     pass 'short SHA pin is rejected'
@@ -119,7 +107,7 @@ fi
 
 # 5. A non-hex ref (tag/branch) yields no extractable pin at all.
 f="$work/tag"
-make_fixture "$f" "v25" "-" "-"
+make_fixture "$f" "v25" "-"
 run_guard "$f"
 if [[ $RC -ne 0 ]] && grep -Fq 'could not find' <<<"$OUT"; then
     pass 'non-hex tag ref is reported as an unfindable pin'
@@ -129,7 +117,7 @@ fi
 
 # 6. Missing build.yml fails closed.
 f="$work/missing-build"
-make_fixture "$f" "$PIN_A" "-" "-"
+make_fixture "$f" "$PIN_A" "-"
 rm -f "$f/.github/workflows/build.yml"
 run_guard "$f"
 if [[ $RC -ne 0 ]] && grep -Fq 'missing' <<<"$OUT"; then
@@ -139,19 +127,19 @@ else
 fi
 
 # 6b. Missing a build workflow file fails closed too.
-f="$work/missing-native"
-make_fixture "$f" "$PIN_A" "-" "-"
-rm -f "$f/.github/workflows/build-native-images.yml"
+f="$work/missing-installer"
+make_fixture "$f" "$PIN_A" "-"
+rm -f "$f/.github/workflows/build-installer-iso.yml"
 run_guard "$f"
 if [[ $RC -ne 0 ]] && grep -Fq 'missing' <<<"$OUT"; then
-    pass 'missing build-native-images.yml fails closed'
+    pass 'missing build-installer-iso.yml fails closed'
 else
-    fail 'missing build-native-images.yml fails closed'
+    fail 'missing build-installer-iso.yml fails closed'
 fi
 
 # 7. Check 3 skips cleanly when the mkosi checkout is absent.
 f="$work/no-checkout"
-make_fixture "$f" "$PIN_A" "-" "-"
+make_fixture "$f" "$PIN_A" "-"
 run_guard "$f" "$f/.mkosi"
 if [[ $RC -eq 0 ]] && grep -Fq 'not present yet' <<<"$OUT"; then
     pass 'absent mkosi checkout skips the HEAD comparison'
@@ -166,7 +154,7 @@ mkdir -p "$checkout"
 git init -q "$checkout"
 git -C "$checkout" -c user.email=t@example.com -c user.name=t commit -q --allow-empty -m seed
 head=$(git -C "$checkout" rev-parse HEAD)
-make_fixture "$f" "$head" "-" "-"
+make_fixture "$f" "$head" "-"
 run_guard "$f" "$checkout"
 if [[ $RC -eq 0 ]] && grep -Fq 'matches build.yml' <<<"$OUT"; then
     pass 'checkout HEAD equal to the pin passes check 3'
@@ -180,7 +168,7 @@ checkout="$f/.mkosi"
 mkdir -p "$checkout"
 git init -q "$checkout"
 git -C "$checkout" -c user.email=t@example.com -c user.name=t commit -q --allow-empty -m seed
-make_fixture "$f" "$PIN_A" "-" "-"
+make_fixture "$f" "$PIN_A" "-"
 run_guard "$f" "$checkout"
 if [[ $RC -ne 0 ]] && grep -Fq 'expected' <<<"$OUT"; then
     pass 'stale checkout HEAD fails check 3'
@@ -190,7 +178,7 @@ fi
 
 # 8. --help/usage exits 2 without doing any work.
 f="$work/usage"
-make_fixture "$f" "$PIN_A" "-" "-"
+make_fixture "$f" "$PIN_A" "-"
 run_guard "$f" --help
 if [[ $RC -eq 2 ]] && grep -Fq 'Usage:' <<<"$OUT"; then
     pass '--help prints usage and exits 2'
@@ -200,7 +188,7 @@ fi
 
 # 8b. More than one positional argument is a usage error.
 f="$work/too-many-args"
-make_fixture "$f" "$PIN_A" "-" "-"
+make_fixture "$f" "$PIN_A" "-"
 run_guard "$f" a b
 if [[ $RC -eq 2 ]] && grep -Fq 'Usage:' <<<"$OUT"; then
     pass 'a second positional argument is a usage error'

@@ -5,9 +5,10 @@ partition installer/updater) to **bootc/composefs** deployments.
 
 > **nbc installs reach end of life on 2026-09-30**
 > ([ADR-0015](adr/0015-retire-native-ab-images-and-nbc-installs.md)). Every
-> nbc host prints an end-of-life notice at login (`/etc/update-motd.d/80-snosi-eol`)
-> and raises one desktop notification per user; the same runbook below is
-> the migration path.
+> previously published images may show an end-of-life notice. New images
+> contain no nbc updater or EOL helper; nbc hosts get no further images
+> ([ADR-0018](adr/0018-remove-native-ab-and-nbc-lanes.md)). This runbook
+> remains the migration path.
 
 Companion documents:
 
@@ -33,13 +34,12 @@ Companion documents:
 ## 1. Identify what you have (inventory)
 
 Per host, determine the install type. The mechanisms are mutually exclusive
-and each auto-updater no-ops on the other's install type, so a mixed fleet is
-safe during the transition.
+but only bootc hosts receive newly built images and updates.
 
 | Check | nbc host | bootc host |
 |---|---|---|
 | `bootc status --format json \| jq .spec.image` | `null` | the followed image ref |
-| `systemctl is-enabled nbc-update-download.timer` | active/enabled (in use) | present but inert |
+| `systemctl is-enabled nbc-update-download.timer` | may exist on an old image | absent on new bootc images |
 | `systemctl list-timers bootc-update-stage.timer` | present but no-ops | active, staging updates |
 | Partition layout | A/B root partitions | single root; composefs `state/deploy/<verity>/` dirs |
 
@@ -201,10 +201,10 @@ artifacts remain available. If a verified offline copy was preserved for this
 host, a separately assessed last-resort reinstall with the same backup set
 re-enters an unsupported system; otherwise recover by repairing/repeating the
 Firn bootc install or restoring a pre-migration disk image. Check media,
-recovery credentials and rollback feasibility *before* wiping. Proposed
-[ADR-0017](adr/0017-gate-native-ab-and-nbc-disposal.md) and the
-[disposal plan](plans/2026-09-24-native-ab-nbc-retirement-plan.md) require this
-dependency to be surfaced before any separately authorized deletion.
+recovery credentials and rollback feasibility *before* wiping.
+[ADR-0018](adr/0018-remove-native-ab-and-nbc-lanes.md) and the
+[historical disposal plan](plans/2026-09-24-native-ab-nbc-retirement-plan.md)
+retain the exact-object check before any separately authorized deletion.
 
 ## Remaining validation before fleet-wide migration
 

@@ -3,7 +3,7 @@
 Description=Stage bootc update timer
 
 [Timer]
-# Mirrors nbc-update-download.timer's cadence during the transition.
+# Stage updates hourly on bootc-managed deployments.
 OnCalendar=hourly
 RandomizedDelaySec=15m
 Persistent=true

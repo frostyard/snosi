@@ -1,7 +1,5 @@
 #!/bin/bash
-# Fixture suite for the staged-update notification units, both transports
-# (bootc-update-notify.* in base, snosi-update-notify.* in the ab-root
-# tree). Pins the trigger-shape contract root-caused live 2026-08-26:
+# Fixture suite for the bootc staged-update notification units.
 #
 #   The /run/snosi/update-staged semaphore persists until the applying
 #   reboot BY DESIGN, and systemd's level-triggered path conditions
@@ -15,14 +13,10 @@
 #   graphical-session.target.wants/ link on the SERVICE, which is
 #   condition- and ack-gated.
 #
-# This is the seventh defect in this subsystem caused by twin bootc/native
-# paths drifting, so the suite also asserts the two pairs stay equivalent
-# modulo transport naming.
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 base_user="$root/mkosi.images/base/mkosi.extra/usr/lib/systemd/user"
-ab_user="$root/shared/outformat/ab-root/tree/usr/lib/systemd/user"
 
 test_number=0
 failures=0
@@ -33,8 +27,7 @@ fail() {
     echo "not ok $test_number - $1"
 }
 
-for pair in "$base_user:bootc-update-notify" "$ab_user:snosi-update-notify"; do
-    dir="${pair%%:*}"; name="${pair##*:}"
+    dir="$base_user"; name="bootc-update-notify"
     path_unit="$dir/$name.path"
     svc_unit="$dir/$name.service"
 
@@ -78,40 +71,6 @@ for pair in "$base_user:bootc-update-notify" "$ab_user:snosi-update-notify"; do
     else
         ok "$name units carry no [Install] section (static-link activation only)"
     fi
-done
-
-# Twin parity: directive-level equality modulo transport naming, so a fix
-# landing in one transport's pair cannot silently miss the other.
-# ExecStart= is exempt: BOTH transports deliberately run the shared
-# /usr/libexec/bootc-update-notify script (pinned by
-# test/native-ab-contracts-test.sh), so it must not be name-normalized.
-normalize() { # file transport-name
-    grep -vE '^\s*#|^\s*$|^ExecStart=' "$1" | sed "s/$2/NAME/g; s/Description=.*/Description=/"
-}
-for u in path service; do
-    if diff -q <(normalize "$base_user/bootc-update-notify.$u" bootc-update-notify) \
-               <(normalize "$ab_user/snosi-update-notify.$u" snosi-update-notify) >/dev/null; then
-        ok "bootc and native .$u units are directive-equivalent"
-    else
-        fail "bootc and native .$u units are directive-equivalent"
-        diff <(normalize "$base_user/bootc-update-notify.$u" bootc-update-notify) \
-             <(normalize "$ab_user/snosi-update-notify.$u" snosi-update-notify) | sed 's/^/#   /' || true
-    fi
-done
-
-# The ask-password serial path unit is the one legitimate level-triggered
-# path unit in the tree: its triggered agent is LONG-RUNNING (--watch), so
-# it cannot retrigger-loop. Pin that exemption reasoning: level-triggered
-# path conditions are only allowed when the triggered unit stays active.
-serial="$root/shared/outformat/ab-root/tree/usr/lib/systemd/system/snosi-ask-password-serial.path"
-if [[ -f "$serial" ]] && grep -q '^DirectoryNotEmpty=' "$serial"; then
-    agent="$root/shared/outformat/ab-root/tree/usr/lib/systemd/system/snosi-ask-password-serial.service"
-    if grep -q -- '--watch' "$agent"; then
-        ok "ask-password serial pair: level-triggered condition is backed by a long-running (--watch) agent"
-    else
-        fail "ask-password serial pair: level-triggered condition requires a long-running triggered unit"
-    fi
-fi
 
 # --- notify script: ack only after a successful send ----------------------
 # The login-time run races the session's notification daemon (some shells

@@ -404,8 +404,9 @@ not replace the representative Surface hardware install, input, power, update,
 rollback, and fallback gate.
 
 Task 10 still provides fixture, candidate, and nightly contract coverage.
-Live Task 9 execution is RETIRED under core ADR-0031; Firn's E2E and lab
-matrix are the current fresh-install evidence source.
+Live Task 9 execution is RETIRED under core ADR-0031; Firn's E2E and minideb
+lab installs will run after the Firn release is pinned. No fresh-install
+evidence exists yet.
 
 ESP repair is a recovery operation, not a new install: after authenticating the
 existing encrypted root with the recovery passphrase, reconstruct and verify

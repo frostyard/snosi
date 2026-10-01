@@ -1,6 +1,6 @@
 # 0017 — Gate native A/B and nbc disposal separately from support retirement
 
-- **Status:** Proposed
+- **Status:** Superseded by [0018](0018-remove-native-ab-and-nbc-lanes.md)
 - **Date:** 2026-09-24
 
 ## Context

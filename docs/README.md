@@ -12,7 +12,7 @@ Docs are split by the question they answer (the shape defined by
 
 One layer sits above this table: [`../ROADMAP.md`](../ROADMAP.md) answers
 **which of these matter next, and why** — the near/mid/long-term horizons, the
-two-transport position, and what the project is deliberately not doing. It
+bootc-only position, and what the project is deliberately not doing. It
 states intent; the categories below hold the record.
 
 ## Index
@@ -31,11 +31,12 @@ states intent; the categories below hold the record.
 - [adr/0010-credential-handoff-paths-not-bytes.md](adr/0010-credential-handoff-paths-not-bytes.md) — credentials cross the sudo boundary as mode-0600 file paths, never bytes; durable keys live in `.snosi-private/`, year-stamped
 - [adr/0011-mkosi-bootstrapped-and-pin-shared.md](adr/0011-mkosi-bootstrapped-and-pin-shared.md) — mkosi runs from a repo-local checkout pinned to the workflow's action commit, bootstrapped pre-sudo
 - [adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md](adr/0012-chunked-layers-cadence-xattrs-chunk-before-seal.md) — OCI layers are chunked by changelog-derived update cadence; secure images chunk before digest sealing, never after
-- [adr/0013-no-requiredby-enablement-prune-stale-requires.md](adr/0013-no-requiredby-enablement-prune-stale-requires.md) — shipped units never use RequiredBy= enablement (CI guard), and the native A/B initrd prunes stale .requires links that would brick boot at "Failed to isolate default target"
+- [adr/0013-no-requiredby-enablement-prune-stale-requires.md](adr/0013-no-requiredby-enablement-prune-stale-requires.md) — shipped units never use RequiredBy= enablement (CI guard); the native A/B initrd's stale `.requires` pruning described there is historical (ADR-0018)
 - [adr/0014-update-status-pkg-diff.md](adr/0014-update-status-pkg-diff.md) — **Proposed:** `snosi-update-status --pkg-diff` diffs local staged deployments from `packages.txt`; default status stays silent on packages
-- [adr/0015-retire-native-ab-images-and-nbc-installs.md](adr/0015-retire-native-ab-images-and-nbc-installs.md) — native A/B (`-ab`) images and nbc installs reach end of life 2026-09-30; one shared helper drives the motd line, one-time desktop toast, and `snosi-update-status` notice
+- [adr/0015-retire-native-ab-images-and-nbc-installs.md](adr/0015-retire-native-ab-images-and-nbc-installs.md) — 2026-09-30 support cutoff; original notice implementation is historical
 - [adr/0016-name-kde-bootc-product-sundog.md](adr/0016-name-kde-bootc-product-sundog.md) — the KDE Plasma product is Sundog, carries Snow's immutable desktop opinions through a Wayland/SDDM/Flatpak translation, and remains bootc-only
-- [adr/0017-gate-native-ab-and-nbc-disposal.md](adr/0017-gate-native-ab-and-nbc-disposal.md) — **Proposed:** separate post-cutoff support from conditional artifact retention and exact-object disposal authorization
+- [adr/0017-gate-native-ab-and-nbc-disposal.md](adr/0017-gate-native-ab-and-nbc-disposal.md) — **Superseded by ADR-0018:** exact-object disposal gate for published objects
+- [adr/0018-remove-native-ab-and-nbc-lanes.md](adr/0018-remove-native-ab-and-nbc-lanes.md) — bootc-only catalog and profiles; retain ISO and shared keys; Snowfield hardware gate waived, untested
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design
@@ -45,7 +46,7 @@ states intent; the categories below hold the record.
 - [design/overview.md](design/overview.md) — entry point: purpose, architecture, image/profile matrix, key patterns
 - [design/build-pipeline.md](design/build-pipeline.md) — mkosi script phases, package relocation, verified downloads, OCI packaging
 - [design/ci-cd.md](design/ci-cd.md) — workflow-by-workflow CI/CD pipeline, publishing, dependency automation
-- [design/sysexts.md](design/sysexts.md) — sysext constraints, the shipped sysext set, authoring narrative (the filename grammar's normative home is [core ADR-0007](https://github.com/frostyard/core/blob/main/docs/adr/0007-frostyard-sysext-filename-pattern.md) and [native-ab-contracts.md](native-ab-contracts.md))
+- [design/sysexts.md](design/sysexts.md) — sysext constraints, the shipped sysext set, authoring narrative (filename grammar: [core ADR-0007](https://github.com/frostyard/core/blob/main/docs/adr/0007-frostyard-sysext-filename-pattern.md))
 - [design/testing.md](design/testing.md) — test framework architecture, tiers, QEMU harnesses
 
 ### Specs
@@ -53,8 +54,8 @@ states intent; the categories below hold the record.
 - [specs/bootc-secure-lab-handoff.md](specs/bootc-secure-lab-handoff.md) — planned manual Snow bootc Firn install → signed update → rollback manifest and lab evidence contract; fixture coverage is not live proof
 
 New contracts start from [specs/TEMPLATE.md](specs/TEMPLATE.md);
-[native-ab-contracts.md](native-ab-contracts.md) below is spec-natured and a
-categorization candidate for this directory.
+[native-ab-contracts.md](native-ab-contracts.md) below is historical except
+for shared keys and installer ISO publication references.
 
 ### Plans
 
@@ -71,7 +72,7 @@ categorization candidate for this directory.
 - [plans/2026-07-17-native-boot-validation-design.md](plans/2026-07-17-native-boot-validation-design.md) / [plan](plans/2026-07-17-native-boot-validation-plan.md)
 - [plans/2026-07-20-update-api-daemon-design.md](plans/2026-07-20-update-api-daemon-design.md)
 - [plans/2026-08-26-cayo-floe-rename-plan.md](plans/2026-08-26-cayo-floe-rename-plan.md) — ordered server-product rename across snosi and downstream repos
-- [plans/2026-09-24-native-ab-nbc-retirement-plan.md](plans/2026-09-24-native-ab-nbc-retirement-plan.md) — **Proposed:** shared Firn boundary, read-only disposal worksheet, review and production gates
+- [plans/2026-09-24-native-ab-nbc-retirement-plan.md](plans/2026-09-24-native-ab-nbc-retirement-plan.md) — **Superseded by ADR-0018:** historical exact-object disposal worksheet
 - [plans/ab-deploy-checklist.md](plans/ab-deploy-checklist.md) — native A/B production-deploy checklist
 
 ### Contracts and runbooks (indexed in place)
@@ -79,13 +80,13 @@ categorization candidate for this directory.
 Pre-existing docs kept at their original paths; categorize opportunistically
 when next rewritten.
 
-- [native-ab-contracts.md](native-ab-contracts.md) — **frozen normative source of truth** for native A/B naming, paths, and policy (spec-natured; candidate for `specs/`)
+- [native-ab-contracts.md](native-ab-contracts.md) — historical native OS contract; §7 public keys and installer ISO publication remain in use
 - [integration-contracts.md](integration-contracts.md) — cross-tool producer→consumer contract map with fragility ratings
 - [bootc-secure-install-contract.md](bootc-secure-install-contract.md) — frozen legacy Task 9 adapter contract; Firn consumes the image's schema-1 contract directly
 - [bootc-secure-assembly-compatibility.md](bootc-secure-assembly-compatibility.md) — assemble-uki.sh compatibility contract with bootc 1.16.8
 - [bootc-secure-operations.md](bootc-secure-operations.md) — normative secure-bootc operations runbook (pinned by `test/bootc-secure-docs-test.sh`)
-- [native-ab-publication.md](native-ab-publication.md) — native A/B production publication runbook
-- [native-ab-capacities.md](native-ab-capacities.md) — measurements behind per-product channel partition sizes
+- [native-ab-publication.md](native-ab-publication.md) — historical native OS publication; ISO publication sections still apply
+- [native-ab-capacities.md](native-ab-capacities.md) — historical native OS partition measurements
 - [nbc-to-bootc-migration.md](nbc-to-bootc-migration.md) — operator runbook: legacy nbc hosts → bootc
 - [installing.md](installing.md) — user-facing installation guide for published images
 - [snosi-kargs.md](snosi-kargs.md) — persistent custom kernel arguments on secure installs
@@ -108,7 +109,7 @@ when next rewritten.
 
 - [fable-audit.md](fable-audit.md) — 2026-07-01 repository + running-system audit; historical narrative, path references reflect the tree at audit time (including the former `yeti/`)
 - [2026-07-03-bootc-migration-record.md](2026-07-03-bootc-migration-record.md) — record of the day the bootc path was first fully validated
-- [native-ab-prototype-history.md](native-ab-prototype-history.md) — phase-by-phase build journal for the native A/B products, installer ISO (Phase 8), and native `/var` factory state, extracted from `AGENTS.md` (snosi#727); the live contracts are in [native-ab-contracts.md](native-ab-contracts.md)
+- [native-ab-prototype-history.md](native-ab-prototype-history.md) — historical native A/B build journal and installer prototype
 - [OCIFIX.md](OCIFIX.md) — record of the PAX-header/OCI-layer problem and its fix
 - [superpowers/](superpowers/) — archived mill-run specs (`superpowers/specs/`) and plans (`superpowers/plans/`); historical, reference paths as they were at the time (including the former `yeti/`)
 

@@ -9,9 +9,14 @@ Steps:
    final summary line — later failures in this repository's workflows are
    usually cascades of an earlier one.
 3. Map the job back to the script it calls. The workflows are thin callers:
-   `validate.yml` runs shellcheck, `check-runtime-etc-guard.sh`,
-   `check-native-publication-guard.sh`, and the fixture tests in `test/`;
-   `build-native-images.yml` calls `shared/native-ab/publish/*.sh` and
+   `validate.yml` runs shellcheck and the Firn catalog/ISO publication fixtures
+   in `shell-lint`; publication guard fixtures and `test/no-nbc-test.sh` in
+   `publication-guard-tests`; `check-runtime-etc-guard.sh` and
+   `check-required-by-guard.sh` in `runtime-etc-guard`; and
+   `check-bootc-publication-guard.sh` plus secure bootc fixtures in
+   `bootc-secure-contracts`;
+   `build-installer-iso.yml` calls the retained ISO scripts in
+   `shared/native-ab/publish/*.sh` and mkosi pin helpers in
    `shared/native-ab/ci/*.sh`; `build-images.yml` calls
    `shared/outformat/image/buildah-package.sh`.
 4. Reproduce locally with the smallest command that exercises the same code

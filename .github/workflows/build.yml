@@ -7,8 +7,8 @@ on:
       # Image-only direct-download metadata should rebuild OCI profiles, not
       # the base+sysext publishing workflow.
       - "shared/download/image-checksums.json"
-      # The Forky systemd sentinel concerns only the secure OCI, native, and
-      # installer profiles; base and sysexts never install from Forky.
+      # The Forky systemd sentinel concerns only secure OCI and installer
+      # profiles; base and sysexts never install from Forky.
       - "shared/download/forky-versions.json"
       # These paths cannot affect base/sysext composition or publication.
       - "**/*.md"
@@ -30,7 +30,6 @@ on:
       - ".github/workflows/check-dependencies.yml"
       - ".github/workflows/check-packages.yml"
       - ".github/workflows/claude.yml"
-      - ".github/workflows/native-retention.yml"
       - ".github/workflows/nightly-compliance.yml"
       - ".github/workflows/scorecard.yml"
       - ".github/workflows/test-install.yml"
@@ -46,7 +45,6 @@ on:
       # else: its mkosi pin is read by shared/native-ab/ci/bootstrap-mkosi.sh
       # and the Justfile.)
       - ".github/workflows/build-images.yml"
-      - ".github/workflows/build-native-images.yml"
       - ".github/workflows/test-bootc-secure.yml"
       - ".github/workflows/validate.yml"
   pull_request:
@@ -74,7 +72,6 @@ on:
       - ".github/workflows/check-dependencies.yml"
       - ".github/workflows/check-packages.yml"
       - ".github/workflows/claude.yml"
-      - ".github/workflows/native-retention.yml"
       - ".github/workflows/nightly-compliance.yml"
       - ".github/workflows/scorecard.yml"
       - ".github/workflows/test-install.yml"
@@ -90,7 +87,6 @@ on:
       # else: its mkosi pin is read by shared/native-ab/ci/bootstrap-mkosi.sh
       # and the Justfile.)
       - ".github/workflows/build-images.yml"
-      - ".github/workflows/build-native-images.yml"
       - ".github/workflows/test-bootc-secure.yml"
       - ".github/workflows/validate.yml"
   workflow_dispatch:

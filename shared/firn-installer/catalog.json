@@ -64,50 +64,5 @@
       "lpadmin",
       "scanner"
     ]
-  },
-  {
-    "family": "ab",
-    "name": "snow-ab",
-    "description": "Native A/B GNOME desktop with backports kernel",
-    "product": "snow-ab",
-    "default_groups": [
-      "sudo",
-      "adm",
-      "video",
-      "input",
-      "render",
-      "plugdev",
-      "netdev",
-      "lpadmin",
-      "scanner"
-    ]
-  },
-  {
-    "family": "ab",
-    "name": "snowfield-ab",
-    "description": "Native A/B GNOME desktop with linux-surface kernel",
-    "product": "snowfield-ab",
-    "default_groups": [
-      "sudo",
-      "adm",
-      "video",
-      "input",
-      "render",
-      "plugdev",
-      "netdev",
-      "lpadmin",
-      "scanner"
-    ]
-  },
-  {
-    "family": "ab",
-    "name": "floe-ab",
-    "description": "Native A/B headless server with podman",
-    "product": "floe-ab",
-    "default_groups": [
-      "sudo",
-      "adm",
-      "netdev"
-    ]
   }
 ]

@@ -27,7 +27,7 @@ on:
       - "shared/native-ab/keys/import-pubring.gpg"
       - "shared/native-ab/keys/mok-2026.crt"
       - "shared/native-ab/publish/**"
-      - "shared/native-ab-secure/package-manager/**"
+      - "shared/bootc-secure/package-manager/**"
       - "test/native-iso-boot-smoke-test.sh"
       - "test/lib/vm.sh"
   workflow_dispatch:

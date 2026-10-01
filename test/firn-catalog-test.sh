@@ -5,8 +5,8 @@
 # unknown fields and missing optional ones, so a malformed entry here fails
 # soft at the worst time -- on the installer ISO. Pin the contract:
 #  - bare JSON array; every entry has family/name/description
-#  - family=bootc entries carry ref (immutable registry path) +
-#    cosign_pub_key; family=ab entries carry product; never both
+#  - exactly four bootc entries carry ref (registry path) + cosign_pub_key;
+#    no product
 #  - every entry declares default_groups (frostyard/snosi#789), a nonempty
 #    string array starting with sudo -- firn preselects these in the user
 #    wizard (join-where-exists at install time)
@@ -25,16 +25,19 @@ fail() { test_number=$((test_number + 1)); failures=$((failures + 1)); echo "not
 jq -e 'type == "array" and length > 0' "$catalog" >/dev/null &&
     ok "catalog is a nonempty JSON array" || fail "catalog is a nonempty JSON array"
 
-jq -e 'all(.[]; (.family | IN("bootc", "ab")) and .name != "" and .description != "")' "$catalog" >/dev/null &&
+jq -e 'all(.[]; .family == "bootc")' "$catalog" >/dev/null &&
+    ok "every entry is bootc" || fail "every entry is bootc"
+
+jq -e 'length == 4 and ([.[].name] | sort == ["floe", "snow", "snowfield", "sundog"])' "$catalog" >/dev/null &&
+    ok "catalog contains exactly the four bootc products" || fail "catalog contains exactly the four bootc products"
+
+jq -e 'all(.[]; .name != "" and .description != "")' "$catalog" >/dev/null &&
     ok "every entry has family/name/description" || fail "every entry has family/name/description"
 
 jq -e 'all(.[] | select(.family == "bootc");
         (.ref | test("^ghcr\\.io/frostyard/[a-z-]+:")) and .cosign_pub_key == "/usr/lib/snosi/cosign.pub" and (has("product") | not))' "$catalog" >/dev/null &&
     ok "bootc entries carry a frostyard ref + the shipped cosign key, no product" ||
     fail "bootc entries carry a frostyard ref + the shipped cosign key, no product"
-
-jq -e 'all(.[] | select(.family == "ab"); (.product != null) and (has("ref") | not))' "$catalog" >/dev/null &&
-    ok "ab entries carry product, no ref" || fail "ab entries carry product, no ref"
 
 jq -e 'all(.[]; (.default_groups | type == "array" and length > 0 and .[0] == "sudo" and all(.[]; type == "string" and . != "")))' "$catalog" >/dev/null &&
     ok "every entry declares default_groups, sudo first" ||
