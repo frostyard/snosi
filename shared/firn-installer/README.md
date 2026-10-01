@@ -4,13 +4,14 @@ Successor to `shared/native-installer` per firn's ADR-0010: **one**
 installer ISO for all four snosi bootc products, with
 [firn](https://github.com/frostyard/firn)'s TUI as the kiosk frontend
 (no cage/GTK/python — a single static Go binary on tty1 and ttyS0) and
-a package payload for firn's bootc installer steps. `mokutil` and `flatpak`
-remain in the ISO payload until the Firn release pin.
+a package payload for firn's bootc installer steps. `mokutil` (Secure Boot
+mok-stage) and `flatpak` (flatpaks step and offline seed) stay in the payload
+because Firn's bootc steps declare them.
 
 ## The firn binary comes from the frostyard apt repo
 
-`mkosi.conf` installs `Packages=frostyard-firn` (published by firn's
-release via repogen), so CI needs no sibling firn checkout. The image
+`mkosi.conf` installs `Packages=frostyard-firn=0.6.0`, pinned to the
+recipe-v2 bootc-only release (published by firn's release via repogen), so CI needs no sibling firn checkout. The image
 postinst still fails the build loudly if `/usr/bin/firn` is missing.
 
 For dev testing of *unreleased* firn, the `just firn-installer` /
