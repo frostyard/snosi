@@ -240,6 +240,7 @@ jobs:
           ./test/runtime-etc-guard-test.sh
           ./test/duplicate-packages-test.sh
           bash ./test/no-nbc-test.sh
+          ./test/ghostty-terminfo-test.sh
           ./test/base-hardware-utils-test.sh
           ./test/wifi-backend-test.sh
           ./test/socat-package-test.sh
