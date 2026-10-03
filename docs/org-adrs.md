@@ -12,8 +12,6 @@ The ones that bind snosi:
 - [ADR-0007 — The Frostyard sysext filename pattern and derived versions](https://github.com/frostyard/core/blob/main/docs/adr/0007-frostyard-sysext-filename-pattern.md) — sysext-postoutput.sh's KEYPACKAGE/epoch/revision rules
 - [ADR-0008 — Sysext distribution layout and update contract](https://github.com/frostyard/core/blob/main/docs/adr/0008-sysext-distribution-and-update-contract.md) — the ext/<name>/ layout the shipped .transfer files consume
 - [ADR-0009 — repository.frostyard.org is the single artifact origin](https://github.com/frostyard/core/blob/main/docs/adr/0009-single-artifact-origin-repository-frostyard-org.md) — frozen os/native/v1 and isos namespaces, SHA256SUMS channel pointer
-- [ADR-0010 — Publish packages through the shared repogen action](https://github.com/frostyard/core/blob/main/docs/adr/0010-publish-packages-via-repogen-to-r2.md) — build.yml / build-images.yml publish steps
-- [ADR-0013 — Component releases trigger image rebuilds via repository_dispatch](https://github.com/frostyard/core/blob/main/docs/adr/0013-release-fanout-via-repository-dispatch.md) — snosi is the receiver of `build` dispatches
 - [ADR-0014 — One GPG repository key, baked into images](https://github.com/frostyard/core/blob/main/docs/adr/0014-single-gpg-trust-root.md) — shared/sysext/keys, import-pubring.gpg
 - [ADR-0015 — os-release is the image identity surface](https://github.com/frostyard/core/blob/main/docs/adr/0015-os-release-image-identity.md) — IMAGE_ID written into ID=; ImageId stays the product name in -ab profiles
 - [ADR-0017 — io.snosi.* OCI capability labels and the mechanics QA tier](https://github.com/frostyard/core/blob/main/docs/adr/0017-io-snosi-capability-labels-and-mechanics-tier.md) — buildah-package.sh trusted labels; build-mechanics.yml
@@ -28,12 +26,10 @@ The ones that bind snosi:
 - [ADR-0041 — Retire copilot-review-apply where Snowcat gates review](https://github.com/frostyard/core/blob/main/docs/adr/0041-retire-copilot-review-apply-where-snowcat-gates-review.md) — Copilot review findings route to people; Snosi retains only the `ai-fix-requested` issue handoff
 - [ADR-0046 — Rename the cayo server image to floe](https://github.com/frostyard/core/blob/main/docs/adr/0046-rename-cayo-server-image-to-floe.md) — sequences the bootc trust cutover, requires native reinstall, and freezes the old GHCR and R2 artifacts
 - [ADR-0047 — Retire NBC on a proportional four-user fast path](https://github.com/frostyard/core/blob/main/docs/adr/0047-retire-nbc-on-a-proportional-fast-path.md) — ends native A/B and nbc support and routine publication on 2026-09-30; limits best-effort migration help through 2026-10-31 to four known users without extending support
-- [ADR-0048 — Publish Debian packages to explicit codenames](https://github.com/frostyard/core/blob/main/docs/adr/0048-publish-debian-packages-to-explicit-codenames.md) — independently protects signed `stable` and referenced package bytes through at least 2027-09-30
 - [ADR-0050 — Replace NBC/native-A/B retention date with a completion condition](https://github.com/frostyard/core/blob/main/docs/adr/0050-replace-nbc-retention-date-with-a-completion-condition.md) — Accepted; outside-`stable` artifacts remain subject to four-user disposition and documentation completion
-
-Proposed [ADR-0052 — Remove NBC/native-A/B artifact retention gates](https://github.com/frostyard/core/blob/main/docs/adr/0052-remove-nbc-artifact-retention-gates.md)
-is **not yet operative**. If accepted it removes the NBC-specific retention
-obligation but does not authorize deletion or relax ADR-0048.
+- [ADR-0052 — Remove NBC/native-A/B artifact retention gates](https://github.com/frostyard/core/blob/main/docs/adr/0052-remove-nbc-artifact-retention-gates.md) — removes the NBC-specific retention obligation without authorizing deletion or relaxing the signed-`stable` floor
+- [ADR-0055 — Publish Debian packages through the apt-publisher single writer](https://github.com/frostyard/core/blob/main/docs/adr/0055-publish-debian-packages-through-the-apt-publisher.md) — `frostyard.sources` reads `/debian/` `trixie`; repogen still publishes sysexts from build.yml; signed `stable` and its referenced package bytes stay unchanged through at least 2027-09-30 (supersedes ADR-0048 and the Debian part of ADR-0010's flow)
+- [ADR-0056 — The APT publisher triggers image rebuilds after packages are live](https://github.com/frostyard/core/blob/main/docs/adr/0056-rebuild-images-after-apt-publication.md) — snosi receives `build` dispatches from frostyard/apt-publisher once a producer's packages are installable (supersedes ADR-0013)
 
 When changing behavior covered by one of these, update or supersede the ADR
 in frostyard/core first, then change this repo in the same effort.

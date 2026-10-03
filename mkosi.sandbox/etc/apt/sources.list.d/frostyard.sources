@@ -1,6 +1,6 @@
 Types: deb
-URIs: https://repository.frostyard.org/
-Suites: stable
+URIs: https://repository.frostyard.org/debian/
+Suites: trixie
 Components: main
 Architectures: all amd64
 Enabled: yes
