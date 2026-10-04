@@ -15,8 +15,7 @@ Snosi builds Debian Trixie bootc OCI images and `/usr`-only system extensions
 Firn offers only these four bootc choices. **Snowfield is untested on
 representative Surface hardware**: its catalog inclusion gate was waived,
 not passed. Fresh-install evidence for Snow, Floe and Sundog is pending:
-minideb lab installs will run after the Firn release is pinned; no such
-evidence exists yet. Fixture coverage does not establish
+no minideb lab install has produced any yet. Fixture coverage does not establish
 production Secure Boot support, nor signed update/rollback evidence; see
 [secure bootc operations](docs/bootc-secure-operations.md).
 
