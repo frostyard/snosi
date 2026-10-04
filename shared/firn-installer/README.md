@@ -10,9 +10,10 @@ because Firn's bootc steps declare them.
 
 ## The firn binary comes from the frostyard apt repo
 
-`mkosi.conf` installs `Packages=frostyard-firn=0.6.0`, pinned to the
-recipe-v2 bootc-only release (published by firn's release via repogen), so CI needs no sibling firn checkout. The image
-postinst still fails the build loudly if `/usr/bin/firn` is missing.
+`mkosi.conf` installs `Packages=frostyard-firn` unpinned (published by
+firn's release via repogen), so CI needs no sibling firn checkout and each
+ISO build takes the newest Firn release. The image postinst still fails the
+build loudly if `/usr/bin/firn` is missing.
 
 For dev testing of *unreleased* firn, the `just firn-installer` /
 `just firn-installer-iso` recipes still run `_firn-binary` first, which

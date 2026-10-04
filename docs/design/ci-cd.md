@@ -68,9 +68,8 @@ bootc publication and signed-sysext policy tests. `test-bootc-secure.yml`
 and `bootc-secure-nightly.yml` provide fixture coverage; fixtures do not
 prove secure install or update on hardware. `test-install.yml` is a manual,
 signature-verified bootc QEMU/KVM install test. Fresh-install evidence for
-Snow, Floe and Sundog is pending: Firn's enforced-Secure-Boot E2E and
-minideb lab installs will run after the Firn release is pinned; none exists
-yet. **Snowfield is untested on representative
+Snow, Floe and Sundog is pending: neither Firn's enforced-Secure-Boot E2E
+nor a minideb lab install has produced any yet. **Snowfield is untested on representative
 Surface hardware; its catalog gate was waived.** Live signed update,
 rollback, rotation and bootloader reconciliation require distinct installed
 lifecycle evidence; see [secure operations](../bootc-secure-operations.md)

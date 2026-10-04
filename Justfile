@@ -160,9 +160,9 @@ _floe: _clean
     {{mkosi}} --profile floe build
 
 # Build the firn TUI binary into shared/firn-installer/tree/usr/bin/firn
-# (gitignored; the image postinst refuses to build without it -- see
-# shared/firn-installer/README.md. TODO: replace with a frostyard-firn
-# Packages= entry once firn cuts a release). CGO_ENABLED=0: the binary runs
+# (gitignored). ExtraTrees lets it override the packaged frostyard-firn for
+# dev testing of unreleased firn -- see shared/firn-installer/README.md.
+# CGO_ENABLED=0: the binary runs
 # inside the ISO rootfs and must not depend on the build host's libc.
 # Version stamping mirrors firn's own Makefile LDFLAGS
 # (main.version/commit/date/builtBy), so the medium's firn reports the
