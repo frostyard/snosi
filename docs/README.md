@@ -73,6 +73,8 @@ for shared keys and installer ISO publication references.
 - [plans/2026-07-20-update-api-daemon-design.md](plans/2026-07-20-update-api-daemon-design.md)
 - [plans/2026-08-26-cayo-floe-rename-plan.md](plans/2026-08-26-cayo-floe-rename-plan.md) — ordered server-product rename across snosi and downstream repos
 - [plans/2026-09-24-native-ab-nbc-retirement-plan.md](plans/2026-09-24-native-ab-nbc-retirement-plan.md) — **Superseded by ADR-0018:** historical exact-object disposal worksheet
+- [plans/2026-10-05-sundog-desktop-completeness-plan.md](plans/2026-10-05-sundog-desktop-completeness-plan.md) — **Proposed:** supply missing Plasma helpers, previews, settings, Thunderbolt controls, and local Help; verify native desktop behavior before the Flatpak migration
+- [plans/2026-10-05-sundog-flatpak-defaults-plan.md](plans/2026-10-05-sundog-flatpak-defaults-plan.md) — **Proposed:** coordinate Firn product-specific online/offline app provisioning and existing-host migration before removing native standalone apps
 - [plans/ab-deploy-checklist.md](plans/ab-deploy-checklist.md) — native A/B production-deploy checklist
 
 ### Contracts and runbooks (indexed in place)

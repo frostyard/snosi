@@ -42,6 +42,12 @@ order; inspect `mkosi summary` and run `check-profile-dependencies.sh` when
 changing profile includes. `shared/composition/var-audit.finalize` applies
 per-product `/var` outcome maps (ADR-0001).
 
+Proposed Sundog work is ordered in the
+[desktop-completeness plan](../plans/2026-10-05-sundog-desktop-completeness-plan.md),
+then the [Flatpak-defaults plan](../plans/2026-10-05-sundog-flatpak-defaults-plan.md).
+The follow-up coordinates product-specific core app selection, selective
+offline provisioning, and existing-install migration with Firn.
+
 Image builds run BuildScripts, PostInstallationScripts, FinalizeScripts and
 PostOutputScripts; details and package relocation rules are in
 [build pipeline](build-pipeline.md). The default mkosi tools tree has a
