@@ -1,6 +1,7 @@
 # Plan: Complete Sundog's native Plasma desktop
 
-**Status:** Proposed
+**Status:** In progress — composition and VM package validation complete;
+manual laptop/hardware validation deferred
 **Last verified:** 2026-10-05
 
 This is the immediate Sundog work: fix missing desktop helpers and provide
@@ -22,7 +23,7 @@ kf.kio.gui: Could not find an executable named: "kcmshell6"
 
 Debian Trixie's `libkf6kcmutils-bin` supplies `/usr/bin/kcmshell6`.
 `libkf6kcmutils6` recommends that package, but mkosi does not install
-Recommends and `shared/packages/sundog/mkosi.conf` does not select it.
+Recommends and the original `shared/packages/sundog/mkosi.conf` did not select it.
 The same split exists for other libraries and their executable helpers:
 Dolphin's Baloo widgets launch `baloo_filemetadata_temp_extractor`, supplied
 by the recommended `libbaloowidgets-bin` package.
@@ -66,34 +67,34 @@ constraints enforced by `test/sundog-profile-test.sh` and the
 
 ## Phase 1 — Compose and build the desktop payload (small)
 
-- [ ] Add the agreed packages to `shared/packages/sundog/mkosi.conf` in
+- [x] Add the agreed packages to `shared/packages/sundog/mkosi.conf` in
       short, commented feature groups. Keep helpers explicit even when a
       newly selected application also hard-depends on them.
-- [ ] Run the existing profile and duplicate-package guards:
+- [x] Run the existing profile and duplicate-package guards:
 
   ```sh
   ./test/sundog-profile-test.sh
   ./check-duplicate-packages.sh
   ```
 
-- [ ] Build through the existing entry point:
+- [x] Build through the existing entry point:
 
   ```sh
   just sundog
   ```
 
-- [ ] Review dependency resolution and the resulting manifest. Confirm the
+- [x] Review dependency resolution and the resulting manifest. Confirm the
       requested selections and the complete `gui-base` closure.
-- [ ] Resolve any actual new build-time `/var` entries through
+- [x] Resolve any actual new build-time `/var` entries through
       `shared/composition/sundog/var-outcomes.txt` and shipped tmpfiles
       rules where needed. The existing `var-audit.finalize` must pass;
       adding a broad discard pattern is not evidence of runtime recovery.
-- [ ] Inspect `output/sundog` for executable helpers, KCM plugins,
+- [x] Inspect `output/sundog` for executable helpers, KCM plugins,
       thumbnail/image plugins, the GTK preview executable, and English
       handbook and Hunspell dictionary files. Check that the files needed
       by the visible actions are usable, rather than relying solely on
       package names.
-- [ ] Identify the installed GTK integration's XSettings/portal provider
+- [x] Identify the installed GTK integration's XSettings/portal provider
       and its session activation path. Installing `xsettingsd` alone does
       not establish activation; use Plasma's existing provider where it
       handles the session and avoid starting a competing provider.
@@ -103,17 +104,24 @@ constraints enforced by `test/sundog-profile-test.sh` and the
 
 ## Phase 2 — Verify installed desktop behavior (medium)
 
-- [ ] Run the existing bootc installation checks described in
+All build and runtime validation uses VMs. The operator narrowed this change's
+acceptance to desktop package behavior: additional deployment, rollback, and
+signing checks are out of scope. The laptop must not be installed, updated, or
+rebooted by automation. Its eventual desktop and Thunderbolt checks will be
+manual, under a test plan agreed after VM package validation.
+
+- [x] Run the initial existing bootc installation checks described in
       [testing](../design/testing.md):
 
   ```sh
   just test-install output/sundog
   ```
 
-- [ ] Test the candidate in a fresh Plasma session on a fresh installation
+- [x] Test the candidate in a fresh Plasma session on a fresh installation
       and on an existing Sundog installation updated to the candidate.
       Record the candidate image identity and which path each result covers.
-- [ ] Check the following user-visible outcomes:
+- [x] Check the VM-applicable user-visible outcomes below; Thunderbolt device
+      authorization remains a deferred manual hardware check.
 
   | Feature | Acceptance check |
   | --- | --- |
@@ -130,25 +138,29 @@ constraints enforced by `test/sundog-profile-test.sh` and the
   | Local Help | Plasma and shipped-application handbooks open with networking disabled. |
   | Thunderbolt | The panel opens; on suitable hardware, device authorization works through the existing bolt service. |
 
-- [ ] Record hardware-dependent checks as pending until suitable hardware
+- [x] Record hardware-dependent checks as pending until suitable hardware
       evidence exists. A VM panel-opening check is not Thunderbolt
       authorization evidence. Host GTK3 theme support does not establish
       theme availability inside every Flatpak or theming of libadwaita apps.
-- [ ] Capture the preceding deployment identity and document recovery using
-      the existing bootc rollback workflow if the candidate regresses the
-      desktop. Wallet and desktop configuration remain persistent user state.
+- The preceding deployment identity is retained with the VM results. Existing
+  bootc recovery guidance remains applicable; exercising deployment or rollback
+  machinery is excluded from this package-only validation scope. Rollback
+  behavior has not been verified for this candidate. Wallet and desktop
+  configuration remain persistent user state.
 - **Done when:** fresh-install and updated-host desktop checks pass with
   recorded image identities, and required hardware checks have suitable
   evidence. Unavailable hardware checks keep this phase open.
 
 ## Phase 3 — Review and deliver (small)
 
-- [ ] Update relevant living documentation to describe the shipped desktop
+- [x] Update relevant living documentation to describe the composed desktop
       payload and its verification. Preserve the distinction between bootc
       mechanics tests and live Firn/Secure Boot lifecycle evidence.
 - [ ] Submit the implementation as a Tier 3 image-composition PR under
       [risk tiers](../risk-tiers.md), with actual build/test results and
-      rollback behavior, for maintainer review.
+      explicit unverified aspects, for maintainer review. Apply the package-only
+      validation scope above; document the existing recovery workflow without
+      requiring additional rollback tests.
 - [ ] Update this plan's status and checkboxes as work lands; link the
       implementation and retained validation evidence.
 - **Done when:** the reviewed implementation is merged, validation is
@@ -156,10 +168,55 @@ constraints enforced by `test/sundog-profile-test.sh` and the
 
 ## Open questions
 
-- **Validation host:** identify the fresh-install and existing-install
-  environments before Phase 2, including access to Thunderbolt hardware.
-- **Artifact paths:** verify the current Debian plugin and handbook paths
-  during Phase 1 instead of treating upstream layout as a permanent ABI.
+- **Manual laptop test plan:** agree on the final operator-run desktop and
+  Thunderbolt authorization checks after the VM results are reviewed.
+
+## Retained validation — 2026-10-05
+
+Validation was performed on `benjamin/feat/sundog-desktop-completeness`, based
+on `8e36fed`. The isolated `sundog-desktop-build` VM built image version
+`20261005155704` through `just sundog`. Both profile/package guards passed.
+Artifact inspection confirmed all 33 requested selections and all 54
+`gui-base` packages. The unchanged `/var` map classified 7,436 paths; no new
+tmpfiles or discard entries were needed. The artifact was 6.2 GiB.
+
+Desktop checks used `sundog-desktop-fresh-uefi` and
+`sundog-desktop-update-uefi`, disposable copies of the operator's prepared
+Incus templates. Both used the same desktop payload. Their local unsigned UKI
+fixture reports image digest
+`sha256:246cfb0f13b6d041c28ef485a61af7e3cbb7b6db9c3e1586241be148ecdcd9b7`.
+The original baselines and installer medium were retained. Initial installation
+mechanics checks also passed all five tiers (33 assertions); these are retained
+results, not new lifecycle requirements for the package addition.
+
+| Outcome | Recorded VM result |
+| --- | --- |
+| KRunner | Baseline Configure reproduced the missing-`kcmshell6` error; both candidates opened KRunner Settings through the same action. |
+| Editors | Both editors launched; the updated VM's launcher opened KMenuEdit through Edit Applications, and the fresh VM's Konsole opened KEditBookmarks through Edit Bookmarks. |
+| Locking | Both panels opened; the updated VM saved `LockOnResume=false` through the panel and its Apply action. Explicit locking reported active. |
+| Monitoring | Both System Monitor overview pages showed live CPU/memory values; memory-monitor widgets displayed sensor data. |
+| Spelling | Both Sonnet/Hunspell checks accepted `hello` and rejected `helllooo`; Kate's fresh-VM spelling dialog flagged `helllooo` with American English (United States) selected. |
+| Metadata | Both Dolphin Information panels displayed `64 × 32` for a TIFF under `/var/tmp`, outside the Baloo index. The updated VM also displayed its generated-by metadata. |
+| Previews | Both KIO preview jobs rendered video, PDF, TIFF, and WebP previews; additional image-format decoding passed. |
+| Wallet | Both managers opened; the updated VM created a test wallet and round-tripped a non-secret test entry through the installed KWallet API. |
+| GTK | Both sessions loaded `gtkconfig` and ran `xsettingsd`; GTK3 Preview opened, including the updated VM's actual Preview action. Fresh XWayland GTK3 clients received changed font/icon/theme values with ini/dconf/portal fallback disabled. |
+| Info Center | OpenCL, Vulkan, GLX, EGL, audio, Wayland, CPU, and EDID pages displayed their tool output. OpenCL reported a valid zero-platform result. |
+| Local Help | Both VMs rendered 14 English handbook paths through KIO with the guest NIC down; Help Center displayed the Dolphin handbook. |
+| Thunderbolt | Both panels opened. Actual device authorization is pending manual hardware validation. |
+
+Observed Debian paths include `/usr/bin/kcmshell6`,
+`/usr/bin/baloo_filemetadata_temp_extractor`,
+`/usr/lib/x86_64-linux-gnu/libexec/gtk3_preview`, the `kf6/sonnet` and
+`kf6/thumbcreator` Qt plugin directories, `/usr/share/hunspell/en_US.{aff,dic}`,
+and `/usr/share/doc/HTML/en/`. The packaged `gtkconfig` metadata has KDED
+autoload enabled at phase 1. Its existing session provider handled XSettings;
+no additional activation service was composed.
+
+Raw non-secret results and repeatable package-check scripts are retained locally
+in `output/sundog-desktop-validation/`. The baseline automation and credentials
+remain in the separate private `output/incus-baselines/` directory. Generated
+artifacts and credentials are not committed. Hardware results, maintainer
+review, PR submission, and merge remain pending.
 
 ## References
 
