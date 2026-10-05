@@ -156,7 +156,7 @@ manual, under a test plan agreed after VM package validation.
 - [x] Update relevant living documentation to describe the composed desktop
       payload and its verification. Preserve the distinction between bootc
       mechanics tests and live Firn/Secure Boot lifecycle evidence.
-- [ ] Submit the implementation as a Tier 3 image-composition PR under
+- [x] Submit the implementation as a Tier 3 image-composition PR under
       [risk tiers](../risk-tiers.md), with actual build/test results and
       explicit unverified aspects, for maintainer review. Apply the package-only
       validation scope above; document the existing recovery workflow without
@@ -216,7 +216,8 @@ Raw non-secret results and repeatable package-check scripts are retained locally
 in `output/sundog-desktop-validation/`. The baseline automation and credentials
 remain in the separate private `output/incus-baselines/` directory. Generated
 artifacts and credentials are not committed. Hardware results, maintainer
-review, PR submission, and merge remain pending.
+review and merge remain pending. Implementation and validation summary:
+[PR #1050](https://github.com/frostyard/snosi/pull/1050).
 
 ## References
 
