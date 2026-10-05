@@ -24,11 +24,14 @@ profile dependency guards have fixture suites.
 base `nbc-update-download` units; installed-image tier 2 checks the package
 and binary are absent. `test/check-no-nbc-package-test.sh` fixtures the
 dpkg-status gate that blocks OCI publication when `frostyard-nbc` is installed.
+`test/ghostty-terminfo-test.sh` checks that base compiles the shipped
+`xterm-ghostty` terminfo (Debian ships only `ghostty`) into `/usr/share/terminfo`.
 `test/firn-catalog-test.sh` checks the
 bootc-only four-product catalog. `test/retirement-plan-test.py` pins
 ADR-0018's documentation, Snowfield's untested/waived status, historical
 status markers and the no-R2-deletion boundary; it never accesses R2.
-`test/firn-installer-iso-test.sh --static` checks Firn's Forky sandbox;
+`test/firn-installer-iso-test.sh --static` checks Firn's Forky sandbox
+and that the ISO installs exactly one unpinned `frostyard-firn`;
 the removed native install live mode is not a bootc proof.
 
 `test/iso-publication-pipeline-test.sh` rehearses the retained Firn ISO

@@ -17,7 +17,8 @@ before changing an interface.
 | `frostyard-updex` deb | Base sysext `.feature`/`.transfer` registrations, chairlift and Pilothouse | Per-component systemd-sysupdate discovery and Updex's CLI/Go SDK schema; keep the component-capable release ahead of clients. |
 | `frostyard-chairlift` / `snow-first-setup` debs | Snow/Snowfield package set | Desktop feature UI and setup functionality; the retired native OS firstboot backend does not ship. |
 | Pilothouse deb | Optional `pilothouse` sysext | Broker probes Updex and container backends independently; absent endpoints must not prevent startup. |
-| repogen | Snosi APT sandbox and sysext transfers | Signed `stable` APT indexes, per-component `SHA256SUMS.gpg` and versioned EROFS filenames. |
+| frostyard/apt-publisher | Snosi APT sandbox (`frostyard.sources`) | Signed `trixie` indexes under `https://repository.frostyard.org/debian/`, signed with the same `frostyard.gpg` key; a `build` dispatch to Snosi after each publication from a producer that notifies it. |
+| repogen | Sysext transfers | Per-component `SHA256SUMS.gpg` and versioned EROFS filenames under `ext/<component>/`. |
 | Snosi ISO publisher | Firn download and `workers/native-installer-redirect/` | Signed `isos/native/v1/SHA256SUMS` and detached signature; Worker reads the index and redirects to the named immutable ISO. |
 
 The base no longer installs `frostyard-nbc` or
@@ -89,8 +90,11 @@ and the CLI warns/skips the diff without masking ordinary update status.
 
 ## Public repository and ISO signing
 
-Repogen publishes signed Frostyard APT indexes under `dists/stable/` and
-signed sysext metadata under `ext/<component>/`. Sysext object names follow
+frostyard/apt-publisher publishes signed Frostyard APT indexes under
+`debian/dists/<codename>/`; Snosi reads `trixie`
+([core ADR-0055](https://github.com/frostyard/core/blob/main/docs/adr/0055-publish-debian-packages-through-the-apt-publisher.md)).
+The legacy `dists/stable/` suite is frozen. Repogen publishes signed sysext
+metadata under `ext/<component>/`. Sysext object names follow
 `<name>_<version>_<os-version>_<arch>.raw.zst`; feature/transfer discovery
 and the GPG trust ring belong to the base image, not the Firn ISO. Bootc OCI
 images publish to `ghcr.io/frostyard/` by immutable signed digest before

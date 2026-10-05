@@ -64,6 +64,7 @@ native-iso-boot-smoke-test.sh	ci	build-installer-iso.yml
 nix-client-group-test.py	ci	validate.yml
 nfs-system-accounts-test.sh	ci	validate.yml
 no-nbc-test.sh	ci	validate.yml
+ghostty-terminfo-test.sh	ci	validate.yml
 openssh-agent-group-test.py	ci	validate.yml
 output-organizer-test.sh	unwired	-
 pilothouse-sysext-test.sh	ci	validate.yml

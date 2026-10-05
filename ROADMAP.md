@@ -10,8 +10,8 @@ sequences. Revisit the horizons as work lands.
 Sundog are OCI products; sysexts add optional `/usr` payloads. Firn offers
 only these four bootc choices. Snowfield ships **untested** on representative
 Surface hardware: its inclusion gate was waived, not passed. Fresh-install
-evidence for Snow, Floe and Sundog is pending: minideb lab installs will run
-after the Firn release is pinned; none exists yet. Neither fixture results
+evidence for Snow, Floe and Sundog is pending: no minideb lab install has
+produced any yet. Neither fixture results
 nor catalog inclusion establishes live secure update and rollback proof.
 
 Native A/B and nbc support and routine publication ended **2026-09-30**
