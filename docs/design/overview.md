@@ -42,9 +42,18 @@ order; inspect `mkosi summary` and run `check-profile-dependencies.sh` when
 changing profile includes. `shared/composition/var-audit.finalize` applies
 per-product `/var` outcome maps (ADR-0001).
 
-Proposed Sundog work is ordered in the
-[desktop-completeness plan](../plans/2026-10-05-sundog-desktop-completeness-plan.md),
-then the [Flatpak-defaults plan](../plans/2026-10-05-sundog-flatpak-defaults-plan.md).
+Sundog explicitly selects Plasma's executable helpers, settings and editors,
+System Monitor, Hunspell English spelling, Dolphin preview plugins, wallet
+management, GTK appearance/Preview integration, Thunderbolt controls, Info
+Center's probe tools, and offline Help. Selective recommendations are required
+because mkosi builds with Debian Recommends disabled. Plasma's autoloaded
+`gtkconfig` module manages XSettings; package composition needs no additional
+session service. Native Gwenview and Okular, including their handbooks, remain
+in the image.
+
+The [desktop-completeness plan](../plans/2026-10-05-sundog-desktop-completeness-plan.md)
+records artifact and VM package validation, followed by the
+[Flatpak-defaults plan](../plans/2026-10-05-sundog-flatpak-defaults-plan.md).
 The follow-up coordinates product-specific core app selection, selective
 offline provisioning, and existing-install migration with Firn.
 

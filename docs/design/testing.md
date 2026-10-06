@@ -67,6 +67,31 @@ disk/VM helpers; `test/lib/secure-vm.sh` supports the secure feasibility
 fixtures. Optional bcvk is only a local insecure-firmware mechanics aid,
 not Secure Boot proof.
 
+## Sundog desktop package validation
+
+The [desktop-completeness plan](../plans/2026-10-05-sundog-desktop-completeness-plan.md)
+records the package payload and its VM acceptance results. Run
+`test/sundog-profile-test.sh` and `check-duplicate-packages.sh`, build with
+`just sundog`, and inspect the artifact's executable helpers, KCMs, preview
+plugins, dictionaries, and English handbooks. Package selection alone cannot
+prove a visible action works: the original static profile test passed while
+KRunner's Configure action could not find `kcmshell6`.
+
+Build in an isolated VM/checkout when retaining local baseline artifacts:
+`mkosi.clean` removes `output/*`. Use disposable copies of the prepared Incus
+baselines for desktop checks. The local baseline setup is retained in
+`output/incus-baselines/`; package-check scripts and non-secret results are in
+`output/sundog-desktop-validation/`, both ignored by git. The plan carries a
+self-contained results summary. Accessibility and input tooling installed in
+a guest's temporary `/usr` overlay are test instrumentation, not image payload.
+
+Check real Plasma actions and rendered content in fresh and updated VM user
+sessions, including GTK3 Preview, XWayland font/icon propagation, live sensors,
+unindexed-file metadata, thumbnail rendering, wallet entries, and local Help
+with guest networking disabled. Hardware-dependent Thunderbolt authorization
+is deferred to manual laptop validation. This package-only change does not
+require additional deployment, rollback, or signing validation.
+
 ## Secure-bootc evidence boundary
 
 `validate.yml`, `test-bootc-secure.yml` and
