@@ -88,6 +88,33 @@ incidental native-lane cleanup. A mismatched sidecar is treated as missing
 and the CLI warns/skips the diff without masking ordinary update status.
 `test/pkg-diff-test.sh` pins parse, identity and atomic symlink publication.
 
+## Core Flatpak sets
+
+🟢 Each bootc image carries its product's core Flatpak set in the OCI label
+`org.frostyard.core-flatpaks`; Firn reads it before installing when a
+recipe sets `core_flatpaks = true`
+([firn ADR-0018](https://github.com/frostyard/firn/blob/main/docs/adr/0018-image-published-core-flatpaks-label.md)).
+The value is compact JSON, `{"version":1,"flatpaks":[{"id":…,"name":…}]}`.
+Sources are `flatpaks/snow.json` (Snow and Snowfield) and
+`flatpaks/sundog.json`; Floe maps to no file and carries no label key.
+`flatpaks/core-flatpaks.py` holds the product mapping, validates the files
+(Flatpak application IDs, names, no duplicates, no empty set), prints each
+build's label argument, and checks the packaged image before push in every
+`buildah-package.sh` lane. `test/core-flatpaks-test.sh` pins the contract.
+
+`label` refuses to print while any source is invalid or stale, so a build
+cannot stamp a label the repository disagrees with. The secure lane checks
+the label again on the pushed, signed digest before `latest` is promoted,
+and `test/core-flatpaks-test.sh` requires every packaging lane to pass the
+label and check it.
+
+`flatpaks/legacy/firn-core-flatpaks.json` is Snow's set in the
+`{"core": [...]}` shape Firn releases before ADR-0018 read; the Firn ISO
+embeds it at `/usr/share/firn/core-flatpaks.json` and `just
+firn-flatpak-seed` reads it. It is generated from `flatpaks/snow.json` and
+goes away with the ISO fallback. The `snow-first-setup` package's own
+`core.json` is not read by first-setup and no longer defines any set.
+
 ## Public repository and ISO signing
 
 frostyard/apt-publisher publishes signed Frostyard APT indexes under

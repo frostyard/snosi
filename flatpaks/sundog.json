@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "flatpaks": [
+    {
+      "id": "org.kde.gwenview",
+      "name": "Gwenview"
+    },
+    {
+      "id": "org.kde.haruna",
+      "name": "Haruna"
+    },
+    {
+      "id": "org.kde.kcalc",
+      "name": "KCalc"
+    },
+    {
+      "id": "org.kde.kcharselect",
+      "name": "KCharSelect"
+    },
+    {
+      "id": "org.kde.okular",
+      "name": "Okular"
+    },
+    {
+      "id": "org.kde.skanpage",
+      "name": "Skanpage"
+    },
+    {
+      "id": "org.kde.kweather",
+      "name": "Weather"
+    },
+    {
+      "id": "io.github.DenysMb.Kontainer",
+      "name": "Kontainer"
+    },
+    {
+      "id": "io.github.kolunmi.Bazaar",
+      "name": "Bazaar"
+    },
+    {
+      "id": "io.missioncenter.MissionCenter",
+      "name": "MissionCenter"
+    }
+  ]
+}

@@ -66,7 +66,7 @@ install time. This is how it gets one.
 `tools/build-iso.sh` packs the **entire** installer rootfs as the
 kernel's initramfs (cpio+zstd), unpacked wholesale into tmpfs at boot —
 it all lives in RAM. The seed is the 23 core desktop apps from
-`core.json` **plus their GNOME/freedesktop runtimes** — several GiB. Put
+Snow's list **plus their GNOME/freedesktop runtimes** — several GiB. Put
 inside the rootfs it would blow the RAM budget the ISO test tracks.
 
 So the seed rides the ISO as a **data area outside the initramfs**: a
@@ -76,7 +76,7 @@ crosses into the target.
 
 ### Build time — `just firn-flatpak-seed`
 
-Reads the app IDs from `core.json` (see below) and builds a standalone
+Reads the app IDs from Snow's core list (see below) and builds a standalone
 flatpak **system** installation tree into `output/firn-flatpak-seed`
 (gitignored) via a `flatpak --user` install pointed there with
 `FLATPAK_USER_DIR` — the on-disk layout of a user and a system
@@ -127,15 +127,20 @@ no medium or no seed on it, the script exits 0 (no-op) and firn uses the
 network — a seedless ISO still boots. This unit is the **snosi ISO's
 own** (unlike the firn-owned kiosk units).
 
-### `core.json` must track first-setup
+### The core flatpak list comes from `flatpaks/`
 
-`core.json` here is a **vendored copy** of
-`frostyard/first-setup`'s `snow_first_setup/core.json` — the single
-source of truth for the core flatpak set, and the exact same file firn
-reads at install time for `core_flatpaks`
-(`internal/flatpak/flatpak.go`, `coreJSONPath`). Vendoring it keeps the
-ISO build from depending on a first-setup checkout. **Re-vendor it when
-first-setup's list changes**, so the seeded set stays in step with what
-firn installs. It is kept byte-identical to upstream for easy diffing;
-the tracking obligation lives in the `firn-flatpak-seed` recipe comment
-and here.
+Each product's core Flatpak set lives in [`flatpaks/`](../../flatpaks/)
+and is published as the image's `org.frostyard.core-flatpaks` label
+(frostyard/firn ADR-0018). The ISO's fallback list at
+`/usr/share/firn/core-flatpaks.json` and the seed both use
+`flatpaks/legacy/firn-core-flatpaks.json`: Snow's set in the legacy
+`{"core": [...]}` shape, generated from `flatpaks/snow.json`. Edit
+`flatpaks/snow.json`, then run
+`flatpaks/core-flatpaks.py generate-legacy`; CI and image builds refuse
+a stale file. There is no longer a vendored copy of first-setup's list to
+re-vendor; first-setup itself never read that list.
+
+The fallback is the same list for every product. It remains only until
+the ISO carries a Firn release that reads the label; then it is removed.
+The seed is Snow's set only: Firn copies the whole seeded installation,
+so seeding other products' sets would put them on every install.

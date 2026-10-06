@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "flatpaks": [
+    {
+      "id": "io.github.kolunmi.Bazaar",
+      "name": "Bazaar App Store"
+    },
+    {
+      "id": "io.missioncenter.MissionCenter",
+      "name": "MissionCenter System Monitor"
+    },
+    {
+      "id": "com.mattjakeman.ExtensionManager",
+      "name": "Extension Manager"
+    },
+    {
+      "id": "com.ranfdev.DistroShelf",
+      "name": "DistroShelf"
+    },
+    {
+      "id": "org.gnome.Decibels",
+      "name": "Audio Player"
+    },
+    {
+      "id": "org.gnome.Calculator",
+      "name": "Calculator"
+    },
+    {
+      "id": "org.gnome.Calendar",
+      "name": "Calendar"
+    },
+    {
+      "id": "org.gnome.Characters",
+      "name": "Characters"
+    },
+    {
+      "id": "org.gnome.clocks",
+      "name": "Clocks"
+    },
+    {
+      "id": "org.gnome.Connections",
+      "name": "Connections"
+    },
+    {
+      "id": "org.gnome.Contacts",
+      "name": "Contacts"
+    },
+    {
+      "id": "org.gnome.baobab",
+      "name": "Disk Usage Analyzer"
+    },
+    {
+      "id": "org.gnome.SimpleScan",
+      "name": "Document Scanner"
+    },
+    {
+      "id": "org.gnome.Evince",
+      "name": "Document Viewer"
+    },
+    {
+      "id": "org.gnome.FileRoller",
+      "name": "File Roller"
+    },
+    {
+      "id": "org.gnome.font-viewer",
+      "name": "Fonts"
+    },
+    {
+      "id": "org.gnome.Loupe",
+      "name": "Image Viewer"
+    },
+    {
+      "id": "org.gnome.Logs",
+      "name": "Logs"
+    },
+    {
+      "id": "org.gnome.Maps",
+      "name": "Maps"
+    },
+    {
+      "id": "org.gnome.Snapshot",
+      "name": "Snapshot"
+    },
+    {
+      "id": "org.gnome.TextEditor",
+      "name": "Text Editor"
+    },
+    {
+      "id": "org.gnome.Showtime",
+      "name": "Videos"
+    },
+    {
+      "id": "org.gnome.Weather",
+      "name": "Weather"
+    }
+  ]
+}

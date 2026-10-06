@@ -30,7 +30,9 @@ write permission. Cosign signs/validates the immutable digest, and
 `latest` is promoted only after remote signature, label, policy-copy and
 artifact checks succeed. Syft SBOMs attach via ORAS. Snow release discovery
 requires a previous signed immutable Snow image with the exact Syft SBOM
-referrer, not an arbitrary tag.
+referrer, not an arbitrary tag. Every packaging lane stamps the product's
+`org.frostyard.core-flatpaks` label and checks it on the packaged image
+before any push ([core Flatpak sets](../integration-contracts.md#core-flatpak-sets)).
 
 `build-installer-iso.yml` retains the scripts at `shared/native-ab/publish/`
 and the mkosi pin helpers at `shared/native-ab/ci/`. `native` in their names

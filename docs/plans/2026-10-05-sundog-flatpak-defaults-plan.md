@@ -55,6 +55,13 @@ and honor them independently when core defaults are disabled.
 
 ## Current integration and ordering constraint
 
+> **Superseded in part (2026-10-06):** `shared/firn-installer/core.json` no
+> longer exists. Core Flatpak sets now live in [`flatpaks/`](../../flatpaks/)
+> and ship as the `org.frostyard.core-flatpaks` image label
+> ([integration contracts](../integration-contracts.md#core-flatpak-sets),
+> firn ADR-0018). Do not recreate or re-vendor that file; this plan's
+> contract and Phases 1–2 are pending a rewrite.
+
 The 2026-10-05 planning review found:
 
 - `shared/firn-installer/core.json` is a byte-identical vendored copy of

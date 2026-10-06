@@ -98,6 +98,13 @@ jobs:
         # per frostyard/snosi#789) is pinned here instead.
         run: ./test/firn-catalog-test.sh
 
+      - name: Validate core Flatpak sets
+        # flatpaks/ is the source of each image's org.frostyard.core-flatpaks
+        # label, which Firn parses fail-closed before installing (firn
+        # ADR-0018). Pin the file shapes, product mapping, label encoding,
+        # image check and generated first-setup list here.
+        run: ./test/core-flatpaks-test.sh
+
       - name: Validate Firn ISO Forky sandbox
         run: ./test/firn-installer-iso-test.sh --static
 
