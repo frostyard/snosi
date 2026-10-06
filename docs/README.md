@@ -73,8 +73,9 @@ for shared keys and installer ISO publication references.
 - [plans/2026-07-20-update-api-daemon-design.md](plans/2026-07-20-update-api-daemon-design.md)
 - [plans/2026-08-26-cayo-floe-rename-plan.md](plans/2026-08-26-cayo-floe-rename-plan.md) — ordered server-product rename across snosi and downstream repos
 - [plans/2026-09-24-native-ab-nbc-retirement-plan.md](plans/2026-09-24-native-ab-nbc-retirement-plan.md) — **Superseded by ADR-0018:** historical exact-object disposal worksheet
-- [plans/2026-10-05-sundog-desktop-completeness-plan.md](plans/2026-10-05-sundog-desktop-completeness-plan.md) — **In progress:** native desktop payload composed and VM package validation recorded; manual laptop/hardware validation deferred before the Flatpak migration
-- [plans/2026-10-05-sundog-flatpak-defaults-plan.md](plans/2026-10-05-sundog-flatpak-defaults-plan.md) — **Proposed:** coordinate Firn product-specific online/offline app provisioning and existing-host migration before removing native standalone apps
+- [plans/2026-10-05-sundog-desktop-completeness-plan.md](plans/2026-10-05-sundog-desktop-completeness-plan.md) — **In progress:** native desktop payload composed and VM package validation recorded; manual laptop/hardware validation deferred
+- [plans/2026-10-05-sundog-flatpak-defaults-plan.md](plans/2026-10-05-sundog-flatpak-defaults-plan.md) — **Proposed:** product-specific core sets, selective offline provisioning, and opt-in migration before native-app removal; package/ref checks and focused automated coverage
+- [plans/2026-10-05-sundog-printer-support-plan.md](plans/2026-10-05-sundog-printer-support-plan.md) — **Planned:** immediate, independent addition of KDE's recommended printer helpers with package-availability and static checks
 - [plans/ab-deploy-checklist.md](plans/ab-deploy-checklist.md) — native A/B production-deploy checklist
 
 ### Contracts and runbooks (indexed in place)
