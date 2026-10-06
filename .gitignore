@@ -31,7 +31,7 @@ shared/snow/tree/usr/share/glib-2.0/schemas/org.gnome.shell.extensions.logo-menu
 
 # firn binary + embedded core flatpak list provisioned at build time by
 # `just _firn-binary` (shared/firn-installer/README.md); never committed
-# (the list is a build-time copy of shared/firn-installer/core.json).
+# (the list is a build-time copy of flatpaks/first-setup/core.json).
 shared/firn-installer/tree/usr/bin/firn
 shared/firn-installer/tree/usr/share/firn/core-flatpaks.json
 

@@ -252,6 +252,11 @@ jobs:
           SNOSI_BOOTC_PCR_CERT: /var/tmp/bootc-secure-credentials/pcr.pub
         run: |
           SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          # Core Flatpak set label (flatpaks/core-flatpaks.py). Products
+          # without a set get no label at all (frostyard/firn ADR-0018).
+          core_flatpaks_label=()
+          label=$(python3 ./flatpaks/core-flatpaks.py label "${{ matrix.profile }}")
+          [[ -z $label ]] || core_flatpaks_label=("$label")
           sudo TMPDIR="$TMPDIR" \
             SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" \
             MAX_LAYERS="$MAX_LAYERS" \
@@ -269,7 +274,17 @@ jobs:
             "org.opencontainers.image.created=${{ steps.date.outputs.date }}" \
             "org.opencontainers.image.source=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/blob/${{ github.sha }}/mkosi.conf" \
             "org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/tree/${{ github.sha }}" \
-            "org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/${{ github.sha }}/README.md"
+            "org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/${{ github.sha }}/README.md" \
+            "${core_flatpaks_label[@]}"
+
+      - name: Check core Flatpak label
+        # The packaged image is the one pushed: confirm its label matches the
+        # product's flatpaks/ file, or is absent for products without one.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo podman image inspect "$IMAGE:${{ steps.version.outputs.tag }}" |
+            python3 ./flatpaks/core-flatpaks.py check-image "${{ matrix.profile }}"
 
       - name: Install secure artifact validation dependencies
         run: |
@@ -609,6 +624,11 @@ jobs:
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
         run: |
+          # Core Flatpak set label (flatpaks/core-flatpaks.py). Products
+          # without a set get no label at all (frostyard/firn ADR-0018).
+          core_flatpaks_label=()
+          label=$(python3 ./flatpaks/core-flatpaks.py label "${{ matrix.profile }}")
+          [[ -z $label ]] || core_flatpaks_label=("$label")
           sudo TMPDIR="$TMPDIR" ./shared/outformat/image/buildah-package.sh \
             output/${{ matrix.profile }} \
             "$IMAGE:${{ steps.version.outputs.tag }}" \
@@ -618,7 +638,17 @@ jobs:
             "org.opencontainers.image.created=${{ steps.date.outputs.date }}" \
             "org.opencontainers.image.source=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/blob/${{ github.sha }}/mkosi.conf" \
             "org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/tree/${{ github.sha }}" \
-            "org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/${{ github.sha }}/README.md"
+            "org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/${{ github.sha }}/README.md" \
+            "${core_flatpaks_label[@]}"
+
+      - name: Check core Flatpak label
+        # The packaged image is the one pushed: confirm its label matches the
+        # product's flatpaks/ file, or is absent for products without one.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo podman image inspect "$IMAGE:${{ steps.version.outputs.tag }}" |
+            python3 ./flatpaks/core-flatpaks.py check-image "${{ matrix.profile }}"
 
       - name: Smoke test - verify SUID bit and bcvk requirements
         env:
