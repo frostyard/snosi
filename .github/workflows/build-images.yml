@@ -430,6 +430,17 @@ jobs:
             "output/${{ matrix.profile }}/usr/lib/snosi/mok.crt" \
             "output/${{ matrix.profile }}/usr/lib/snosi/pcr-signing.pub"
 
+      - name: Check core Flatpak label on pushed digest
+        # Firn reads the label from the signed digest it installs; check that
+        # digest, not only the local image checked before the push.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          skopeo inspect --authfile "$AUTH_FILE" "docker://$IMAGE@$DIGEST" |
+            python3 ./flatpaks/core-flatpaks.py check-image "${{ matrix.profile }}"
+
       - name: Promote validated digest to latest
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}

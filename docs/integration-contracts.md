@@ -102,11 +102,18 @@ Sources are `flatpaks/snow.json` (Snow and Snowfield) and
 build's label argument, and checks the packaged image before push in every
 `buildah-package.sh` lane. `test/core-flatpaks-test.sh` pins the contract.
 
-Snow and Snowfield also ship `flatpaks/first-setup/core.json`, generated
-from `flatpaks/snow.json`, over the copy the `snow-first-setup` package
-ships, so first-setup offers the same set the label publishes. The Firn
-ISO embeds the same file at `/usr/share/firn/core-flatpaks.json` for Firn
-releases that predate the label.
+`label` refuses to print while any source is invalid or stale, so a build
+cannot stamp a label the repository disagrees with. The secure lane checks
+the label again on the pushed, signed digest before `latest` is promoted,
+and `test/core-flatpaks-test.sh` requires every packaging lane to pass the
+label and check it.
+
+`flatpaks/legacy/firn-core-flatpaks.json` is Snow's set in the
+`{"core": [...]}` shape Firn releases before ADR-0018 read; the Firn ISO
+embeds it at `/usr/share/firn/core-flatpaks.json` and `just
+firn-flatpak-seed` reads it. It is generated from `flatpaks/snow.json` and
+goes away with the ISO fallback. The `snow-first-setup` package's own
+`core.json` is not read by first-setup and no longer defines any set.
 
 ## Public repository and ISO signing
 

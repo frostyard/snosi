@@ -48,7 +48,7 @@ firn-installer-iso: ensure-mkosi _firn-binary
 # ADR-0006 media obligation: seed the core desktop apps + runtime so the
 # install-time offline path is the common path, not the degraded one). This
 # is SLOW and needs network + several GiB of disk: it downloads every app in
-# flatpaks/first-setup/core.json plus their GNOME/freedesktop runtimes from
+# flatpaks/legacy/firn-core-flatpaks.json plus their GNOME/freedesktop runtimes from
 # Flathub. Run it BEFORE `just firn-installer-iso` -- that recipe picks the
 # tree up automatically if it exists (output/firn-flatpak-seed) and builds a
 # seeded ISO; skip it and the ISO is built without a seed and firn falls back
@@ -62,7 +62,7 @@ firn-installer-iso: ensure-mkosi _firn-binary
 firn-flatpak-seed:
     #!/usr/bin/env bash
     set -euo pipefail
-    core="{{justfile_directory()}}/flatpaks/first-setup/core.json"
+    core="{{justfile_directory()}}/flatpaks/legacy/firn-core-flatpaks.json"
     seed="{{justfile_directory()}}/output/firn-flatpak-seed"
     [[ -f "$core" ]] || { echo "Error: missing $core" >&2; exit 1; }
     command -v flatpak >/dev/null || { echo "Error: flatpak not found on build host" >&2; exit 1; }
@@ -93,7 +93,7 @@ firn-flatpak-seed:
     # for the network-download leg, internal/flatpak/flatpak.go).
     flatpak remote-add --user --if-not-exists \
         flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-    # Read the app IDs from Snow's core list in first-setup's shape,
+    # Read the app IDs from Snow's set in the legacy {"core": [...]} shape,
     # generated from flatpaks/snow.json (flatpaks/core-flatpaks.py). The seed
     # is Snow's GNOME set only; seeding other products' sets needs Firn to
     # install only requested apps from the medium (out of scope for firn
@@ -191,8 +191,8 @@ _firn-binary:
     # install time (firn reads InstallerCoreJSONPath =
     # /usr/share/firn/core-flatpaks.json as the fallback; see firn
     # internal/flatpak/flatpak.go). Same generated list the flatpak seed
-    # uses; regenerate it with flatpaks/core-flatpaks.py generate-first-setup.
-    core="{{justfile_directory()}}/flatpaks/first-setup/core.json"
+    # uses; regenerate it with flatpaks/core-flatpaks.py generate-legacy.
+    core="{{justfile_directory()}}/flatpaks/legacy/firn-core-flatpaks.json"
     [[ -f "$core" ]] || { echo "Error: missing $core (generated from flatpaks/snow.json)" >&2; exit 1; }
     corelist="{{justfile_directory()}}/shared/firn-installer/tree/usr/share/firn/core-flatpaks.json"
     mkdir -p "$(dirname "$corelist")"

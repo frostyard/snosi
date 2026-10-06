@@ -9,12 +9,15 @@ mapped to no file publishes no label.
 
 Commands:
   validate                 check every source file, the product mapping and
-                           the generated first-setup list
-  label PROFILE            print the buildah-package.sh label argument for
-                           PROFILE, or nothing when it has no core set
-  generate-first-setup     rewrite first-setup/core.json from snow.json
-  check-image PROFILE      read `podman image inspect` JSON on stdin and check
-                           the image's label matches PROFILE's file
+                           the generated legacy list
+  label PROFILE            validate, then print the buildah-package.sh label
+                           argument for PROFILE, or nothing when it has no
+                           core set
+  generate-legacy          rewrite legacy/firn-core-flatpaks.json from Snow's
+                           set
+  check-image PROFILE      read `podman image inspect` or `skopeo inspect`
+                           JSON on stdin and check the image's label matches
+                           PROFILE's file
 """
 
 import json
@@ -24,10 +27,17 @@ from pathlib import Path
 
 LABEL = "org.frostyard.core-flatpaks"
 FORMAT_VERSION = 1
+# Every image buildah-package.sh produces carries this label; requiring it
+# proves check-image was handed a real image inspection.
+BOOTC_LABEL = ("containers.bootc", "1")
 
 DIR = Path(__file__).resolve().parent
 ROOT = DIR.parent
-FIRST_SETUP = DIR / "first-setup" / "core.json"
+# Snow's set in the {"core": [...]} shape Firn releases before ADR-0018 read
+# from /usr/share/firn/core-flatpaks.json on the installer ISO. Also feeds
+# `just firn-flatpak-seed`. Remove with the ISO fallback.
+LEGACY = DIR / "legacy" / "firn-core-flatpaks.json"
+LEGACY_PRODUCT = "snow"
 
 # Every bootc product profile must appear here, with None when the product
 # intentionally has no core set. Snowfield shares Snow's list until it needs
@@ -60,8 +70,10 @@ def check_set(data, where):
     extra = set(data) - {"version", "flatpaks"}
     if extra:
         raise Invalid(f"{where}: unknown field(s): {', '.join(sorted(extra))}")
-    if data.get("version") != FORMAT_VERSION or isinstance(data.get("version"), bool):
-        raise Invalid(f"{where}: version must be {FORMAT_VERSION}")
+    version = data.get("version")
+    # type() rather than ==: 1.0 and True both compare equal to 1.
+    if type(version) is not int or version != FORMAT_VERSION:
+        raise Invalid(f"{where}: version must be the integer {FORMAT_VERSION}")
     apps = data.get("flatpaks")
     if not isinstance(apps, list) or not apps:
         raise Invalid(f"{where}: flatpaks must be a non-empty array "
@@ -106,55 +118,64 @@ def compact(data):
     return json.dumps(data, separators=(",", ":"), ensure_ascii=False)
 
 
-def first_setup_text():
-    """first-setup's core.json shape, generated from Snow's set."""
-    apps = load_set(DIR / "snow.json")["flatpaks"]
+def legacy_text():
+    """The legacy {"core": [...]} list, generated from Snow's set."""
+    apps = product_set(LEGACY_PRODUCT)["flatpaks"]
     core = [{"name": e["name"], "id": e["id"]} for e in apps]
     return json.dumps({"core": core}, indent=4, ensure_ascii=False) + "\n"
 
 
-def cmd_validate():
-    problems = []
+def problems():
+    found = []
     for name in sorted({n for n in PRODUCTS.values() if n}):
         try:
             load_set(DIR / name)
         except Invalid as err:
-            problems.append(str(err))
+            found.append(str(err))
     mapped = {n for n in PRODUCTS.values() if n}
     for path in sorted(DIR.glob("*.json")):
         if path.name not in mapped:
-            problems.append(f"{path.name}: not mapped to any product in PRODUCTS")
+            found.append(f"{path.name}: not mapped to any product in PRODUCTS")
     profiles = {p.name for p in (ROOT / "mkosi.profiles").iterdir() if p.is_dir()}
     for profile in sorted(profiles - NON_PRODUCT_PROFILES - set(PRODUCTS)):
-        problems.append(f"profile {profile}: missing from PRODUCTS (map it to a file or None)")
+        found.append(f"profile {profile}: missing from PRODUCTS (map it to a file or None)")
     for profile in sorted(set(PRODUCTS) - profiles):
-        problems.append(f"PRODUCTS entry {profile}: no such mkosi profile")
+        found.append(f"PRODUCTS entry {profile}: no such mkosi profile")
     try:
-        if not FIRST_SETUP.exists() or FIRST_SETUP.read_text() != first_setup_text():
-            problems.append(f"{FIRST_SETUP.relative_to(ROOT)} is out of date; "
-                            "run: flatpaks/core-flatpaks.py generate-first-setup")
+        if not LEGACY.exists() or LEGACY.read_text() != legacy_text():
+            found.append(f"{LEGACY.relative_to(ROOT)} is out of date; "
+                         "run: flatpaks/core-flatpaks.py generate-legacy")
     except Invalid as err:
-        problems.append(str(err))
-    for problem in problems:
+        found.append(str(err))
+    return found
+
+
+def cmd_validate():
+    found = problems()
+    for problem in found:
         print(f"error: {problem}", file=sys.stderr)
-    return 1 if problems else 0
+    return 1 if found else 0
 
 
 def cmd_label(profile):
+    # A build must not stamp a label while the sources disagree.
+    found = problems()
+    if found:
+        raise Invalid("refusing to label: " + "; ".join(found))
     data = product_set(profile)
     if data is not None:
         print(f"{LABEL}={compact(data)}")
     return 0
 
 
-def cmd_generate_first_setup():
-    FIRST_SETUP.parent.mkdir(parents=True, exist_ok=True)
-    FIRST_SETUP.write_text(first_setup_text())
+def cmd_generate_legacy():
+    LEGACY.parent.mkdir(parents=True, exist_ok=True)
+    LEGACY.write_text(legacy_text())
     return 0
 
 
-def cmd_check_image(profile, inspect_json):
-    expected = product_set(profile)
+def image_labels(inspect_json):
+    """Labels from `podman image inspect` (list) or `skopeo inspect` (object)."""
     try:
         inspected = json.loads(inspect_json)
     except json.JSONDecodeError as err:
@@ -163,7 +184,23 @@ def cmd_check_image(profile, inspect_json):
         if len(inspected) != 1:
             raise Invalid(f"expected one inspected image, got {len(inspected)}")
         inspected = inspected[0]
-    labels = (inspected.get("Labels") or inspected.get("Config", {}).get("Labels") or {})
+    if not isinstance(inspected, dict):
+        raise Invalid("inspect output is not an image inspection object")
+    labels = inspected.get("Labels")
+    if labels is None:
+        config = inspected.get("Config")
+        labels = config.get("Labels") if isinstance(config, dict) else None
+    if not isinstance(labels, dict):
+        raise Invalid("inspect output has no Labels map")
+    key, value = BOOTC_LABEL
+    if labels.get(key) != value:
+        raise Invalid(f"inspect output lacks {key}={value}; not a packaged image inspection")
+    return labels
+
+
+def cmd_check_image(profile, inspect_json):
+    expected = product_set(profile)
+    labels = image_labels(inspect_json)
     if expected is None:
         if LABEL in labels:
             raise Invalid(f"{profile} must not carry {LABEL}, found {labels[LABEL]!r}")
@@ -190,8 +227,8 @@ def main(argv):
                 return cmd_validate()
             case ["label", profile]:
                 return cmd_label(profile)
-            case ["generate-first-setup"]:
-                return cmd_generate_first_setup()
+            case ["generate-legacy"]:
+                return cmd_generate_legacy()
             case ["check-image", profile]:
                 return cmd_check_image(profile, sys.stdin.read())
             case _:
