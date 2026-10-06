@@ -26,6 +26,10 @@
       "name": "Skanpage"
     },
     {
+      "id": "org.kde.kweather",
+      "name": "Weather"
+    },
+    {
       "id": "io.github.DenysMb.Kontainer",
       "name": "Kontainer"
     },
