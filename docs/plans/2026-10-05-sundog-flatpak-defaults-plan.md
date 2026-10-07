@@ -40,14 +40,10 @@ It contains these ten application IDs:
 | Bazaar | `io.github.kolunmi.Bazaar` |
 | MissionCenter | `io.missioncenter.MissionCenter` |
 
-KWeather was added during #1054, after the original nine-app agreement.
-
-Every GNOME application in Snow's set is excluded, including those with no
-named replacement such as Calendar, Contacts, Clocks and Maps. Also
-excluded: `com.mattjakeman.ExtensionManager`, `com.ranfdev.DistroShelf`
-and `org.kde.skanlite`. Skanpage is the sole default scanner application.
-Bazaar and MissionCenter are retained by explicit operator choice, even
-though native Discover and Plasma System Monitor are also available.
+Every application in Snow's set is excluded, unless expressly included
+in the application list above. Bazaar and MissionCenter are retained
+by explicit operator choice, even though native Discover and
+Plasma System Monitor are also available.
 
 These rules select applications, not runtimes: selected applications may
 require GNOME, KDE or freedesktop runtimes, and Flatpak installs those as
@@ -169,16 +165,6 @@ flatpak remote-info --system --arch=x86_64 flathub org.kde.gwenview
 git diff --check
 ```
 
-## Later / ideas
-
-- **Selective offline seeding.** Published ISOs carry no Flatpak seed, so
-  installs download the set. A locally seeded ISO still copies its whole
-  GNOME seed onto any product, Sundog included, because Firn tar-copies the
-  medium's `/var/lib/flatpak` (firn ADR-0006). Installing only requested
-  IDs from a shared `flatpak create-usb` repository with `--sideload-repo`,
-  and building that seed in CI, would fix it. ADR-0018 left this out of
-  scope; it needs its own Firn decision before it becomes a phase here.
-
 ## References
 
 - Prerequisite: [native desktop completeness](2026-10-05-sundog-desktop-completeness-plan.md).
@@ -190,7 +176,7 @@ git diff --check
 - Implements: [architecture overview](../design/overview.md),
   [build pipeline](../design/build-pipeline.md),
   [testing](../design/testing.md).
-- Media: [Firn installer composition and seed](../../shared/firn-installer/README.md).
+- Media: [Firn installer composition](../../shared/firn-installer/README.md).
 - Firn provisioning: [ADR-0006](https://github.com/frostyard/firn/blob/main/docs/adr/0006-install-time-offline-first-flatpaks.md),
   [`internal/flatpak/flatpak.go`](https://github.com/frostyard/firn/blob/main/internal/flatpak/flatpak.go).
 - Constraints: [sysext design](../design/sysexts.md),
