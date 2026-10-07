@@ -102,6 +102,16 @@ Sources are `flatpaks/snow.json` (Snow and Snowfield) and
 build's label argument, and checks the packaged image before push in every
 `buildah-package.sh` lane. `test/core-flatpaks-test.sh` pins the contract.
 
+Installed systems cannot easily read their image's label, so each image
+also ships its set at `/usr/share/frostyard/<IMAGE_ID>.core-flatpaks.json`,
+a byte copy of its source file beside the core ADR-0003 provenance files.
+The org namespace (core ADR-0004) lets other products, such as chairlift,
+read it. Snowfield's file carries Snow's set and Floe ships none.
+`shared/composition/core-flatpaks.finalize` installs it and
+`core-flatpaks.postoutput` fails the build when the output tree's file is
+missing, changed or unexpected. Nothing reconciles installed Flatpaks with a
+changed set.
+
 `label` refuses to print while any source is invalid or stale, so a build
 cannot stamp a label the repository disagrees with. The secure lane checks
 the label again on the pushed, signed digest before `latest` is promoted,

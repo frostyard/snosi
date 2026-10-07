@@ -11,6 +11,9 @@
 #    to print while it is stale
 #  - check-image accepts the right label and rejects a missing, extra,
 #    mismatched or malformed one, and input that is not an image inspection
+#  - install ships each set at /usr/share/frostyard/<IMAGE_ID>.core-flatpaks.json
+#    (none for floe), check-tree rejects a missing, extra or changed file, and
+#    every product composition runs both
 #  - producer validation rejects each malformed shape (as Invalid, not a crash)
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1
@@ -152,6 +155,52 @@ check "label prints again once in sync" "$tmp/repo/flatpaks/core-flatpaks.py" la
 jq -e '.core | length > 0 and all(.[]; has("id") and has("name"))' "$root/flatpaks/legacy/firn-core-flatpaks.json" >/dev/null &&
     ok "legacy list has the {core:[{name,id}]} shape" ||
     fail "legacy list has the {core:[{name,id}]} shape"
+
+# install writes each image's on-disk copy from the same source file as its
+# label; check-tree is the build's post-output check against the image tree.
+tree_file() { echo "$tmp/tree-$1/usr/share/frostyard/$1.core-flatpaks.json"; }
+for p in snow snowfield sundog floe; do "$tool" install "$p" "$tmp/tree-$p" >/dev/null; done
+cmp -s "$(tree_file snow)" "$root/flatpaks/snow.json" &&
+    ok "install copies snow.json for snow" || fail "install copies snow.json for snow"
+cmp -s "$(tree_file snowfield)" "$root/flatpaks/snow.json" &&
+    ok "install copies snow.json for snowfield" || fail "install copies snow.json for snowfield"
+cmp -s "$(tree_file sundog)" "$root/flatpaks/sundog.json" &&
+    ok "install copies sundog.json for sundog" || fail "install copies sundog.json for sundog"
+[[ ! -e "$tmp/tree-floe" ]] && ok "install writes nothing for floe" || fail "install writes nothing for floe"
+for p in snow snowfield sundog floe; do
+    check "check-tree accepts the installed $p tree" "$tool" check-tree "$p" "$tmp/tree-$p"
+done
+refuse "check-tree rejects sundog carrying snow's set" "$tool" check-tree sundog "$tmp/tree-snow"
+mkdir -p "$(dirname "$(tree_file floe)")"
+cp "$root/flatpaks/snow.json" "$(tree_file floe)"
+refuse "check-tree rejects floe shipping a file" "$tool" check-tree floe "$tmp/tree-floe"
+jq -c . "$root/flatpaks/sundog.json" > "$(tree_file sundog)"
+refuse "check-tree rejects a file that differs from its source" "$tool" check-tree sundog "$tmp/tree-sundog"
+rm "$(tree_file sundog)"
+refuse "check-tree rejects a missing file" "$tool" check-tree sundog "$tmp/tree-sundog"
+scratch
+jq '.flatpaks |= .[:-1]' "$root/flatpaks/snow.json" > "$tmp/repo/flatpaks/snow.json"
+refuse "install refuses while the legacy list is stale" "$tmp/repo/flatpaks/core-flatpaks.py" install sundog "$tmp/tree-stale"
+[[ ! -e "$tmp/tree-stale" ]] && ok "a refused install writes nothing" || fail "a refused install writes nothing"
+
+# Every product composition must write the file and check the output tree
+# (snowfield builds from the snow composition).
+for c in floe snow sundog; do
+    conf="$root/shared/composition/$c/mkosi.conf"
+    if grep -qx 'FinalizeScripts=%D/shared/composition/core-flatpaks.finalize' "$conf" &&
+        grep -qx 'PostOutputScripts=%D/shared/composition/core-flatpaks.postoutput' "$conf"; then
+        ok "$c composition installs and checks the on-disk set"
+    else
+        fail "$c composition installs and checks the on-disk set"
+    fi
+done
+for p in "$root"/mkosi.profiles/*/mkosi.conf; do
+    profile=$(basename "$(dirname "$p")")
+    [[ $profile == firn-installer ]] && continue
+    grep -qE '^Include=%D/shared/composition/(floe|snow|sundog)/mkosi.conf$' "$p" &&
+        ok "$profile includes a product composition" ||
+        fail "$profile includes a product composition"
+done
 
 # Every workflow lane that packages an image must compute the label, pass it
 # to buildah-package.sh and check the packaged image in the very next step,

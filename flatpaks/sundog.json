@@ -40,6 +40,22 @@
     {
       "id": "io.missioncenter.MissionCenter",
       "name": "MissionCenter"
+    },
+    {
+      "id": "org.kde.elisa",
+      "name": "Elisa"
+    },
+    {
+      "id": "org.kde.filelight",
+      "name": "Filelight"
+    },
+    {
+      "id": "org.kde.krdc",
+      "name": "KRDC"
+    },
+    {
+      "id": "org.kde.kclock",
+      "name": "KClock"
     }
   ]
 }
