@@ -131,16 +131,17 @@ own** (unlike the firn-owned kiosk units).
 
 Each product's core Flatpak set lives in [`flatpaks/`](../../flatpaks/)
 and is published as the image's `org.frostyard.core-flatpaks` label
-(frostyard/firn ADR-0018). The ISO's fallback list at
-`/usr/share/firn/core-flatpaks.json` and the seed both use
-`flatpaks/legacy/firn-core-flatpaks.json`: Snow's set in the legacy
-`{"core": [...]}` shape, generated from `flatpaks/snow.json`. Edit
-`flatpaks/snow.json`, then run
-`flatpaks/core-flatpaks.py generate-legacy`; CI and image builds refuse
-a stale file. There is no longer a vendored copy of first-setup's list to
-re-vendor; first-setup itself never read that list.
+(frostyard/firn ADR-0018). Firn reads that label for the chosen image, so
+the ISO carries no core list of its own: the former
+`/usr/share/firn/core-flatpaks.json` fallback, which gave every product
+Snow's set, is gone, and `test/firn-installer-iso-test.sh --static`
+keeps it off the medium.
 
-The fallback is the same list for every product. It remains only until
-the ISO carries a Firn release that reads the label; then it is removed.
+Only the optional seed still uses `flatpaks/legacy/firn-core-flatpaks.json`:
+Snow's set in the legacy `{"core": [...]}` shape, generated from
+`flatpaks/snow.json`. Edit `flatpaks/snow.json`, then run
+`flatpaks/core-flatpaks.py generate-legacy`; CI and image builds refuse
+a stale file.
+
 The seed is Snow's set only: Firn copies the whole seeded installation,
 so seeding other products' sets would put them on every install.

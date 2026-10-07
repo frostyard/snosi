@@ -118,11 +118,12 @@ the label again on the pushed, signed digest before `latest` is promoted,
 and `test/core-flatpaks-test.sh` requires every packaging lane to pass the
 label and check it.
 
-`flatpaks/legacy/firn-core-flatpaks.json` is Snow's set in the
-`{"core": [...]}` shape Firn releases before ADR-0018 read; the Firn ISO
-embeds it at `/usr/share/firn/core-flatpaks.json` and `just
-firn-flatpak-seed` reads it. It is generated from `flatpaks/snow.json` and
-goes away with the ISO fallback. The `snow-first-setup` package's own
+The Firn ISO carries no core list: its former
+`/usr/share/firn/core-flatpaks.json` fallback gave every product Snow's
+set and was retired once the ISO's Firn read the label.
+`flatpaks/legacy/firn-core-flatpaks.json`, Snow's set in the legacy
+`{"core": [...]}` shape and generated from `flatpaks/snow.json`, now feeds
+only `just firn-flatpak-seed`. The `snow-first-setup` package's own
 `core.json` is not read by first-setup and no longer defines any set.
 
 ## Public repository and ISO signing

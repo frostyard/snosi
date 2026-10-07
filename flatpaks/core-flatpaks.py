@@ -41,9 +41,9 @@ BOOTC_LABEL = ("containers.bootc", "1")
 
 DIR = Path(__file__).resolve().parent
 ROOT = DIR.parent
-# Snow's set in the {"core": [...]} shape Firn releases before ADR-0018 read
-# from /usr/share/firn/core-flatpaks.json on the installer ISO. Also feeds
-# `just firn-flatpak-seed`. Remove with the ISO fallback.
+# Snow's set in the legacy {"core": [...]} shape, read only by
+# `just firn-flatpak-seed`. The installer ISO no longer ships it as Firn's
+# /usr/share/firn/core-flatpaks.json fallback.
 LEGACY = DIR / "legacy" / "firn-core-flatpaks.json"
 LEGACY_PRODUCT = "snow"
 
