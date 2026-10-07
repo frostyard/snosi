@@ -92,6 +92,13 @@ def check_set(data, where):
         name = entry.get("name")
         if not isinstance(name, str) or not name.strip():
             raise Invalid(f"{at}: name must be a non-empty string")
+        # Firn renders names on the installer console before the image is
+        # verified, and rejects control or format characters (frostyard/firn
+        # core-flatpaks-label spec). str.isprintable matches Go's
+        # unicode.IsPrint: plain spaces and letters pass; tabs, newlines,
+        # escapes and zero-width joiners do not.
+        if not name.isprintable():
+            raise Invalid(f"{at}: name contains a non-printable character")
         if app_id in seen:
             raise Invalid(f"{at}: duplicate id {app_id}")
         seen.add(app_id)
