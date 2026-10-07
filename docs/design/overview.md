@@ -48,16 +48,19 @@ management, GTK appearance/Preview integration, Thunderbolt controls, Info
 Center's probe tools, and offline Help. Selective recommendations are required
 because mkosi builds with Debian Recommends disabled. Plasma's autoloaded
 `gtkconfig` module manages XSettings; package composition needs no additional
-session service. Native Gwenview and Okular, including their handbooks, remain
-in the image.
+session service. Gwenview, Okular, KCalc and Skanpage are not native: they
+come from Sundog's core Flatpak set, which Firn offers enabled by default.
+The image keeps their host-side support explicit: `kimageformat6-plugins`
+for native Qt image formats and `libsane1` for scanner udev rules.
 
 The [desktop-completeness plan](../plans/2026-10-05-sundog-desktop-completeness-plan.md)
 records artifact and VM package validation, followed by the
 [Flatpak-defaults plan](../plans/2026-10-05-sundog-flatpak-defaults-plan.md).
-Each product's core Flatpak set is published as an image label; see
+Each product's core Flatpak set is published as an image label and shipped
+at `/usr/share/frostyard/<IMAGE_ID>.core-flatpaks.json`; see
 [integration contracts](../integration-contracts.md#core-flatpak-sets).
-The follow-up covers the Firn release that reads it, existing-install
-migration, and removing the native applications Sundog's set replaces.
+Nothing migrates existing installs or reconciles installed Flatpaks with a
+changed set.
 
 Image builds run BuildScripts, PostInstallationScripts, FinalizeScripts and
 PostOutputScripts; details and package relocation rules are in
