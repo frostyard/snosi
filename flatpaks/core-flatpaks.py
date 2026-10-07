@@ -257,13 +257,18 @@ def cmd_check_tree(profile, root):
     expected = product_set(profile)
     path = tree_path(profile, root)
     shown = f"/{path.relative_to(root)}"
+    # Any other set file, or a dangling link, is as wrong as a missing one:
+    # glob lists symlinks whether or not their targets exist.
+    allowed = set() if expected is None else {path}
+    unexpected = sorted(set(path.parent.glob("*.core-flatpaks.json")) - allowed)
+    if unexpected:
+        names = ", ".join(f"/{p.relative_to(root)}" for p in unexpected)
+        raise Invalid(f"{profile} must not ship {names}")
     if expected is None:
-        if path.exists():
-            raise Invalid(f"{profile} must not ship {shown}")
-        print(f"ok: {profile} ships no {shown}")
+        print(f"ok: {profile} ships no core Flatpak set file")
         return 0
-    if not path.is_file():
-        raise Invalid(f"{profile} image is missing {shown}")
+    if path.is_symlink() or not path.is_file():
+        raise Invalid(f"{profile} image is missing {shown} as a regular file")
     if path.read_bytes() != (DIR / PRODUCTS[profile]).read_bytes():
         raise Invalid(f"{profile} {shown} does not match {PRODUCTS[profile]}")
     print(f"ok: {profile} {shown} matches {PRODUCTS[profile]} "

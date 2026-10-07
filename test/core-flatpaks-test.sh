@@ -170,10 +170,26 @@ cmp -s "$(tree_file sundog)" "$root/flatpaks/sundog.json" &&
 for p in snow snowfield sundog floe; do
     check "check-tree accepts the installed $p tree" "$tool" check-tree "$p" "$tmp/tree-$p"
 done
-refuse "check-tree rejects sundog carrying snow's set" "$tool" check-tree sundog "$tmp/tree-snow"
-mkdir -p "$(dirname "$(tree_file floe)")"
+cp "$root/flatpaks/snow.json" "$(tree_file sundog)"
+refuse "check-tree rejects sundog carrying snow's set" "$tool" check-tree sundog "$tmp/tree-sundog"
+cp "$(tree_file snow)" "$tmp/tree-sundog/usr/share/frostyard/"
+"$tool" install sundog "$tmp/tree-sundog" >/dev/null
+refuse "check-tree rejects another product's set file beside the right one" "$tool" check-tree sundog "$tmp/tree-sundog"
+rm "$tmp/tree-sundog/usr/share/frostyard/snow.core-flatpaks.json"
+floe_dir=$(dirname "$(tree_file floe)")
+mkdir -p "$floe_dir"
 cp "$root/flatpaks/snow.json" "$(tree_file floe)"
 refuse "check-tree rejects floe shipping a file" "$tool" check-tree floe "$tmp/tree-floe"
+rm "$(tree_file floe)"
+cp "$root/flatpaks/snow.json" "$floe_dir/snow.core-flatpaks.json"
+refuse "check-tree rejects floe shipping another product's set" "$tool" check-tree floe "$tmp/tree-floe"
+rm "$floe_dir/snow.core-flatpaks.json"
+ln -s /nonexistent "$(tree_file floe)"
+refuse "check-tree rejects a dangling link where floe has no set" "$tool" check-tree floe "$tmp/tree-floe"
+rm "$(tree_file floe)"
+check "check-tree accepts floe's tree once it is clean again" "$tool" check-tree floe "$tmp/tree-floe"
+ln -sf "$root/flatpaks/snow.json" "$(tree_file snowfield)"
+refuse "check-tree rejects a symlink in place of the file" "$tool" check-tree snowfield "$tmp/tree-snowfield"
 jq -c . "$root/flatpaks/sundog.json" > "$(tree_file sundog)"
 refuse "check-tree rejects a file that differs from its source" "$tool" check-tree sundog "$tmp/tree-sundog"
 rm "$(tree_file sundog)"

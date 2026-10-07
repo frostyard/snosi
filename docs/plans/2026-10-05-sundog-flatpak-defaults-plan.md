@@ -153,10 +153,9 @@ calculator or scanner app.
       the wizard could not read the label (preflight reads it again and
       fails before any disk write if it still cannot). The hidden-toggle
       cases (no set, malformed label) are unchanged (firn#112).
-- [x] Record the changed default in a Firn ADR
-      ([ADR-0019](https://github.com/frostyard/firn/blob/main/docs/adr/0019-wizard-offers-core-flatpaks-by-default.md)). It applies to every
-      product: default Snow and Snowfield installs now download Snow's 23
-      GNOME apps, several GiB with no seed.
+- [x] Record the changed default in [Firn ADR-0019][firn-adr-0019]. It
+      applies to every product: default Snow and Snowfield installs now
+      download Snow's 23 GNOME apps, several GiB with no seed.
 - [x] Ship it in the same Firn release as Phase 3 (v0.7.0).
 - **Done when:** a published-ISO wizard offers Sundog's set enabled by
   default.
@@ -236,3 +235,5 @@ git diff --check
   [`internal/flatpak/flatpak.go`](https://github.com/frostyard/firn/blob/main/internal/flatpak/flatpak.go).
 - Constraints: [sysext design](../design/sysexts.md),
   [risk tiers](../risk-tiers.md), [review rubric](../review-rubric.md).
+
+[firn-adr-0019]: https://github.com/frostyard/firn/blob/main/docs/adr/0019-wizard-offers-core-flatpaks-by-default.md

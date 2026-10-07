@@ -51,7 +51,8 @@ Image builds have four phases, in order:
 4. **PostOutputScripts:** `shared/manifest/postoutput/mkosi.postoutput`
    records the image manifest; `shared/composition/core-flatpaks.postoutput`
    fails the build unless the output tree's core Flatpak set matches its
-   source; sysext postoutput scripts derive versioned names. `sysextmv.sh` and `manifestmv.sh` arrange CI publication output.
+   source; sysext postoutput scripts derive versioned names. `sysextmv.sh`
+   and `manifestmv.sh` arrange CI publication output.
 
 The base includes `pciutils`/`usbutils` and NFS account sysusers definitions
 for `_rpc` and `statd`. `test/nfs-system-accounts-test.sh` verifies fresh
