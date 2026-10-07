@@ -102,12 +102,23 @@ reject_set "rejects a null flatpaks" '{"version":1,"flatpaks":null}'
 reject_set "rejects an unknown top-level field" "{\"version\":1,\"flatpaks\":[$good],\"extra\":1}"
 reject_set "rejects an unknown entry field" '{"version":1,"flatpaks":[{"id":"org.example.App","name":"App","x":1}]}'
 reject_set "rejects a missing name" '{"version":1,"flatpaks":[{"id":"org.example.App"}]}'
+reject_set "rejects an escape sequence in a name" '{"version":1,"flatpaks":[{"id":"org.example.App","name":"B\u001b[2JEVIL"}]}'
+reject_set "rejects a newline in a name" '{"version":1,"flatpaks":[{"id":"org.example.App","name":"B\nC"}]}'
+reject_set "rejects a tab in a name" '{"version":1,"flatpaks":[{"id":"org.example.App","name":"B\tC"}]}'
+reject_set "rejects a zero-width joiner in a name" '{"version":1,"flatpaks":[{"id":"org.example.App","name":"B\u200dC"}]}'
 reject_set "rejects an empty name" '{"version":1,"flatpaks":[{"id":"org.example.App","name":" "}]}'
 reject_set "rejects a two-element id" '{"version":1,"flatpaks":[{"id":"org.App","name":"App"}]}'
 reject_set "rejects an element starting with a digit" '{"version":1,"flatpaks":[{"id":"org.1example.App","name":"App"}]}'
 reject_set "rejects '-' before the last element" '{"version":1,"flatpaks":[{"id":"org.ex-ample.App","name":"App"}]}'
 reject_set "rejects an id with a space" '{"version":1,"flatpaks":[{"id":"org.example.My App","name":"App"}]}'
 reject_set "rejects a duplicate id" "{\"version\":1,\"flatpaks\":[$good,$good]}"
+python3 - "$tool" <<'PY' >/dev/null 2>&1 && ok "accepts spaces and non-ASCII letters in a name" || fail "accepts spaces and non-ASCII letters in a name"
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("cf", sys.argv[1])
+cf = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(cf)
+cf.check_set({"version": 1, "flatpaks": [{"id": "org.example.App", "name": "Visionneuse d\u2019images"}]}, "fixture")
+PY
 python3 - "$tool" <<'PY' >/dev/null 2>&1 && ok "accepts '-' in the last element" || fail "accepts '-' in the last element"
 import importlib.util, sys
 spec = importlib.util.spec_from_file_location("cf", sys.argv[1])
