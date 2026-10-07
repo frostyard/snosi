@@ -74,7 +74,7 @@ for shared keys and installer ISO publication references.
 - [plans/2026-08-26-cayo-floe-rename-plan.md](plans/2026-08-26-cayo-floe-rename-plan.md) — ordered server-product rename across snosi and downstream repos
 - [plans/2026-09-24-native-ab-nbc-retirement-plan.md](plans/2026-09-24-native-ab-nbc-retirement-plan.md) — **Superseded by ADR-0018:** historical exact-object disposal worksheet
 - [plans/2026-10-05-sundog-desktop-completeness-plan.md](plans/2026-10-05-sundog-desktop-completeness-plan.md) — **In progress:** native desktop payload composed and VM package validation recorded; manual laptop/hardware validation deferred
-- [plans/2026-10-05-sundog-flatpak-defaults-plan.md](plans/2026-10-05-sundog-flatpak-defaults-plan.md) — **In progress:** Sundog's core set ships as an image label; Firn release, ISO fallback retirement, opt-in migration and native-app removal remain
+- [plans/2026-10-05-sundog-flatpak-defaults-plan.md](plans/2026-10-05-sundog-flatpak-defaults-plan.md) — **In progress:** Sundog's core set ships as an image label; Firn default-on toggle and release, ISO fallback retirement, on-disk sets, opt-in migration and native-app removal remain
 - [plans/2026-10-05-sundog-printer-support-plan.md](plans/2026-10-05-sundog-printer-support-plan.md) — **Planned:** immediate, independent addition of KDE's recommended printer helpers with package-availability and static checks
 - [plans/ab-deploy-checklist.md](plans/ab-deploy-checklist.md) — native A/B production-deploy checklist
 
