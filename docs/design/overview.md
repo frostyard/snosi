@@ -54,10 +54,10 @@ in the image.
 The [desktop-completeness plan](../plans/2026-10-05-sundog-desktop-completeness-plan.md)
 records artifact and VM package validation, followed by the
 [Flatpak-defaults plan](../plans/2026-10-05-sundog-flatpak-defaults-plan.md).
-The follow-up coordinates product-specific core app selection, selective
-offline provisioning, and existing-install migration with Firn. Each
-product's core Flatpak set is published as an image label; see
+Each product's core Flatpak set is published as an image label; see
 [integration contracts](../integration-contracts.md#core-flatpak-sets).
+The follow-up covers the Firn release that reads it, existing-install
+migration, and removing the native applications Sundog's set replaces.
 
 Image builds run BuildScripts, PostInstallationScripts, FinalizeScripts and
 PostOutputScripts; details and package relocation rules are in

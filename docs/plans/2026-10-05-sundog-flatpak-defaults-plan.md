@@ -1,26 +1,35 @@
 # Plan: Provision Sundog-specific Flatpak application defaults
 
-**Status:** Proposed
-**Last verified:** 2026-10-05
+**Status:** In progress — Sundog's set ships as the image label
+(`flatpaks/sundog.json`, #1054); Firn release, fallback retirement,
+the four added apps, on-disk sets, Firn's default-on toggle and
+native-app removal remain
+**Last verified:** 2026-10-07
 
 This follows the
 [native desktop-completeness plan](2026-10-05-sundog-desktop-completeness-plan.md).
-It provisions Sundog's selected applications through Flatpak, gives Firn
-product-specific online and offline app selection, and provides an
-existing-install migration before native applications leave the image.
-It implements the Flatpak-first intent of
+It gives Sundog its own core Flatpak set, makes Firn install that set
+instead of Snow's GNOME list and offer it by default, ships each image's
+set on disk, and removes the native applications the set replaces. There
+is one installed system; existing-install migration and the gap between
+releases are deliberately out of scope. It implements the
+Flatpak-first intent of
 [ADR-0016](../adr/0016-name-kde-bootc-product-sundog.md) through the
-[installer integration](../integration-contracts.md).
+[core Flatpak set contract](../integration-contracts.md#core-flatpak-sets).
 
-The immediate printer-package fix is scheduled separately in the
-[printer-support plan](2026-10-05-sundog-printer-support-plan.md). This
-Flatpak plan remains proposed while its cross-repository contract and
-implementation are developed. Deferred manual desktop checks from the
-preceding plan are not prerequisites for this package/ref-only acceptance.
+The original 2026-10-05 version of this plan proposed a `sets` map in
+first-setup's `core.json` and a `system.core_flatpak_set` recipe selector.
+[Firn ADR-0018](https://github.com/frostyard/firn/blob/main/docs/adr/0018-image-published-core-flatpaks-label.md)
+replaced that design: each image publishes its own set as the
+`org.frostyard.core-flatpaks` OCI label, so the chosen image is the
+selector. Do not recreate first-setup sets, a recipe selector, or
+`shared/firn-installer/core.json`.
 
 ## Agreed application set
 
-Sundog's core set contains exactly these nine application IDs:
+[`flatpaks/sundog.json`](../../flatpaks/sundog.json) is the canonical set.
+It contains the first ten application IDs below; Phase 4 adds the last
+four:
 
 | Application | Flatpak ID |
 | --- | --- |
@@ -30,271 +39,189 @@ Sundog's core set contains exactly these nine application IDs:
 | KCharSelect | `org.kde.kcharselect` |
 | Okular | `org.kde.okular` |
 | Skanpage | `org.kde.skanpage` |
+| KWeather | `org.kde.kweather` |
 | Kontainer | `io.github.DenysMb.Kontainer` |
 | Bazaar | `io.github.kolunmi.Bazaar` |
 | MissionCenter | `io.missioncenter.MissionCenter` |
+| Elisa | `org.kde.elisa` |
+| Filelight | `org.kde.filelight` |
+| KRDC | `org.kde.krdc` |
+| KClock | `org.kde.kclock` |
 
-The seven newly selected KDE-oriented applications have stable Flathub
-refs verified on 2026-10-05. Check stable x86_64 ref availability for all
-nine applications and metadata relevant to offline export. Flatpak's seed
-export and installation mechanisms supply runtime dependencies.
+Every application in Snow's set is excluded, unless expressly included
+in the application list above. Bazaar and MissionCenter are retained
+by explicit operator choice, even though native Discover and
+Plasma System Monitor are also available.
 
-Exclude every GNOME application in the current core list, including
-applications with no named replacement such as Calendar, Contacts,
-Clocks, Maps, and Weather. Also exclude
-`com.mattjakeman.ExtensionManager`, `com.ranfdev.DistroShelf`, and
-`org.kde.skanlite`. Skanpage is the sole default scanner application.
-Bazaar and MissionCenter are retained by explicit operator choice, even
-though native Discover and Plasma System Monitor are also available.
+These rules select applications, not runtimes: selected applications may
+require GNOME, KDE or freedesktop runtimes, and Flatpak installs those as
+dependencies. Explicit recipe `flatpaks` stay separate; Firn merges them
+with an opted-in core set and honors them when core defaults are off.
+Floe has no set and carries no label.
 
-These are application-selection rules. Selected applications may require
-GNOME, KDE, or freedesktop runtimes and extensions; those dependencies
-must remain available. Explicit user-requested apps are separate from
-the core defaults: merge and deduplicate them with an opted-in core set,
-and honor them independently when core defaults are disabled.
+## Phase 1 — Record the core-set contract (medium) — ✅ landed 2026-10-06
 
-## Current integration and ordering constraint
+- [x] Firn ADR-0018 defines the label, its fail-closed parser, preflight
+      timing and retirement of the first-setup and ISO-fallback sources
+      (firn#108, firn#110).
+- [x] [Integration contracts](../integration-contracts.md#core-flatpak-sets)
+      record the snosi side: one source file per distinct set, Snowfield
+      sharing `flatpaks/snow.json`, and Floe without a label.
+- **Done when:** the label contract, Floe's empty set and the rollout order
+  (labels before a Firn release that reads them) are recorded. Done.
 
-> **Superseded in part (2026-10-06):** `shared/firn-installer/core.json` no
-> longer exists. Core Flatpak sets now live in [`flatpaks/`](../../flatpaks/)
-> and ship as the `org.frostyard.core-flatpaks` image label
-> ([integration contracts](../integration-contracts.md#core-flatpak-sets),
-> firn ADR-0018). Do not recreate or re-vendor that file; this plan's
-> contract and Phases 1–2 are pending a rewrite.
+## Phase 2 — Publish per-product sets (medium) — ✅ landed 2026-10-06
 
-The 2026-10-05 planning review found:
+- [x] `flatpaks/snow.json` and `flatpaks/sundog.json` hold the sets;
+      `flatpaks/core-flatpaks.py` validates them, prints each build's label
+      and checks packaged images (#1054, #1055).
+- [x] Every packaging lane stamps and checks the label; the secure lane
+      rechecks the pushed, signed digest before promoting `latest`.
+      `test/core-flatpaks-test.sh` pins the contract.
+- [x] Published `ghcr.io/frostyard/sundog:latest` carries Sundog's set and
+      `floe:latest` carries no label key (checked with `skopeo inspect`,
+      2026-10-06).
+- [x] Firn reads the label in `preflight-image`, installs explicit apps then
+      the core set, and previews the set in the wizard (firn#111).
+- **Done when:** published images carry their sets and Firn's main branch
+  consumes them. Done.
 
-- `shared/firn-installer/core.json` is a byte-identical vendored copy of
-  first-setup's `snow_first_setup/core.json`, the current canonical
-  GNOME-oriented core list.
-- `Justfile`'s `firn-flatpak-seed` recipe reads that single list and builds
-  `output/firn-flatpak-seed` with its apps and runtimes. ISO assembly puts
-  the seed outside the initramfs, and
-  `firn-flatpak-seed.service` mounts it at `/var/lib/flatpak`.
-- `.github/workflows/build-installer-iso.yml` does not invoke the seed
-  builder or pass a seed to ISO assembly; published CI media is currently
-  seedless.
-- `shared/firn-installer/mkosi.conf` embeds the same list at
-  `/usr/share/firn/core-flatpaks.json`; the local `_firn-binary` recipe
-  supplies the same fallback for development builds.
-- Firn's `internal/flatpak/flatpak.go` reads the image core list or the
-  installer fallback. The composefs deployment does not expose image
-  `/usr` as ordinary files at installation time, so changing only an
-  image-side list cannot reliably select Sundog's apps.
-- Firn's `Provision` currently tar-copies the entire medium's system
-  Flatpak installation. Filtering the requested app IDs alone therefore
-  does not prevent unwanted seeded GNOME apps from reaching Sundog.
-- Firn's wizard retains the chosen catalog entry but does not serialize
-  its name into the recipe. Product identity must reach core-set selection
-  explicitly rather than being guessed from an OCI reference.
-- Native `gwenview`, `kcalc`, `okular`, and `skanpage` are explicitly
-  selected in `shared/packages/sundog/mkosi.conf`. Haruna, KCharSelect,
-  and Skanlite are not explicitly selected there.
+## Phase 3 — Release Firn and retire the ISO fallback (small)
 
-Installer provisioning and the existing-host migration must be ready
-before those four native applications are removed. A bootc update does
-not apply an install-time app list to an existing `/var/lib/flatpak`.
+Until this phase lands, the ISO's Firn (v0.6.2) still installs Snow's GNOME
+list on every product, including Sundog.
 
-## Proposed cross-repository contract
+- [ ] Release Firn with firn#111 and Phase 5's change (see
+      [Delivery](#delivery)). The ISO takes the newest Firn release unpinned.
+- [ ] Confirm the published ISO carries that Firn version.
+- [ ] Remove the `/usr/share/firn/core-flatpaks.json` embedding from
+      `shared/firn-installer/mkosi.conf` and the Justfile's `_firn-binary`.
+- [ ] Update `shared/firn-installer/README.md` and the integration
+      contract's fallback paragraph.
+- **Done when:** an out-of-band installation from the published ISO
+  verifies that its Firn installs Sundog's set for a Sundog install with
+  core Flatpaks enabled, and the ISO no longer ships
+  `/usr/share/firn/core-flatpaks.json`.
 
-Keep first-setup's `snow_first_setup/core.json` canonical and extend it
-additively. Preserve its existing top-level `core` array for the legacy
-consumer; add a `sets` map without duplicating that array:
+Offline seeding is unchanged and effectively unused: published ISOs carry
+no seed, and Firn installs each image's labeled set. `just
+firn-flatpak-seed` keeps reading `flatpaks/legacy/firn-core-flatpaks.json`,
+so that file, its generator and its tests stay. A locally seeded ISO still
+copies Snow's whole seed onto every product, so it is not valid Phase 3
+evidence.
 
-| Selector | Manifest entry | Selection |
-| --- | --- | --- |
-| `snow` | `sets.snow.ref = "core"` | Existing GNOME core list |
-| `snowfield` | `sets.snowfield.ref = "core"` | Same canonical GNOME core list |
-| `sundog` | `sets.sundog.apps` | The nine applications above |
-| `floe` | `sets.floe.apps = []` | Intentionally no core applications |
+## Phase 4 — Expand Sundog's set and ship each set on disk (small)
 
-Each set has exactly one of `ref` or `apps`. References may point only to
-the reserved legacy `core` array; `apps` uses the existing `name`/`id`
-entry format. Floe's empty set is an explicit operator decision, not a
-missing-manifest fallback. Explicit recipe applications remain supported
-for Floe.
+An installed system cannot easily read its image's label (firn ADR-0018),
+and Sundog has no first-setup copy of its list.
 
-Firn carries the normalized catalog `name` into a recipe selector such as
-`system.core_flatpak_set`. This needs no new catalog field and preserves
-the bootc catalog's ban on the native `product` field. The same selector
-chooses data from a readable image manifest or the installer fallback.
-New wizard recipes carry the selector; legacy recipes without it retain a
-defined legacy-`core` meaning. Unknown nonempty selectors and absent or
-malformed requested manifests are configuration errors, never a fallback
-to another product. Core opt-out skips set lookup and still installs
-explicit applications. Combined IDs are deduplicated in stable order.
+- [ ] Add Elisa, Filelight, KRDC and KClock to `flatpaks/sundog.json`.
+- [ ] Ship each image's set at
+      `/usr/share/frostyard/<IMAGE_ID>.core-flatpaks.json`, beside the
+      provenance files of core ADR-0003. It uses the org namespace (core
+      ADR-0004) because other products, such as chairlift, may read it.
+      Generate it from the same source file as the label: Snowfield's
+      carries Snow's set, and Floe ships no file.
+- [ ] Fail the image build when the file is missing or differs from its
+      source, with a check against the build tree such as a
+      PostOutputScript. `core-flatpaks.py check-image` reads only inspect
+      JSON, so it keeps checking the label alone. Cover both in
+      `test/core-flatpaks-test.sh`.
+- [ ] Record the path in the
+      [integration contract](../integration-contracts.md#core-flatpak-sets).
+- **Done when:** published Sundog, Snow and Snowfield images carry the file,
+  matching their label, and Floe carries none.
 
-Use one shared sideload repository, exported with `flatpak create-usb`,
-instead of copying a deployed installation. Firn installs only requested
-IDs with `--sideload-repo`; Flatpak supplies dependency deployment,
-exports, and ownership. Flathub advertises collection ID
-`org.flathub.Stable`, which must be configured in both the isolated seed
-builder and the target remote. Ship a local Flathub descriptor with its
-signing key so remote setup itself works offline. An absent seed retains
-network fallback; unavailable apps are reported separately from structural
-repository/setup failures. Existing unrelated target apps are preserved.
+Updated systems gain access to the current list this way. Nothing
+reconciles already-installed Flatpaks with a changed set; that is accepted.
+
+## Phase 5 — Firn offers core Flatpaks by default (small, cross-repo)
+
+Firn's wizard leaves core Flatpaks off unless the user enables them. After
+Phase 6, that default would leave Sundog with no image viewer, PDF viewer,
+calculator or scanner app.
+
+- [ ] Change Firn's wizard so the core-Flatpaks toggle starts on whenever
+      it is offered: when the chosen image publishes a valid set, and when
+      the wizard could not read the label (preflight reads it again and
+      fails before any disk write if it still cannot). The hidden-toggle
+      cases (no set, malformed label) are unchanged.
+- [ ] Record the changed default in a Firn ADR. It applies to every
+      product: default Snow and Snowfield installs now download Snow's 23
+      GNOME apps, several GiB with no seed.
+- [ ] Ship it in the same Firn release as Phase 3.
+- **Done when:** a published-ISO wizard offers Sundog's set enabled by
+  default.
+
+## Phase 6 — Remove native apps and preserve host integration (medium)
+
+- [ ] Remove the explicit native `gwenview`, `kcalc`, `okular` and
+      `skanpage` selections from `shared/packages/sundog/mkosi.conf`.
+- [ ] Explicitly retain `kimageformat6-plugins` and `libsane1`. Gwenview
+      currently brings the former; Skanpage brings the latter through
+      `libksanecore6-1`, and `libsane1` owns the host's scanner udev rules.
+      Retain any other host-side preview, sharing, scanner or portal support
+      the dependency review finds.
+- [ ] Preserve every package `mkosi.images/gui-base/mkosi.conf` requires and
+      review sysext compatibility under the
+      [library-closure contract](../design/sysexts.md).
+- [ ] Remove `gwenview-doc` and `okular-doc` with their applications.
+      Help Center stays for the remaining native applications.
+- [ ] Update `docs/design/overview.md`, which still says native Gwenview and
+      Okular, including their handbooks, remain in the image.
+- **Done when:** the native selections are gone, required host support is
+  explicitly composed, and availability checks, static guards and normal
+  image-build CI pass.
+
+## Delivery
+
+The phases land as one Firn change and one snosi change, in this order:
+
+1. **Firn PR:** Phase 5's default-on toggle and ADR.
+2. **Firn release:** one release carrying firn#111 and that change. Its
+   release dispatch rebuilds the ISO.
+3. **Snosi PR:** all snosi work from Phases 3, 4 and 6. Merge it only
+   after the Firn release is installable from the frostyard APT
+   repository, so the ISO built from that merge carries the new Firn.
+
+Merged before the release, the snosi PR would produce an ISO whose Firn
+(v0.6.2) still reads the removed fallback, so it would install no core
+set while Sundog's native apps are gone. The ISO takes the newest Firn
+unpinned, so "bumping" Firn into snosi is the rebuild, not a file change.
 
 ## Validation scope
 
-Acceptance is basic APT/Flathub availability plus focused schema and
-selection checks. UI behavior, hardware integration, sandboxed Help,
-fresh/migrated live installs, local image/ISO builds, and bootc
-upgrade/rollback exercises are not acceptance gates. Normal CI runs its
-existing builds, `/var` audits, and automated tests; results must describe
-the checks actually performed.
+Acceptance is package/ref availability plus static and automated checks.
+UI behavior, hardware integration, live installs and bootc
+upgrade/rollback exercises are not gates, except Phase 3's out-of-band
+installation. Report the checks actually run.
 
-Local checks are:
-
-- Confirm APT candidates for retained host support with
-  `apt-cache policy kimageformat6-plugins libsane1`.
-- Check each of the nine stable x86_64 Flathub refs, for example
-  `flatpak remote-info --system --arch=x86_64 flathub org.kde.gwenview`.
-  Inspect metadata for offline-export restrictions such as extra-data
-  payloads; this does not require installing or launching applications.
-- Parse the manifest and check set shape, aliases, IDs, and catalog/set
-  consistency. Add focused Firn unit fixtures for selection, opt-out,
-  deduplication, and selective provisioning; let Firn CI exercise them.
-- Run the existing short Snosi checks when their inputs change:
-
-  ```sh
-  ./test/sundog-profile-test.sh
-  ./check-duplicate-packages.sh
-  ./test/firn-catalog-test.sh
-  ./test/firn-installer-iso-test.sh --static
-  git diff --check
-  ```
-
-## Phase 1 — Specify and record the core-set contract (medium)
-
-- [ ] Finalize the additive manifest schema and recipe selector with Firn
-      and first-setup, following the proposed contract above. Keep one
-      canonical source per set and byte-identical media vendoring.
-- [ ] Define parsing and error behavior for aliases, intentionally empty
-      sets, opt-out, explicit applications, legacy recipes, and
-      missing/malformed requested data.
-- [ ] Define the shared sideload layout, local remote configuration, and
-      reporting for refs that cannot be exported offline.
-- [ ] Record the new cross-repository decision in frostyard/core, link it
-      from `docs/org-adrs.md`, and update the relevant Firn contract with
-      its implementing code. Existing accepted ADRs are not rewritten.
-- **Done when:** the manifest/selector and sideload contracts are recorded,
-  including Floe's empty set, compatibility behavior, and release order.
-
-## Phase 2 — Implement product-aware provisioning and media (large)
-
-- [ ] Extend first-setup's manifest and re-vendor it into
-      `shared/firn-installer/core.json`. Embed the canonical data in Sundog
-      and at the installer fallback path for composefs selection.
-- [ ] Implement Firn's catalog-name-to-recipe selector in
-      `internal/tui/wizard.go` and its recipe schema; update
-      `internal/steps/bootc.go` and `internal/flatpak/flatpak.go` to resolve
-      the exact core set and merge explicit requests.
-- [ ] Replace whole-installation tar copying with requested-ID installs
-      into Firn's mounted target using `--sideload-repo`. Configure the
-      target's remote collection ID even when the remote already exists.
-      Preserve unrelated apps and report unavailable apps separately from
-      structural setup failures.
-- [ ] Update `Justfile`'s `firn-flatpak-seed` recipe to install the union
-      of desktop core sets into isolated staging and export supported refs
-      and dependencies with `flatpak create-usb --destination-repo=repo`.
-- [ ] Update `shared/firn-installer/mkosi.conf` and `_firn-binary` to ship
-      the same manifest fallback and local Flathub descriptor/signing key.
-- [ ] Update ISO seed assembly and `firn-flatpak-seed-mount` to expose a
-      dedicated read-only cache, such as `/run/firn-flatpak-seed/repo`,
-      rather than mounting a deployed installation at `/var/lib/flatpak`.
-- [ ] Invoke the shared seed builder from
-      `.github/workflows/build-installer-iso.yml`, supply its tools, and
-      pass the exported seed to assembly. Preserve optional seedless media.
-- [ ] Preserve the current seed-builder isolation from the host's own
-      Flatpak installations so already-installed host runtimes cannot
-      mask an incomplete seed. Keep multi-GiB data outside the initramfs.
-- [ ] Check ref availability and export metadata. Add focused unit
-      fixtures for selection and selective provisioning, including an
-      unrequested seeded app, explicit-only requests, and unavailable-app
-      versus structural failures. Run manifest/static checks locally and
-      use normal CI for builds and automated fixture coverage.
-- [ ] Deliver the compatible Firn release and installer payload before
-      proceeding to native application removal. The ISO consumes the
-      newest published Firn release; do not introduce a release pin.
-- **Done when:** compatible Firn is released, Snosi media carries the
-  updated manifest and selective seed path, and availability, focused
-  fixtures, and normal CI results are recorded. Live-install evidence is
-  not required for this application-selection change.
-
-## Phase 3 — Migrate existing installations (medium)
-
-- [ ] Provide documented, opt-in migration commands in `docs/installing.md`
-      for system and per-user installations, using the canonical Sundog
-      manifest rather than a separately maintained app list.
-- [ ] Install replacements first and check installation success/ref
-      presence before offering optional removal of former default GNOME
-      apps, Extension Manager, and DistroShelf. Retain Bazaar and
-      MissionCenter; deliberately retained user apps remain installed.
-- [ ] Specify behavior for system and per-user installations, apps users
-      deliberately retained, app data, and an interrupted migration.
-      Make rerunning the migration safe and keep app-data deletion outside
-      the ordinary replacement operation.
-- [ ] Document how to list installed replacement refs, report failed
-      downloads, and rerun the same commands after interruption. Application
-      launches and hardware behavior are outside the migration checkpoint.
-- [ ] Document recovery for a failed migration. Bootc rollback restores
-      native image packages but does not undo persistent Flatpak changes;
-      application recovery needs its own instructions.
-- **Done when:** canonical-data-driven migration commands are delivered
-  for both installation scopes, with replacement-first ordering, optional
-  cleanup, rerun behavior, and application/data recovery documented.
-
-## Phase 4 — Remove native apps and preserve host integration (medium)
-
-- [ ] After Phases 2 and 3 are ready, remove explicit native `gwenview`,
-      `kcalc`, `okular`, and `skanpage` selections from Sundog.
-- [ ] Review hard-dependency metadata and explicitly retain
-      `kimageformat6-plugins` and `libsane1`. Gwenview currently brings the
-      former; Skanpage brings the latter through `libksanecore6-1`.
-      `libsane1` owns the host's scanner udev rules. Retain any other
-      host-side preview, sharing, scanner-account, or portal support
-      identified by that dependency review.
-- [ ] Preserve every package required by `mkosi.images/gui-base/mkosi.conf`
-      and review sysext compatibility under the
-      [existing library-closure contract](../design/sysexts.md).
-- [ ] Retain independently packaged `gwenview-doc` and `okular-doc`, along
-      with native Help Center support, during this change. These packages
-      do not hard-depend on the native applications. Bundled handbooks leave
-      with their application packages; sandboxed Help behavior remains
-      unverified and is not a cleanup gate.
-- [ ] Check retained-package availability and run the short profile and
-      duplicate-package guards. Use ordinary image-build CI for dependency
-      resolution, `/var` auditing, and built package-manifest checks.
-- [ ] Update `shared/firn-installer/README.md`, relevant living designs and
-      integration contracts, user migration guidance, and this plan's
-      status/evidence with the scoped check results and delivery order.
-- **Done when:** native selections are removed after provisioning and
-  migration support are delivered, required host support is explicitly
-  composed, and availability/static checks plus normal CI results are
-  recorded. No UI or bootc lifecycle proof is required.
-
-## Open questions
-
-- **Offline exportability:** inspect the selected refs' metadata in Phase 2
-  and define reporting/network fallback for any ref that `create-usb`
-  cannot export, including extra-data payloads. A shared cache does not
-  imply offline availability for every explicitly requested application.
+```sh
+apt-cache policy kimageformat6-plugins libsane1
+jq -r '.flatpaks[].id' flatpaks/sundog.json |
+  xargs -n1 flatpak remote-info --system --arch=x86_64 flathub
+./flatpaks/core-flatpaks.py validate
+./test/core-flatpaks-test.sh
+./test/sundog-profile-test.sh
+./check-duplicate-packages.sh
+./test/firn-catalog-test.sh
+./test/firn-installer-iso-test.sh --static
+git diff --check
+```
 
 ## References
 
 - Prerequisite: [native desktop completeness](2026-10-05-sundog-desktop-completeness-plan.md).
-- Independent immediate fix: [printer support](2026-10-05-sundog-printer-support-plan.md).
+- Independent fix: [printer support](2026-10-05-sundog-printer-support-plan.md).
+- Contract: [core Flatpak sets](../integration-contracts.md#core-flatpak-sets),
+  [firn ADR-0018](https://github.com/frostyard/firn/blob/main/docs/adr/0018-image-published-core-flatpaks-label.md),
+  [firn label spec](https://github.com/frostyard/firn/blob/main/docs/specs/core-flatpaks-label.md).
+- Decision: [ADR-0016](../adr/0016-name-kde-bootc-product-sundog.md).
 - Implements: [architecture overview](../design/overview.md),
   [build pipeline](../design/build-pipeline.md),
-  [testing](../design/testing.md),
-  [integration contracts](../integration-contracts.md).
-- Media: [Firn installer composition and seed](../../shared/firn-installer/README.md).
-- Decision: [ADR-0016](../adr/0016-name-kde-bootc-product-sundog.md);
-  [cross-repository decision index](../org-adrs.md).
-- Firn: [offline-first provisioning decision](https://github.com/frostyard/firn/blob/main/docs/adr/0006-install-time-offline-first-flatpaks.md),
-  [current provisioning implementation](https://github.com/frostyard/firn/blob/main/internal/flatpak/flatpak.go).
-- Canonical current list: [first-setup core.json](https://github.com/frostyard/first-setup/blob/main/snow_first_setup/core.json).
-- Selective seed mechanics: [Flatpak create-usb](https://manpages.debian.org/trixie/flatpak/flatpak-create-usb.1.en.html),
-  [Flatpak install](https://manpages.debian.org/trixie/flatpak/flatpak-install.1.en.html).
+  [testing](../design/testing.md).
+- Media: [Firn installer composition](../../shared/firn-installer/README.md).
+- Firn provisioning: [ADR-0006](https://github.com/frostyard/firn/blob/main/docs/adr/0006-install-time-offline-first-flatpaks.md),
+  [`internal/flatpak/flatpak.go`](https://github.com/frostyard/firn/blob/main/internal/flatpak/flatpak.go).
 - Constraints: [sysext design](../design/sysexts.md),
   [risk tiers](../risk-tiers.md), [review rubric](../review-rubric.md).
