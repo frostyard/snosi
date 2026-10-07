@@ -2,16 +2,17 @@
 
 **Status:** In progress — Sundog's set ships as the image label
 (`flatpaks/sundog.json`, #1054); Firn release, fallback retirement,
-on-disk sets, Firn's default-on toggle, migration and native-app removal
-remain
+the four added apps, on-disk sets, Firn's default-on toggle and
+native-app removal remain
 **Last verified:** 2026-10-07
 
 This follows the
 [native desktop-completeness plan](2026-10-05-sundog-desktop-completeness-plan.md).
 It gives Sundog its own core Flatpak set, makes Firn install that set
 instead of Snow's GNOME list and offer it by default, ships each image's
-set on disk, provides an existing-install migration, and then removes the
-native applications the set replaces. It implements the
+set on disk, and removes the native applications the set replaces. There
+is one installed system; existing-install migration and the gap between
+releases are deliberately out of scope. It implements the
 Flatpak-first intent of
 [ADR-0016](../adr/0016-name-kde-bootc-product-sundog.md) through the
 [core Flatpak set contract](../integration-contracts.md#core-flatpak-sets).
@@ -95,18 +96,19 @@ list on every product, including Sundog.
 - [ ] Confirm the published ISO carries that Firn version.
 - [ ] Remove the `/usr/share/firn/core-flatpaks.json` embedding from
       `shared/firn-installer/mkosi.conf` and the Justfile's `_firn-binary`.
-- [ ] Point `just firn-flatpak-seed` at `flatpaks/snow.json`, then delete
-      `flatpaks/legacy/` and `core-flatpaks.py generate-legacy`.
 - [ ] Update `shared/firn-installer/README.md` and the integration
       contract's fallback paragraph.
 - **Done when:** an out-of-band installation from the published ISO
   verifies that its Firn installs Sundog's set for a Sundog install with
-  core Flatpaks enabled, and neither snosi nor the ISO ships
-  `core-flatpaks.json`.
+  core Flatpaks enabled, and the ISO no longer ships
+  `/usr/share/firn/core-flatpaks.json`.
 
-**Interim duplicates:** once Phase 3 lands and before Phase 7, a fresh
-Sundog install with core Flatpaks enabled gets both native and Flatpak
-Gwenview, Okular, KCalc and Skanpage. Keep that window short.
+Offline seeding is unchanged and effectively unused: published ISOs carry
+no seed, and Firn installs each image's labeled set. `just
+firn-flatpak-seed` keeps reading `flatpaks/legacy/firn-core-flatpaks.json`,
+so that file, its generator and its tests stay. A locally seeded ISO still
+copies Snow's whole seed onto every product, so it is not valid Phase 3
+evidence.
 
 ## Phase 4 — Expand Sundog's set and ship each set on disk (small)
 
@@ -116,11 +118,15 @@ and Sundog has no first-setup copy of its list.
 - [ ] Add Elisa, Filelight, KRDC and KClock to `flatpaks/sundog.json`.
 - [ ] Ship each image's set at
       `/usr/share/frostyard/<IMAGE_ID>.core-flatpaks.json`, beside the
-      existing `<IMAGE_ID>.packages.txt` (ADR-0014). Generate it from the
-      same source file as the label: Snowfield's carries Snow's set, and
-      Floe ships no file.
-- [ ] Extend `core-flatpaks.py check-image` and `test/core-flatpaks-test.sh`
-      so the file and the label must match, and Floe has neither.
+      provenance files of core ADR-0003. It uses the org namespace (core
+      ADR-0004) because other products, such as chairlift, may read it.
+      Generate it from the same source file as the label: Snowfield's
+      carries Snow's set, and Floe ships no file.
+- [ ] Fail the image build when the file is missing or differs from its
+      source, with a check against the build tree such as a
+      PostOutputScript. `core-flatpaks.py check-image` reads only inspect
+      JSON, so it keeps checking the label alone. Cover both in
+      `test/core-flatpaks-test.sh`.
 - [ ] Record the path in the
       [integration contract](../integration-contracts.md#core-flatpak-sets).
 - **Done when:** published Sundog, Snow and Snowfield images carry the file,
@@ -132,45 +138,25 @@ reconciles already-installed Flatpaks with a changed set; that is accepted.
 ## Phase 5 — Firn offers core Flatpaks by default (small, cross-repo)
 
 Firn's wizard leaves core Flatpaks off unless the user enables them. After
-Phase 7, that default would leave Sundog with no image viewer, PDF viewer,
+Phase 6, that default would leave Sundog with no image viewer, PDF viewer,
 calculator or scanner app.
 
-- [ ] Change Firn's wizard so the core-Flatpaks toggle starts on when the
-      chosen image publishes a valid set. The existing hidden-toggle cases
-      (no set, malformed label) are unchanged.
+- [ ] Change Firn's wizard so the core-Flatpaks toggle starts on whenever
+      it is offered: when the chosen image publishes a valid set, and when
+      the wizard could not read the label (preflight reads it again and
+      fails before any disk write if it still cannot). The hidden-toggle
+      cases (no set, malformed label) are unchanged.
+- [ ] Record the changed default in a Firn ADR. It applies to every
+      product: default Snow and Snowfield installs now download Snow's 23
+      GNOME apps, several GiB with no seed.
 - [ ] Ship it in the same Firn release as Phase 3.
 - **Done when:** a published-ISO wizard offers Sundog's set enabled by
   default.
 
-## Phase 6 — Migrate existing installations (medium)
+## Phase 6 — Remove native apps and preserve host integration (medium)
 
-Existing Sundog installs that opted into core Flatpaks hold Snow's GNOME
-set. A bootc update does not change `/var/lib/flatpak`.
-
-- [ ] Provide documented, opt-in migration commands in `docs/installing.md`
-      for system and per-user installations. Read the app list from
-      `/usr/share/frostyard/sundog.core-flatpaks.json` on the booted image,
-      not a second copy.
-- [ ] Install replacements first and check that each ref is present before
-      offering optional removal of the former GNOME defaults, Extension
-      Manager and DistroShelf. Keep Bazaar, MissionCenter and any app the
-      user deliberately kept.
-- [ ] Make rerunning the migration safe after interruption, and keep
-      app-data deletion out of the ordinary replacement step.
-- [ ] Document how to list installed replacement refs and report failed
-      downloads. App launches and hardware behavior are outside this
-      checkpoint.
-- [ ] Document recovery: bootc rollback restores native image packages but
-      does not undo Flatpak changes.
-- **Done when:** migration commands driven by the canonical set are
-  documented for both installation scopes, with replacement-first
-  ordering, optional cleanup, rerun behavior and recovery.
-
-## Phase 7 — Remove native apps and preserve host integration (medium)
-
-- [ ] After Phases 3–6, remove the explicit native `gwenview`, `kcalc`,
-      `okular` and `skanpage` selections from
-      `shared/packages/sundog/mkosi.conf`.
+- [ ] Remove the explicit native `gwenview`, `kcalc`, `okular` and
+      `skanpage` selections from `shared/packages/sundog/mkosi.conf`.
 - [ ] Explicitly retain `kimageformat6-plugins` and `libsane1`. Gwenview
       currently brings the former; Skanpage brings the latter through
       `libksanecore6-1`, and `libsane1` owns the host's scanner udev rules.
@@ -191,29 +177,29 @@ set. A bootc update does not change `/var/lib/flatpak`.
 
 The phases land as one Firn change and one snosi change, in this order:
 
-1. **Firn PR:** Phase 5's default-on toggle.
+1. **Firn PR:** Phase 5's default-on toggle and ADR.
 2. **Firn release:** one release carrying firn#111 and that change. Its
    release dispatch rebuilds the ISO.
-3. **Snosi PR:** Phases 3, 4, 6 and 7's snosi work together. Merge it only
+3. **Snosi PR:** all snosi work from Phases 3, 4 and 6. Merge it only
    after the Firn release is installable from the frostyard APT
    repository, so the ISO built from that merge carries the new Firn.
 
-The order matters. Merged before the release, the snosi PR would produce
-an ISO whose Firn (v0.6.2) still reads the removed fallback, so it would
-install no core set while Sundog's native apps are gone. The ISO takes
-the newest Firn unpinned, so "bumping" Firn into snosi is the rebuild,
-not a file change.
+Merged before the release, the snosi PR would produce an ISO whose Firn
+(v0.6.2) still reads the removed fallback, so it would install no core
+set while Sundog's native apps are gone. The ISO takes the newest Firn
+unpinned, so "bumping" Firn into snosi is the rebuild, not a file change.
 
 ## Validation scope
 
 Acceptance is package/ref availability plus static and automated checks.
-UI behavior, hardware integration, live fresh or migrated installs, and
-bootc upgrade/rollback exercises are not gates, except Phase 3's
-out-of-band installation. Report the checks actually run.
+UI behavior, hardware integration, live installs and bootc
+upgrade/rollback exercises are not gates, except Phase 3's out-of-band
+installation. Report the checks actually run.
 
 ```sh
 apt-cache policy kimageformat6-plugins libsane1
-flatpak remote-info --system --arch=x86_64 flathub org.kde.gwenview
+jq -r '.flatpaks[].id' flatpaks/sundog.json |
+  xargs -n1 flatpak remote-info --system --arch=x86_64 flathub
 ./flatpaks/core-flatpaks.py validate
 ./test/core-flatpaks-test.sh
 ./test/sundog-profile-test.sh
