@@ -25,4 +25,15 @@ if [[ $unpinned -ne 1 || $any -ne 1 ]]; then
     exit 1
 fi
 
+# Firn reads each image's org.frostyard.core-flatpaks label (firn
+# ADR-0018); the retired ISO fallback gave every product Snow's set.
+fallback=usr/share/firn/core-flatpaks.json
+# grep -F >/dev/null, not -q: -q exits on the first match and, under
+# pipefail, the upstream grep's SIGPIPE would make the match look false.
+if grep -v '^[[:space:]]*#' "$conf" "$root/Justfile" | grep -F "$fallback" >/dev/null ||
+    [[ -e "$root/shared/firn-installer/tree/$fallback" ]]; then
+    echo "Firn ISO must not ship the retired /$fallback fallback" >&2
+    exit 1
+fi
+
 echo 'Firn ISO static sandbox contract passed'

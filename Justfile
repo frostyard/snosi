@@ -186,18 +186,6 @@ _firn-binary:
         -ldflags "-X main.version=$version -X main.commit=$commit -X main.date=$build_time -X main.builtBy=snosi-justfile" \
         -o "$out" ./cmd/firn-cli)
     echo "built $out ($version, $commit)"
-    # Embed the core flatpak list so firn's core_flatpaks works on
-    # composefs bootc images, whose /usr is not readable as plain files at
-    # install time (firn reads InstallerCoreJSONPath =
-    # /usr/share/firn/core-flatpaks.json as the fallback; see firn
-    # internal/flatpak/flatpak.go). Same generated list the flatpak seed
-    # uses; regenerate it with flatpaks/core-flatpaks.py generate-legacy.
-    core="{{justfile_directory()}}/flatpaks/legacy/firn-core-flatpaks.json"
-    [[ -f "$core" ]] || { echo "Error: missing $core (generated from flatpaks/snow.json)" >&2; exit 1; }
-    corelist="{{justfile_directory()}}/shared/firn-installer/tree/usr/share/firn/core-flatpaks.json"
-    mkdir -p "$(dirname "$corelist")"
-    cp "$core" "$corelist"
-    echo "embedded core flatpak list -> $corelist"
 
 [private]
 _firn-installer: _clean

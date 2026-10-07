@@ -1,0 +1,20 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Ship the product's core Flatpak set at
+# /usr/share/frostyard/<IMAGE_ID>.core-flatpaks.json, from the same
+# flatpaks/ source file as the image's org.frostyard.core-flatpaks label
+# (docs/integration-contracts.md "Core Flatpak sets"). An installed system
+# cannot easily read its image's label, so this copy is how it learns the
+# current set. A product with no set (Floe) ships no file.
+#
+# NON-chroot FinalizeScript: it runs on the host against $BUILDROOT, so the
+# repository's flatpaks/core-flatpaks.py (and its PRODUCTS mapping) is used
+# directly. core-flatpaks.postoutput checks the result in the output tree.
+set -euo pipefail
+
+: "${BUILDROOT:?core-flatpaks.finalize: \$BUILDROOT not set (must run as a FinalizeScript)}"
+: "${SRCDIR:?core-flatpaks.finalize: \$SRCDIR not set (must run as a FinalizeScript)}"
+: "${IMAGE_ID:?core-flatpaks.finalize: \$IMAGE_ID not set (must run as a FinalizeScript)}"
+
+python3 "$SRCDIR/flatpaks/core-flatpaks.py" install "$IMAGE_ID" "$BUILDROOT"

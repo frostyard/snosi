@@ -45,9 +45,14 @@ Image builds have four phases, in order:
    xattrs for OCI chunking. Presets recreate links on true first boot.
    `shared/composition/var-audit.finalize` audits per-product `/var` outcome
    maps and rejects unclassified or stale entries.
+   `shared/composition/core-flatpaks.finalize` ships the product's
+   [core Flatpak set](../integration-contracts.md#core-flatpak-sets) under
+   `/usr/share/frostyard/`.
 4. **PostOutputScripts:** `shared/manifest/postoutput/mkosi.postoutput`
-   records the image manifest; sysext postoutput scripts derive versioned
-   names. `sysextmv.sh` and `manifestmv.sh` arrange CI publication output.
+   records the image manifest; `shared/composition/core-flatpaks.postoutput`
+   fails the build unless the output tree's core Flatpak set matches its
+   source; sysext postoutput scripts derive versioned names. `sysextmv.sh`
+   and `manifestmv.sh` arrange CI publication output.
 
 The base includes `pciutils`/`usbutils` and NFS account sysusers definitions
 for `_rpc` and `statd`. `test/nfs-system-accounts-test.sh` verifies fresh

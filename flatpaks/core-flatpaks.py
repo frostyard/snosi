@@ -4,8 +4,9 @@
 The files in this directory are the source of truth for the core Flatpak set
 Firn installs when a recipe sets core_flatpaks = true. Each image build
 publishes its product's set in the OCI label org.frostyard.core-flatpaks,
-which Firn reads before installing (frostyard/firn ADR-0018). A product
-mapped to no file publishes no label.
+which Firn reads before installing (frostyard/firn ADR-0018), and ships it
+on disk at /usr/share/frostyard/<IMAGE_ID>.core-flatpaks.json for installed
+systems. A product mapped to no file publishes neither.
 
 Commands:
   validate                 check every source file, the product mapping and
@@ -18,6 +19,10 @@ Commands:
   check-image PROFILE      read `podman image inspect` or `skopeo inspect`
                            JSON on stdin and check the image's label matches
                            PROFILE's file
+  install PROFILE ROOT     validate, then copy PROFILE's file into the image
+                           tree ROOT, or write nothing when it has no core set
+  check-tree PROFILE ROOT  check the image tree ROOT carries PROFILE's file
+                           unchanged, or no file when it has no core set
 """
 
 import json
@@ -26,6 +31,9 @@ import sys
 from pathlib import Path
 
 LABEL = "org.frostyard.core-flatpaks"
+# The on-disk copy beside the core ADR-0003 provenance files; the org
+# namespace (core ADR-0004) lets other products, such as chairlift, read it.
+TREE_DIR = Path("usr/share/frostyard")
 FORMAT_VERSION = 1
 # Every image buildah-package.sh produces carries this label; requiring it
 # proves check-image was handed a real image inspection.
@@ -33,9 +41,9 @@ BOOTC_LABEL = ("containers.bootc", "1")
 
 DIR = Path(__file__).resolve().parent
 ROOT = DIR.parent
-# Snow's set in the {"core": [...]} shape Firn releases before ADR-0018 read
-# from /usr/share/firn/core-flatpaks.json on the installer ISO. Also feeds
-# `just firn-flatpak-seed`. Remove with the ISO fallback.
+# Snow's set in the legacy {"core": [...]} shape, read only by
+# `just firn-flatpak-seed`. The installer ISO no longer ships it as Firn's
+# /usr/share/firn/core-flatpaks.json fallback.
 LEGACY = DIR / "legacy" / "firn-core-flatpaks.json"
 LEGACY_PRODUCT = "snow"
 
@@ -227,6 +235,47 @@ def cmd_check_image(profile, inspect_json):
     return 0
 
 
+def tree_path(profile, root):
+    return Path(root) / TREE_DIR / f"{profile}.core-flatpaks.json"
+
+
+def cmd_install(profile, root):
+    # Same gate as label: never ship a set the repository disagrees with.
+    found = problems()
+    if found:
+        raise Invalid("refusing to install: " + "; ".join(found))
+    if product_set(profile) is None:
+        return 0
+    dest = tree_path(profile, root)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes((DIR / PRODUCTS[profile]).read_bytes())
+    print(f"installed {PRODUCTS[profile]} -> /{dest.relative_to(root)}")
+    return 0
+
+
+def cmd_check_tree(profile, root):
+    expected = product_set(profile)
+    path = tree_path(profile, root)
+    shown = f"/{path.relative_to(root)}"
+    # Any other set file, or a dangling link, is as wrong as a missing one:
+    # glob lists symlinks whether or not their targets exist.
+    allowed = set() if expected is None else {path}
+    unexpected = sorted(set(path.parent.glob("*.core-flatpaks.json")) - allowed)
+    if unexpected:
+        names = ", ".join(f"/{p.relative_to(root)}" for p in unexpected)
+        raise Invalid(f"{profile} must not ship {names}")
+    if expected is None:
+        print(f"ok: {profile} ships no core Flatpak set file")
+        return 0
+    if path.is_symlink() or not path.is_file():
+        raise Invalid(f"{profile} image is missing {shown} as a regular file")
+    if path.read_bytes() != (DIR / PRODUCTS[profile]).read_bytes():
+        raise Invalid(f"{profile} {shown} does not match {PRODUCTS[profile]}")
+    print(f"ok: {profile} {shown} matches {PRODUCTS[profile]} "
+          f"({len(expected['flatpaks'])} apps)")
+    return 0
+
+
 def main(argv):
     try:
         match argv:
@@ -238,6 +287,10 @@ def main(argv):
                 return cmd_generate_legacy()
             case ["check-image", profile]:
                 return cmd_check_image(profile, sys.stdin.read())
+            case ["install", profile, root]:
+                return cmd_install(profile, root)
+            case ["check-tree", profile, root]:
+                return cmd_check_tree(profile, root)
             case _:
                 print(__doc__, file=sys.stderr)
                 return 2

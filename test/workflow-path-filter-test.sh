@@ -137,7 +137,6 @@ installer_iso_inputs=(
     'shared/download/sysext-checksums.json'
     'shared/download/verified-download.sh'
     'shared/firn-installer/**'
-    'flatpaks/legacy/firn-core-flatpaks.json'
     'shared/native-ab/ci/**'
     'shared/native-ab/keys/import-pubring.gpg'
     'shared/native-ab/keys/mok-2026.crt'

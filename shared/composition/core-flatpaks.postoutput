@@ -1,0 +1,26 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Fail the build unless the output tree ships the product's core Flatpak set
+# unchanged from its flatpaks/ source, or no file for a product without one.
+# core-flatpaks.finalize writes it; this catches a composition that lost the
+# finalize step or a later step that changed the file. core-flatpaks.py
+# check-image checks only the label, from inspect JSON, so this is the
+# on-disk half of the same contract.
+set -euo pipefail
+
+: "${OUTPUTDIR:?core-flatpaks.postoutput: \$OUTPUTDIR not set (must run as a PostOutputScript)}"
+: "${SRCDIR:?core-flatpaks.postoutput: \$SRCDIR not set (must run as a PostOutputScript)}"
+: "${IMAGE_ID:?core-flatpaks.postoutput: \$IMAGE_ID not set (must run as a PostOutputScript)}"
+: "${MKOSI_CONFIG:?core-flatpaks.postoutput: \$MKOSI_CONFIG not set (must run as a PostOutputScript)}"
+
+# The directory output is named after Output=, not ImageId= (see
+# shared/manifest/postoutput/mkosi.postoutput).
+output=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["Output"])' "$MKOSI_CONFIG")
+tree="$OUTPUTDIR/$output"
+[[ -d "$tree/usr" ]] || {
+    echo "core-flatpaks.postoutput: no image tree at $tree" >&2
+    exit 1
+}
+
+python3 "$SRCDIR/flatpaks/core-flatpaks.py" check-tree "$IMAGE_ID" "$tree"

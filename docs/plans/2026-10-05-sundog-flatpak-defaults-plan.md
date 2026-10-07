@@ -1,9 +1,9 @@
 # Plan: Provision Sundog-specific Flatpak application defaults
 
-**Status:** In progress — Sundog's set ships as the image label
-(`flatpaks/sundog.json`, #1054); Firn release, fallback retirement,
-the four added apps, on-disk sets, Firn's default-on toggle and
-native-app removal remain
+**Status:** In progress — Firn v0.7.0 carries the label reader (firn#111)
+and the default-on toggle (firn#112, ADR-0019); the snosi change for
+Phases 3, 4 and 6 is ready. Post-merge evidence (published images, an
+out-of-band ISO install) remains
 **Last verified:** 2026-10-07
 
 This follows the
@@ -27,9 +27,8 @@ selector. Do not recreate first-setup sets, a recipe selector, or
 
 ## Agreed application set
 
-[`flatpaks/sundog.json`](../../flatpaks/sundog.json) is the canonical set.
-It contains the first ten application IDs below; Phase 4 adds the last
-four:
+[`flatpaks/sundog.json`](../../flatpaks/sundog.json) is the canonical set
+and contains all fourteen application IDs below:
 
 | Application | Flatpak ID |
 | --- | --- |
@@ -91,12 +90,16 @@ Floe has no set and carries no label.
 Until this phase lands, the ISO's Firn (v0.6.2) still installs Snow's GNOME
 list on every product, including Sundog.
 
-- [ ] Release Firn with firn#111 and Phase 5's change (see
+- [x] Release Firn with firn#111 and Phase 5's change (see
       [Delivery](#delivery)). The ISO takes the newest Firn release unpinned.
+      v0.7.0 carries both and is in the frostyard APT trixie suite
+      (2026-10-07).
 - [ ] Confirm the published ISO carries that Firn version.
-- [ ] Remove the `/usr/share/firn/core-flatpaks.json` embedding from
+- [x] Remove the `/usr/share/firn/core-flatpaks.json` embedding from
       `shared/firn-installer/mkosi.conf` and the Justfile's `_firn-binary`.
-- [ ] Update `shared/firn-installer/README.md` and the integration
+      `test/firn-installer-iso-test.sh --static` rejects its return,
+      including a stale gitignored copy in the tree.
+- [x] Update `shared/firn-installer/README.md` and the integration
       contract's fallback paragraph.
 - **Done when:** an out-of-band installation from the published ISO
   verifies that its Firn installs Sundog's set for a Sundog install with
@@ -115,19 +118,23 @@ evidence.
 An installed system cannot easily read its image's label (firn ADR-0018),
 and Sundog has no first-setup copy of its list.
 
-- [ ] Add Elisa, Filelight, KRDC and KClock to `flatpaks/sundog.json`.
-- [ ] Ship each image's set at
+- [x] Add Elisa, Filelight, KRDC and KClock to `flatpaks/sundog.json`
+      (each has an x86_64 Flathub ref, checked 2026-10-07).
+- [x] Ship each image's set at
       `/usr/share/frostyard/<IMAGE_ID>.core-flatpaks.json`, beside the
       provenance files of core ADR-0003. It uses the org namespace (core
       ADR-0004) because other products, such as chairlift, may read it.
       Generate it from the same source file as the label: Snowfield's
       carries Snow's set, and Floe ships no file.
-- [ ] Fail the image build when the file is missing or differs from its
-      source, with a check against the build tree such as a
-      PostOutputScript. `core-flatpaks.py check-image` reads only inspect
-      JSON, so it keeps checking the label alone. Cover both in
-      `test/core-flatpaks-test.sh`.
-- [ ] Record the path in the
+      `shared/composition/core-flatpaks.finalize` runs
+      `core-flatpaks.py install`.
+- [x] Fail the image build when the file is missing or differs from its
+      source: `shared/composition/core-flatpaks.postoutput` runs
+      `core-flatpaks.py check-tree` against the output tree.
+      `core-flatpaks.py check-image` reads only inspect JSON, so it keeps
+      checking the label alone. `test/core-flatpaks-test.sh` covers both
+      and requires every product composition to run them.
+- [x] Record the path in the
       [integration contract](../integration-contracts.md#core-flatpak-sets).
 - **Done when:** published Sundog, Snow and Snowfield images carry the file,
   matching their label, and Floe carries none.
@@ -135,40 +142,43 @@ and Sundog has no first-setup copy of its list.
 Updated systems gain access to the current list this way. Nothing
 reconciles already-installed Flatpaks with a changed set; that is accepted.
 
-## Phase 5 — Firn offers core Flatpaks by default (small, cross-repo)
+## Phase 5 — Firn offers core Flatpaks by default (small, cross-repo) — code landed 2026-10-07
 
 Firn's wizard leaves core Flatpaks off unless the user enables them. After
 Phase 6, that default would leave Sundog with no image viewer, PDF viewer,
 calculator or scanner app.
 
-- [ ] Change Firn's wizard so the core-Flatpaks toggle starts on whenever
+- [x] Change Firn's wizard so the core-Flatpaks toggle starts on whenever
       it is offered: when the chosen image publishes a valid set, and when
       the wizard could not read the label (preflight reads it again and
       fails before any disk write if it still cannot). The hidden-toggle
-      cases (no set, malformed label) are unchanged.
-- [ ] Record the changed default in a Firn ADR. It applies to every
-      product: default Snow and Snowfield installs now download Snow's 23
-      GNOME apps, several GiB with no seed.
-- [ ] Ship it in the same Firn release as Phase 3.
+      cases (no set, malformed label) are unchanged (firn#112).
+- [x] Record the changed default in [Firn ADR-0019][firn-adr-0019]. It
+      applies to every product: default Snow and Snowfield installs now
+      download Snow's 23 GNOME apps, several GiB with no seed.
+- [x] Ship it in the same Firn release as Phase 3 (v0.7.0).
 - **Done when:** a published-ISO wizard offers Sundog's set enabled by
   default.
 
 ## Phase 6 — Remove native apps and preserve host integration (medium)
 
-- [ ] Remove the explicit native `gwenview`, `kcalc`, `okular` and
+- [x] Remove the explicit native `gwenview`, `kcalc`, `okular` and
       `skanpage` selections from `shared/packages/sundog/mkosi.conf`.
-- [ ] Explicitly retain `kimageformat6-plugins` and `libsane1`. Gwenview
-      currently brings the former; Skanpage brings the latter through
-      `libksanecore6-1`, and `libsane1` owns the host's scanner udev rules.
-      Retain any other host-side preview, sharing, scanner or portal support
-      the dependency review finds.
-- [ ] Preserve every package `mkosi.images/gui-base/mkosi.conf` requires and
+- [x] Explicitly retain `kimageformat6-plugins` and `libsane1`. Gwenview
+      brought the former. `libsane1` owns the host's scanner udev rules and
+      hwdb; base's `sane-utils` also depends on it. Dependency review
+      (2026-10-07): a simulated `--auto-remove purge` of the six packages in
+      published `sundog:latest`, with Recommends and Suggests not treated as
+      important, removes only app-only libraries (Okular core, OCR,
+      kimageannotator, Qt PDF) besides `kimageformat6-plugins`; no preview,
+      sharing, scanner or portal package leaves.
+- [x] Preserve every package `mkosi.images/gui-base/mkosi.conf` requires and
       review sysext compatibility under the
-      [library-closure contract](../design/sysexts.md).
-- [ ] Remove `gwenview-doc` and `okular-doc` with their applications.
+      [library-closure contract](../design/sysexts.md). The gui-base block is
+      unchanged.
+- [x] Remove `gwenview-doc` and `okular-doc` with their applications.
       Help Center stays for the remaining native applications.
-- [ ] Update `docs/design/overview.md`, which still says native Gwenview and
-      Okular, including their handbooks, remain in the image.
+- [x] Update `docs/design/overview.md`.
 - **Done when:** the native selections are gone, required host support is
   explicitly composed, and availability checks, static guards and normal
   image-build CI pass.
@@ -225,3 +235,5 @@ git diff --check
   [`internal/flatpak/flatpak.go`](https://github.com/frostyard/firn/blob/main/internal/flatpak/flatpak.go).
 - Constraints: [sysext design](../design/sysexts.md),
   [risk tiers](../risk-tiers.md), [review rubric](../review-rubric.md).
+
+[firn-adr-0019]: https://github.com/frostyard/firn/blob/main/docs/adr/0019-wizard-offers-core-flatpaks-by-default.md

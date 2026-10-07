@@ -102,17 +102,28 @@ Sources are `flatpaks/snow.json` (Snow and Snowfield) and
 build's label argument, and checks the packaged image before push in every
 `buildah-package.sh` lane. `test/core-flatpaks-test.sh` pins the contract.
 
+Installed systems cannot easily read their image's label, so each image
+also ships its set at `/usr/share/frostyard/<IMAGE_ID>.core-flatpaks.json`,
+a byte copy of its source file beside the core ADR-0003 provenance files.
+The org namespace (core ADR-0004) lets other products, such as chairlift,
+read it. Snowfield's file carries Snow's set and Floe ships none.
+`shared/composition/core-flatpaks.finalize` installs it and
+`core-flatpaks.postoutput` fails the build when the output tree's file is
+missing, changed or unexpected. Nothing reconciles installed Flatpaks with a
+changed set.
+
 `label` refuses to print while any source is invalid or stale, so a build
 cannot stamp a label the repository disagrees with. The secure lane checks
 the label again on the pushed, signed digest before `latest` is promoted,
 and `test/core-flatpaks-test.sh` requires every packaging lane to pass the
 label and check it.
 
-`flatpaks/legacy/firn-core-flatpaks.json` is Snow's set in the
-`{"core": [...]}` shape Firn releases before ADR-0018 read; the Firn ISO
-embeds it at `/usr/share/firn/core-flatpaks.json` and `just
-firn-flatpak-seed` reads it. It is generated from `flatpaks/snow.json` and
-goes away with the ISO fallback. The `snow-first-setup` package's own
+The Firn ISO carries no core list: its former
+`/usr/share/firn/core-flatpaks.json` fallback gave every product Snow's
+set and was retired once the ISO's Firn read the label.
+`flatpaks/legacy/firn-core-flatpaks.json`, Snow's set in the legacy
+`{"core": [...]}` shape and generated from `flatpaks/snow.json`, now feeds
+only `just firn-flatpak-seed`. The `snow-first-setup` package's own
 `core.json` is not read by first-setup and no longer defines any set.
 
 ## Public repository and ISO signing
