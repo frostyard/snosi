@@ -12,7 +12,7 @@ SYSEXT_GUARD="$ROOT_DIR/shared/sysext/finalize/sysext-no-private-keys.sh"
 IMAGE_FINALIZE="$ROOT_DIR/shared/outformat/image/finalize/mkosi.finalize.chroot"
 WORK_DIR="$(mktemp -d)"
 BUILDROOT="$WORK_DIR/root"
-trap 'rm -rf "$WORK_DIR"' EXIT
+trap 'chmod -R u+rwX "$WORK_DIR" 2>/dev/null; rm -rf "$WORK_DIR"' EXIT
 
 failures=0
 fail() { echo "FAIL: $*" >&2; failures=$((failures + 1)); }
@@ -24,6 +24,7 @@ fake_key() { # path [label]
 }
 
 reset_root() {
+    [[ -e "$BUILDROOT" ]] && chmod -R u+rwX "$BUILDROOT"
     rm -rf "$BUILDROOT"
     mkdir -p "$BUILDROOT"/{etc/ssl/private,etc/ssl/certs,etc/ssh,usr/share/doc,opt,var/lib/dpkg/info}
     printf 'not a key\n' >"$BUILDROOT/usr/share/doc/readme"
@@ -176,6 +177,55 @@ reset_root
 mkdir -p "$BUILDROOT/usr/share/dir with space"
 fake_key "$BUILDROOT/usr/share/dir with space/k.pem"
 expect_reject "paths with spaces are reported" "usr/share/dir with space/k.pem" "$GUARD"
+
+# --- fail closed: scan errors must fail, never report clean -----------------
+# Permission bits do not stop root, so these fixtures need an unprivileged
+# user (validate.yml runs them as the runner user).
+
+expect_scan_error() { # description script
+    run "$2"
+    if [[ $RUN_STATUS -ne 0 && "$RUN_OUTPUT" == *"refusing to report fixture clean"* &&
+        "$RUN_OUTPUT" != *"no build-time private keys"* ]]; then
+        pass "$1"
+    else
+        fail "$1 (exit $RUN_STATUS): $RUN_OUTPUT"
+    fi
+}
+
+if [[ $EUID -eq 0 ]]; then
+    echo "SKIP: fail-closed permission fixtures need a non-root user"
+else
+    reset_root
+    fake_key "$BUILDROOT/usr/lib/hidden/server.key"
+    chmod 000 "$BUILDROOT/usr/lib/hidden/server.key"
+    expect_scan_error "unreadable file fails the scan" "$GUARD"
+    expect_scan_error "unreadable file fails the sysext scan" "$SYSEXT_GUARD"
+    chmod 600 "$BUILDROOT/usr/lib/hidden/server.key"
+
+    reset_root
+    fake_key "$BUILDROOT/usr/lib/hidden/server.key"
+    chmod 000 "$BUILDROOT/usr/lib/hidden"
+    expect_scan_error "untraversable directory fails the scan" "$GUARD"
+    expect_scan_error "untraversable directory fails the sysext scan" "$SYSEXT_GUARD"
+    chmod 755 "$BUILDROOT/usr/lib/hidden"
+
+    reset_root
+    printf 'opaque\n' >"$BUILDROOT/usr/share/doc/clean-but-unreadable"
+    chmod 000 "$BUILDROOT/usr/share/doc/clean-but-unreadable"
+    expect_scan_error "unreadable file without a key still fails the scan" "$GUARD"
+    chmod 600 "$BUILDROOT/usr/share/doc/clean-but-unreadable"
+
+    reset_root
+    printf '/usr/share/doc/readme\n' >"$BUILDROOT/var/lib/dpkg/info/fixture.list"
+    chmod 000 "$BUILDROOT/var/lib/dpkg/info/fixture.list"
+    run "$GUARD"
+    if [[ $RUN_STATUS -ne 0 && "$RUN_OUTPUT" != *"no build-time private keys"* ]]; then
+        pass "unreadable dpkg list fails the guard"
+    else
+        fail "unreadable dpkg list (exit $RUN_STATUS): $RUN_OUTPUT"
+    fi
+    chmod 600 "$BUILDROOT/var/lib/dpkg/info/fixture.list"
+fi
 
 if RUN_OUTPUT=$(env -u BUILDROOT SRCDIR="$ROOT_DIR" "$GUARD" 2>&1); then
     fail "missing BUILDROOT must fail closed"

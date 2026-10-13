@@ -31,6 +31,10 @@
 #   Sysexts rely on that list: mkosi removes an overlay sysext's dpkg
 #   database before finalize because dpkg itself lives in the base tree.
 #
+# The guard fails closed: if find cannot traverse a directory, grep cannot
+# read a file, or a dpkg/allowlist input cannot be read, the build fails
+# instead of reporting the tree clean.
+#
 # NO_PRIVATE_KEYS_ROOTS (space-separated, relative to $BUILDROOT) limits the
 # scan to the trees that actually ship; the default "." scans the whole OCI
 # root. The sysext wrapper sets "usr opt", the only trees mkosi packs.
@@ -45,6 +49,14 @@ fi
 
 read -r -a roots <<<"${NO_PRIVATE_KEYS_ROOTS:-.}"
 key_header='^-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY( BLOCK)?-----[[:space:]]*$'
+
+scratch=$(mktemp -d)
+trap 'rm -rf "$scratch"' EXIT
+
+scan_error() {
+    echo "no-private-keys: $1; refusing to report ${IMAGE_ID:-image} clean" >&2
+    exit 1
+}
 
 allowlist="$SRCDIR/shared/security/private-key-allowlist.txt"
 declare -A allowed_sha256=()
@@ -79,16 +91,32 @@ declare -A offenders=()
 for root in "${roots[@]}"; do
     [[ -e "$root" ]] || continue
 
+    # One traversal per root. find exits non-zero on any unreadable or
+    # untraversable directory; that must fail the guard, not shrink the scan.
+    if ! find "$root" -xdev \
+        \( -path ./proc -o -path ./sys -o -path ./dev -o -path ./run \) -prune -o \
+        \( \( -path '*etc/ssl/private/*' ! -type d -fprint0 "$scratch/location" \) , \
+        \( -path '*etc/ssh/ssh_host_*_key' -fprint0 "$scratch/location-ssh" \) , \
+        \( -type f -fprint0 "$scratch/files" \) \); then
+        scan_error "find could not traverse all of $root"
+    fi
+
     # Location rules: these paths only ever hold per-machine secrets.
     while IFS= read -r -d '' path; do
         offenders[${path#./}]="private-key location"
-    done < <(find "$root" -xdev \
-        \( -path ./proc -o -path ./sys -o -path ./dev -o -path ./run \) -prune -o \
-        \( -path '*etc/ssl/private/*' ! -type d -print0 \) -o \
-        \( -path '*etc/ssh/ssh_host_*_key' -print0 \))
+    done < <(cat "$scratch/location" "$scratch/location-ssh")
 
     # Content rule: PEM, OpenSSH and armored PGP private keys. grep -I skips
-    # binary files; keys we care about are text.
+    # binary files; keys we care about are text. grep exits 1 for "no match"
+    # and 2 for an error, but xargs folds both into 123; map errors to 255 so
+    # xargs aborts with 124 and any non-zero xargs status means a failed scan.
+    # shellcheck disable=SC2016 # $0/$@ belong to the inner sh
+    if ! xargs -0 -r sh -c \
+        'grep -lIZE -e "$0" -- "$@"; rc=$?; [ "$rc" -le 1 ] || exit 255' \
+        "$key_header" <"$scratch/files" >"$scratch/hits"; then
+        scan_error "grep could not read every file under $root"
+    fi
+
     while IFS= read -r -d '' path; do
         rel=${path#./}
         if [[ -n "${allowed_sha256[$rel]:-}" ]]; then
@@ -109,10 +137,7 @@ for root in "${roots[@]}"; do
         else
             offenders[$rel]="private key (not installed by any package)"
         fi
-    done < <(find "$root" -xdev \
-        \( -path ./proc -o -path ./sys -o -path ./dev -o -path ./run \) -prune -o \
-        -type f -print0 |
-        xargs -0 -r grep -lIZE -e "$key_header" -- || true)
+    done <"$scratch/hits"
 done
 
 for rel in "${unverified[@]}"; do
