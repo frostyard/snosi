@@ -38,6 +38,9 @@ references the pair.
   fixture, are exempted only by an exact path and sha256 entry in the reviewed
   `shared/security/private-key-allowlist.txt`.
 - `test/no-private-keys-test.sh` holds rejection fixtures and checks the wiring.
+- The guard fails closed. If find cannot traverse a directory, grep cannot
+  read a file, or a dpkg or allowlist input cannot be read, the build fails
+  instead of reporting clean.
 
 On 2026-10-13, no other private key matched in the verified vendor debs
 (`shared/download/sysext-checksums.json`) or in the published Snow image.

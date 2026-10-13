@@ -12,7 +12,7 @@ SYSEXT_GUARD="$ROOT_DIR/shared/sysext/finalize/sysext-no-private-keys.sh"
 IMAGE_FINALIZE="$ROOT_DIR/shared/outformat/image/finalize/mkosi.finalize.chroot"
 WORK_DIR="$(mktemp -d)"
 BUILDROOT="$WORK_DIR/root"
-trap 'rm -rf "$WORK_DIR"' EXIT
+trap 'chmod -R u+rwX "$WORK_DIR" 2>/dev/null; rm -rf "$WORK_DIR"' EXIT
 
 failures=0
 fail() { echo "FAIL: $*" >&2; failures=$((failures + 1)); }
@@ -24,6 +24,7 @@ fake_key() { # path [label]
 }
 
 reset_root() {
+    [[ -e "$BUILDROOT" ]] && chmod -R u+rwX "$BUILDROOT"
     rm -rf "$BUILDROOT"
     mkdir -p "$BUILDROOT"/{etc/ssl/private,etc/ssl/certs,etc/ssh,usr/share/doc,opt,var/lib/dpkg/info}
     printf 'not a key\n' >"$BUILDROOT/usr/share/doc/readme"
@@ -176,6 +177,112 @@ reset_root
 mkdir -p "$BUILDROOT/usr/share/dir with space"
 fake_key "$BUILDROOT/usr/share/dir with space/k.pem"
 expect_reject "paths with spaces are reported" "usr/share/dir with space/k.pem" "$GUARD"
+
+# --- fail closed: scan errors must fail, never report clean -----------------
+# Permission bits do not stop root, so these fixtures need an unprivileged
+# user (validate.yml runs them as the runner user).
+
+expect_scan_error() { # description script
+    run "$2"
+    if [[ $RUN_STATUS -ne 0 && "$RUN_OUTPUT" == *"refusing to report fixture clean"* &&
+        "$RUN_OUTPUT" != *"no build-time private keys"* ]]; then
+        pass "$1"
+    else
+        fail "$1 (exit $RUN_STATUS): $RUN_OUTPUT"
+    fi
+}
+
+if [[ $EUID -eq 0 ]]; then
+    echo "SKIP: fail-closed permission fixtures need a non-root user"
+else
+    reset_root
+    fake_key "$BUILDROOT/usr/lib/hidden/server.key"
+    chmod 000 "$BUILDROOT/usr/lib/hidden/server.key"
+    expect_scan_error "unreadable file fails the scan" "$GUARD"
+    expect_scan_error "unreadable file fails the sysext scan" "$SYSEXT_GUARD"
+    chmod 600 "$BUILDROOT/usr/lib/hidden/server.key"
+
+    reset_root
+    fake_key "$BUILDROOT/usr/lib/hidden/server.key"
+    chmod 000 "$BUILDROOT/usr/lib/hidden"
+    expect_scan_error "untraversable directory fails the scan" "$GUARD"
+    expect_scan_error "untraversable directory fails the sysext scan" "$SYSEXT_GUARD"
+    chmod 755 "$BUILDROOT/usr/lib/hidden"
+
+    reset_root
+    printf 'opaque\n' >"$BUILDROOT/usr/share/doc/clean-but-unreadable"
+    chmod 000 "$BUILDROOT/usr/share/doc/clean-but-unreadable"
+    expect_scan_error "unreadable file without a key still fails the scan" "$GUARD"
+    chmod 600 "$BUILDROOT/usr/share/doc/clean-but-unreadable"
+
+    reset_root
+    printf '/usr/share/doc/readme\n' >"$BUILDROOT/var/lib/dpkg/info/fixture.list"
+    chmod 000 "$BUILDROOT/var/lib/dpkg/info/fixture.list"
+    run "$GUARD"
+    if [[ $RUN_STATUS -ne 0 && "$RUN_OUTPUT" != *"no build-time private keys"* ]]; then
+        pass "unreadable dpkg list fails the guard"
+    else
+        fail "unreadable dpkg list (exit $RUN_STATUS): $RUN_OUTPUT"
+    fi
+    chmod 600 "$BUILDROOT/var/lib/dpkg/info/fixture.list"
+fi
+
+# Producer failures: shim each external command the guard consumes so it
+# fails with its documented error status. Runs as root too: shims, not modes.
+# grep's error status is 2; its 1 means "no match" and is a clean result.
+SHIM_DIR="$WORK_DIR/shims"
+make_shim() { # command
+    local status=1
+    [[ $1 == grep ]] && status=2
+    rm -rf "$SHIM_DIR"
+    mkdir -p "$SHIM_DIR"
+    printf '#!/bin/sh\necho "%s: simulated failure" >&2\nexit %s\n' "$1" "$status" >"$SHIM_DIR/$1"
+    chmod +x "$SHIM_DIR/$1"
+}
+run_shimmed() { # command script
+    make_shim "$1"
+    if RUN_OUTPUT=$(PATH="$SHIM_DIR:$PATH" BUILDROOT="$BUILDROOT" SRCDIR="$ROOT_DIR" IMAGE_ID=fixture "$2" 2>&1); then
+        RUN_STATUS=0
+    else
+        RUN_STATUS=$?
+    fi
+}
+expect_not_clean() { # description
+    if [[ $RUN_STATUS -ne 0 && "$RUN_OUTPUT" != *"no build-time private keys"* ]]; then
+        pass "$1"
+    else
+        fail "$1 (exit $RUN_STATUS): $RUN_OUTPUT"
+    fi
+}
+
+reset_root
+printf '\x30\x82\x04\xa4\x02\x01\x00' >"$BUILDROOT/etc/ssl/private/server.der"
+run_shimmed cat "$GUARD"
+if [[ $RUN_STATUS -ne 0 && "$RUN_OUTPUT" == *"/etc/ssl/private/server.der:"* ]]; then
+    pass "location rule does not depend on cat"
+else
+    fail "location rule with failing cat (exit $RUN_STATUS): $RUN_OUTPUT"
+fi
+
+for producer in find xargs grep; do
+    reset_root
+    fake_key "$BUILDROOT/usr/lib/fixture/server.key"
+    run_shimmed "$producer" "$GUARD"
+    expect_not_clean "failing $producer fails the guard"
+    run_shimmed "$producer" "$SYSEXT_GUARD"
+    expect_not_clean "failing $producer fails the sysext guard"
+done
+
+reset_root
+fake_key "$BUILDROOT/usr/share/ovmf/PkKek-1-snakeoil.key"
+own usr/share/ovmf/PkKek-1-snakeoil.key ovmf
+run_shimmed md5sum "$GUARD"
+expect_not_clean "failing md5sum fails the guard"
+
+reset_root
+fake_key "$BUILDROOT/usr/lib/code-server/node_modules/httpolyglot/test/fixtures/server.key"
+run_shimmed sha256sum "$GUARD"
+expect_not_clean "failing sha256sum fails the guard"
 
 if RUN_OUTPUT=$(env -u BUILDROOT SRCDIR="$ROOT_DIR" "$GUARD" 2>&1); then
     fail "missing BUILDROOT must fail closed"
