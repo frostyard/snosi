@@ -121,12 +121,63 @@ fake_key "$BUILDROOT/etc/ssl/private/ssl-cert-snakeoil.key"
 printf '/etc/ssl/private/ssl-cert-snakeoil.key\n' >"$BUILDROOT/var/lib/dpkg/info/fixture.list"
 expect_reject "package ownership does not exempt /etc/ssl/private" etc/ssl/private/ssl-cert-snakeoil.key "$GUARD"
 
+# Allowlist: a fixture SRCDIR carries its own shared/security/private-key-allowlist.txt.
+FIXTURE_SRC="$WORK_DIR/src"
+mkdir -p "$FIXTURE_SRC/shared/security"
+reset_root
+fake_key "$BUILDROOT/usr/lib/vendor/test/fixtures/server.key"
+fixture_sha=$(sha256sum <"$BUILDROOT/usr/lib/vendor/test/fixtures/server.key")
+printf '# comment\n%s  /usr/lib/vendor/test/fixtures/server.key\n' "${fixture_sha%% *}" \
+    >"$FIXTURE_SRC/shared/security/private-key-allowlist.txt"
+run_allowlisted() {
+    if RUN_OUTPUT=$(BUILDROOT="$BUILDROOT" SRCDIR="$FIXTURE_SRC" IMAGE_ID=fixture "$GUARD" 2>&1); then
+        RUN_STATUS=0
+    else
+        RUN_STATUS=$?
+    fi
+}
+run_allowlisted
+if [[ $RUN_STATUS -eq 0 && "$RUN_OUTPUT" == *"allowlisted public key: /usr/lib/vendor/test/fixtures/server.key"* ]]; then
+    pass "allowlisted fixture with matching sha256 passes"
+else
+    fail "allowlisted fixture (exit $RUN_STATUS): $RUN_OUTPUT"
+fi
+fake_key "$BUILDROOT/usr/lib/vendor/test/fixtures/server.key" "RSA "
+run_allowlisted
+if [[ $RUN_STATUS -ne 0 && "$RUN_OUTPUT" == *"sha256 differs from private-key-allowlist.txt"* ]]; then
+    pass "allowlisted path with changed bytes is rejected"
+else
+    fail "allowlisted path with changed bytes (exit $RUN_STATUS): $RUN_OUTPUT"
+fi
+fake_key "$BUILDROOT/usr/lib/vendor/test/fixtures/other.key"
+fake_key "$BUILDROOT/usr/lib/vendor/test/fixtures/server.key"
+run_allowlisted
+if [[ $RUN_STATUS -ne 0 && "$RUN_OUTPUT" == *"/usr/lib/vendor/test/fixtures/other.key:"* ]]; then
+    pass "allowlist exempts only the listed path"
+else
+    fail "allowlist must not exempt unlisted paths (exit $RUN_STATUS): $RUN_OUTPUT"
+fi
+
+reset_root
+fake_key "$BUILDROOT/usr/lib/code-server/node_modules/httpolyglot/test/fixtures/server.key"
+expect_reject "repo allowlist does not exempt different bytes at a listed path" \
+    usr/lib/code-server/node_modules/httpolyglot/test/fixtures/server.key "$SYSEXT_GUARD"
+
+while read -r sha path; do
+    [[ -z "$sha" || "$sha" == \#* ]] && continue
+    if [[ "$sha" =~ ^[0-9a-f]{64}$ && "$path" == /* ]]; then
+        pass "allowlist entry well formed: $path"
+    else
+        fail "malformed allowlist entry: $sha $path"
+    fi
+done <"$ROOT_DIR/shared/security/private-key-allowlist.txt"
+
 reset_root
 mkdir -p "$BUILDROOT/usr/share/dir with space"
 fake_key "$BUILDROOT/usr/share/dir with space/k.pem"
 expect_reject "paths with spaces are reported" "usr/share/dir with space/k.pem" "$GUARD"
 
-if RUN_OUTPUT=$(env -u BUILDROOT "$GUARD" 2>&1); then
+if RUN_OUTPUT=$(env -u BUILDROOT SRCDIR="$ROOT_DIR" "$GUARD" 2>&1); then
     fail "missing BUILDROOT must fail closed"
 else
     pass "missing BUILDROOT fails closed"

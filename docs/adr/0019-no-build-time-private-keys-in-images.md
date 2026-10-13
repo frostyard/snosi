@@ -32,8 +32,15 @@ references the pair.
   because package payload is public and identical on every install, for
   example ovmf's `PkKek-1-snakeoil.key` or npm test fixtures in vendor debs.
   When the package ships md5sums, the file must still match them. Owned files
-  with no md5sums entry are logged as unverified.
+  with no md5sums entry are logged as unverified. Overlay sysexts have no dpkg
+  database at finalize, because mkosi removes it when dpkg is not in the upper
+  layer. So public keys in sysexts, such as code-server's httpolyglot test
+  fixture, are exempted only by an exact path and sha256 entry in the reviewed
+  `shared/security/private-key-allowlist.txt`.
 - `test/no-private-keys-test.sh` holds rejection fixtures and checks the wiring.
+
+On 2026-10-13, no other private key matched in the verified vendor debs
+(`shared/download/sysext-checksums.json`) or in the published Snow image.
 
 ## Consequences
 
@@ -44,6 +51,8 @@ references the pair.
 - On upgrade, bootc's three-way `/etc` merge drops the unmodified snakeoil
   files from existing installs. A key an administrator changed stays. Keys
   that already shipped stay public; nothing used them.
+- An upstream bump that changes an allowlisted fixture fails the sysext build
+  until a reviewer re-pins it.
 - A package that overwrites one of its own md5sums-less files with a fresh
   key in its postinst would pass. That is the accepted residual risk of
   exempting vendor debs without md5sums.

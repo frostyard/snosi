@@ -26,6 +26,10 @@
 #     them, so a package file rewritten after installation is rejected;
 #     owned files without an md5sums entry (some vendor .debs ship none) are
 #     exempted and listed in the build log as unverified.
+#   Content matches are also exempt when listed, with their exact sha256, in
+#   shared/security/private-key-allowlist.txt (reviewed public fixtures).
+#   Sysexts rely on that list: mkosi removes an overlay sysext's dpkg
+#   database before finalize because dpkg itself lives in the base tree.
 #
 # NO_PRIVATE_KEYS_ROOTS (space-separated, relative to $BUILDROOT) limits the
 # scan to the trees that actually ship; the default "." scans the whole OCI
@@ -33,6 +37,7 @@
 set -euo pipefail
 
 : "${BUILDROOT:?no-private-keys: \$BUILDROOT not set (must run as a FinalizeScript)}"
+: "${SRCDIR:?no-private-keys: \$SRCDIR not set (must run as a FinalizeScript)}"
 if [[ ! -d "$BUILDROOT" ]]; then
     echo "no-private-keys: BUILDROOT is not a directory" >&2
     exit 1
@@ -40,6 +45,15 @@ fi
 
 read -r -a roots <<<"${NO_PRIVATE_KEYS_ROOTS:-.}"
 key_header='^-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY( BLOCK)?-----[[:space:]]*$'
+
+allowlist="$SRCDIR/shared/security/private-key-allowlist.txt"
+declare -A allowed_sha256=()
+if [[ -f "$allowlist" ]]; then
+    while read -r sha path; do
+        [[ -z "$sha" || "$sha" == \#* ]] && continue
+        allowed_sha256[${path#/}]=$sha
+    done <"$allowlist"
+fi
 
 cd "$BUILDROOT"
 
@@ -77,7 +91,15 @@ for root in "${roots[@]}"; do
     # binary files; keys we care about are text.
     while IFS= read -r -d '' path; do
         rel=${path#./}
-        if [[ -n "${package_md5[$rel]:-}" ]]; then
+        if [[ -n "${allowed_sha256[$rel]:-}" ]]; then
+            actual=$(sha256sum <"$path")
+            actual=${actual%% *}
+            if [[ "$actual" == "${allowed_sha256[$rel]}" ]]; then
+                echo "no-private-keys: allowlisted public key: /$rel"
+                continue
+            fi
+            offenders[$rel]="private key (sha256 differs from private-key-allowlist.txt)"
+        elif [[ -n "${package_md5[$rel]:-}" ]]; then
             actual=$(md5sum <"$path")
             actual=${actual%% *}
             [[ "$actual" == "${package_md5[$rel]}" ]] && continue
