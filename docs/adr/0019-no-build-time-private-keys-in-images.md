@@ -27,10 +27,12 @@ references the pair.
   every OCI composition. Through `shared/sysext/finalize/sysext-no-private-keys.sh`
   it also runs on `/usr` and `/opt` in every sysext. It fails the build for
   any file under `/etc/ssl/private/`, any `/etc/ssh/ssh_host_*_key`, and any
-  text file with a PEM, OpenSSH or PGP private-key header. The only exception
-  is a file byte-identical (by dpkg MD5) to the file a Debian package ships.
-  Such a file is already public in the archive, for example ovmf's
-  `PkKek-1-snakeoil.key`.
+  text file with a PEM, OpenSSH or PGP private-key header on a line of its
+  own. Files a package installed (listed in dpkg's `*.list`) are exempt
+  because package payload is public and identical on every install, for
+  example ovmf's `PkKek-1-snakeoil.key` or npm test fixtures in vendor debs.
+  When the package ships md5sums, the file must still match them. Owned files
+  with no md5sums entry are logged as unverified.
 - `test/no-private-keys-test.sh` holds rejection fixtures and checks the wiring.
 
 ## Consequences
@@ -42,6 +44,9 @@ references the pair.
 - On upgrade, bootc's three-way `/etc` merge drops the unmodified snakeoil
   files from existing installs. A key an administrator changed stays. Keys
   that already shipped stay public; nothing used them.
+- A package that overwrites one of its own md5sums-less files with a fresh
+  key in its postinst would pass. That is the accepted residual risk of
+  exempting vendor debs without md5sums.
 - The content scan uses `grep -I`, so DER or other binary keys outside
   `/etc/ssl/private` are not detected. Archives such as
   `/usr/share/homebrew.tar.zst` are not unpacked.
