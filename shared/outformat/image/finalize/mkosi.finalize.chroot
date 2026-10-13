@@ -175,6 +175,19 @@ echo "Stripped $(wc -l < "$manifest") enablement symlinks from /etc (recreated b
 # Remove SSH Keys
 rm -f /etc/ssh/ssh_host_*
 
+# Remove the ssl-cert snakeoil pair. ssl-cert's postinst (pulled in by
+# cups-daemon on snow, snowfield and sundog) runs `make-ssl-cert
+# generate-default-snakeoil` at build time, so every install of a published
+# image would share one public private key. Nothing in the images uses it
+# (CUPS keeps its own credentials in /etc/cups/ssl; no shipped service
+# references the snakeoil pair), so it is not regenerated at boot; an
+# administrator who needs it runs `make-ssl-cert generate-default-snakeoil`.
+# Also drop the c_rehash link make-ssl-cert adds to /etc/ssl/certs.
+# shared/security/no-private-keys.finalize fails the build if any
+# build-time private key survives.
+find /etc/ssl/certs -maxdepth 1 -type l -lname '*ssl-cert-snakeoil.pem' -delete 2>/dev/null || true
+rm -f /etc/ssl/private/ssl-cert-snakeoil.key /etc/ssl/certs/ssl-cert-snakeoil.pem
+
 # Ship NO hicolor icon cache. GTK/St/Qt treat a present icon-theme.cache as
 # an authoritative index whenever its mtime is >= the theme directory's mtime.
 # Sysexts merge app icons into /usr/share/icons/hicolor with their upstream

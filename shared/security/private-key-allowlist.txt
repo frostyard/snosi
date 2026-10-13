@@ -1,0 +1,14 @@
+# Reviewed private keys that may ship because they are already public,
+# identical on every install and not used for any trust decision (upstream
+# test fixtures and the like). Read by shared/security/no-private-keys.finalize.
+#
+# Format: <sha256>  <absolute path>   (two spaces, like sha256sum output)
+# An entry exempts only that exact path with those exact bytes, so an
+# upstream bump that changes the file fails the build until re-reviewed.
+# Packaged files in OCI images are exempted by dpkg ownership instead; this
+# list exists mainly for sysexts, whose dpkg database mkosi removes before
+# finalize. Adding an entry needs a reviewer to confirm the key is public.
+
+# code-server (verified upstream .deb, shared/download/sysext-checksums.json):
+# httpolyglot's bundled test fixture, unused at runtime.
+6bf80cc4376ae97a69b2eb95fd3e17df4614bea2fe224e5e707806ed9bf0f2c8  /usr/lib/code-server/node_modules/httpolyglot/test/fixtures/server.key

@@ -40,9 +40,14 @@ Image builds have four phases, in order:
    destined for immutable images or sysexts must be relocated under `/usr`.
 3. **FinalizeScripts:** `shared/outformat/image/finalize/mkosi.finalize.chroot`
    normalizes the image, writes `/etc/machine-id` as `uninitialized`, removes
-   SSH host keys, strips `/etc` enablement symlinks, records
+   SSH host keys and the ssl-cert snakeoil pair, strips `/etc` enablement
+   symlinks, records
    `/usr/share/snosi/enablement-manifest.txt` and sets `user.component`
    xattrs for OCI chunking. Presets recreate links on true first boot.
+   `shared/security/no-private-keys.finalize` then fails the build if any
+   build-time private key remains ([ADR-0019](../adr/0019-no-build-time-private-keys-in-images.md));
+   sysexts run it on `/usr` and `/opt` through
+   `shared/sysext/finalize/sysext-no-private-keys.sh`.
    `shared/composition/var-audit.finalize` audits per-product `/var` outcome
    maps and rejects unclassified or stale entries.
    `shared/composition/core-flatpaks.finalize` ships the product's

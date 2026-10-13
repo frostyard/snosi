@@ -48,7 +48,10 @@ the supplied MOK certificate and PCR public key against
 `shared/native-ab/keys/mok-2026.crt` and
 `shared/native-ab/keys/pcr-signing-2026.pub`; bootc-secure and Firn also
 consume the public keys. External lab bootc lanes fetch them from snosi main,
-so do not rename `shared/native-ab/keys/`. Private keys never enter images.
+so do not rename `shared/native-ab/keys/`. Private keys never enter images:
+`shared/security/no-private-keys.finalize` fails any OCI or sysext build that
+ships a build-time private key (ADR-0019); the image finalize removes SSH host
+keys and ssl-cert's snakeoil pair.
 `docs/bootc-secure-operations.md` governs support claims and lifecycle gates;
 fixture success does not establish production Secure Boot support.
 

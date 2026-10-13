@@ -1,0 +1,131 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Build guard: no private key generated at build time may ship in an image.
+#
+# Every machine installed from a published image shares the image's bytes,
+# and the images are public. A private key created during the build (by a
+# package postinst such as ssl-cert's `make-ssl-cert generate-default-snakeoil`
+# or openssh-server's host key generation, or by a build script) is
+# therefore one key shared by every install and readable by anyone who pulls
+# the image. Per-machine keys are generated on the machine (sshd-keygen,
+# `make-ssl-cert`, ...), never in the image.
+#
+# This is a NON-chroot mkosi FinalizeScript: it runs on the host against
+# $BUILDROOT, after the image finalize has removed known build-time keys.
+# It fails the build when it finds:
+#   - any non-directory under etc/ssl/private/ (the private-key directory),
+#   - any etc/ssh/ssh_host_*_key,
+#   - any regular text file with a PEM/OpenSSH/PGP private-key header on a
+#     line of its own (source files that merely quote the header inside a
+#     string literal, e.g. ssh2's keyParser.js, do not match), UNLESS a
+#     package installed it: the path is in var/lib/dpkg/info/*.list. Package
+#     payload is public, identical on every install and not a per-image
+#     secret (ovmf's PkKek-1-snakeoil.key, perl example keys, npm test
+#     fixtures). When the package ships md5sums the file must still match
+#     them, so a package file rewritten after installation is rejected;
+#     owned files without an md5sums entry (some vendor .debs ship none) are
+#     exempted and listed in the build log as unverified.
+#   Content matches are also exempt when listed, with their exact sha256, in
+#   shared/security/private-key-allowlist.txt (reviewed public fixtures).
+#   Sysexts rely on that list: mkosi removes an overlay sysext's dpkg
+#   database before finalize because dpkg itself lives in the base tree.
+#
+# NO_PRIVATE_KEYS_ROOTS (space-separated, relative to $BUILDROOT) limits the
+# scan to the trees that actually ship; the default "." scans the whole OCI
+# root. The sysext wrapper sets "usr opt", the only trees mkosi packs.
+set -euo pipefail
+
+: "${BUILDROOT:?no-private-keys: \$BUILDROOT not set (must run as a FinalizeScript)}"
+: "${SRCDIR:?no-private-keys: \$SRCDIR not set (must run as a FinalizeScript)}"
+if [[ ! -d "$BUILDROOT" ]]; then
+    echo "no-private-keys: BUILDROOT is not a directory" >&2
+    exit 1
+fi
+
+read -r -a roots <<<"${NO_PRIVATE_KEYS_ROOTS:-.}"
+key_header='^-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY( BLOCK)?-----[[:space:]]*$'
+
+allowlist="$SRCDIR/shared/security/private-key-allowlist.txt"
+declare -A allowed_sha256=()
+if [[ -f "$allowlist" ]]; then
+    while read -r sha path; do
+        [[ -z "$sha" || "$sha" == \#* ]] && continue
+        allowed_sha256[${path#/}]=$sha
+    done <"$allowlist"
+fi
+
+cd "$BUILDROOT"
+
+# Package-installed paths (relative, no leading slash) and their MD5s.
+declare -A package_owned=() package_md5=()
+shopt -s nullglob
+for list in var/lib/dpkg/info/*.list; do
+    while IFS= read -r path; do
+        [[ -n "$path" ]] && package_owned[${path#/}]=1
+    done <"$list"
+done
+for sums in var/lib/dpkg/info/*.md5sums; do
+    while read -r md5 path; do
+        [[ -n "$path" ]] && package_md5[$path]=$md5
+    done <"$sums"
+done
+shopt -u nullglob
+
+declare -a unverified=()
+
+declare -A offenders=()
+
+for root in "${roots[@]}"; do
+    [[ -e "$root" ]] || continue
+
+    # Location rules: these paths only ever hold per-machine secrets.
+    while IFS= read -r -d '' path; do
+        offenders[${path#./}]="private-key location"
+    done < <(find "$root" -xdev \
+        \( -path ./proc -o -path ./sys -o -path ./dev -o -path ./run \) -prune -o \
+        \( -path '*etc/ssl/private/*' ! -type d -print0 \) -o \
+        \( -path '*etc/ssh/ssh_host_*_key' -print0 \))
+
+    # Content rule: PEM, OpenSSH and armored PGP private keys. grep -I skips
+    # binary files; keys we care about are text.
+    while IFS= read -r -d '' path; do
+        rel=${path#./}
+        if [[ -n "${allowed_sha256[$rel]:-}" ]]; then
+            actual=$(sha256sum <"$path")
+            actual=${actual%% *}
+            if [[ "$actual" == "${allowed_sha256[$rel]}" ]]; then
+                echo "no-private-keys: allowlisted public key: /$rel"
+                continue
+            fi
+            offenders[$rel]="private key (sha256 differs from private-key-allowlist.txt)"
+        elif [[ -n "${package_md5[$rel]:-}" ]]; then
+            actual=$(md5sum <"$path")
+            actual=${actual%% *}
+            [[ "$actual" == "${package_md5[$rel]}" ]] && continue
+            offenders[$rel]="private key (differs from its package's md5sums)"
+        elif [[ -n "${package_owned[$rel]:-}" ]]; then
+            unverified+=("$rel")
+        else
+            offenders[$rel]="private key (not installed by any package)"
+        fi
+    done < <(find "$root" -xdev \
+        \( -path ./proc -o -path ./sys -o -path ./dev -o -path ./run \) -prune -o \
+        -type f -print0 |
+        xargs -0 -r grep -lIZE -e "$key_header" -- || true)
+done
+
+for rel in "${unverified[@]}"; do
+    echo "no-private-keys: exempt package payload without md5sums: /$rel"
+done
+
+if ((${#offenders[@]} > 0)); then
+    echo "no-private-keys: refusing to ship private keys in ${IMAGE_ID:-image}:" >&2
+    while IFS= read -r path; do
+        echo "  /$path: ${offenders[$path]}" >&2
+    done < <(printf '%s\n' "${!offenders[@]}" | LC_ALL=C sort)
+    echo "Remove build-time keys in finalize and generate them per machine at first boot." >&2
+    exit 1
+fi
+
+echo "no-private-keys: no build-time private keys in ${IMAGE_ID:-image} (${roots[*]})"
