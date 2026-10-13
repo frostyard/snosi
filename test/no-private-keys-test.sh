@@ -102,6 +102,26 @@ fake_key "$BUILDROOT/usr/share/ovmf/PkKek-1-snakeoil.key" "RSA "
 expect_reject "package key rewritten after install is rejected" usr/share/ovmf/PkKek-1-snakeoil.key "$GUARD"
 
 reset_root
+mkdir -p "$BUILDROOT/usr/lib/node_modules/ssh2"
+printf "const h = '-----BEGIN OPENSSH PRIVATE KEY-----\\n';\n" >"$BUILDROOT/usr/lib/node_modules/ssh2/keyParser.js"
+expect_pass "header quoted inside source code is not a key" "$GUARD"
+
+reset_root
+fake_key "$BUILDROOT/usr/lib/code-server/test/fixtures/server.key"
+printf '/usr/lib/code-server/test/fixtures/server.key\n' >"$BUILDROOT/var/lib/dpkg/info/code-server.list"
+run "$GUARD"
+if [[ $RUN_STATUS -eq 0 && "$RUN_OUTPUT" == *"without md5sums: /usr/lib/code-server/test/fixtures/server.key"* ]]; then
+    pass "package payload without md5sums passes and is logged as unverified"
+else
+    fail "package payload without md5sums (exit $RUN_STATUS): $RUN_OUTPUT"
+fi
+
+reset_root
+fake_key "$BUILDROOT/etc/ssl/private/ssl-cert-snakeoil.key"
+printf '/etc/ssl/private/ssl-cert-snakeoil.key\n' >"$BUILDROOT/var/lib/dpkg/info/fixture.list"
+expect_reject "package ownership does not exempt /etc/ssl/private" etc/ssl/private/ssl-cert-snakeoil.key "$GUARD"
+
+reset_root
 mkdir -p "$BUILDROOT/usr/share/dir with space"
 fake_key "$BUILDROOT/usr/share/dir with space/k.pem"
 expect_reject "paths with spaces are reported" "usr/share/dir with space/k.pem" "$GUARD"

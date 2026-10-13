@@ -16,13 +16,16 @@
 # It fails the build when it finds:
 #   - any non-directory under etc/ssl/private/ (the private-key directory),
 #   - any etc/ssh/ssh_host_*_key,
-#   - any regular text file containing a PEM/OpenSSH/PGP private-key header,
-#     UNLESS it is byte-identical to a file a Debian package ships (path
-#     listed in var/lib/dpkg/info/*.md5sums with a matching MD5). Such files
-#     are already public in the Debian archive and identical on every Debian
-#     system, e.g. ovmf's deliberately public PkKek-1-snakeoil.key or perl
-#     module example keys; they are not a per-image secret. A package file
-#     rewritten after installation no longer matches its MD5 and is rejected.
+#   - any regular text file with a PEM/OpenSSH/PGP private-key header on a
+#     line of its own (source files that merely quote the header inside a
+#     string literal, e.g. ssh2's keyParser.js, do not match), UNLESS a
+#     package installed it: the path is in var/lib/dpkg/info/*.list. Package
+#     payload is public, identical on every install and not a per-image
+#     secret (ovmf's PkKek-1-snakeoil.key, perl example keys, npm test
+#     fixtures). When the package ships md5sums the file must still match
+#     them, so a package file rewritten after installation is rejected;
+#     owned files without an md5sums entry (some vendor .debs ship none) are
+#     exempted and listed in the build log as unverified.
 #
 # NO_PRIVATE_KEYS_ROOTS (space-separated, relative to $BUILDROOT) limits the
 # scan to the trees that actually ship; the default "." scans the whole OCI
@@ -36,19 +39,26 @@ if [[ ! -d "$BUILDROOT" ]]; then
 fi
 
 read -r -a roots <<<"${NO_PRIVATE_KEYS_ROOTS:-.}"
-key_header='-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY( BLOCK)?-----'
+key_header='^-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY( BLOCK)?-----[[:space:]]*$'
 
 cd "$BUILDROOT"
 
-# Package-shipped files and their archive MD5s, as "md5  path".
-declare -A package_md5=()
+# Package-installed paths (relative, no leading slash) and their MD5s.
+declare -A package_owned=() package_md5=()
 shopt -s nullglob
+for list in var/lib/dpkg/info/*.list; do
+    while IFS= read -r path; do
+        [[ -n "$path" ]] && package_owned[${path#/}]=1
+    done <"$list"
+done
 for sums in var/lib/dpkg/info/*.md5sums; do
     while read -r md5 path; do
         [[ -n "$path" ]] && package_md5[$path]=$md5
     done <"$sums"
 done
 shopt -u nullglob
+
+declare -a unverified=()
 
 declare -A offenders=()
 
@@ -71,14 +81,20 @@ for root in "${roots[@]}"; do
             actual=$(md5sum <"$path")
             actual=${actual%% *}
             [[ "$actual" == "${package_md5[$rel]}" ]] && continue
-            offenders[$rel]="private key (differs from its Debian package)"
+            offenders[$rel]="private key (differs from its package's md5sums)"
+        elif [[ -n "${package_owned[$rel]:-}" ]]; then
+            unverified+=("$rel")
         else
-            offenders[$rel]="private key (not shipped by any Debian package)"
+            offenders[$rel]="private key (not installed by any package)"
         fi
     done < <(find "$root" -xdev \
         \( -path ./proc -o -path ./sys -o -path ./dev -o -path ./run \) -prune -o \
         -type f -print0 |
         xargs -0 -r grep -lIZE -e "$key_header" -- || true)
+done
+
+for rel in "${unverified[@]}"; do
+    echo "no-private-keys: exempt package payload without md5sums: /$rel"
 done
 
 if ((${#offenders[@]} > 0)); then
