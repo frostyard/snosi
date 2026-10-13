@@ -101,10 +101,14 @@ for root in "${roots[@]}"; do
         scan_error "find could not traverse all of $root"
     fi
 
-    # Location rules: these paths only ever hold per-machine secrets.
-    while IFS= read -r -d '' path; do
-        offenders[${path#./}]="private-key location"
-    done < <(cat "$scratch/location" "$scratch/location-ssh")
+    # Location rules: these paths only ever hold per-machine secrets. Read
+    # the lists by direct redirection, never through a pipe or process
+    # substitution: a failed redirection stops the script under set -e.
+    for list in "$scratch/location" "$scratch/location-ssh"; do
+        while IFS= read -r -d '' path; do
+            offenders[${path#./}]="private-key location"
+        done <"$list"
+    done
 
     # Content rule: PEM, OpenSSH and armored PGP private keys. grep -I skips
     # binary files; keys we care about are text. grep exits 1 for "no match"
@@ -146,9 +150,13 @@ done
 
 if ((${#offenders[@]} > 0)); then
     echo "no-private-keys: refusing to ship private keys in ${IMAGE_ID:-image}:" >&2
+    # Report sorted; if sort itself fails, report unsorted. Either way the
+    # guard exits 1 below.
+    printf '%s\n' "${!offenders[@]}" >"$scratch/offenders"
+    LC_ALL=C sort -o "$scratch/offenders" "$scratch/offenders" || true
     while IFS= read -r path; do
         echo "  /$path: ${offenders[$path]}" >&2
-    done < <(printf '%s\n' "${!offenders[@]}" | LC_ALL=C sort)
+    done <"$scratch/offenders"
     echo "Remove build-time keys in finalize and generate them per machine at first boot." >&2
     exit 1
 fi

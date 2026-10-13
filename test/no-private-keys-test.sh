@@ -227,6 +227,63 @@ else
     chmod 600 "$BUILDROOT/var/lib/dpkg/info/fixture.list"
 fi
 
+# Producer failures: shim each external command the guard consumes so it
+# fails with its documented error status. Runs as root too: shims, not modes.
+# grep's error status is 2; its 1 means "no match" and is a clean result.
+SHIM_DIR="$WORK_DIR/shims"
+make_shim() { # command
+    local status=1
+    [[ $1 == grep ]] && status=2
+    rm -rf "$SHIM_DIR"
+    mkdir -p "$SHIM_DIR"
+    printf '#!/bin/sh\necho "%s: simulated failure" >&2\nexit %s\n' "$1" "$status" >"$SHIM_DIR/$1"
+    chmod +x "$SHIM_DIR/$1"
+}
+run_shimmed() { # command script
+    make_shim "$1"
+    if RUN_OUTPUT=$(PATH="$SHIM_DIR:$PATH" BUILDROOT="$BUILDROOT" SRCDIR="$ROOT_DIR" IMAGE_ID=fixture "$2" 2>&1); then
+        RUN_STATUS=0
+    else
+        RUN_STATUS=$?
+    fi
+}
+expect_not_clean() { # description
+    if [[ $RUN_STATUS -ne 0 && "$RUN_OUTPUT" != *"no build-time private keys"* ]]; then
+        pass "$1"
+    else
+        fail "$1 (exit $RUN_STATUS): $RUN_OUTPUT"
+    fi
+}
+
+reset_root
+printf '\x30\x82\x04\xa4\x02\x01\x00' >"$BUILDROOT/etc/ssl/private/server.der"
+run_shimmed cat "$GUARD"
+if [[ $RUN_STATUS -ne 0 && "$RUN_OUTPUT" == *"/etc/ssl/private/server.der:"* ]]; then
+    pass "location rule does not depend on cat"
+else
+    fail "location rule with failing cat (exit $RUN_STATUS): $RUN_OUTPUT"
+fi
+
+for producer in find xargs grep; do
+    reset_root
+    fake_key "$BUILDROOT/usr/lib/fixture/server.key"
+    run_shimmed "$producer" "$GUARD"
+    expect_not_clean "failing $producer fails the guard"
+    run_shimmed "$producer" "$SYSEXT_GUARD"
+    expect_not_clean "failing $producer fails the sysext guard"
+done
+
+reset_root
+fake_key "$BUILDROOT/usr/share/ovmf/PkKek-1-snakeoil.key"
+own usr/share/ovmf/PkKek-1-snakeoil.key ovmf
+run_shimmed md5sum "$GUARD"
+expect_not_clean "failing md5sum fails the guard"
+
+reset_root
+fake_key "$BUILDROOT/usr/lib/code-server/node_modules/httpolyglot/test/fixtures/server.key"
+run_shimmed sha256sum "$GUARD"
+expect_not_clean "failing sha256sum fails the guard"
+
 if RUN_OUTPUT=$(env -u BUILDROOT SRCDIR="$ROOT_DIR" "$GUARD" 2>&1); then
     fail "missing BUILDROOT must fail closed"
 else
