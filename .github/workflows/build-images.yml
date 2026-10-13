@@ -340,9 +340,9 @@ jobs:
 
       - name: Setup Syft
         id: setup-syft
-        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
-          syft-version: v1.54.0
+          syft-version: v1.54.1
 
       - name: Generate SBOM
         id: generate-sbom
@@ -450,7 +450,7 @@ jobs:
             "$IMAGE" "${{ steps.push.outputs.digest }}" "$AUTH_FILE"
 
       - name: Install ORAS
-        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
+        uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2
 
       - name: Login to GHCR with ORAS
         env:
@@ -726,7 +726,7 @@ jobs:
 
       - name: Install ORAS
         if: steps.current.outputs.tag != ''
-        uses: oras-project/setup-oras@1d808f7d7f6995cc68b7bf507bfe5c5446e1dc9d # v2
+        uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2
 
       - name: Login to GHCR with ORAS
         if: steps.current.outputs.tag != ''
