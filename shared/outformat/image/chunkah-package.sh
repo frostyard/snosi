@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-CHUNKAH_IMAGE='quay.io/coreos/chunkah@sha256:8b56578258d1d10d3e1c7b0f71a4d05317c5fde331c4f483576a1b60e65f0cea'
+CHUNKAH_IMAGE='quay.io/coreos/chunkah@sha256:71e593421c5de7dcc7c8c5c50e98d3bac572055a76f399f61a491d123c20a523'
 
 chunk_image() { # image-ref source-date-epoch [max-layers]
     local image_ref=$1 source_date_epoch=$2 max_layers=${3:-128}
