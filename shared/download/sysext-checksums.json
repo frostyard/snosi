@@ -39,6 +39,11 @@
     "sha256": "68a2e3ef230caca48e60c9bebd60b432fd70eb7a45291fce2340758a586682a3",
     "version": "1.1.30"
   },
+  "gitdesktop": {
+    "url": "https://github.com/theBGuy/GitDesktop/releases/download/v0.13.5/GitDesktop_0.13.5_amd64.deb",
+    "sha256": "211fc4f4379914c128bc1725a4df79997739535004b7ae15cc3d5ca8a3196d8d",
+    "version": "0.13.5"
+  },
   "k3s": {
     "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.5%2Bk3s1/k3s",
     "sha256": "d73847bcd3c5fccef0115b372e2f9a91f3032dc84bbf71518a4617565294d313",

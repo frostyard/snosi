@@ -33,6 +33,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
 | **edge** | microsoft-edge-stable | Microsoft Edge browser (pinned .deb via verified_download, relocated from /opt) |
+| **gitdesktop** | git-desktop | GitDesktop keyboard-first Git client (pinned upstream .deb via verified_download from theBGuy/GitDesktop GitHub releases; Tauri; native /usr layout) |
 | **github-copilot** | github | GitHub Copilot desktop app (official pinned .deb via verified_download; Tauri; native /usr layout) |
 | **himmelblau** | himmelblau | Himmelblau Microsoft Entra ID login: PAM/NSS modules, TPM-backed HSM PIN, sshd MFA drop-in, browser SSO broker, o365 launchers (upstream stable Debian 13 apt repo); configured with `snosi-himmelblau-setup` |
 | **incus** | incus | Incus container/VM manager (Frostyard rebuild of Zabbly's deb, which bundles its own qemu/OVMF/swtpm/virtiofsd under `/usr/incus`), dnsmasq, virt-viewer; still carries unused Debian qemu/OVMF until #1014 |
@@ -147,7 +148,7 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server`, `coder`, `edge`, `bitwarden`, `github-copilot`, `paseo`, and `sunshine` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb`; its Tauri payload already has a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, used by the Edge sysext. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
+`code-server`, `coder`, `edge`, `bitwarden`, `gitdesktop`, `github-copilot`, `paseo`, and `sunshine` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb` and `gitdesktop` uses the upstream GitDesktop `.deb`; both Tauri payloads already have a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, used by the Edge sysext. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
 
 ## Sysext-Specific Extra Files
 
@@ -230,6 +231,13 @@ and checks fresh and previously root-owned Coder homes.
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
 - The postinst repoints the update-alternatives symlinks (`/usr/bin/microsoft-edge`, `x-www-browser`, `gnome-www-browser`) at the real binary: their `/etc/alternatives` targets are stripped from sysexts, so they would dangle on target systems
 - Its icons are hicolor symlinks created by the relocation script — visibility depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below), so on images that still ship `icon-theme.cache` the Edge icon renders generic
+
+### gitdesktop
+- No `mkosi.extra/`, relocation, runtime service, or `/etc` capture: the pinned upstream `.deb` (package `git-desktop`, no maintainer scripts) installs the Tauri binary directly at `/usr/bin/gitdesktop`
+- Its `Depends` match github-copilot's: gui-base already carries webkit2gtk and GTK3, so only the ayatana appindicator stack lands in the delta
+- Runtime needs `git` (in base) plus the user's forge CLI (`gh` for GitHub, `glab` for GitLab), which the sysext does not ship: users install those per-user
+- The app bundles Tauri's self-updater pointed at upstream's `latest.json`. It cannot replace a read-only sysext `/usr`, so decline its update prompts; new versions arrive through `check-dependencies.yml` and sysupdate
+- Ships hicolor icons, so the shared `sysext-strip-icon-cache.sh` finalize step is required
 
 ### github-copilot
 - No `mkosi.extra/`, relocation, runtime service, or `/etc` capture: GitHub's official pinned `.deb` installs the Tauri application directly under `/usr`
@@ -700,7 +708,7 @@ but survived because gbm's ABI tolerated it).
 **The fix — `mkosi.images/gui-base`**: an internal, never-published
 directory image (base + the common GUI lib closure). Desktop-app sysexts
 (1password, bitwarden, chatgpt, claude-desktop, edge,
-github-copilot, localsend, moonlight, obsidian, sunshine, voxtype,
+gitdesktop, github-copilot, localsend, moonlight, obsidian, sunshine, voxtype,
 vscode) set
 `Dependencies=gui-base` +
 `BaseTrees=%O/gui-base`, so their deltas omit the entire common GUI stack

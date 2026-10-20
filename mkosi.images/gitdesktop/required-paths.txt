@@ -1,0 +1,4 @@
+# gitdesktop sysext: GitDesktop Git client (Tauri)
+/usr/bin/gitdesktop
+/usr/share/applications/GitDesktop.desktop
+/usr/share/icons/hicolor/128x128/apps/gitdesktop.png
