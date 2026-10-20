@@ -88,6 +88,15 @@ jobs:
             echo "github_copilot_version=$LATEST_GITHUB_COPILOT" >> "$GITHUB_OUTPUT"
           fi
 
+          # Check GitDesktop
+          CURRENT_GITDESKTOP=$(jq -r '.gitdesktop.version' "$CHECKSUMS")
+          LATEST_GITDESKTOP=$(gh_api https://api.github.com/repos/theBGuy/GitDesktop/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_GITDESKTOP" && "$LATEST_GITDESKTOP" != "null" ]] && ver_gt "$LATEST_GITDESKTOP" "$CURRENT_GITDESKTOP"; then
+            UPDATES="${UPDATES}gitdesktop: $CURRENT_GITDESKTOP -> $LATEST_GITDESKTOP\n"
+            echo "gitdesktop_update=true" >> "$GITHUB_OUTPUT"
+            echo "gitdesktop_version=$LATEST_GITDESKTOP" >> "$GITHUB_OUTPUT"
+          fi
+
           # Check Sunshine
           CURRENT_SUNSHINE=$(jq -r '.sunshine.version' "$CHECKSUMS")
           LATEST_SUNSHINE=$(gh_api https://api.github.com/repos/LizardByte/Sunshine/releases | jq -r '[.[] | select(.draft == false and .prerelease == false)][0].tag_name' | sed 's/^v//')
@@ -198,6 +207,8 @@ jobs:
           BITWARDEN_VERSION: ${{ steps.check.outputs.bitwarden_version }}
           GITHUB_COPILOT_UPDATE: ${{ steps.check.outputs.github_copilot_update }}
           GITHUB_COPILOT_VERSION: ${{ steps.check.outputs.github_copilot_version }}
+          GITDESKTOP_UPDATE: ${{ steps.check.outputs.gitdesktop_update }}
+          GITDESKTOP_VERSION: ${{ steps.check.outputs.gitdesktop_version }}
           SUNSHINE_UPDATE: ${{ steps.check.outputs.sunshine_update }}
           SUNSHINE_VERSION: ${{ steps.check.outputs.sunshine_version }}
           CODESERVER_UPDATE: ${{ steps.check.outputs.codeserver_update }}
@@ -263,6 +274,18 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
               '."github-copilot".url=$u | ."github-copilot".sha256=$s | ."github-copilot".version=$v' \
+              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
+            rm -f "$TMP"
+          fi
+
+          if [[ "$GITDESKTOP_UPDATE" == "true" ]]; then
+            VER="$GITDESKTOP_VERSION"
+            URL="https://github.com/theBGuy/GitDesktop/releases/download/v${VER}/GitDesktop_${VER}_amd64.deb"
+            TMP=$(mktemp)
+            curl -fsSL --max-time 120 -o "$TMP" "$URL"
+            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
+            jq --arg u "$URL" --arg s "$SHA" --arg v "$VER" \
+              '.gitdesktop.url=$u | .gitdesktop.sha256=$s | .gitdesktop.version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi
