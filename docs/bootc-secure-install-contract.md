@@ -289,6 +289,11 @@ as `EFI/BOOT/mmx64.efi`, and the MOK-signed systemd-boot second stage as
 for one-time operator approval and must provide a restage action that repeats
 only this enrollment staging without repartitioning or reinstalling.
 
+While Secure Boot is enabled, or its state cannot be read, the bootc bootloader
+reconciler requires that second stage and fails when it is missing. With Secure
+Boot disabled and no shim second stage installed it skips and succeeds, and it
+reconciles once a shim installation provides the stage.
+
 After the installed Type #2 UKI is present, resolve the installed BLS `efi=`
 entry and extract its `.pcrpkey` to a private temporary file. Byte-compare the
 extracted key with `pcr_public_key`; refusal is required if the section is
