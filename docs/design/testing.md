@@ -13,12 +13,14 @@ instructions.
 `test/registry.tsv` records whether each test runs in CI (`ci`), is invoked
 by another test (`nested`), is a helper, or remains `unwired`.
 `test/test-registry-test.sh` verifies tracked entries against the workflow
-references. The registry guard itself is `unwired`, so run it locally when
-changing test wiring. New tests should be registered alongside their
-workflow or parent; `unwired` describes a known coverage gap, not a passing
-test. The `validate.yml` shell-lint job discovers scripts by extension and
-shebang. Runtime `/etc` deletion, `RequiredBy=`, publication, sysext and
-profile dependency guards have fixture suites.
+references and runs in `validate.yml`, so a dropped wiring step fails CI.
+New tests should be registered alongside their workflow or parent; `unwired`
+describes a known coverage gap, not a passing test. Three tests remain
+`unwired`: `bootc-migration-test.sh` and `bootc-update-test.sh`, which need
+image references, and `dps-luks-cleanup-test.sh`, which needs root. The
+`validate.yml` shell-lint job discovers scripts by extension and shebang.
+Runtime `/etc` deletion, `RequiredBy=`, publication, sysext and profile
+dependency guards have fixture suites.
 
 `test/no-nbc-test.sh` rejects `frostyard-nbc` in tracked mkosi configs and
 base `nbc-update-download` units; installed-image tier 2 checks the package
