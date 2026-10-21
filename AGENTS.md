@@ -33,7 +33,10 @@ Sysexts overlay `/usr` only: relocate package `/opt` payloads into `/usr` and
 capture only tmpfiles-referenced factory `/etc` values. Shipped runtime units
 must not delete `/etc` paths or self-disable: use a `/var` run-once marker;
 `check-runtime-etc-guard.sh` enforces this. Do not ship `RequiredBy=` or
-`.requires/` enablement (`check-required-by-guard.sh`). Build-time enablement
+`.requires/` enablement (`check-required-by-guard.sh`).
+The Frostyard repository key must be the content of
+`/usr/lib/systemd/import-pubring.pgp`: `systemd-container/forky` overwrites
+the base copy, so `shared/bootc-secure/mkosi.conf` restores it. Build-time enablement
 is normalized into `/usr/share/snosi/enablement-manifest.txt`; presets
 recreate links on true first boot (`/etc/machine-id` is `uninitialized`).
 
