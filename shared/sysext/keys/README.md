@@ -7,6 +7,14 @@ The generic base image ships the repository-only binary OpenPGP keyring from
 repository key `432C452CD2B7F4FF1B5D23264DE6A2016E622F97`, which verifies the
 `SHA256SUMS.gpg` that repogen publishes beside each sysext manifest.
 
+`shared/bootc-secure/mkosi.conf` installs `systemd-container/forky`, whose
+package ships the upstream distro keyring at `import-pubring.pgp` and so
+overwrites the base copy. systemd 262 reads no `/usr/lib` `.gpg` fallback, so
+the secure composition restores the repository keyring at both names after
+package installation. `test/sysext-signature-verification-test.sh` checks the
+configs statically, and `--rootfs` checks each built OCI tree in
+`build-images.yml`. Updex reads `import-pubring.gpg` and was not affected.
+
 Native A/B profiles overlay those paths with `import-pubring.gpg`, a combined
 ring containing the repository key and native OS-update key
 `F37282A35CB6BDFEBFC8FE775A2EAC5C8216FD68`. systemd-sysupdate supports one

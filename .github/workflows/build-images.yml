@@ -211,6 +211,11 @@ jobs:
             --image-version "${{ steps.version.outputs.tag }}" \
             build
 
+      - name: Check sysupdate vendor keyring
+        # systemd-container/forky overwrites the base keyring; the built tree
+        # must still trust the repository signer for sysext transfers.
+        run: sudo ./test/sysext-signature-verification-test.sh --rootfs "output/${{ matrix.profile }}"
+
       - name: Materialize protected bootc signing credentials
         env:
           NATIVE_SECURE_BOOT_KEY: ${{ secrets.NATIVE_SECURE_BOOT_KEY }}
@@ -630,6 +635,11 @@ jobs:
             --dependency=base \
             --image-version "${{ steps.version.outputs.tag }}" \
             build
+
+      - name: Check sysupdate vendor keyring
+        # systemd-container/forky overwrites the base keyring; the built tree
+        # must still trust the repository signer for sysext transfers.
+        run: sudo ./test/sysext-signature-verification-test.sh --rootfs "output/${{ matrix.profile }}"
 
       - name: Package image
         env:
