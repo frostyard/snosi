@@ -36,3 +36,6 @@ jobs:
 
       - name: Validate signed sysext metadata
         run: ./test/sysext-signature-verification-test.sh
+
+      - name: Validate third-party APT source scope
+        run: ./test/third-party-apt-source-scope-test.sh
