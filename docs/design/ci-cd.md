@@ -12,12 +12,15 @@ workflows are documented only in
 
 | Workflow | Inputs and output | Publication boundary |
 | --- | --- | --- |
-| `.github/workflows/build.yml` | Builds base and sysexts, moves artifacts and manifests into publish layout | R2 upload by repogen outside pull requests; PR build has only `contents: read`. This is the canonical mkosi action pin for the Justfile and retained ISO helpers. |
+| `.github/workflows/build.yml` | Builds base and sysexts in two mkosi invocations (himmelblau has its own scoped sandbox tree and `continue-on-error`), then moves artifacts and manifests into publish layout | R2 upload by repogen outside pull requests; PR build has only `contents: read`. This is the canonical mkosi action pin for the Justfile and retained ISO helpers. |
 | `.github/workflows/build-images.yml` | Four bootc OCI profiles (`snow`, `snowfield`, `floe`, `sundog`) | PR mechanics builds use no secrets and do not publish. Protected main-branch builds sign and verify each immutable digest before copying it to `latest`. |
 | `.github/workflows/build-installer-iso.yml` | Firn ISO from the bootc-only catalog | Positive main-push paths, manual or `build` repository dispatch; no PR trigger. Candidate upload, independent public-origin byte and ISO boot checks, protected index promotion and stable-redirect verification. |
 | `.github/workflows/deploy-native-installer-redirect.yml` | Cloudflare Worker for the stable ISO URL | Validates worker/bucket identity and deploys separately from ISO publication. The Worker resolves the signed-index target through its read-only R2 binding; it does not sign the index. |
 
 `build-images.yml` resets mkosi dependencies to `base` in each matrix job.
+Neither OCI workflow passes `--sandbox-tree=shared/himmelblau/sandbox`, so
+himmelblau's third-party APT source never reaches an image build
+([ADR-0020](../adr/0020-scope-third-party-apt-sources.md)).
 Protected assembly obtains signing credentials through transient mode-0600
 runner files. The supplied MOK certificate and derived PCR public key must
 match `shared/native-ab/keys/mok-2026.crt` and

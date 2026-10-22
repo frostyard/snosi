@@ -38,6 +38,7 @@ states intent; the categories below hold the record.
 - [adr/0017-gate-native-ab-and-nbc-disposal.md](adr/0017-gate-native-ab-and-nbc-disposal.md) — **Superseded by ADR-0018:** exact-object disposal gate for published objects
 - [adr/0018-remove-native-ab-and-nbc-lanes.md](adr/0018-remove-native-ab-and-nbc-lanes.md) — bootc-only catalog and profiles; retain ISO and shared keys; Snowfield hardware gate waived, untested
 - [adr/0019-no-build-time-private-keys-in-images.md](adr/0019-no-build-time-private-keys-in-images.md) — build-time private keys (ssl-cert snakeoil, SSH host keys) are removed in finalize and a build guard rejects any that remain
+- [adr/0020-scope-third-party-apt-sources.md](adr/0020-scope-third-party-apt-sources.md) — the himmelblau APT source is scoped to its own build invocation, and a guard rejects new shared third-party sources
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design

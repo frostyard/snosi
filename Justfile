@@ -138,9 +138,13 @@ ensure-mkosi:
 _clean:
     {{mkosi}} clean -ff
 
+# himmelblau's third-party APT source is scoped to shared/himmelblau/sandbox,
+# so it builds in a second invocation (ADR-0020). output/base already exists
+# by then, so mkosi skips it and only the himmelblau sysext is built.
 [private]
 _sysexts: _clean
     {{mkosi}} build
+    {{mkosi}} --dependency= --dependency=base --dependency=himmelblau --sandbox-tree=shared/himmelblau/sandbox build
 
 [private]
 _snow: _clean

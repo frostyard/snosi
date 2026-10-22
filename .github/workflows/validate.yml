@@ -181,6 +181,12 @@ jobs:
         # systemd vendor-keyring names carry the canonical combined trust ring.
         run: ./test/sysext-signature-verification-test.sh
 
+      - name: Validate third-party APT source scope
+        # Static guard: only allowlisted third-party sources live in the shared
+        # mkosi.sandbox; himmelblau's stays scoped to its own build invocation
+        # (ADR-0020), so one down repository cannot fail every build.
+        run: ./test/third-party-apt-source-scope-test.sh
+
       - name: Validate sysext authoring inventory
         # Discover every tracked Overlay=yes image and reject missing manifests,
         # package identity, finalizers, update metadata, or orphan metadata.
