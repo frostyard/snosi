@@ -18,9 +18,10 @@
 # getting QEMU version": the incus deb's bundled
 # /usr/incus/bin/qemu-system-x86_64 (which incusd's wrapper puts first on
 # PATH) needs libepoxy.so.0 directly, libspice-server.so.1 needs libopus.so.0,
-# gtk-vnc/spice-client-gtk need libgstreamer-1.0.so.0, and qemu's ui-gtk.so
-# plus virt-viewer need libgtk-3.so.0. Pinning them here makes another base
-# closure change a build error rather than a silently broken publish.
+# gtk-vnc/spice-client-gtk need libgstreamer-1.0.so.0, and virt-viewer needs
+# libgtk-3.so.0 (so did Debian qemu's ui-gtk.so, dropped in r4). Pinning them
+# here makes another base closure change a build error rather than a silently
+# broken publish.
 /usr/lib/x86_64-linux-gnu/libepoxy.so.0
 /usr/lib/x86_64-linux-gnu/libopus.so.0
 /usr/lib/x86_64-linux-gnu/libgstreamer-1.0.so.0

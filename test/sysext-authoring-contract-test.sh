@@ -60,7 +60,8 @@ validate_inventory() {
         for file in \
             '%D/shared/sysext/finalize/sysext-usr-only.sh' \
             '%D/shared/sysext/finalize/sysext-required-paths.sh' \
-            '%D/shared/sysext/finalize/sysext-strip-icon-cache.sh'; do
+            '%D/shared/sysext/finalize/sysext-strip-icon-cache.sh' \
+            '%D/shared/sysext/finalize/sysext-no-base-owned.sh'; do
             grep -E '^[[:space:]]*FinalizeScripts=' "$config_path" |
                 grep -Fq "$file" ||
                 validation_error "$name: mkosi.conf is missing finalizer $file"
@@ -140,7 +141,7 @@ Overlay=yes
 CompressOutput=zstd
 
 [Content]
-FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh
+FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh,%D/shared/sysext/finalize/sysext-no-base-owned.sh
 
 [Build]
 Environment=KEYPACKAGE=fixture-package
@@ -208,6 +209,11 @@ run_negative_fixture() {
                 "$root/mkosi.images/fixture/mkosi.conf"
             git -C "$root" add mkosi.images/fixture/mkosi.conf
             ;;
+        missing-base-owned-finalizer)
+            sed -i 's#,%D/shared/sysext/finalize/sysext-no-base-owned.sh##' \
+                "$root/mkosi.images/fixture/mkosi.conf"
+            git -C "$root" add mkosi.images/fixture/mkosi.conf
+            ;;
         mismatched-feature)
             sed -i 's/Features=fixture/Features=other/' \
                 "$metadata_dir/sysupdate.fixture.d/fixture.transfer"
@@ -272,6 +278,7 @@ run_negative_fixture empty-required-paths "required-paths.txt has no path entrie
 run_negative_fixture missing-keypackage "exactly one nonempty KEYPACKAGE"
 run_negative_fixture missing-finalizer "sysext-strip-icon-cache.sh"
 run_negative_fixture missing-usr-only-finalizer "sysext-usr-only.sh"
+run_negative_fixture missing-base-owned-finalizer "sysext-no-base-owned.sh"
 run_negative_fixture mismatched-feature "transfer must select Features=fixture"
 run_negative_fixture unsigned-transfer "transfer must set Verify=true"
 run_negative_fixture orphan-metadata "orphan component-scoped sysext metadata"

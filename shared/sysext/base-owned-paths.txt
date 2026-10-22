@@ -1,0 +1,39 @@
+# Paths the BASE image owns that no sysext delta may ship, whatever the
+# sysext was built against (#1011, #1015).
+#
+# Format: one shell glob per line, matched against paths RELATIVE to the
+# delta's /usr (e.g. bin/qemu-system-x86_64). Comments and blank lines
+# ignored. A trailing dir glob (…/*) matches direct children, which is
+# enough to flag the package.
+#
+# A match fails the build (shared/sysext/finalize/sysext-no-base-owned.sh).
+# Every sysext builds against base (directly or through gui-base), so a
+# delta normally omits these; a match means one of:
+#   - the sysext pulled a package from the same family that base does NOT
+#     carry (another emulator, qemu-system-gui/-modules-*, qemu-block-extra),
+#     whose files are built for one exact qemu build and stop loading after
+#     base's next qemu point release;
+#   - apt UPGRADED a base package into the delta (e.g. a newer qemu from
+#     backports), which then overlays every product's copy;
+#   - base stopped shipping the package, so rebuilt deltas carry it again.
+# All three need re-triage, never a pattern removal.
+#
+# The Frostyard incus deb bundles its own qemu, OVMF, swtpm and virtiofsd
+# under /usr/incus; none of these globs match that tree.
+
+# VM runtime: qemu-system-x86, qemu-system-common, qemu-system-data,
+# qemu-utils, ovmf, ipxe-qemu, seabios (mkosi.images/base/mkosi.conf).
+# Emulators, qemu-img/-io/-nbd/-storage-daemon, and the kvm wrapper.
+bin/qemu-*
+bin/kvm
+# qemu-bridge-helper
+lib/qemu/*
+# Loadable modules: version-locked to the exact qemu build that loads them.
+lib/x86_64-linux-gnu/qemu/*
+# BIOS/option ROMs (qemu-system-data, ipxe-qemu), keymaps, and the
+# firmware/*.json descriptors systemd-vmspawn selects UEFI firmware from.
+share/qemu/*
+# UEFI firmware (ovmf ships both spellings) and SeaBIOS.
+share/OVMF/*
+share/ovmf/*
+share/seabios/*
