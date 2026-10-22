@@ -4,3 +4,5 @@
 /usr/lib/systemd/system/nix-daemon.service
 /usr/lib/systemd/system/nix.mount
 /usr/lib/systemd/system/multi-user.target.d/10-nix.conf
+/usr/lib/tmpfiles.d/nix.conf
+/usr/share/factory/etc/nix/nix.conf
