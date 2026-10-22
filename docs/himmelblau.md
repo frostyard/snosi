@@ -16,6 +16,11 @@ packages arrive as a sysext, activation is image-defined, and runtime
 `systemctl enable` is forbidden, so only the configuration step remains. That
 step is `snosi-himmelblau-setup`.
 
+The himmelblau APT source and its key live in `shared/himmelblau/sandbox/`.
+Only the himmelblau build uses them, through a separate mkosi invocation
+with `--sandbox-tree=shared/himmelblau/sandbox` ([ADR-0020](adr/0020-scope-third-party-apt-sources.md)).
+A himmelblau repository outage fails that build alone.
+
 ## What the sysext contains
 
 | Package | Role |

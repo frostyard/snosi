@@ -202,6 +202,36 @@ jobs:
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
           sudo -E mkosi build
+
+      - name: Build himmelblau sysext (scoped third-party source)
+        # himmelblau packages come from a third-party APT repo that only this
+        # image needs, so it builds in its own mkosi invocation with its own
+        # sandbox tree. That keeps the repository metadata sync for that source
+        # out of every other build: an outage of the himmelblau repo must not
+        # stop the other sysexts from being built and published (ADR-0020).
+        # `output/base` already exists, so mkosi skips it here.
+        id: himmelblau
+        continue-on-error: true
+        env:
+          # These are picked up by mkosi.postoutput script
+          CREATED_DATE: ${{ steps.date.outputs.date }}
+          DEFAULT_TAG: ${{ steps.version.outputs.tag }}
+          IMAGE_VERSION: ${{ steps.version.outputs.tag }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_DESC: ${{ env.IMAGE_DESC }}
+          IMAGE_KEYWORDS: ${{ env.IMAGE_KEYWORDS }}
+          IMAGE_LICENSE: ${{ env.IMAGE_LICENSE }}
+          IMAGE_LOGO_URL: ${{ env.IMAGE_LOGO_URL }}
+          # These are automatically available from GitHub context
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          sudo -E mkosi --dependency= --dependency=base --dependency=himmelblau --sandbox-tree=shared/himmelblau/sandbox build
+
+      - name: Collect sysext outputs
+        # Both mkosi invocations write into output/; collect after the second
+        # one so the himmelblau artifact and manifest publish with the rest.
+        run: |
           sudo ./sysextmv.sh
           sudo ./manifestmv.sh
       - name: Publish sysexts to frostyard repo
@@ -236,3 +266,11 @@ jobs:
           r2-bucket: frostyardrepo
           source-dir: output/manifests
           destination-dir: manifests/
+
+      - name: Fail when the himmelblau sysext did not build
+        # Deliberately last: the other sysexts publish first, then this check
+        # still turns the build red so a himmelblau outage stays visible.
+        if: steps.himmelblau.outcome == 'failure'
+        run: |
+          echo "::error::the himmelblau sysext did not build; its APT source (https://packages.himmelblau-idm.org) may be unavailable (ADR-0020)"
+          exit 1
