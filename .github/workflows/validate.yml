@@ -112,6 +112,16 @@ jobs:
         # Ephemeral OpenPGP key, local Range-capable HTTP origin, no R2 writes.
         run: ./test/iso-publication-pipeline-test.sh
 
+      - name: Validate installer redirect verifier
+        # Stubbed curl covers input validation, version ordering and the
+        # published SHA256SUMS comparison. No network or R2 writes.
+        run: ./test/verify-installer-redirect-test.sh
+
+      - name: Validate brew installer retry logic
+        # Root-free, network-free fixture for brew.chroot installer retries
+        # and partial-tree cleanup.
+        run: ./test/brew-installer-retry-test.sh
+
       - name: Validate snosi-etc-diff drift tooling
         # Static, non-root regression test driving the real script against
         # fixture trees via its SNOSI_ETC_DIFF_LIVE_ETC/PRISTINE_ETC test
@@ -157,6 +167,10 @@ jobs:
         # matrices, and Scorecard remains schedule-driven.
         run: ./test/workflow-path-filter-test.sh
 
+      - name: Validate test registry against workflow wiring
+        # Fails closed when a registered test loses its workflow reference.
+        run: ./test/test-registry-test.sh
+
       - name: Validate dependency workflow token fallback
         # Workflow-file pin updates require WORKFLOW_PAT; checksum and chunkah
         # updates must remain publishable through the ordinary job token.
@@ -194,6 +208,16 @@ jobs:
         # required-paths.txt entries. No root, network, or image build.
         run: ./test/sysext-required-paths-test.sh
 
+      - name: Validate sysext postoutput artifact naming
+        # Fixture suite for the mkosi postoutput hook: versioned filenames,
+        # compression extensions and manifest key/version propagation.
+        run: ./test/sysext-postoutput-test.sh
+
+      - name: Validate publication output organizer
+        # Fixture suite for manifestmv.sh and sysextmv.sh, which sort freshly
+        # built artifacts into $OUTPUTDIR subdirectories before upload.
+        run: ./test/output-organizer-test.sh
+
       - name: Validate Lemonade sysext integration
         # Lemonade 11.8 moved its environment template to /etc/default/lemond;
         # exercise the sysext's factory relocation and tmpfiles wiring.
@@ -211,6 +235,16 @@ jobs:
       - name: Validate local mkosi profile dependency check
         # Fixture check for pinned local mkosi use. No root, network, or build.
         run: ./test/check-profile-dependencies-local-mkosi-test.sh
+
+      - name: Validate mkosi pin guard fixtures
+        # Fixture coverage for shared/native-ab/ci/check-mkosi-pin.sh. No
+        # root, network, or mkosi build.
+        run: ./test/check-mkosi-pin-test.sh
+
+      - name: Validate mkosi bootstrap fixtures
+        # Fixture coverage for shared/native-ab/ci/bootstrap-mkosi.sh. No
+        # root, network, or mkosi build.
+        run: ./test/bootstrap-mkosi-test.sh
 
       - name: Validate Sunshine file capabilities
         # PATH-stubbed capability assertion fixture. No root, network, or build.
@@ -363,6 +397,8 @@ jobs:
         run: ./test/bootc-secure-install-test.sh --fixtures
       - name: Validate secure update harness fixtures
         run: ./test/bootc-secure-update-test.sh --fixtures
+      - name: Validate Secure Boot VM helper fixtures
+        run: ./test/secure-vm-fixture-test.sh
       - name: Validate secure rotation harness fixtures
         run: ./test/bootc-secure-rotation-test.sh --fixtures
       - name: Validate remote publication fixtures

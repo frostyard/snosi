@@ -19,9 +19,9 @@
 #      -> catches a stale registry that under-reports live coverage
 #   6. no duplicate entries
 #
-# NOTE: this guard is itself listed as `unwired` in test/registry.tsv -- it has
-# no runner yet, because wiring it needs a .github/workflows/ change. See the
-# Test Registry section of docs/design/testing.md for the exact step to add.
+# NOTE: this guard is itself listed as `ci` in test/registry.tsv and runs from
+# .github/workflows/validate.yml, so check 3 also fails if its own step is
+# dropped. See the Test Registry section of docs/design/testing.md.
 #
 # Hermetic: no network, no root, no image build.
 set -euo pipefail
