@@ -36,8 +36,10 @@ components and features to chairlift/Pilothouse. Keep each component in its
 own definitions directory: systemd-sysupdate version-locks enabled transfers
 sharing a directory. The source uses `Verify=true` with the Frostyard
 repository key installed at both systemd vendor keyring names; the client
-verifies `SHA256SUMS.gpg` before trusting hashes. `test/sysext-signature-verification-test.sh`
-guards this trust path. For the `/usr`-only authoring and service activation
+verifies `SHA256SUMS.gpg` before trusting hashes. The secure bootc composition
+restores that keyring after `systemd-container/forky` overwrites `.pgp`.
+`test/sysext-signature-verification-test.sh` guards this trust path statically
+and, with `--rootfs`, on every built OCI tree. For the `/usr`-only authoring and service activation
 constraints see [sysext design](design/sysexts.md).
 
 Updex `features check --json` and `features update --json` can emit top-level

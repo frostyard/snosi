@@ -7,10 +7,24 @@ readonly SOURCE="${SNOSI_BOOTC_RECONCILE_SOURCE:-/usr/lib/snosi/bootc/systemd-bo
 readonly CERT="${SNOSI_BOOTC_RECONCILE_CERT:-/usr/lib/snosi/mok.crt}"
 readonly RUN_DIR="${SNOSI_BOOTC_RECONCILE_RUN_DIR:-/run/snosi-bootloader-reconcile}"
 readonly ESP_LIBRARY="${SNOSI_ESP_LIBRARY:-/usr/lib/snosi/esp.sh}"
+readonly SECUREBOOT_VAR="${SNOSI_BOOTC_RECONCILE_SECUREBOOT_VAR:-/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c}"
 RECONCILE_TEMP=""
 RECONCILE_BACKUP=""
 
 die() { printf 'snosi-bootc-bootloader-reconcile: %s\n' "$*" >&2; exit 1; }
+
+# Print the UEFI Secure Boot state from efivarfs: 1 is enabled, 0 is disabled.
+# A missing, unreadable, truncated or non-boolean value returns non-zero so the
+# caller can treat an unknown state as enabled (fail closed).
+read_secureboot_state() {
+    local value
+
+    [[ -f "$SECUREBOOT_VAR" && -r "$SECUREBOOT_VAR" ]] || return 1
+    value=$(od -An -t u1 -j4 -N1 "$SECUREBOOT_VAR" 2>/dev/null) || return 1
+    value="${value//[[:space:]]/}"
+    [[ $value == 0 || $value == 1 ]] || return 1
+    printf '%s\n' "$value"
+}
 
 cleanup() {
     set +e
@@ -22,7 +36,7 @@ cleanup() {
 }
 
 main() {
-    local destination_dir destination
+    local destination_dir destination secureboot
     trap cleanup EXIT
 
     [[ -r "$ESP_LIBRARY" ]] || die "ESP support library is missing"
@@ -37,7 +51,17 @@ main() {
 
     destination_dir="$SNOSI_ESP_MOUNTPOINT/EFI/BOOT"
     destination="$destination_dir/grubx64.efi"
-    [[ -d "$destination_dir" && -f "$destination" ]] || die "installed shim second stage is missing"
+    if [[ ! -d "$destination_dir" || ! -f "$destination" ]]; then
+        # An install that boots systemd-boot directly, without shim, has no
+        # second stage to reconcile. Skip only when Secure Boot is definitely
+        # disabled (#928); an enabled or unknown state still fails closed.
+        secureboot=$(read_secureboot_state) || secureboot=unknown
+        if [[ $secureboot == 0 ]]; then
+            printf 'snosi-bootc-bootloader-reconcile: Secure Boot is disabled and no shim second stage is installed; nothing to reconcile\n' >&2
+            exit 0
+        fi
+        die "installed shim second stage is missing"
+    fi
     # The source lives under /usr so an existing /boot ESP mount cannot shadow it.
     if cmp -s "$SOURCE" "$destination"; then
         exit 0

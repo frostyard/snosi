@@ -31,12 +31,15 @@ write_layout() { # path ESP-path [second-ESP-path]
 
 setup_fixture() {
     WORK=$(mktemp -d)
-    mkdir -p "$WORK/bin" "$WORK/root/usr/lib/snosi/bootc" "$WORK/esp/EFI/BOOT" "$WORK/run"
+    mkdir -p "$WORK/bin" "$WORK/root/usr/lib/snosi/bootc" "$WORK/esp/EFI/BOOT" "$WORK/run" "$WORK/efivars"
     printf 'certificate\n' >"$WORK/root/usr/lib/snosi/mok.crt"
     printf 'good-new\n' >"$WORK/root/usr/lib/snosi/bootc/systemd-bootx64.efi"
     printf 'good-old\n' >"$WORK/esp/EFI/BOOT/grubx64.efi"
     printf 'shim\n' >"$WORK/esp/EFI/BOOT/BOOTX64.EFI"
     printf 'mokmanager\n' >"$WORK/esp/EFI/BOOT/mmx64.efi"
+    # Fixture Secure Boot variable: 4 attribute bytes, then the value. The
+    # default is enabled so unrelated tests keep the fail-closed behaviour.
+    printf '\x06\x00\x00\x00\x01' >"$WORK/efivars/SecureBoot"
     write_layout "$WORK/layout.json" /dev/vda3
 
     cat >"$WORK/bin/cryptsetup" <<'EOF'
@@ -101,6 +104,7 @@ run_reconciler() {
     SNOSI_BOOTC_RECONCILE_SOURCE="$WORK/root/usr/lib/snosi/bootc/systemd-bootx64.efi" \
     SNOSI_BOOTC_RECONCILE_CERT="$WORK/root/usr/lib/snosi/mok.crt" \
     SNOSI_BOOTC_RECONCILE_RUN_DIR="$WORK/run" \
+    SNOSI_BOOTC_RECONCILE_SECUREBOOT_VAR="$WORK/efivars/SecureBoot" \
     SNOSI_ESP_LIBRARY="$ESP_LIBRARY" \
     SNOSI_TEST_LAYOUT="$WORK/layout.json" \
     SNOSI_TEST_CERT="$WORK/root/usr/lib/snosi/mok.crt" \
@@ -124,6 +128,17 @@ assert_failure_keeps_stage() { # description
         pass "$1 rejects the invalid state"
     fi
     assert_same "$1 keeps the prior second stage" "$before" "$WORK/esp/EFI/BOOT/grubx64.efi"
+}
+
+assert_missing_stage_fails() { # description
+    local output
+    if output=$(SNOSI_TEST_MOUNTED_ESP=1 run_reconciler 2>&1); then
+        fail "$1 fails closed without a second stage"
+    elif [[ $output == *'installed shim second stage is missing'* ]]; then
+        pass "$1 fails closed without a second stage"
+    else
+        fail "$1 reports the missing second stage"
+    fi
 }
 
 test_noop() {
@@ -261,6 +276,75 @@ test_temporary_mount() {
     cleanup; WORK=""
 }
 
+test_secure_boot_disabled_without_second_stage() {
+    local output
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi"
+    printf '\x06\x00\x00\x00\x00' >"$WORK/efivars/SecureBoot"
+    if output=$(SNOSI_TEST_MOUNTED_ESP=1 run_reconciler 2>&1); then
+        pass "Secure Boot disabled without second stage succeeds"
+    else
+        fail "Secure Boot disabled without second stage succeeds"
+    fi
+    if [[ $output == 'snosi-bootc-bootloader-reconcile: Secure Boot is disabled and no shim second stage is installed; nothing to reconcile' ]]; then
+        pass "Secure Boot disabled without second stage reports one skip line"
+    else
+        fail "Secure Boot disabled without second stage reports one skip line"
+    fi
+    if [[ $(cd "$WORK/esp/EFI/BOOT" && printf '%s\n' * | sort | tr '\n' ' ') == 'BOOTX64.EFI mmx64.efi ' ]]; then
+        pass "Secure Boot disabled skip creates no second stage"
+    else
+        fail "Secure Boot disabled skip creates no second stage"
+    fi
+    if [[ ! -s "$WORK/log" ]]; then pass "Secure Boot disabled skip does not mount or sync"; else fail "Secure Boot disabled skip does not mount or sync"; fi
+    cleanup; WORK=""
+}
+
+test_secure_boot_enabled_without_second_stage() {
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi"
+    printf '\x06\x00\x00\x00\x01' >"$WORK/efivars/SecureBoot"
+    assert_missing_stage_fails "Secure Boot enabled"
+    if [[ ! -e "$WORK/esp/EFI/BOOT/grubx64.efi" ]]; then
+        pass "Secure Boot enabled failure creates no second stage"
+    else
+        fail "Secure Boot enabled failure creates no second stage"
+    fi
+    cleanup; WORK=""
+}
+
+test_unreadable_secure_boot_state() {
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi"
+    rm -f -- "$WORK/efivars/SecureBoot"
+    assert_missing_stage_fails "missing Secure Boot variable"
+    cleanup; WORK=""
+
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi"
+    printf '\x06\x00\x00\x00\x02' >"$WORK/efivars/SecureBoot"
+    assert_missing_stage_fails "non-boolean Secure Boot value"
+    cleanup; WORK=""
+
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi"
+    printf '\x06\x00\x00\x00' >"$WORK/efivars/SecureBoot"
+    assert_missing_stage_fails "truncated Secure Boot variable"
+    cleanup; WORK=""
+}
+
+test_secure_boot_disabled_with_second_stage() {
+    setup_fixture
+    printf '\x06\x00\x00\x00\x00' >"$WORK/efivars/SecureBoot"
+    if SNOSI_TEST_MOUNTED_ESP=1 run_reconciler; then
+        pass "Secure Boot disabled still reconciles an installed second stage"
+    else
+        fail "Secure Boot disabled still reconciles an installed second stage"
+    fi
+    assert_same "Secure Boot disabled installs the immutable source" "$WORK/root/usr/lib/snosi/bootc/systemd-bootx64.efi" "$WORK/esp/EFI/BOOT/grubx64.efi"
+    cleanup; WORK=""
+}
+
 [[ -x "$RECONCILER" ]] || { echo "not ok - reconciler is not implemented yet" >&2; exit 1; }
 test_noop
 test_valid_update
@@ -275,6 +359,10 @@ test_failed_durability_sync
 test_rollback
 test_missing_or_ambiguous_esp
 test_temporary_mount
+test_secure_boot_disabled_without_second_stage
+test_secure_boot_enabled_without_second_stage
+test_unreadable_secure_boot_state
+test_secure_boot_disabled_with_second_stage
 
 [[ $FAIL -eq 0 ]] || exit 1
 printf 'bootloader reconciliation fixtures passed (%d assertions)\n' "$PASS"

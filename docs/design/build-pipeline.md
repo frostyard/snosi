@@ -59,6 +59,16 @@ Image builds have four phases, in order:
    source; sysext postoutput scripts derive versioned names. `sysextmv.sh`
    and `manifestmv.sh` arrange CI publication output.
 
+The sysext build is two mkosi invocations (`just sysexts`, and the "Build
+main and sysexts" plus "Build himmelblau sysext" steps of `build.yml`). The
+first builds `base`, `gui-base` and every root `Dependencies=` sysext. The
+second runs with `--dependency= --dependency=base --dependency=himmelblau
+--sandbox-tree=shared/himmelblau/sandbox`: mkosi reuses the existing
+`output/base`, and only the himmelblau APT source reaches that sandbox.
+`SandboxTrees=` is universal, so a source in `mkosi.sandbox/` would apply to
+every image of every invocation ([ADR-0020](../adr/0020-scope-third-party-apt-sources.md)).
+Outputs of both invocations are collected after the second one.
+
 The base includes `pciutils`/`usbutils` and NFS account sysusers definitions
 for `_rpc` and `statd`. `test/nfs-system-accounts-test.sh` verifies fresh
 and existing account/state handling. Sysext factory `/etc` captures must

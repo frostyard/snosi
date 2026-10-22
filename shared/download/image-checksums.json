@@ -5,9 +5,9 @@
     "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
   },
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/7a3f48c7e498/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/be041513824f/install.sh",
     "sha256": "5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148",
-    "version": "7a3f48c7e498"
+    "version": "be041513824f"
   },
   "hotedge": {
     "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/8869f0923582404def36f756c1a19fa8bdd3d7cf",
@@ -20,9 +20,9 @@
     "version": "b11e1c5fc1d941537387b619515ceaa423e923b5"
   },
   "bazaar": {
-    "url": "https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/3bb9134985343ffd1993520eb37c90e113bfb09b",
-    "sha256": "b779610b06e1ac58af6193f515f637d3846eae67d3fb36f4af71b2e05fb05869",
-    "version": "3bb9134985343ffd1993520eb37c90e113bfb09b"
+    "url": "https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/551ab812fda96e76fecc29a06f2adc993dd4e041",
+    "sha256": "1c5260b146fdb9175ab1659dec29d8f16b2914df6718c9a85f6d501ab491b743",
+    "version": "551ab812fda96e76fecc29a06f2adc993dd4e041"
   },
   "cosign-installer": {
     "url": "https://github.com/sigstore/cosign/releases/download/v2.6.2/cosign-linux-amd64",
