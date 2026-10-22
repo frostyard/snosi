@@ -142,7 +142,7 @@ jobs:
             "rclone:r2:${{ secrets.NATIVE_R2_BUCKET }}"
 
       - name: Upload prepared publication metadata
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-prepared-iso
           path: |
@@ -215,7 +215,7 @@ jobs:
 
       - name: Upload smoke console log
         if: always() && steps.smoke.outcome == 'failure'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-smoke-console-iso
           path: /var/tmp/smoke-console.log
@@ -230,7 +230,7 @@ jobs:
 
       - name: Upload verified marker
         if: steps.verify.outcome == 'success' && steps.smoke.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-verified-iso
           path: /var/tmp/native-verified/iso
@@ -356,7 +356,7 @@ jobs:
 
       - name: Upload promoted marker
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-promoted-iso
           path: /var/tmp/native-promoted/iso
