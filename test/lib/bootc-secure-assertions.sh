@@ -1,6 +1,9 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Assertions shared by the bootc secure install and update harnesses.
+# Assertions shared by the bootc secure install, update and rotation harnesses
+# and by the two bootc secure publication helpers
+# (shared/bootc-secure/ci/verify-published-image.sh and
+# shared/bootc-secure/ci/promote-published-image.sh).
 #
 # These existed as independent copies in both harnesses, and three of the four
 # had drifted. One drift was semantic and load-bearing: type2_only accepted only
@@ -9,9 +12,46 @@
 # property against the same system and passed.
 #
 # That is the sixth defect in this subsystem caused by a fix landing in one of
-# two sibling harnesses. One copy now, sourced by both.
+# two sibling harnesses. One copy now, sourced by every consumer.
 #
-# Requires vm_ssh from test/lib/ssh.sh.
+# The secure bootc profile and OCI reference grammar moved here for the same
+# reason. Keep this file free of side effects when it is sourced: no shell
+# options and nothing at top level except variable assignments and function
+# definitions.
+#
+# esp_cat requires vm_ssh from test/lib/ssh.sh; nothing else here does.
+
+
+# --- Secure bootc profile and OCI reference grammar -------------------------
+#
+# There are two profile sets, on purpose. A secure VM lane needs a bootable
+# secure image under test; sundog publishes a secure OCI image but has no secure
+# VM lane, so publication accepts one profile more than the lanes do. The test
+# digest refs accept any hex digit; publication accepts lowercase hex only,
+# because that is what the registry digest grammar allows.
+BOOTC_SECURE_LANE_PROFILES='floe|snow|snowfield'
+BOOTC_SECURE_PUBLISHED_PROFILES='floe|snow|snowfield|sundog'
+
+valid_profile() { # profile; exact match of the whole string.
+    local re='^('"$BOOTC_SECURE_LANE_PROFILES"')$'
+    [[ $1 =~ $re ]]
+}
+valid_digest_ref() { # ghcr.io/frostyard/<lane-profile>@sha256:<64 hex>
+    local re='^ghcr\.io/frostyard/('"$BOOTC_SECURE_LANE_PROFILES"')@sha256:[[:xdigit:]]{64}$'
+    [[ $1 =~ $re ]]
+}
+valid_tracking_ref() { # ghcr.io/frostyard/<lane-profile>:<tracking-tag>
+    local re='^ghcr\.io/frostyard/('"$BOOTC_SECURE_LANE_PROFILES"'):[a-zA-Z0-9][a-zA-Z0-9._-]*$'
+    [[ $1 =~ $re ]]
+}
+valid_published_image() { # ghcr.io/frostyard/<published-profile>
+    local re='^ghcr\.io/frostyard/('"$BOOTC_SECURE_PUBLISHED_PROFILES"')$'
+    [[ $1 =~ $re ]]
+}
+valid_published_digest() { # sha256:<64 lowercase hex>
+    local re='^sha256:[a-f0-9]{64}$'
+    [[ $1 =~ $re ]]
+}
 
 
 # bootc mounts /boot only while it is using it, and leaves it unmounted

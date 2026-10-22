@@ -250,6 +250,47 @@ done
 # bootc writes `uki`; requiring `efi` alone rejects every genuine install.
 grep -Fq '(uki|efi)' "$lib"
 
+# The profile and OCI-reference grammar has one home too: the same library.
+# The two profile sets are deliberate. The secure VM lanes cover floe, snow and
+# snowfield; publication also accepts sundog, which publishes a secure OCI image
+# but has no secure VM lane. The lane digest refs accept any hex digit, while a
+# published digest is lowercase hex only.
+for validator in valid_profile valid_digest_ref valid_tracking_ref \
+                 valid_published_image valid_published_digest; do
+    count=$(grep -Ec "^${validator}\(\)" "$lib")
+    [[ $count -eq 1 ]] || {
+        echo "$lib must define ${validator} exactly once (found $count)" >&2
+        exit 1
+    }
+done
+
+for consumer in "$root/test/bootc-secure-install-test.sh" \
+                "$root/test/bootc-secure-update-test.sh" \
+                "$root/test/bootc-secure-rotation-test.sh" \
+                "$root/shared/bootc-secure/ci/verify-published-image.sh" \
+                "$root/shared/bootc-secure/ci/promote-published-image.sh"; do
+    grep -Fq 'test/lib/bootc-secure-assertions.sh' "$consumer" || {
+        echo "${consumer#"$root/"} must source the shared assertions library" >&2
+        exit 1
+    }
+    for validator in valid_profile validate_profile valid_oci_ref valid_digest_ref \
+                     valid_tracking_ref valid_published_image valid_published_digest; do
+        if grep -Eq "^${validator}\(\)" "$consumer"; then
+            echo "${consumer#"$root/"} redefines ${validator}; it belongs to the shared library" >&2
+            exit 1
+        fi
+    done
+    # A product alternation in code means a copy of the grammar is back.
+    # Comments are stripped first; the install harness prints
+    # PROFILE=floe|snow|snowfield in a usage message, which has no parentheses
+    # and must stay.
+    if sed 's/#.*//' "$consumer" | grep -Eq '\(floe\|snow|frostyard/\('; then
+        echo "${consumer#"$root/"} carries a product alternation; use the shared validators" >&2
+        sed 's/#.*//' "$consumer" | grep -nE '\(floe\|snow|frostyard/\(' >&2
+        exit 1
+    fi
+done
+
 # No guest command in these harnesses may reach into /boot. bootc mounts it only
 # while it is using it, so every /boot path reports absent on a HEALTHY system:
 # it produced "BLS entries are not Type #2-only" on one run and "no UKI at the
