@@ -28,8 +28,9 @@ settings use `mkosi.sandbox/`. Network retry/timeouts need both trees.
 Image builds have four phases, in order:
 
 1. **BuildScripts:** `shared/scripts/build/brew.chroot` installs Homebrew;
-   Snow/Snowfield also run verified Hotedge, Logomenu, Bazaar Companion and
-   Surface certificate downloads through `shared/snow/scripts/build/`.
+   Snow/Snowfield also run verified Hotedge, Logomenu and Bazaar Companion
+   downloads through `shared/snow/scripts/build/`. Build scripts must write
+   image content under `$DESTDIR`: mkosi discards the build overlay.
    Downloads use `shared/download/verified-download.sh` and pinned SHA-256
    metadata, not unchecked network content. Frostyard's `bootc` and
    `libostree-1-1` arrive as debs from the configured APT source, not an

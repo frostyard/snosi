@@ -471,16 +471,6 @@ jobs:
             echo "brew_commit=$LATEST_BREW" >> $GITHUB_OUTPUT
           fi
 
-          # Check Surface cert (less frequent changes)
-          CURRENT_SURF=$(jq -r '.["surface-cert"].version' "$CHECKSUMS")
-          LATEST_SURF=$(gh_api "https://api.github.com/repos/linux-surface/linux-surface/commits?path=pkg/keys/surface.cer" | jq -r '.[0].sha' | head -c 12)
-          CURRENT_SURF_SHORT=$(echo "$CURRENT_SURF" | head -c 12)
-          if [[ -n "$LATEST_SURF" && "$LATEST_SURF" != "null" && "$LATEST_SURF" != "$CURRENT_SURF_SHORT" ]]; then
-            UPDATES="${UPDATES}surface-cert: $CURRENT_SURF_SHORT -> $LATEST_SURF\n"
-            echo "surface_update=true" >> $GITHUB_OUTPUT
-            echo "surface_commit=$LATEST_SURF" >> $GITHUB_OUTPUT
-          fi
-
           # Check hotedge
           CURRENT_HE=$(jq -r '.hotedge.version' "$CHECKSUMS")
           LATEST_HE=$(gh_api https://api.github.com/repos/frostyard/hotedge/commits/HEAD | jq -r '.sha')
@@ -578,8 +568,6 @@ jobs:
         env:
           BREW_UPDATE: ${{ steps.check.outputs.brew_update }}
           BREW_COMMIT: ${{ steps.check.outputs.brew_commit }}
-          SURFACE_UPDATE: ${{ steps.check.outputs.surface_update }}
-          SURFACE_COMMIT: ${{ steps.check.outputs.surface_commit }}
           HOTEDGE_UPDATE: ${{ steps.check.outputs.hotedge_update }}
           HOTEDGE_COMMIT: ${{ steps.check.outputs.hotedge_commit }}
           LOGOMENU_UPDATE: ${{ steps.check.outputs.logomenu_update }}
@@ -622,18 +610,6 @@ jobs:
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
             jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
               '.["brew-install"].url=$u | .["brew-install"].sha256=$s | .["brew-install"].version=$v' \
-              "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
-            rm -f "$TMP"
-          fi
-
-          if [[ "$SURFACE_UPDATE" == "true" ]]; then
-            COMMIT="$SURFACE_COMMIT"
-            URL="https://github.com/linux-surface/linux-surface/raw/${COMMIT}/pkg/keys/surface.cer"
-            TMP=$(mktemp)
-            curl -fsSL --max-time 120 -o "$TMP" "$URL"
-            SHA=$(sha256sum "$TMP" | cut -d' ' -f1)
-            jq --arg u "$URL" --arg s "$SHA" --arg v "$COMMIT" \
-              '.["surface-cert"].url=$u | .["surface-cert"].sha256=$s | .["surface-cert"].version=$v' \
               "$CHECKSUMS" > tmp.json && mv tmp.json "$CHECKSUMS"
             rm -f "$TMP"
           fi
