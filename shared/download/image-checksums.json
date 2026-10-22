@@ -1,9 +1,4 @@
 {
-  "surface-cert": {
-    "url": "https://github.com/linux-surface/linux-surface/raw/d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a/pkg/keys/surface.cer",
-    "sha256": "081202cf3ea30519046bbb9faf5dafe24c3fdf56b79afea62778f24913ab6d64",
-    "version": "d8887bc8ce14a47d5b9d45f6697f05d53e43fe9a"
-  },
   "brew-install": {
     "url": "https://raw.githubusercontent.com/Homebrew/install/be041513824f/install.sh",
     "sha256": "5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148",
