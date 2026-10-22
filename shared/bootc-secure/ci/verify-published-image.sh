@@ -6,6 +6,8 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 POLICY="$ROOT_DIR/shared/bootc-secure/tree/etc/containers/policy.json"
 REGISTRIES="$ROOT_DIR/shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml"
+# shellcheck source=test/lib/bootc-secure-assertions.sh
+source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
 # shellcheck source=shared/bootc-secure/compatibility.sh
 source "$ROOT_DIR/shared/bootc-secure/compatibility.sh"
 snosi_bootc_secure_load_compatibility \
@@ -31,14 +33,14 @@ if [[ ${AUTH_FILE##*/} != config.json ]]; then
     exit 2
 fi
 
-if [[ ! $IMAGE =~ ^ghcr\.io/frostyard/(floe|snow|snowfield|sundog)$ ]]; then
+if ! valid_published_image "$IMAGE"; then
     printf 'invalid secure image reference\n' >&2
     exit 2
 fi
 
-IMAGE_NAME=${BASH_REMATCH[1]}
+IMAGE_NAME=${IMAGE##*/}
 if [[ ! $VERSION_TAG =~ ^[0-9]{14}$ ]] ||
-        [[ ! $EXPECTED_DIGEST =~ ^sha256:[a-f0-9]{64}$ ]]; then
+        ! valid_published_digest "$EXPECTED_DIGEST"; then
     printf 'invalid secure image reference\n' >&2
     exit 2
 fi

@@ -39,8 +39,6 @@ fail() { printf 'not ok - %s\n' "$1" >&2; FAIL=$((FAIL + 1)); }
 assert_true() { local description=$1; shift; if "$@"; then pass "$description"; else fail "$description"; fi; }
 assert_false() { local description=$1; shift; if "$@"; then fail "$description"; else pass "$description"; fi; }
 
-validate_profile() { [[ $1 == floe || $1 == snow || $1 == snowfield ]]; }
-valid_oci_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(floe|snow|snowfield)@sha256:[[:xdigit:]]{64}$ ]]; }
 valid_recovery_key() { [[ -f $1 && $(stat -c '%a' "$1") == 600 && -s $1 ]]; }
 disk_is_raw() { # block devices are raw by construction; regular files must be raw qemu images.
     [[ -b $1 ]] && return 0
@@ -73,7 +71,6 @@ run_marked_runner() { # runner expected-marker args...
     runner_output_has_marker "$RUNNER_OUTPUT" "$marker" || { printf '%s\n' "$RUNNER_OUTPUT" >&2; return 1; }
 }
 tpm_token_identity() { jq -c '[.tokens | to_entries[] | select(.value.type == "systemd-tpm2") | .value] | if length == 1 then .[0] else empty end' | sha256sum | cut -d' ' -f1; }
-valid_tracking_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(floe|snow|snowfield):[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; }
 recovery_state_is_ready() { # manifest
     [[ -f $1 && $(stat -c '%a' "$1") == 600 ]] && jq -e '
         .schema == 1 and
@@ -110,9 +107,9 @@ write_install_state() { # state-path workdir recovery-key ssh-private-key recipe
 
 require_live_inputs() {
     local missing=() command
-    validate_profile "$PROFILE" || missing+=("PROFILE=floe|snow|snowfield")
+    valid_profile "$PROFILE" || missing+=("PROFILE=floe|snow|snowfield")
     [[ -f $DAKOTA_ISO ]] || missing+=("DAKOTA_ISO=<fresh secure Dakota ISO>")
-    valid_oci_ref "$OCI_REF" && [[ $OCI_REF == "ghcr.io/frostyard/$PROFILE@"* ]] || missing+=("OCI_REF=ghcr.io/frostyard/$PROFILE@sha256:<digest>")
+    valid_digest_ref "$OCI_REF" && [[ $OCI_REF == "ghcr.io/frostyard/$PROFILE@"* ]] || missing+=("OCI_REF=ghcr.io/frostyard/$PROFILE@sha256:<digest>")
     [[ -f $MOK_CERT ]] || missing+=("MOK_CERT")
     [[ -f $PCR_PUBLIC ]] || missing+=("PCR_PUBLIC")
     valid_recovery_key "$RECOVERY_KEY" || missing+=("RECOVERY_KEY (regular, nonempty, mode 0600)")
@@ -152,12 +149,12 @@ run_fixtures() {
     local work entries output
     work=$(mktemp -d)
     trap 'rm -rf "$work"' RETURN
-    assert_true 'floe is a supported profile' validate_profile floe
-    assert_true 'snow is a supported profile' validate_profile snow
-    assert_true 'snowfield is a supported profile' validate_profile snowfield
-    assert_false 'unknown profiles are rejected' validate_profile invalid
-    assert_true 'immutable matching OCI reference is accepted' valid_oci_ref "ghcr.io/frostyard/floe@sha256:$(printf 'a%.0s' {1..64})"
-    assert_false 'tags and wrong repositories are rejected' valid_oci_ref 'ghcr.io/frostyard/floe:latest'
+    assert_true 'floe is a supported profile' valid_profile floe
+    assert_true 'snow is a supported profile' valid_profile snow
+    assert_true 'snowfield is a supported profile' valid_profile snowfield
+    assert_false 'unknown profiles are rejected' valid_profile invalid
+    assert_true 'immutable matching OCI reference is accepted' valid_digest_ref "ghcr.io/frostyard/floe@sha256:$(printf 'a%.0s' {1..64})"
+    assert_false 'tags and wrong repositories are rejected' valid_digest_ref 'ghcr.io/frostyard/floe:latest'
     printf key >"$work/recovery"; chmod 600 "$work/recovery"
     printf mok >"$work/mok.crt"; printf pcr >"$work/pcr.pub"; : >"$work/disk"
     OCI_REF="ghcr.io/frostyard/floe@sha256:$(printf 'e%.0s' {1..64})"

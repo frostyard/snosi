@@ -11,6 +11,10 @@ fail() { printf 'not ok - %s\n' "$1" >&2; FAIL=$((FAIL + 1)); }
 assert_true() { local description=$1; shift; if "$@"; then pass "$description"; else fail "$description"; fi; }
 assert_false() { local description=$1; shift; if "$@"; then fail "$description"; else pass "$description"; fi; }
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=test/lib/bootc-secure-assertions.sh
+source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
+
 rotation_phase() {
     case $1 in
         old-only|dual-pcr|new-pcr|mok-overlap|new-mok|old-trust-removed) return 0 ;;
@@ -24,7 +28,6 @@ phase_marker() {
 
 marker_is_exact() { [[ $1 == "$2" ]]; }
 mode_0600() { [[ -f $1 && $(stat -c '%a' "$1") == 600 ]]; }
-valid_digest_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(floe|snow|snowfield)@sha256:[[:xdigit:]]{64}$ ]]; }
 state_value() { jq -er --arg key "$2" '.[$key]' "$1"; }
 
 install_state_is_safe() { # Task 9 install-state manifest

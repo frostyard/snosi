@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 set -euo pipefail
 
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+# shellcheck source=test/lib/bootc-secure-assertions.sh
+source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
+
 if [[ $# -ne 3 ]]; then
     printf 'usage: %s IMAGE EXPECTED_DIGEST AUTH_FILE\n' "${0##*/}" >&2
     exit 2
@@ -11,8 +15,8 @@ IMAGE=$1
 EXPECTED_DIGEST=$2
 AUTH_FILE=$3
 
-if [[ ! $IMAGE =~ ^ghcr\.io/frostyard/(floe|snow|snowfield|sundog)$ ]] ||
-        [[ ! $EXPECTED_DIGEST =~ ^sha256:[a-f0-9]{64}$ ]]; then
+if ! valid_published_image "$IMAGE" ||
+        ! valid_published_digest "$EXPECTED_DIGEST"; then
     printf 'invalid secure image reference\n' >&2
     exit 2
 fi

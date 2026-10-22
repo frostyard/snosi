@@ -33,9 +33,6 @@ source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
 WORK=""
 QEMU_PID=""
 
-valid_profile() { [[ $1 == floe || $1 == snow || $1 == snowfield ]]; }
-valid_digest_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(floe|snow|snowfield)@sha256:[[:xdigit:]]{64}$ ]]; }
-valid_tracking_ref() { [[ $1 =~ ^ghcr\.io/frostyard/(floe|snow|snowfield):[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; }
 valid_image_version() { [[ $1 =~ ^[0-9]{14}$ ]]; }
 valid_publish_slot() { [[ $1 == N+1 || $1 == N+2 ]]; }
 mode_0600() { [[ -f $1 && $(stat -c '%a' "$1") == 600 ]]; }
