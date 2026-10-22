@@ -1,0 +1,30 @@
+# Agent (worker-node) counterpart of k3s.service. Inert until the admin
+# creates /etc/default/k3s-agent with at least K3S_URL= and K3S_TOKEN=
+# (K3S_TOKEN_FILE= also works) — the same file's existence stops
+# k3s.service, so writing it is the single switch that turns this node
+# from a standalone server into an agent joining an existing cluster.
+[Unit]
+Description=Lightweight Kubernetes (k3s agent)
+Documentation=https://docs.k3s.io
+Wants=network-online.target
+After=network-online.target
+ConditionFileNotEmpty=/etc/default/k3s-agent
+
+[Service]
+Type=notify
+EnvironmentFile=-/etc/default/k3s-agent
+KillMode=process
+Delegate=yes
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+TimeoutStartSec=0
+Restart=always
+RestartSec=5s
+ExecStartPre=-/sbin/modprobe br_netfilter
+ExecStartPre=-/sbin/modprobe overlay
+ExecStart=/usr/bin/k3s agent
+
+[Install]
+WantedBy=multi-user.target

@@ -19,7 +19,7 @@ describes a known coverage gap, not a passing test. Three tests remain
 `unwired`: `bootc-migration-test.sh` and `bootc-update-test.sh`, which need
 image references, and `dps-luks-cleanup-test.sh`, which needs root. The
 `validate.yml` shell-lint job discovers scripts by extension and shebang.
-Runtime `/etc` deletion, `RequiredBy=`, publication, sysext and profile
+Runtime `/etc` deletion, `RequiredBy=`, `Upholds=`, publication, sysext and profile
 dependency guards have fixture suites.
 
 `test/no-nbc-test.sh` rejects `frostyard-nbc` in tracked mkosi configs and

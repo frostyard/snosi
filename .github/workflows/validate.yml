@@ -308,6 +308,9 @@ jobs:
       - name: Test RequiredBy guard
         run: ./test/required-by-guard-test.sh
 
+      - name: Test Upholds guard
+        run: ./test/upholds-guard-test.sh
+
       - name: Test geoclue account provisioning
         run: sudo python3 ./test/geoclue-state-scope-test.py
 
@@ -356,6 +359,11 @@ jobs:
         # target" (2026-08-12, snow-linux-live-setup.service). See
         # docs/adr/0013 and frostyard/core ADR-0030.
         run: ./check-required-by-guard.sh
+
+      - name: Forbid Upholds= of condition-gated units
+        # systemd retries an upheld unit whose Condition fails, forever
+        # (snosi#1100). Uphold a RemainAfterExit oneshot that Wants= it.
+        run: ./check-upholds-guard.sh
 
   bootc-secure-contracts:
     runs-on: ubuntu-latest
