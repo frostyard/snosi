@@ -1,7 +1,7 @@
 # 0019 — Ship no build-time private keys in images
 
-- **Status:** Proposed
-- **Date:** 2026-10-13
+- **Status:** Accepted
+- **Date:** 2026-10-23
 
 ## Context
 
