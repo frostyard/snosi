@@ -10,7 +10,8 @@
 /usr/lib/systemd/system-preset/40-coder.preset
 /usr/lib/systemd/system/multi-user.target.d/10-coder.conf
 /usr/lib/systemd/system/coder-sysext-setup.service
-# Gate coder.service on a set CODER_ACCESS_URL: the deb's coder.env template is
-# non-empty, so ConditionFileNotEmpty= never kept the unit inert (snosi#1117)
+# Gate coder.service on a set CODER_ACCESS_URL and a bind address: the deb's
+# coder.env template is non-empty, so ConditionFileNotEmpty= never kept the unit
+# inert (snosi#1117, snosi#1120)
 /usr/lib/coder-sysext/coder-configured
 /usr/lib/systemd/system/coder.service.d/10-snosi-configured.conf
