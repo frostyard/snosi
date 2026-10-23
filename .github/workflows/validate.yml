@@ -311,6 +311,9 @@ jobs:
       - name: Test Upholds guard
         run: ./test/upholds-guard-test.sh
 
+      - name: Test sysext Upholds guard
+        run: ./test/sysext-upholds-guard-test.sh
+
       - name: Test geoclue account provisioning
         run: sudo python3 ./test/geoclue-state-scope-test.py
 

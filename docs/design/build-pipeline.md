@@ -48,7 +48,10 @@ Image builds have four phases, in order:
    `shared/security/no-private-keys.finalize` then fails the build if any
    build-time private key remains ([ADR-0019](../adr/0019-no-build-time-private-keys-in-images.md));
    sysexts run it on `/usr` and `/opt` through
-   `shared/sysext/finalize/sysext-no-private-keys.sh`.
+   `shared/sysext/finalize/sysext-no-private-keys.sh`. Every sysext also runs
+   `shared/sysext/finalize/sysext-upholds-guard.sh`, which fails an
+   `Upholds=` of a condition-gated unit (delta, then the base tree from
+   `$MKOSI_CONFIG`; snosi#1113).
    `shared/composition/var-audit.finalize` audits per-product `/var` outcome
    maps and rejects unclassified or stale entries.
    `shared/composition/core-flatpaks.finalize` ships the product's

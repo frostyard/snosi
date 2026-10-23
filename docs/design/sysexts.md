@@ -66,7 +66,7 @@ Format=sysext
 Bootable=no
 BaseTrees=%O/base
 PostOutputScripts=%D/shared/sysext/postoutput/sysext-postoutput.sh
-FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh,%D/shared/sysext/finalize/sysext-no-base-owned.sh
+FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh,%D/shared/sysext/finalize/sysext-no-base-owned.sh,%D/shared/sysext/finalize/sysext-upholds-guard.sh
 
 Packages=<package-list>
 
@@ -505,7 +505,9 @@ Example path inside the sysext: `usr/lib/systemd/system/multi-user.target.d/10-t
 
 **Never uphold a unit that has a `Condition*=`.** systemd retries an upheld unit whose condition fails, forever (snosi#1100: k3s logged 93,566 journal lines on one host). Uphold a `Type=oneshot` + `RemainAfterExit=yes` unit that `Wants=` the gated unit instead (`himmelblau-sysext-setup.service`, `k3s-sysext-setup.service`): a `Wants=` pull is a single clean skip.
 
-`check-upholds-guard.sh` enforces this in CI (`validate.yml`). For each `Upholds=` target defined in a payload tree, if the unit or one of its `.d/*.conf` drop-ins has a `Condition*=` line, the target must resolve (last assignment wins; main unit, then drop-ins in name order) to `Type=oneshot` and `RemainAfterExit=yes`. Units shipped only by packages are skipped. Fixture suite: `test/upholds-guard-test.sh`.
+`check-upholds-guard.sh` enforces this in CI (`validate.yml`). For each `Upholds=` target defined in a payload tree, if the unit or one of its `.d/*.conf` drop-ins has a `Condition*=` line, the target must resolve (last assignment wins; main unit, then drop-ins in name order) to `Type=oneshot` and `RemainAfterExit=yes`. Units shipped only by packages are skipped: this guard covers repo-defined units. Fixture suite: `test/upholds-guard-test.sh`.
+
+**Build-time delta check (#1113).** `shared/sysext/finalize/sysext-upholds-guard.sh`, wired into every sysext's `FinalizeScripts=`, covers the package-shipped units. It reads every `Upholds=` in the delta's `usr/lib/systemd/system/*.target.d/*.conf` and resolves each target in the delta first, then in the base tree (an instance through its template; an alias symlink by its target name, 8 hops at most), with drop-ins from both trees (the delta file wins for the same basename; main unit first, then drop-ins in name order). The same rule applies: a conditioned target must be a `Type=oneshot` + `RemainAfterExit=yes` unit. A target that resolves to no unit file and no drop-in (a typo) fails, and so does one masked with a `/dev/null` symlink. The base tree comes from `$MKOSI_CONFIG` (the first `BaseTrees=` entry, mapped under `$SRCDIR` through the `BuildSources=` entry without a target; fallback `$SRCDIR/output/base`), not from `$BUILDROOT`: mkosi runs FinalizeScripts after it unmounts the base overlay, so `$BUILDROOT` holds only the delta, and mkosi has already removed from the delta every `/usr` file the base also ships. A missing base tree fails the build. The `# upholds-guard-allow:` escape below works the same way. Fixture suite: `test/sysext-upholds-guard-test.sh`.
 
 Escape hatch: put `# upholds-guard-allow: <reason>` on its own line immediately above the `Condition*=` line, only when the condition can never fail on an installed system. A trailing inline comment does not work: systemd has no inline comments and it would corrupt the value.
 
@@ -953,7 +955,7 @@ finalizer for any new sysext.
 
 1. Create `mkosi.images/<name>/mkosi.conf` following the pattern above
 2. Set `KEYPACKAGE` to the primary package name
-3. Wire `sysext-usr-only.sh`, `sysext-required-paths.sh`, `sysext-strip-icon-cache.sh`, and `sysext-no-base-owned.sh` through `FinalizeScripts=`, then create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in); the shared checks fail the build on `/opt` payload or a missing manifest path
+3. Wire `sysext-usr-only.sh`, `sysext-required-paths.sh`, `sysext-strip-icon-cache.sh`, `sysext-no-base-owned.sh`, and `sysext-upholds-guard.sh` through `FinalizeScripts=`, then create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in); the shared checks fail the build on `/opt` payload or a missing manifest path
 4. Add any extra files in `mkosi.images/<name>/mkosi.extra/`
 5. If configs needed in `/etc`: create `mkosi.finalize` to capture ONLY the needed paths to `/usr/share/factory/etc/` (never all of `/etc` — see Constraints), add tmpfiles.d rules
 6. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/` (its own component directory — do not add to the shared `sysupdate.d/`)
