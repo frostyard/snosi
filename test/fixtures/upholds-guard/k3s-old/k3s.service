@@ -1,0 +1,32 @@
+# Adapted from the unit the upstream k3s installer generates, with the
+# binary at /usr/bin/k3s (sysexts ship only /usr) and snosi's declarative
+# role selection: this node runs as a server unless the admin creates
+# /etc/default/k3s-agent, which hands the node to k3s-agent.service instead
+# (see 40-k3s.preset). Server configuration goes in the natively-read
+# /etc/rancher/k3s/config.yaml or /etc/default/k3s (both persist in the
+# /etc overlay); state lives under /var/lib/rancher.
+[Unit]
+Description=Lightweight Kubernetes (k3s server)
+Documentation=https://docs.k3s.io
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=!/etc/default/k3s-agent
+
+[Service]
+Type=notify
+EnvironmentFile=-/etc/default/k3s
+KillMode=process
+Delegate=yes
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+TimeoutStartSec=0
+Restart=always
+RestartSec=5s
+ExecStartPre=-/sbin/modprobe br_netfilter
+ExecStartPre=-/sbin/modprobe overlay
+ExecStart=/usr/bin/k3s server
+
+[Install]
+WantedBy=multi-user.target

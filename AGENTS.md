@@ -38,7 +38,8 @@ Sysexts overlay `/usr` only: relocate package `/opt` payloads into `/usr` and
 capture only tmpfiles-referenced factory `/etc` values. Shipped runtime units
 must not delete `/etc` paths or self-disable: use a `/var` run-once marker;
 `check-runtime-etc-guard.sh` enforces this. Do not ship `RequiredBy=` or
-`.requires/` enablement (`check-required-by-guard.sh`).
+`.requires/` enablement (`check-required-by-guard.sh`). Do not uphold a
+condition-gated unit (`check-upholds-guard.sh`).
 Base owns the host VM runtime (`qemu-system-x86`, `qemu-utils`, `ovmf`);
 every sysext runs `shared/sysext/finalize/sysext-no-base-owned.sh`, which
 fails a delta that ships any glob in `shared/sysext/base-owned-paths.txt`.

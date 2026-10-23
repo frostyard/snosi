@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# k3s-sysext-setup.service: the one unit multi-user.target upholds for k3s.
+#
+# k3s.service and k3s-agent.service are mutually exclusive by Condition (one
+# of the two always fails on a given node). systemd retries an upheld unit
+# whose condition fails, forever (snosi#1100: 93,566 journal lines on one
+# host). So 10-k3s.conf upholds only this RemainAfterExit oneshot, which
+# stays active (no churn) and Wants= both role units: a Wants= pull is a
+# single clean skip for the unit whose condition fails. Same pattern as
+# himmelblau-sysext-setup.service.
+
+[Unit]
+Description=k3s Sysext Role Activation
+Documentation=https://docs.k3s.io
+Wants=k3s.service k3s-agent.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+
+[Install]
+WantedBy=multi-user.target

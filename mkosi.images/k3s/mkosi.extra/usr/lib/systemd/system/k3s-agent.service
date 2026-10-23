@@ -3,6 +3,9 @@
 # (K3S_TOKEN_FILE= also works) — the same file's existence stops
 # k3s.service, so writing it is the single switch that turns this node
 # from a standalone server into an agent joining an existing cluster.
+# k3s-sysext-setup.service pulls this unit in with Wants= (it is not upheld
+# itself: snosi#1100). On a running node, after writing the file run
+# `systemctl stop k3s` and `systemctl start k3s-agent`, or reboot.
 [Unit]
 Description=Lightweight Kubernetes (k3s agent)
 Documentation=https://docs.k3s.io

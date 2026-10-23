@@ -1,7 +1,13 @@
-# Both units are preset-enabled; their Conditions select the role at start
-# time (server unless /etc/default/k3s-agent exists, agent when it does), so
-# exactly one of the two ever runs on a given node. Merging the sysext on a
-# fresh node therefore starts a standalone k3s server, matching upstream's
-# curl|sh installer behavior.
+# k3s-sysext-setup.service is preset-enabled and upheld by
+# multi-user.target.d/10-k3s.conf; it Wants= both role units. Their Conditions
+# select the role at start time (server unless /etc/default/k3s-agent exists,
+# agent when it does), so exactly one of the two ever runs on a given node.
+# Merging the sysext on a fresh node therefore starts a standalone k3s server,
+# matching upstream's curl|sh installer behavior.
+#
+# Role switch on a running node: write /etc/default/k3s-agent, then
+# `systemctl stop k3s` and `systemctl start k3s-agent` (or reboot). The role
+# units are not upheld, so nothing switches them at runtime by itself.
+enable k3s-sysext-setup.service
 enable k3s.service
 enable k3s-agent.service

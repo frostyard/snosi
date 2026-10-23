@@ -2,9 +2,10 @@
 # binary at /usr/bin/k3s (sysexts ship only /usr) and snosi's declarative
 # role selection: this node runs as a server unless the admin creates
 # /etc/default/k3s-agent, which hands the node to k3s-agent.service instead
-# (see 40-k3s.preset). Server configuration goes in the natively-read
-# /etc/rancher/k3s/config.yaml or /etc/default/k3s (both persist in the
-# /etc overlay); state lives under /var/lib/rancher.
+# (see 40-k3s.preset). k3s-sysext-setup.service pulls this unit in with
+# Wants= (it is not upheld itself: snosi#1100). Server configuration goes
+# in the natively-read /etc/rancher/k3s/config.yaml or /etc/default/k3s
+# (both persist in the /etc overlay); state lives under /var/lib/rancher.
 [Unit]
 Description=Lightweight Kubernetes (k3s server)
 Documentation=https://docs.k3s.io
