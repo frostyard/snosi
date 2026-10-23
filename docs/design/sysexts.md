@@ -210,11 +210,11 @@ owner is absent. `test/sysext-account-order-test.py` replays the shipped command
 and checks fresh and previously root-owned Coder homes.
 
 - `mkosi.postinst.chroot` — Downloads the coder .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Single static binary + two units, all natively under `/usr`; no relocation
-- `mkosi.finalize` — Captures `/etc/coder.d/` to factory defaults; `coder.service` is gated on `ConditionFileNotEmpty=/etc/coder.d/coder.env`, so the enabled+upheld unit stays inert until an admin fills in `CODER_ACCESS_URL` etc.
+- `mkosi.finalize` — Captures `/etc/coder.d/` to factory defaults; `coder.service` is gated on `ConditionFileNotEmpty=/etc/coder.d/coder.env`, so the unit stays inert (a clean `Wants=` skip) until an admin fills in `CODER_ACCESS_URL` etc.
 - `usr/lib/sysusers.d/coder.conf` — Recreates the `coder` system user at boot (the deb preinst's `useradd` lands in the buildroot `/etc/passwd`, stripped from the delta) with membership in `docker` (mirrors preinst) and `incus-admin` (Incus-template provisioning); `m` lines implicitly create those groups when the owning sysext isn't merged
 - `usr/lib/tmpfiles.d/coder.conf` — Factory config injection + `/home/coder` creation
 - `usr/lib/systemd/system-preset/40-coder.preset` — Enables `coder.service`, explicitly disables `coder-workspace-proxy.service` (separate opt-in role, needs its own env file)
-- `usr/lib/systemd/system/multi-user.target.d/10-coder.conf` — `Upholds=coder.service` drop-in for reliable boot activation
+- `usr/lib/systemd/system/multi-user.target.d/10-coder.conf` — `Upholds=coder-sysext-setup.service` drop-in for reliable boot activation. The setup unit (`coder-sysext-setup.service`, preset-enabled) is a `Type=oneshot` + `RemainAfterExit=yes` unit with no Condition that `Wants=coder.service`. Upholding `coder.service` directly was wrong: its `ConditionFileNotEmpty=/etc/coder.d/coder.env` fails until an admin fills the env file, and systemd retries an upheld unit with a failed condition forever (snosi#1100). `sysext-upholds-guard.sh` found it (#1113). `coder.service` keeps `Restart=on-failure` for crash recovery. `SYSEXT_REVISION=1` republishes the fix at the same coder version; remove it when the coder version bumps
 
 ### debdev / dev
 - `mkosi.postinst.chroot` — Repoints `/usr/bin`+`/usr/sbin` symlinks that route through `/etc/alternatives` to their resolved targets. Sysexts cannot ship `/etc`, so alternatives symlinks created while installing these sysexts' packages would dangle at runtime (observed live: `/usr/bin/automake -> /etc/alternatives/automake`, missing).
@@ -261,8 +261,8 @@ and checks fresh and previously root-owned Coder homes.
 ### incus
 - `mkosi.finalize` — Captures the tmpfiles-referenced `/etc` paths to factory defaults
 - `usr/lib/systemd/system-preset/40-incus.preset` — Enable incus services
-- `usr/lib/systemd/system/multi-user.target.d/10-incus.conf` — `Upholds=` drop-in for reliable boot activation (sockets + lxcfs + startup + sysext-setup; incus.service itself is socket-activated)
-- `usr/lib/systemd/system/incus-sysext-setup.service` — Oneshot post-merge setup (subuid/subgid)
+- `usr/lib/systemd/system/multi-user.target.d/10-incus.conf` — `Upholds=` drop-in for reliable boot activation (sockets + startup + sysext-setup; incus.service itself is socket-activated). `incus-lxcfs.service` is deliberately not upheld: it has `ConditionVirtualization=!container`, and systemd retries an upheld unit with a failed condition forever (snosi#1100). `sysext-upholds-guard.sh` found it (#1113); `incus-sysext-setup.service` `Wants=` it instead (a single clean skip inside a container), and `incus-lxcfs.service` keeps `Restart=on-failure` for crash recovery. `SYSEXT_REVISION=5` republishes the fix at the same incus version
+- `usr/lib/systemd/system/incus-sysext-setup.service` — Oneshot (`RemainAfterExit=yes`) post-merge setup (subuid/subgid); also the upheld unit that `Wants=incus-lxcfs.service`
 - `usr/lib/incus/incus-sysext-setup` — The setup script the service runs
 - `usr/lib/sysusers.d/{dnsmasq,rdma}.conf` — User/group definitions
 - `usr/lib/tmpfiles.d/incus.conf` — Factory config injection + runtime dirs + xz alternatives links
@@ -296,8 +296,9 @@ access for a group member, denial for a nonmember, and existing-GID preservation
 
 - `mkosi.finalize` — Captures `/etc/nix` to factory defaults
 - `usr/lib/systemd/system/nix.mount` + `nix-daemon.service.d/mount-binding.conf` — `/nix` bind mount wiring
-- `usr/lib/systemd/system-preset/40-nix.preset` — Enable nix.mount + nix-daemon
-- `usr/lib/systemd/system/multi-user.target.d/10-nix.conf` — `Upholds=nix.mount nix-daemon.socket nix-daemon.service` drop-in for reliable boot activation
+- `usr/lib/systemd/system-preset/40-nix.preset` — Enable nix.mount + nix-daemon + `nix-sysext-setup.service`
+- `usr/lib/systemd/system/multi-user.target.d/10-nix.conf` — `Upholds=nix.mount nix-sysext-setup.service` drop-in for reliable boot activation. `nix-sysext-setup.service` is a `Type=oneshot` + `RemainAfterExit=yes` unit with no Condition (`After=nix.mount`, `Before=` the daemon units) that `Wants=nix-daemon.socket nix-daemon.service`. Upholding the daemon units directly was wrong: both carry `ConditionPathIsReadWrite=/nix/var/nix/daemon-socket`, and systemd retries an upheld unit with a failed condition forever (snosi#1100). `sysext-upholds-guard.sh` found it (#1113). `nix-daemon.service` has no `Restart=`; `nix-daemon.socket` re-activates it on the next connection. `SYSEXT_REVISION=3` republishes the fix at the same nix version
+- `usr/lib/systemd/system/nix-sysext-setup.service` — The upheld activation oneshot described above
 - `usr/lib/sysusers.d/nix.conf` — Nix user/group
 - `usr/lib/tmpfiles.d/nix.conf` — `/nix` hierarchy + factory config injection
 

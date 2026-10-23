@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# nix-sysext-setup.service: the unit multi-user.target upholds for the nix daemon.
+#
+# nix-daemon.socket and nix-daemon.service (from nix-setup-systemd) carry
+# ConditionPathIsReadWrite=/nix/var/nix/daemon-socket, which fails until
+# nix.mount has bound /nix. systemd retries an upheld unit whose condition
+# fails, forever (snosi#1100: 93,566 journal lines on one host). So 10-nix.conf
+# upholds nix.mount (no condition) and only this RemainAfterExit oneshot, which
+# stays active (no churn) and Wants= the daemon units: a Wants= pull is a single
+# clean skip if the condition fails. It orders after nix.mount and before the
+# daemon units so the mount is in place first. nix-daemon.service has no
+# Restart=; nix-daemon.socket re-activates it on the next connection. Found by
+# shared/sysext/finalize/sysext-upholds-guard.sh (snosi#1113). Same pattern as
+# k3s-sysext-setup.service.
+
+[Unit]
+Description=Nix Sysext Activation
+Documentation=man:nix(1)
+After=nix.mount
+Before=nix-daemon.socket nix-daemon.service
+Wants=nix-daemon.socket nix-daemon.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+
+[Install]
+WantedBy=multi-user.target
