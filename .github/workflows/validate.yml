@@ -234,6 +234,10 @@ jobs:
         # network, live endpoints, or image build.
         run: ./test/pilothouse-sysext-test.sh
 
+      - name: Validate Coder sysext configuration gate
+        # CODER_ACCESS_URL gate fixtures; no root, network, or image build.
+        run: ./test/coder-sysext-test.sh
+
       - name: Validate Sunshine package dependencies
         # Fixture check for Sunshine's .deb dependencies. No root, network, or build.
         run: ./test/sunshine-package-dependencies-test.sh

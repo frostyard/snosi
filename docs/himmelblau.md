@@ -190,15 +190,16 @@ klist                           # Kerberos ticket after an Entra login
   the first merge so the session bus sees the new service file. Firefox
   needs the linux-entra-sso extension; Chromium/Chrome get it through the
   managed policy in `/etc/chromium/policies/managed/himmelblau.json`.
-- `snosi-etc-diff` will list `nsswitch.conf`, `pam.d/common-*` and, on
-  desktops, `pam.d/gdm-password` as modified. That drift is the integration
-  and is expected.
+- `snosi-etc-diff` always needs root (it exits with "must run as root"
+  otherwise, because it bind-mounts `/`); run it with `sudo`. It will list
+  `nsswitch.conf`, `pam.d/common-*` and, on desktops, `pam.d/gdm-password` as
+  modified. That drift is the integration and is expected.
 
 ## Removing
 
 Disable the feature in Updex (or remove the `.raw`) and reboot. The NSS and
 PAM entries stay in `/etc` but reference modules that no longer exist, which
 glibc and PAM ignore (`pam_himmelblau` lines are `default=ignore`); use
-`snosi-etc-diff --restore /etc/nsswitch.conf` and
+`sudo snosi-etc-diff --restore /etc/nsswitch.conf` and
 `sudo pam-auth-update --remove himmelblau` to clean them up. Device state
 lives in `/var/lib/private/himmelblaud` and `/var/cache/himmelblaud`.

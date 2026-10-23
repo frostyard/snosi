@@ -1,0 +1,54 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# ExecCondition= helper for coder.service (snosi#1117).
+#
+# The coder .deb ships /etc/coder.d/coder.env as a non-empty 291-byte template
+# whose every key (CODER_ACCESS_URL included) is empty, so the unit's own
+# upstream ConditionFileNotEmpty=/etc/coder.d/coder.env passes on a fresh host
+# and the server starts with no access URL. This check replaces that condition
+# with a real one: it reads the file as text (never sources it) and succeeds
+# only when CODER_ACCESS_URL was given a non-empty value.
+#
+# CODER_ENV_FILE exists for the test suite only.
+
+set -euo pipefail
+
+env_file=${CODER_ENV_FILE:-/etc/coder.d/coder.env}
+key=CODER_ACCESS_URL
+
+if [[ ! -f $env_file || ! -r $env_file ]]; then
+    echo "coder-configured: cannot read $env_file; set CODER_ACCESS_URL there, then run: systemctl restart coder.service" >&2
+    exit 1
+fi
+
+# Same semantics as systemd EnvironmentFile=: the last assignment wins, and a
+# line whose first non-blank character is # or ; is a comment.
+value=
+while IFS= read -r line || [[ -n $line ]]; do
+    line=${line#"${line%%[![:space:]]*}"}
+    [[ -n $line ]] || continue
+    case $line in
+        '#'* | ';'*) continue ;;
+    esac
+    if [[ $line =~ ^${key}[[:space:]]*=(.*)$ ]]; then
+        value=${BASH_REMATCH[1]}
+    fi
+done <"$env_file"
+
+value=${value#"${value%%[![:space:]]*}"}
+value=${value%"${value##*[![:space:]]}"}
+if ((${#value} >= 2)); then
+    first=${value:0:1}
+    last=${value: -1}
+    if [[ $first == "$last" && ($first == '"' || $first == "'") ]]; then
+        value=${value:1:${#value}-2}
+    fi
+fi
+
+if [[ -n $value ]]; then
+    exit 0
+fi
+
+echo "coder-configured: CODER_ACCESS_URL is not set in $env_file; set it, then run: systemctl restart coder.service" >&2
+exit 1

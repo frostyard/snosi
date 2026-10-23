@@ -51,6 +51,7 @@ check-forky-systemd-test.sh	ci	validate.yml
 check-mkosi-pin-test.sh	ci	validate.yml
 check-no-nbc-package-test.sh	ci	validate.yml
 check-profile-dependencies-local-mkosi-test.sh	ci	validate.yml
+coder-sysext-test.sh	ci	validate.yml
 copilot-automation-secret-test.py	ci	validate.yml
 core-flatpaks-test.sh	ci	validate.yml
 dps-luks-cleanup-test.sh	unwired	-
