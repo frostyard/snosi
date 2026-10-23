@@ -2,7 +2,8 @@
 #
 # coder-sysext-setup.service: the one unit multi-user.target upholds for coder.
 #
-# coder.service is not started until CODER_ACCESS_URL has a value: its
+# coder.service is not started until CODER_ACCESS_URL has a value and coder
+# has a bind address: its
 # ExecCondition= drop-in (coder.service.d/10-snosi-configured.conf) runs
 # /usr/lib/coder-sysext/coder-configured, which exits 1 on an unconfigured
 # host. Upholding coder.service is wrong: systemd retries an upheld unit that does not stay

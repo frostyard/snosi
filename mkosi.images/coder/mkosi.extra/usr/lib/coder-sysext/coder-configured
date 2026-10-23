@@ -1,54 +1,111 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# ExecCondition= helper for coder.service (snosi#1117).
+# ExecCondition= helper for coder.service (snosi#1117, snosi#1120).
 #
-# The coder .deb ships /etc/coder.d/coder.env as a non-empty 291-byte template
-# whose every key (CODER_ACCESS_URL included) is empty, so the unit's own
-# upstream ConditionFileNotEmpty=/etc/coder.d/coder.env passes on a fresh host
-# and the server starts with no access URL. This check replaces that condition
-# with a real one: it reads the file as text (never sources it) and succeeds
-# only when CODER_ACCESS_URL was given a non-empty value.
+# coder.service reads /etc/coder.d/coder.env with EnvironmentFile=. This check
+# reads the same file as text (it never sources it) and succeeds only when
+# `coder server` has what it needs to start:
 #
-# CODER_ENV_FILE exists for the test suite only.
+#  1. CODER_ACCESS_URL has a value (snosi#1117). The deb ships coder.env as a
+#     non-empty 291-byte template whose every key is empty, so the unit's own
+#     ConditionFileNotEmpty= passes on a fresh host.
+#  2. coder has a bind address (snosi#1120). systemd exports the template's
+#     empty CODER_HTTP_ADDRESS= as an empty string, which replaces coder's
+#     default 127.0.0.1:3000, and `coder server` exits 1 with "TLS is
+#     disabled. Enable with --tls-enable or specify a HTTP address".
+#
+# The bind-address rules follow coder 2.37.4 (cli/server.go, codersdk
+# deployment options, serpent v0.15.0 ParseEnv):
+#  - An absent key takes coder's default; a present key, even an empty one,
+#    replaces it.
+#  - A non-empty CODER_ADDRESS (deprecated) is the bind address.
+#  - CODER_TLS_ENABLE true: coder listens on CODER_TLS_ADDRESS (default
+#    127.0.0.1:3443).
+#  - Otherwise coder listens on CODER_HTTP_ADDRESS (default 127.0.0.1:3000).
+#  - coder refuses an empty CODER_ADDRESS= or CODER_TLS_ADDRESS= and a
+#    CODER_TLS_ENABLE value that is not a Go boolean (empty means false).
+#
+# Exit 0 runs the unit. Exit 1 skips it without a unit failure, so
+# Restart=on-failure does not loop, and prints one line that names the key.
+#
+# CODER_ENV_FILE exists for the test suite and the image build only.
 
 set -euo pipefail
 
 env_file=${CODER_ENV_FILE:-/etc/coder.d/coder.env}
-key=CODER_ACCESS_URL
+restart='then run: systemctl restart coder.service'
+
+skip() { # message
+    echo "coder-configured: $1, $restart" >&2
+    exit 1
+}
 
 if [[ ! -f $env_file || ! -r $env_file ]]; then
-    echo "coder-configured: cannot read $env_file; set CODER_ACCESS_URL there, then run: systemctl restart coder.service" >&2
-    exit 1
+    skip "cannot read $env_file; set CODER_ACCESS_URL there"
 fi
+
+keys=(CODER_ACCESS_URL CODER_HTTP_ADDRESS CODER_TLS_ENABLE CODER_TLS_ADDRESS CODER_ADDRESS)
+declare -A value=()
+
+# Strip surrounding whitespace and one matching quote pair, into $unquoted.
+unquote() {
+    local v=$1 first last
+    v=${v#"${v%%[![:space:]]*}"}
+    v=${v%"${v##*[![:space:]]}"}
+    if ((${#v} >= 2)); then
+        first=${v:0:1}
+        last=${v: -1}
+        if [[ $first == "$last" && ($first == '"' || $first == "'") ]]; then
+            v=${v:1:${#v}-2}
+        fi
+    fi
+    unquoted=$v
+}
 
 # Same semantics as systemd EnvironmentFile=: the last assignment wins, and a
 # line whose first non-blank character is # or ; is a comment.
-value=
 while IFS= read -r line || [[ -n $line ]]; do
     line=${line#"${line%%[![:space:]]*}"}
     [[ -n $line ]] || continue
     case $line in
         '#'* | ';'*) continue ;;
     esac
-    if [[ $line =~ ^${key}[[:space:]]*=(.*)$ ]]; then
-        value=${BASH_REMATCH[1]}
-    fi
+    for key in "${keys[@]}"; do
+        if [[ $line =~ ^${key}[[:space:]]*=(.*)$ ]]; then
+            unquote "${BASH_REMATCH[1]}"
+            value[$key]=$unquoted
+        fi
+    done
 done <"$env_file"
 
-value=${value#"${value%%[![:space:]]*}"}
-value=${value%"${value##*[![:space:]]}"}
-if ((${#value} >= 2)); then
-    first=${value:0:1}
-    last=${value: -1}
-    if [[ $first == "$last" && ($first == '"' || $first == "'") ]]; then
-        value=${value:1:${#value}-2}
-    fi
+present() { [[ -n ${value[$1]+set} ]]; }
+
+if [[ -z ${value[CODER_ACCESS_URL]:-} ]]; then
+    skip "CODER_ACCESS_URL is not set in $env_file; set it"
 fi
 
-if [[ -n $value ]]; then
+for key in CODER_ADDRESS CODER_TLS_ADDRESS; do
+    if present "$key" && [[ -z ${value[$key]} ]]; then
+        skip "$key is empty in $env_file and coder rejects an empty $key; set it or delete the line"
+    fi
+done
+
+tls=false
+case ${value[CODER_TLS_ENABLE]:-} in
+    '' | 0 | f | F | false | FALSE | False) ;;
+    1 | t | T | true | TRUE | True) tls=true ;;
+    *) skip "CODER_TLS_ENABLE=${value[CODER_TLS_ENABLE]} in $env_file is not a boolean; set it to true or false" ;;
+esac
+
+# A non-empty CODER_ADDRESS, or TLS with its (non-empty or default) address,
+# gives coder a bind address.
+if [[ -n ${value[CODER_ADDRESS]:-} || $tls == true ]]; then
     exit 0
 fi
 
-echo "coder-configured: CODER_ACCESS_URL is not set in $env_file; set it, then run: systemctl restart coder.service" >&2
-exit 1
+if present CODER_HTTP_ADDRESS && [[ -z ${value[CODER_HTTP_ADDRESS]} ]]; then
+    skip "CODER_HTTP_ADDRESS is empty in $env_file, so coder has no address to listen on; set it (for example 127.0.0.1:3000, or 0.0.0.0:3000 for every interface) or delete the line"
+fi
+
+exit 0

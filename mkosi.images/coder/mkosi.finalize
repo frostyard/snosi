@@ -7,10 +7,39 @@ set -euo pipefail
 # coder.service's ConditionFileNotEmpty= passes on a fresh host. The real gate
 # is ExecCondition= in coder.service.d/10-snosi-configured.conf
 # (/usr/lib/coder-sysext/coder-configured): coder.service is skipped until an
-# admin sets CODER_ACCESS_URL.
+# admin sets CODER_ACCESS_URL, and while coder has no bind address.
 mkdir -p "$BUILDROOT/usr/share/factory/etc"
 
 if [ -d "$BUILDROOT/etc/coder.d" ]; then
     cp --archive --update=none "$BUILDROOT/etc/coder.d" \
        "$BUILDROOT/usr/share/factory/etc/"
+fi
+
+factory_env="$BUILDROOT/usr/share/factory/etc/coder.d/coder.env"
+gate="$BUILDROOT/usr/lib/coder-sysext/coder-configured"
+if [ ! -f "$factory_env" ]; then
+    # required-paths.txt fails the build on the missing file.
+    exit 0
+fi
+
+# snosi#1120: the template's empty CODER_HTTP_ADDRESS= replaces coder's
+# default 127.0.0.1:3000 with an empty address, and coder server exits 1. Ship
+# the default as an explicit value, so CODER_ACCESS_URL is the only key an
+# admin must set, and the file shows where coder listens.
+sed -i 's|^CODER_HTTP_ADDRESS=$|# Where coder listens. 127.0.0.1:3000 (coder'"'"'s default) is this host only;\n# use 0.0.0.0:3000 for every interface, or put a reverse proxy in front.\nCODER_HTTP_ADDRESS=127.0.0.1:3000|' \
+    "$factory_env"
+
+# The shipped template must stay inert, and become runnable with an access
+# URL alone. This fails the build if a new coder deb changes the template.
+if CODER_ENV_FILE="$factory_env" bash "$gate" 2>/dev/null; then
+    echo "coder mkosi.finalize: the factory coder.env passes coder-configured without CODER_ACCESS_URL" >&2
+    exit 1
+fi
+probe=$(mktemp)
+trap 'rm -f "$probe"' EXIT
+cat "$factory_env" >"$probe"
+echo 'CODER_ACCESS_URL=https://coder.example.com' >>"$probe"
+if ! CODER_ENV_FILE="$probe" bash "$gate"; then
+    echo "coder mkosi.finalize: the factory coder.env plus CODER_ACCESS_URL does not pass coder-configured" >&2
+    exit 1
 fi
