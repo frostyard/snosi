@@ -238,26 +238,54 @@ dest_object_exists() { # relpath
 # HTTP verification helpers (verify-remote.sh, promote.sh)
 # ---------------------------------------------------------------------------
 
-# http_size url -- prints Content-Length via a HEAD request.
+# Retry budget for the whole-object HEAD/GET helpers below. Three of the
+# last 60 build-installer-iso.yml runs failed with "curl: (56) Recv failure:
+# Connection reset by peer" in the middle of a full GET of the published ISO
+# candidate (twice in test/native-iso-boot-smoke-test.sh's download, once in
+# verify-remote.sh's http_get_to_file). A reset after the response headers is
+# a transient edge/origin fault, not a verdict about the object. Plain
+# `curl --retry N` does NOT retry curl errors 56 (recv failure) or 18
+# (partial file), so the retry needs --retry-all-errors; without it the
+# retry budget is dead weight for exactly the failure that was observed.
+# No --retry-delay is set on purpose: curl then backs off exponentially
+# (1, 2, 4, 8, 16 s), and --retry-max-time bounds the whole retry window.
+# The check still fails closed: after the last attempt the helper returns
+# curl's non-zero status and the caller reports the failure as before.
+# PUBLISH_HTTP_GET_RETRIES is curl's retry count, so 0 means one attempt.
+PUBLISH_HTTP_GET_RETRIES="${PUBLISH_HTTP_GET_RETRIES:-5}"
+PUBLISH_HTTP_GET_RETRY_MAX_TIME="${PUBLISH_HTTP_GET_RETRY_MAX_TIME:-300}"
+
+# http_size url -- prints Content-Length via a HEAD request. A retried HEAD
+# can print its headers more than once, so only the LAST content-length
+# value is reported; none at all (curl failed on every attempt) exits 1.
 http_size() { # url
-    curl -fsSL --connect-timeout 10 --max-time 30 -I "$1" |
-        tr -d '\r' | awk -F': ' 'tolower($1) == "content-length" {print $2; found=1} END {if (!found) exit 1}'
+    curl -fsSL --connect-timeout 10 --max-time 30 \
+        --retry "$PUBLISH_HTTP_GET_RETRIES" --retry-all-errors \
+        --retry-max-time "$PUBLISH_HTTP_GET_RETRY_MAX_TIME" -I "$1" |
+        tr -d '\r' |
+        awk -F': ' 'tolower($1) == "content-length" {value=$2} END {if (value == "") exit 1; print value}'
 }
 
 # http_get_sha256 url -- downloads the full body and prints its sha256sum
 # (the download itself is discarded; callers that also need the bytes
-# should call http_get_to_file instead).
+# should call http_get_to_file instead). A failed transfer returns 1 here
+# instead of hashing the partial file: the bytes on disk are only the
+# reference for the checks below when curl reports a complete body.
 http_get_sha256() { # url
     local tmp
     tmp="$(mktemp /var/tmp/publish-lib-http.XXXXXX)"
     register_cleanup "rm -f '$tmp'"
-    curl -fsSL --connect-timeout 10 --max-time 600 "$1" -o "$tmp"
+    curl -fsSL --connect-timeout 10 --max-time 600 \
+        --retry "$PUBLISH_HTTP_GET_RETRIES" --retry-all-errors \
+        --retry-max-time "$PUBLISH_HTTP_GET_RETRY_MAX_TIME" "$1" -o "$tmp" || return 1
     sha256sum "$tmp" | cut -d' ' -f1
 }
 
 # http_get_to_file url outfile -- full GET, saved to outfile.
 http_get_to_file() { # url outfile
-    curl -fsSL --connect-timeout 10 --max-time 600 "$1" -o "$2"
+    curl -fsSL --connect-timeout 10 --max-time 600 \
+        --retry "$PUBLISH_HTTP_GET_RETRIES" --retry-all-errors \
+        --retry-max-time "$PUBLISH_HTTP_GET_RETRY_MAX_TIME" "$1" -o "$2"
 }
 
 # Retry budget for the range GETs below. A cold (uncached) object on the

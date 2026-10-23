@@ -11,9 +11,9 @@ for cmd in jq python3 sha256sum git gpg gpgv curl; do
 done
 
 work=$(mktemp -d /var/tmp/iso-publication-pipeline.XXXXXX)
-server_pid=""; cold_pid=""; ignore_pid=""
+server_pid=""; cold_pid=""; ignore_pid=""; reset_pid=""; dead_pid=""
 cleanup() {
-    for pid in "$server_pid" "$cold_pid" "$ignore_pid"; do
+    for pid in "$server_pid" "$cold_pid" "$ignore_pid" "$reset_pid" "$dead_pid"; do
         [[ -z $pid ]] || kill "$pid" 2>/dev/null || true
     done
     rm -rf "$work"
@@ -86,7 +86,7 @@ mkdir -p "$dest"
 # Bind only localhost; choose distinct OS-allocated ports for each origin.
 ports=$(python3 - <<'PY'
 import socket
-sockets = [socket.socket() for _ in range(3)]
+sockets = [socket.socket() for _ in range(5)]
 try:
     for sock in sockets:
         sock.bind(('127.0.0.1', 0))
@@ -96,13 +96,13 @@ finally:
         sock.close()
 PY
 )
-read -r port ignore_port cold_port <<< "$ports"
+read -r port ignore_port cold_port reset_port dead_port <<< "$ports"
 python3 "$root/test/lib/range-http-server.py" "$port" "$dest" >"$work/server.log" 2>&1 &
 server_pid=$!
 base="http://127.0.0.1:$port/isos/native/v1"
 ready=0
 for _ in {1..30}; do
-    if curl -fsS "http://127.0.0.1:$port/" -o /dev/null 2>/dev/null; then
+    if curl -fsS --max-time 2 "http://127.0.0.1:$port/" -o /dev/null 2>/dev/null; then
         ready=1
         break
     fi
@@ -117,11 +117,11 @@ check 'candidate is under the flat installer namespace' test -f "$candidate"
 check 'candidate has immutable cache metadata' \
     grep -q immutable "$candidate.meta.json"
 check 'ISO candidate verifies by size, hash and two HTTP ranges' \
-    "$publish/verify-remote.sh" "$work/one" "$base"
+    timeout 120 "$publish/verify-remote.sh" "$work/one" "$base"
 
 printf 'X' | dd of="$candidate" bs=1 seek=0 count=1 conv=notrunc status=none
 reject 'tampered ISO candidate fails remote verification' \
-    "$publish/verify-remote.sh" "$work/one" "$base"
+    timeout 120 "$publish/verify-remote.sh" "$work/one" "$base"
 "$publish/publish-candidate.sh" "$work/one" "$dest" >/dev/null
 
 # Force an origin that persistently returns HTTP 200 to Range, then model the
@@ -129,27 +129,58 @@ reject 'tampered ISO candidate fails remote verification' \
 python3 "$root/test/lib/range-http-server.py" "$ignore_port" "$dest" --ignore-ranges \
     >"$work/ignored.log" 2>&1 & ignore_pid=$!
 for _ in {1..30}; do
-    curl -fsS "http://127.0.0.1:$ignore_port/" -o /dev/null 2>/dev/null && break
+    curl -fsS --max-time 2 "http://127.0.0.1:$ignore_port/" -o /dev/null 2>/dev/null && break
     sleep 0.1
 done
 check 'ignored-Range origin started' kill -0 "$ignore_pid"
 reject 'persistent HTTP 200 for Range fails closed' \
-    env PUBLISH_HTTP_RANGE_ATTEMPTS=2 PUBLISH_HTTP_RANGE_RETRY_DELAY=0 \
+    timeout 120 env PUBLISH_HTTP_RANGE_ATTEMPTS=2 PUBLISH_HTTP_RANGE_RETRY_DELAY=0 \
     "$publish/verify-remote.sh" "$work/one" "http://127.0.0.1:$ignore_port/isos/native/v1"
 check 'ignored-Range failure reports HTTP 200' grep -q 'server ignored Range.*HTTP 200' "$work/rejected.log"
 
 python3 "$root/test/lib/range-http-server.py" "$cold_port" "$dest" --ignore-first-ranges 1 \
     >"$work/cold.log" 2>&1 & cold_pid=$!
 for _ in {1..30}; do
-    curl -fsS "http://127.0.0.1:$cold_port/" -o /dev/null 2>/dev/null && break
+    curl -fsS --max-time 2 "http://127.0.0.1:$cold_port/" -o /dev/null 2>/dev/null && break
     sleep 0.1
 done
 check 'cold-Range origin started' kill -0 "$cold_pid"
 check 'cold origin recovers after the first ignored Range' \
-    env PUBLISH_HTTP_RANGE_ATTEMPTS=4 PUBLISH_HTTP_RANGE_RETRY_DELAY=0 \
+    timeout 120 env PUBLISH_HTTP_RANGE_ATTEMPTS=4 PUBLISH_HTTP_RANGE_RETRY_DELAY=0 \
     "$publish/verify-remote.sh" "$work/one" "http://127.0.0.1:$cold_port/isos/native/v1"
 
-"$publish/promote.sh" "${signing[@]}" "$work/one" "$base" "$dest" >"$work/promoted.log"
+# Abort a full GET mid-body (transport reset, not a Range verdict) once per
+# object, then on every attempt: the first must be retried into success, the
+# second must still fail closed after the retry budget is spent.
+python3 "$root/test/lib/range-http-server.py" "$reset_port" "$dest" --reset-first-gets 2 \
+    >"$work/reset.log" 2>&1 & reset_pid=$!
+for _ in {1..30}; do
+    curl -fsS --max-time 2 "http://127.0.0.1:$reset_port/" -o /dev/null 2>/dev/null && break
+    sleep 0.1
+done
+check 'transient-reset origin started' kill -0 "$reset_pid"
+python3 "$root/test/lib/range-http-server.py" "$dead_port" "$dest" --reset-first-gets 1000 \
+    >"$work/dead.log" 2>&1 & dead_pid=$!
+for _ in {1..30}; do
+    curl -fsS --max-time 2 "http://127.0.0.1:$dead_port/" -o /dev/null 2>/dev/null && break
+    sleep 0.1
+done
+check 'persistent-reset origin started' kill -0 "$dead_pid"
+check 'transient connection reset during full GET is retried' \
+    timeout 120 env PUBLISH_HTTP_GET_RETRIES=3 \
+    "$publish/verify-remote.sh" "$work/one" "http://127.0.0.1:$reset_port/isos/native/v1"
+check 'transient-reset origin aborted exactly 2 full GETs' \
+    test "$(grep -c '^reset GET ' "$work/reset.log")" -eq 2
+reject 'persistent connection reset fails closed' \
+    timeout 120 env PUBLISH_HTTP_GET_RETRIES=1 \
+    "$publish/verify-remote.sh" "$work/one" "http://127.0.0.1:$dead_port/isos/native/v1"
+check 'persistent-reset origin aborted exactly 2 full GETs' \
+    test "$(grep -c '^reset GET ' "$work/dead.log")" -eq 2
+check 'persistent reset failure reports the failed full GET' \
+    grep -q 'full GET failed' "$work/rejected.log"
+
+timeout 120 "$publish/promote.sh" "${signing[@]}" "$work/one" "$base" "$dest" \
+    >"$work/promoted.log"
 index_dir="$dest/isos/native/v1"
 check 'first promotion reports no outgoing signed index' \
     grep -q 'No existing signed index to archive' "$work/promoted.log"
@@ -158,24 +189,25 @@ check 'signed index validates against ephemeral pubring' \
 check 'both index objects carry no-store cache policy' \
     bash -c 'grep -q no-store "$1/SHA256SUMS.gpg.meta.json" && grep -q no-store "$1/SHA256SUMS.meta.json"' _ "$index_dir"
 check 'public origin serves signed first ISO version' \
-    "$publish/verify-published-index.sh" --pubring "$pubring" --expect-version "$v1" --attempts 1 --delay 0 "$base"
+    timeout 120 "$publish/verify-published-index.sh" --pubring "$pubring" --expect-version "$v1" --attempts 1 --delay 0 "$base"
 reject 'public index rejects a version not yet promoted' \
-    "$publish/verify-published-index.sh" --pubring "$pubring" --expect-version "$v2" --attempts 1 --delay 0 "$base"
+    timeout 120 "$publish/verify-published-index.sh" --pubring "$pubring" --expect-version "$v2" --attempts 1 --delay 0 "$base"
 cp "$index_dir/SHA256SUMS.gpg" "$work/sig.bak"
 printf tamper >>"$index_dir/SHA256SUMS.gpg"
 reject 'public index rejects tampered signature' \
-    "$publish/verify-published-index.sh" --pubring "$pubring" --attempts 1 --delay 0 "$base"
+    timeout 120 "$publish/verify-published-index.sh" --pubring "$pubring" --attempts 1 --delay 0 "$base"
 cp "$work/sig.bak" "$index_dir/SHA256SUMS.gpg"
 
 "$publish/publish-candidate.sh" "$work/two" "$dest" >/dev/null
-check 'second ISO candidate verifies' "$publish/verify-remote.sh" "$work/two" "$base"
-"$publish/promote.sh" "${signing[@]}" "$work/two" "$base" "$dest" >/dev/null
+check 'second ISO candidate verifies' \
+    timeout 120 "$publish/verify-remote.sh" "$work/two" "$base"
+timeout 120 "$publish/promote.sh" "${signing[@]}" "$work/two" "$base" "$dest" >/dev/null
 check 'second promotion archives the outgoing signed ISO index' \
     test -f "$index_dir/.history/$v1/SHA256SUMS.gpg"
 check 'public index serves second ISO version' \
-    "$publish/verify-published-index.sh" --pubring "$pubring" --expect-version "$v2" --attempts 1 --delay 0 "$base"
+    timeout 120 "$publish/verify-published-index.sh" --pubring "$pubring" --expect-version "$v2" --attempts 1 --delay 0 "$base"
 reject 'missing pubring prevents promotion' \
-    "$publish/promote.sh" --signing-key "$secret" --passphrase-file "$passphrase_file" \
+    timeout 120 "$publish/promote.sh" --signing-key "$secret" --passphrase-file "$passphrase_file" \
     --pubring "$work/missing.gpg" "$work/one" "$base" "$dest"
 
 echo "ISO publication pipeline: $pass checks passed"
