@@ -1,3 +1,4 @@
 enable nix.mount
 enable nix-daemon.socket
 enable nix-daemon.service
+enable nix-sysext-setup.service

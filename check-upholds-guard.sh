@@ -13,7 +13,9 @@
 # defined in the repo (`T` or `T.d/*.conf`), if any defining file has a
 # Condition*= line, T must resolve to Type=oneshot and RemainAfterExit=yes
 # (last assignment wins: main unit, then drop-ins in basename order).
-# Targets with no definition in the repo (package-shipped units) are skipped.
+# Targets with no definition in the repo (package-shipped units) are skipped
+# here; sysext builds check those on the delta and the base tree with
+# shared/sysext/finalize/sysext-upholds-guard.sh (snosi#1113).
 #
 # Escape hatch: a comment line `# upholds-guard-allow: <reason>` IMMEDIATELY
 # above the Condition*= line exempts that line. It must be its own line:

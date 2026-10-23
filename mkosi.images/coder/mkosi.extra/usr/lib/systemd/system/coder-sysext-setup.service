@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# coder-sysext-setup.service: the one unit multi-user.target upholds for coder.
+#
+# coder.service is gated on ConditionFileNotEmpty=/etc/coder.d/coder.env, which
+# fails on every host until an admin fills in the env file. systemd retries an
+# upheld unit whose condition fails, forever (snosi#1100: 93,566 journal lines
+# on one host). So 10-coder.conf upholds only this RemainAfterExit oneshot,
+# which stays active (no churn) and Wants= coder.service: a Wants= pull is a
+# single clean skip while the condition fails. coder.service keeps its own
+# Restart=on-failure for crash recovery. Found by
+# shared/sysext/finalize/sysext-upholds-guard.sh (snosi#1113). Same pattern as
+# k3s-sysext-setup.service and himmelblau-sysext-setup.service.
+
+[Unit]
+Description=Coder Sysext Activation
+Documentation=https://coder.com/docs
+Wants=coder.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+
+[Install]
+WantedBy=multi-user.target

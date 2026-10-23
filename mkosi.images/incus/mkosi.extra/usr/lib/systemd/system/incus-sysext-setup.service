@@ -4,12 +4,21 @@
 #
 # This service runs after systemd-sysusers and systemd-tmpfiles-setup to handle
 # configurations that cannot be done declaratively (specifically subuid/subgid).
+#
+# It is also the unit multi-user.target upholds for incus-lxcfs.service, which
+# has ConditionVirtualization=!container: systemd retries an upheld unit whose
+# condition fails, forever (snosi#1100), so 10-incus.conf cannot uphold lxcfs
+# directly. This RemainAfterExit oneshot stays active and Wants= lxcfs: a
+# Wants= pull is a single clean skip inside a container, and incus-lxcfs.service
+# keeps its own Restart=on-failure for crash recovery. Found by
+# shared/sysext/finalize/sysext-upholds-guard.sh (snosi#1113).
 
 [Unit]
 Description=Incus Sysext Post-Merge Configuration
 Documentation=man:incus(1)
 DefaultDependencies=no
 After=systemd-sysusers.service systemd-tmpfiles-setup.service local-fs.target
+Wants=incus-lxcfs.service
 Before=incus.socket incus-user.socket incus-lxcfs.service incus-startup.service
 ConditionPathExists=!/run/incus-sysext-setup.done
 

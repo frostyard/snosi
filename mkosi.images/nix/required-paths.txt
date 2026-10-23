@@ -4,6 +4,7 @@
 /usr/lib/systemd/system/nix-daemon.service
 /usr/lib/systemd/system/nix.mount
 /usr/lib/systemd/system/multi-user.target.d/10-nix.conf
+/usr/lib/systemd/system/nix-sysext-setup.service
 # usr/lib/tmpfiles.d/nix.conf is not pinned: base ships the same path and mkosi
 # drops it from the sysext delta (see snosi#1111).
 /usr/share/factory/etc/nix/nix.conf

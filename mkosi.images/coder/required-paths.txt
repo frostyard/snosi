@@ -9,3 +9,4 @@
 /usr/lib/tmpfiles.d/coder.conf
 /usr/lib/systemd/system-preset/40-coder.preset
 /usr/lib/systemd/system/multi-user.target.d/10-coder.conf
+/usr/lib/systemd/system/coder-sysext-setup.service
