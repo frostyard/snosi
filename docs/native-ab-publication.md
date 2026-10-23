@@ -20,7 +20,7 @@ The pipeline scripts live in `shared/native-ab/publish/`:
 | `prepare-iso-publication.sh` | Sibling of the above for the network-installer ISO (Task 8.2): stages `shared/firn-installer/tools/build-iso.sh`'s already-version-stamped-and-named output plus an unsigned `SHA256SUMS` + `publication-info.json` whose `dest_path` is the flat `isos/native/v1` namespace (no per-product/x86-64 subpath). |
 | `generate-sbom.sh` | Generates `<channel>_<version>.sbom.spdx.json` directly from the mkosi package manifest. Called by `prepare-native-publication.sh`; not normally invoked standalone. |
 | `publish-candidate.sh` | Uploads immutable versioned objects to a per-version candidate staging path. |
-| `verify-remote.sh` | Independently re-verifies every candidate object over HTTP (size, full SHA-256, strict HTTP 206 range GETs) before anything is promoted. Range bodies are capped at the requested byte count, so an origin that ignores `Range` fails explicitly without downloading the full artifact. |
+| `verify-remote.sh` | Independently re-verifies every candidate object over HTTP (size, full SHA-256, strict HTTP 206 range GETs) before anything is promoted. Range bodies are capped at the requested byte count, so an origin that ignores `Range` fails explicitly without downloading the full artifact. Whole-object HEAD and GET transfers retry transient transport errors (`--retry-all-errors`, `PUBLISH_HTTP_GET_RETRIES`, `PUBLISH_HTTP_GET_RETRY_MAX_TIME`). |
 | `promote.sh` | Copies verified candidates to their final public names, regenerates and signs `SHA256SUMS`, publishes signature-first/manifest-last. |
 | `withdraw.sh` | Restores a previously-archived signed index pair (incident response / bad-release rollback of the *index*, not the bits). |
 | `verify-installer-redirect.sh` | Confirms the stable installer URL redirects without caching to the expected promoted ISO and that the target is present in `SHA256SUMS`. Run only after `verify-published-index.sh` has authenticated that index. |
@@ -28,6 +28,24 @@ The pipeline scripts live in `shared/native-ab/publish/`:
 All five scripts have `--help`, are `set -euo pipefail`, and are shellcheck
 (`-S warning -x`) clean. `shared/native-ab/publish/publish-lib.sh` is a
 shared library, not a standalone script.
+
+### HTTP retry limits
+
+The whole-object HTTP helpers (`http_size`, `http_get_sha256`,
+`http_get_to_file`) retry transport failures, because a reset in the middle
+of a full GET of the ISO candidate is a transient edge fault: three of the
+last 60 `build-installer-iso.yml` runs failed that way with `curl: (56) Recv
+failure: Connection reset by peer`. Curl's plain `--retry` skips error 56 and
+18, so the helpers add `--retry-all-errors`, `PUBLISH_HTTP_GET_RETRIES`
+(default 5 retries) and `PUBLISH_HTTP_GET_RETRY_MAX_TIME` (default 300 s).
+Each call keeps `--connect-timeout 10` and a `--max-time`. Without
+`--retry-delay`, curl backs off 1, 2, 4, 8, 16 s, so a full budget costs 31 s
+of delay; `--retry-max-time` bounds the window. A missing object (4xx) is
+retried too, then fails. After the last attempt the helper returns non-zero
+and the caller exits with its existing failure message, so the pipeline still
+fails closed. `http_size` reports only the last `content-length` header, and
+`http_get_sha256` never hashes a partial file. Range GETs are unchanged:
+`http_range_sha256` has its own attempt loop.
 
 ## Destination addressing
 

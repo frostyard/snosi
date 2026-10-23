@@ -51,6 +51,27 @@ the removed workflow never ran successfully because its R2 credentials
 were unavailable. No R2 object is deleted by the source-lane removal; any
 future deletion is gated by ADR-0018's exact-object check.
 
+The public-origin HTTP checks retry transient transport failures. Three of
+the last 60 runs of this workflow failed with `curl: (56) Recv failure:
+Connection reset by peer` in the middle of a full GET of the ISO candidate,
+a transient edge fault rather than a verdict about the object. Plain curl
+`--retry` does not retry errors 56 (recv failure) or 18 (partial body), so
+`http_size`, `http_get_sha256` and `http_get_to_file` in
+`shared/native-ab/publish/publish-lib.sh` pass `--retry-all-errors` with
+`PUBLISH_HTTP_GET_RETRIES` (default 5) and
+`PUBLISH_HTTP_GET_RETRY_MAX_TIME` (default 300 s). Every call keeps a
+`--connect-timeout` and a `--max-time`. No `--retry-delay` is set, so curl
+backs off exponentially (1, 2, 4, 8, 16 s: 31 s of delay for a full budget);
+`--retry-max-time` caps the whole window. The boot smoke test's ISO download
+uses the same options, and `verify-installer-redirect.sh` uses them on its
+three curls. The checks still fail closed: after the last attempt the
+helper returns non-zero and the caller exits with its existing diagnostic
+(`http_get_sha256` also no longer hashes a partial file as if it were the
+object). `--retry-all-errors` also retries a deterministic 4xx, so a missing
+object costs up to 31 s before it fails; `test-public-origin-iso` and
+`promote-iso` carry `timeout-minutes: 60` and `30` so no retry chain can
+hold a job open indefinitely. Range GETs keep their own attempt loop.
+
 ## Validation and evidence
 
 `.github/workflows/validate.yml` runs on PRs, main pushes and manual

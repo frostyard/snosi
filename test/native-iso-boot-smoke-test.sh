@@ -92,7 +92,8 @@ else
     [[ -n "$BASE_URL" ]] || die "ISO not in $PREPARED_DIR and no base-url given"
     url="$BASE_URL/.candidate/$VERSION/$ISO_NAME"
     echo "Downloading $url"
-    curl -fsSL --retry 3 -o "$iso" "$url" || die "download failed: $url"
+    curl -fsSL --connect-timeout 10 --max-time 600 --retry 5 --retry-all-errors \
+        --retry-max-time 300 -o "$iso" "$url" || die "download failed: $url"
 fi
 actual_sha="$(sha256sum "$iso" | cut -d' ' -f1)"
 [[ "$actual_sha" == "$expected_sha" ]] || die "sha256 mismatch for $ISO_NAME: got $actual_sha want $expected_sha"

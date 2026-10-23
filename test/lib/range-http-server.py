@@ -21,6 +21,7 @@
 #
 # Usage: range-http-server.py <port> <directory> [--ignore-ranges]
 #                                                [--ignore-first-ranges N]
+#                                                [--reset-first-gets N]
 #
 # --ignore-ranges        every Range request is answered with a full 200 body
 #                        (a permanently Range-incapable origin).
@@ -31,11 +32,27 @@
 #                        (cf-cache-status BYPASS/DYNAMIC) object answers its
 #                        first Range request with a full 200 and serves
 #                        correct 206s from then on.
+# --reset-first-gets N   the first N plain GETs (no Range header; HEAD is not
+#                        counted) are answered with 200 headers carrying the
+#                        FULL Content-Length, but only half the body travels
+#                        before the connection is aborted with a TCP RST. This
+#                        models the transient "curl: (56) Recv failure:
+#                        Connection reset by peer" / "(18) end of response with
+#                        N bytes missing" seen mid-body in public-origin ISO
+#                        verification. SimpleHTTPRequestHandler's
+#                        self.connection.close() does NOT close the socket fd
+#                        -- rfile/wfile still reference it -- so a real abort
+#                        needs SO_LINGER(1,0) plus shutdown(SHUT_RDWR). Each
+#                        such abort also writes one "reset GET <path> after
+#                        <half> of <size> bytes" line to stderr, so a test can
+#                        prove that the abort really happened.
 # Binds 127.0.0.1 only.
 import http.server
 import os
 import re
+import socket
 import socketserver
+import struct
 import sys
 import threading
 
@@ -46,7 +63,9 @@ class RangeRequestHandler(http.server.SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     ignore_ranges = False
     ignore_first_ranges = 0
+    reset_first_gets = 0
     _ignore_lock = threading.Lock()
+    _reset_lock = threading.Lock()
 
     @classmethod
     def _should_ignore_range(cls):
@@ -58,6 +77,57 @@ class RangeRequestHandler(http.server.SimpleHTTPRequestHandler):
                 return True
         return False
 
+    @classmethod
+    def _should_reset_get(cls):
+        with cls._reset_lock:
+            if cls.reset_first_gets > 0:
+                cls.reset_first_gets -= 1
+                return True
+        return False
+
+    def _abort_connection(self):
+        """Abort the connection with a TCP RST, not a clean FIN.
+
+        SO_LINGER with a zero timeout makes the close() that follows discard
+        queued data and send RST. shutdown() forces the peer's read to fail
+        right away instead of waiting for the handler's buffered file objects
+        to be garbage-collected.
+        """
+        try:
+            self.connection.setsockopt(
+                socket.SOL_SOCKET,
+                socket.SO_LINGER,
+                struct.pack("ii", 1, 0),
+            )
+        except OSError:
+            pass
+        try:
+            self.connection.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        self.close_connection = True
+
+    def _reset_full_get(self, path, file_size):
+        """Send full-length 200 headers, half the body, then abort."""
+        half = max(1, file_size // 2) if file_size else 0
+        sys.stderr.write(
+            f"reset GET {self.path} after {half} of {file_size} bytes\n"
+        )
+        sys.stderr.flush()
+        with open(path, "rb") as f:
+            self.send_response(200)
+            self.send_header("Content-Type", self.guess_type(path))
+            self.send_header("Content-Length", str(file_size))
+            self.send_header("Accept-Ranges", "bytes")
+            self.end_headers()
+            if half:
+                try:
+                    self.wfile.write(f.read(half))
+                    self.wfile.flush()
+                except OSError:
+                    pass
+        self._abort_connection()
+
     def send_head(self):
         path = self.translate_path(self.path)
         if os.path.isdir(path) or not os.path.isfile(path):
@@ -65,6 +135,13 @@ class RangeRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         file_size = os.path.getsize(path)
         range_header = self.headers.get("Range")
+        if (
+            not range_header
+            and self.command == "GET"
+            and self._should_reset_get()
+        ):
+            self._reset_full_get(path, file_size)
+            return None
         if not range_header or self._should_ignore_range():
             f = open(path, "rb")
             self.send_response(200)
@@ -130,7 +207,7 @@ def main():
     if len(args) < 2:
         print(
             f"Usage: {sys.argv[0]} <port> <directory> "
-            "[--ignore-ranges] [--ignore-first-ranges N]",
+            "[--ignore-ranges] [--ignore-first-ranges N] [--reset-first-gets N]",
             file=sys.stderr,
         )
         return 2
@@ -146,6 +223,11 @@ def main():
                 print("--ignore-first-ranges requires a count", file=sys.stderr)
                 return 2
             RangeRequestHandler.ignore_first_ranges = int(rest.pop(0))
+        elif option == "--reset-first-gets":
+            if not rest:
+                print("--reset-first-gets requires a count", file=sys.stderr)
+                return 2
+            RangeRequestHandler.reset_first_gets = int(rest.pop(0))
         else:
             print(f"Unknown option: {option}", file=sys.stderr)
             return 2
@@ -158,6 +240,8 @@ def main():
             mode = f"ignoring first {RangeRequestHandler.ignore_first_ranges} Range request(s)"
         else:
             mode = "Range-capable"
+        if RangeRequestHandler.reset_first_gets:
+            mode += f", resetting first {RangeRequestHandler.reset_first_gets} plain GET(s)"
         print(f"Serving {directory} on http://127.0.0.1:{port}/ ({mode})")
         httpd.serve_forever()
     return 0

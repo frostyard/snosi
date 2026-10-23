@@ -24,7 +24,8 @@ expected_name="snosi-installer_${EXPECTED_VERSION}_x86-64.iso"
 base_url="${STABLE_URL%/*}"
 expected_location="$base_url/$expected_name"
 
-status="$(curl -sS --max-time 60 -D "$WORK/headers" -o /dev/null -w '%{http_code}' "$STABLE_URL")"
+status="$(curl -sS --connect-timeout 10 --retry 5 --retry-all-errors --retry-max-time 120 \
+    --max-time 60 -D "$WORK/headers" -o /dev/null -w '%{http_code}' "$STABLE_URL")"
 [[ "$status" == 302 ]] || { echo "Error: $STABLE_URL returned HTTP $status, expected 302" >&2; exit 1; }
 
 location="$(awk 'BEGIN {IGNORECASE=1} /^Location:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); value=$0} END {print value}' "$WORK/headers")"
@@ -36,8 +37,10 @@ location="$(awk 'BEGIN {IGNORECASE=1} /^Location:/ {sub(/^[^:]*:[[:space:]]*/, "
 cache_control="$(awk 'BEGIN {IGNORECASE=1} /^Cache-Control:/ {sub(/^[^:]*:[[:space:]]*/, ""); sub(/\r$/, ""); value=$0} END {print value}' "$WORK/headers")"
 [[ "${cache_control,,}" == *no-store* ]] || { echo "Error: redirect lacks Cache-Control: no-store (got '$cache_control')" >&2; exit 1; }
 
-curl -fsSI --max-time 60 "$location" >/dev/null || { echo "Error: immutable ISO is not reachable: $location" >&2; exit 1; }
-curl -fsS --max-time 60 -o "$WORK/SHA256SUMS" "$base_url/SHA256SUMS"
+curl -fsSI --connect-timeout 10 --retry 5 --retry-all-errors --retry-max-time 120 \
+    --max-time 60 "$location" >/dev/null || { echo "Error: immutable ISO is not reachable: $location" >&2; exit 1; }
+curl -fsS --connect-timeout 10 --retry 5 --retry-all-errors --retry-max-time 120 \
+    --max-time 60 -o "$WORK/SHA256SUMS" "$base_url/SHA256SUMS"
 
 awk -v name="$expected_name" '
     $2 == name && length($1) == 64 && $1 !~ /[^0-9a-f]/ {matches++}
