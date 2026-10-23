@@ -3,9 +3,11 @@
 set -euo pipefail
 
 # Capture /etc/coder.d to factory defaults for tmpfiles.d to restore at boot.
-# coder.service has EnvironmentFile=/etc/coder.d/coder.env and is gated on
-# ConditionFileNotEmpty=/etc/coder.d/coder.env, so the unit stays inert until
-# an admin fills in the config (CODER_ACCESS_URL etc.).
+# The deb's coder.env is a non-empty template of empty keys, so
+# coder.service's ConditionFileNotEmpty= passes on a fresh host. The real gate
+# is ExecCondition= in coder.service.d/10-snosi-configured.conf
+# (/usr/lib/coder-sysext/coder-configured): coder.service is skipped until an
+# admin sets CODER_ACCESS_URL.
 mkdir -p "$BUILDROOT/usr/share/factory/etc"
 
 if [ -d "$BUILDROOT/etc/coder.d" ]; then
