@@ -437,6 +437,18 @@ systemd-sysupdate still version-locks enabled transfers sharing a definitions
 directory. Component discovery requires a compatible `frostyard-updex`
 release before an image depending on this layout is published.
 
+updex is the only updater for sysexts. It downloads into
+`/var/lib/extensions.d/` and owns the `/var/lib/extensions/<name>.raw` links
+that systemd-sysext merges. The image finalize
+(`shared/outformat/image/finalize/mkosi.finalize.chroot`) masks the upstream
+`systemd-sysupdate.timer`, `systemd-sysupdate-reboot.timer` and
+`systemd-sysupdate-update.timer` in `/etc`; `test/bootc-secure-static-test.sh`
+pins all three. The `-update` timer (new in systemd 262) stages images but
+never moves an updex link, so a staged revision stays inactive, also after a
+reboot; its vacuum (default `InstancesMax=3`, no `ProtectVersion=`) can
+delete the image an updex link points to; and it exits 1 whenever a component
+has only disabled features. Manual `systemd-sysupdate` runs stay available.
+
 ### Transfer file (`<name>.transfer`)
 
 Defines how systemd-sysupdate downloads the sysext:

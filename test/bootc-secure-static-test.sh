@@ -10,9 +10,11 @@ tree="$root/shared/bootc-secure/tree"
 package_manager="$root/shared/bootc-secure/package-manager"
 artifact_validator="$root/test/bootc-secure-artifact-test.sh"
 
-# Upstream sysupdate timers have no default OS transfer on bootc images.
-# Both masks must be unconditional, not hidden in a branch.
-for timer in systemd-sysupdate.timer systemd-sysupdate-reboot.timer; do
+# Upstream sysupdate timers have no default OS transfer on bootc images, and
+# sysexts update through updex. All three masks (systemd 262 adds
+# systemd-sysupdate-update.timer) must be unconditional, not hidden in a branch.
+for timer in systemd-sysupdate.timer systemd-sysupdate-reboot.timer \
+    systemd-sysupdate-update.timer; do
     if ! grep -Fqx "ln -sf /dev/null /etc/systemd/system/$timer" \
         "$root/shared/outformat/image/finalize/mkosi.finalize.chroot"; then
         echo "image finalize must mask $timer unconditionally" >&2

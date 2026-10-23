@@ -38,8 +38,17 @@ echo "uninitialized" > /etc/machine-id
 # "No transfer definitions found." (observed on a bootc Floe host). Masks are
 # kept by the enablement strip (presets cannot recreate them), and an /etc
 # mask overrides existing installs' persisted .wants links.
+# systemd 262 (Forky) adds systemd-sysupdate-update.timer, which runs
+# `systemd-sysupdate update --component-all --cleanup=yes`. It is the same
+# class of timer and must stay masked too: it exits 1 on every run (each
+# component whose features are all disabled returns ENOENT), it stages images
+# in /var/lib/extensions.d without changing updex's /var/lib/extensions links
+# (so nothing activates them), and its InstancesMax vacuum can delete the
+# image an updex link points to (systemd v262 source). The staging gap and
+# the exit 1 were observed on framework and selfie on 2026-10-23.
 ln -sf /dev/null /etc/systemd/system/systemd-sysupdate.timer
 ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-reboot.timer
+ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-update.timer
 
 # Native /var factory state: the installer creates a fresh per-machine /var,
 # so nothing written to image /var at build time survives (see CLAUDE.md
