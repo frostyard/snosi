@@ -15,7 +15,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 scoped_tree=shared/himmelblau/sandbox
 scoped_invocation="--dependency=himmelblau --sandbox-tree=$scoped_tree"
-just_invocation="--dependency= --dependency=base $scoped_invocation build"
+just_invocation="--dependency= --dependency=base $scoped_invocation --cache-only=never build"
 
 PASS=0
 FAIL=0
@@ -355,8 +355,18 @@ expect_failure "missing final himmelblau fail step" check_build_workflow "$dir"
 
 # The scoped invocation dropped from the Justfile target.
 dir=$(fixture_root justfile)
-sed -i '/--sandbox-tree=shared\/himmelblau\/sandbox build$/d' "$dir/Justfile"
+sed -i '/--sandbox-tree=shared\/himmelblau\/sandbox --cache-only=never build$/d' "$dir/Justfile"
 expect_failure "missing scoped invocation in _sysexts" check_justfile "$dir"
+
+# The metadata sync flag dropped from the Justfile invocation.
+dir=$(fixture_root justfile-cache-only)
+sed -i 's/ --cache-only=never//' "$dir/Justfile"
+expect_failure "missing --cache-only=never in _sysexts" check_justfile "$dir"
+
+# The metadata sync flag dropped from the workflow invocation.
+dir=$(fixture_root workflow-cache-only)
+sed -i 's/ --cache-only=never//' "$dir/.github/workflows/build.yml"
+expect_failure "missing --cache-only=never in build.yml" check_build_workflow "$dir"
 
 check_all "$root" || true
 
