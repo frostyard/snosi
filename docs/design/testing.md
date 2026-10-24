@@ -111,9 +111,31 @@ path is feasibility evidence, not Firn installation evidence. The
 `test/bootc-secure-update-test.sh --fixtures` and rotation fixtures validate
 protocol shapes and failure handling, not installed update or rollback.
 
-Fresh-install evidence for **Snow, Floe and Sundog** is pending: Firn's
-enforced-Secure-Boot E2E and minideb lab installs will run after the Firn
-release is pinned; no fresh-install evidence exists yet. The
+Fresh-install evidence exists for **Snow and Floe** as VM evidence only.
+Argo workflow `bootc-only-iso-install-54wr4` (frostyard/lab
+`argo/bootc-only-iso-install-test.yaml`, minideb 10.0.1.175, 2026-10-24)
+installed `snosi-installer_20261023195508_x86-64.iso` (Firn 0.8.0, commit
+f3c4b5dd; checksum authenticated by the signed `SHA256SUMS.gpg` index).
+Every cell was bootc, unencrypted, Secure Boot on, on a blank Incus VM disk:
+
+- `PASS: bootc/snow/none/sb=true image=ghcr.io/frostyard/snow:latest
+  digest=sha256:6dc2232f62193dc7801e38e8730717e4e84f647592568e407cb9513422f1e379`
+  (image version 20261023200056).
+- `PASS: bootc/floe/none/sb=true image=ghcr.io/frostyard/floe:latest
+  digest=sha256:b23cc05c2cf88729c534e09c0c68fd6417a45511b9514c1b03d533b2931138b0`
+  (image version 20261023195819).
+
+A PASS proves the Firn ISO install to a blank virtual disk, the Secure Boot
+MOK chain through installed boot, first boot to a ready login prompt, a
+btrfs-backed root (composefs overlay on btrfs `/sysroot`), and an installed
+bootc image ref and digest matching the pin. It is not hardware
+qualification and does not prove encrypted (LUKS/TPM) unlock, graphical
+login, updates, rollback or the signed N/N+1 lifecycle. Firn's own
+enforced-Secure-Boot E2E has still produced no evidence.
+
+**Sundog** failed `boot:no_report` (the installed system did not report) in
+the same run; see [frostyard/snosi#1123](https://github.com/frostyard/snosi/issues/1123).
+Its evidence stays pending. The
 bootc-only installer also lists **Snowfield untested** on representative
 Surface hardware: its catalog gate was waived, not passed. The
 [manual Snow lab handoff](../specs/bootc-secure-lab-handoff.md) describes
