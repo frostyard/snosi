@@ -148,6 +148,16 @@ jobs:
           sudo podman image inspect "$IMAGE:mechanics-${{ steps.version.outputs.tag }}" |
             python3 ./flatpaks/core-flatpaks.py check-image "${{ matrix.profile }}"
 
+      - name: Check image version annotation
+        # bootc reads the image version from the OCI manifest annotation, not
+        # from the config label (frostyard/snosi#1125).
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo ./shared/outformat/image/check-image-version.sh \
+            "containers-storage:$IMAGE:mechanics-${{ steps.version.outputs.tag }}" \
+            "${{ steps.version.outputs.tag }}"
+
       - name: Refuse to publish anything secure-capable under a mechanics tag
         # Fail-closed mirror of test-install.yml's guard, pointing the other
         # way. That one refuses to INSTALL a secure image by the mechanics
@@ -196,6 +206,17 @@ jobs:
             echo ''
             echo 'Provides no security evidence. Not for installation.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check image version annotation on pushed tag
+        # bootc reads the image version from the OCI manifest annotation, not
+        # from the config label (frostyard/snosi#1125). The root auth from
+        # `sudo buildah login` above reaches skopeo through sudo.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo ./shared/outformat/image/check-image-version.sh \
+            "docker://$IMAGE:mechanics-${{ steps.version.outputs.tag }}" \
+            "${{ steps.version.outputs.tag }}"
 
       - name: cleanup build output
         if: always()

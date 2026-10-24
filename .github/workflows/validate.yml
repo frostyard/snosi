@@ -105,6 +105,12 @@ jobs:
         # image check and generated first-setup list here.
         run: ./test/core-flatpaks-test.sh
 
+      - name: Validate image version annotation
+        # bootc reads the image version from the OCI manifest annotation, not
+        # the config label (frostyard/snosi#1125). Pin the label/annotation
+        # contract, the os-release consistency check and the lane wiring.
+        run: ./test/image-version-annotation-test.sh
+
       - name: Validate Firn ISO Forky sandbox
         run: ./test/firn-installer-iso-test.sh --static
 

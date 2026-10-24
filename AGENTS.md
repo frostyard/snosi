@@ -115,7 +115,10 @@ only shipped stager publishes a bootc `digest=` identity; do not remove
 its version parser without a separate interface decision.
 
 `.github/workflows/build.yml` publishes sysexts; `build-images.yml` publishes
-signed OCI images by immutable digest before promoting `latest`.
+signed OCI images by immutable digest before promoting `latest`. Published
+images carry `org.opencontainers.image.version` as both a config label and a
+manifest annotation equal to os-release `IMAGE_VERSION`; bootc reads the
+annotation.
 `build-installer-iso.yml` builds and signed-index-publishes the Firn ISO to
 `isos/native/v1/`. `deploy-native-installer-redirect.yml` deploys the
 retained `workers/native-installer-redirect/` stable-URL Worker. ISO

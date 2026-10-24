@@ -131,6 +131,12 @@ the followed registry image's version label; `--pkg-diff` compares the
 running inventory with the *local* staged inventory, without reading the
 network or a mutable dpkg database.
 
+Published images carry `org.opencontainers.image.version` as both a config
+label and a manifest annotation, and both equal the image's os-release
+`IMAGE_VERSION`. bootc reads the version from the manifest annotation, so
+`shared/outformat/image/check-image-version.sh` checks the packaged image
+and the pushed digest.
+
 The `mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh` sidecar
 library writes an identity-bound, write-once package inventory and atomically
 swaps its `/run/snosi/staged-packages` symlink. The sole shipped producer uses

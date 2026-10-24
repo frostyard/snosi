@@ -8,6 +8,13 @@
 #
 # Usage: buildah-package.sh <rootfs-dir> <image-ref> [label=value ...]
 #
+# The value of a caller label org.opencontainers.image.version is also written
+# as the OCI manifest annotation of the same key, because bootc reads the
+# image version from the manifest annotation, not from the config label
+# (frostyard/snosi#1125). That value must equal IMAGE_VERSION in the rootfs
+# /usr/lib/os-release; the check is skipped only for test fixtures without
+# os-release and for local callers that pass no version label.
+#
 # Examples:
 #   buildah-package.sh output/snow localhost/snow:latest
 #   buildah-package.sh output/snow ghcr.io/frostyard/snow:v1 \
@@ -20,6 +27,29 @@ IMAGE_REF="$2"
 shift 2
 
 [[ -d "$ROOTFS_DIR" ]] || { echo "Error: rootfs directory does not exist: $ROOTFS_DIR" >&2; exit 1; }
+
+readonly VERSION_ANNOTATION_KEY="org.opencontainers.image.version"
+VERSION_ANNOTATION_VALUE=""
+for argument in "$@"; do
+    [[ $argument != "$VERSION_ANNOTATION_KEY="* ]] ||
+        VERSION_ANNOTATION_VALUE=${argument#"$VERSION_ANNOTATION_KEY="}
+done
+if [[ -n $VERSION_ANNOTATION_VALUE && -f "$ROOTFS_DIR/usr/lib/os-release" ]]; then
+    image_version=$(sed -n 's/^IMAGE_VERSION=//p' "$ROOTFS_DIR/usr/lib/os-release" | tail -n 1)
+    if [[ -z $image_version ]]; then
+        echo "Error: os-release has no IMAGE_VERSION: $ROOTFS_DIR/usr/lib/os-release" >&2
+        exit 1
+    fi
+    case $image_version in
+        \"*\") image_version=${image_version#\"}; image_version=${image_version%\"} ;;
+        \'*\') image_version=${image_version#\'}; image_version=${image_version%\'} ;;
+    esac
+    if [[ $image_version != "$VERSION_ANNOTATION_VALUE" ]]; then
+        printf 'Error: image version label %s differs from os-release IMAGE_VERSION %s\n' \
+            "$VERSION_ANNOTATION_VALUE" "$image_version" >&2
+        exit 1
+    fi
+fi
 
 probe_rootfs_bootc_version() ( # rootfs
     local root=$1 proc="$1/proc" mounted=0 output status
@@ -153,6 +183,9 @@ if [[ ${SNOSI_BOOTC_SECURE:-0} == 1 ]]; then
     final_mount=""
     buildah config --label "$SECURE_CAPABLE_LABEL" "$final_container"
     buildah config --label "$SECURE_ASSEMBLY_LABEL" "$final_container"
+    if [[ -n $VERSION_ANNOTATION_VALUE ]]; then
+        buildah config --annotation "$VERSION_ANNOTATION_KEY=$VERSION_ANNOTATION_VALUE" "$final_container"
+    fi
     buildah commit "$final_container" "$IMAGE_REF"
     buildah rm "$final_container"
     final_container=""
@@ -189,6 +222,11 @@ buildah config \
 for label in "$@"; do
     buildah config --label "$label" "$container"
 done
+
+# bootc reads the image version from the manifest annotation (snosi#1125).
+if [[ -n $VERSION_ANNOTATION_VALUE ]]; then
+    buildah config --annotation "$VERSION_ANNOTATION_KEY=$VERSION_ANNOTATION_VALUE" "$container"
+fi
 
 # Trusted labels are applied last so caller labels cannot downgrade or forge them.
 buildah config --label "$SECURE_INCAPABLE_LABEL" "$container"

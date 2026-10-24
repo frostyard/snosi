@@ -291,6 +291,16 @@ jobs:
           sudo podman image inspect "$IMAGE:${{ steps.version.outputs.tag }}" |
             python3 ./flatpaks/core-flatpaks.py check-image "${{ matrix.profile }}"
 
+      - name: Check image version annotation
+        # bootc reads the image version from the OCI manifest annotation, not
+        # from the config label (frostyard/snosi#1125).
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo ./shared/outformat/image/check-image-version.sh \
+            "containers-storage:$IMAGE:${{ steps.version.outputs.tag }}" \
+            "${{ steps.version.outputs.tag }}"
+
       - name: Install secure artifact validation dependencies
         run: |
           sudo apt-get update
@@ -445,6 +455,18 @@ jobs:
           AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
           skopeo inspect --authfile "$AUTH_FILE" "docker://$IMAGE@$DIGEST" |
             python3 ./flatpaks/core-flatpaks.py check-image "${{ matrix.profile }}"
+
+      - name: Check image version annotation on pushed digest
+        # bootc reads the image version from the OCI manifest annotation, not
+        # from the config label (frostyard/snosi#1125). Gate `latest` on the
+        # pushed digest, not only on the local image.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          ./shared/outformat/image/check-image-version.sh \
+            "docker://$IMAGE@$DIGEST" "${{ steps.version.outputs.tag }}" "$AUTH_FILE"
 
       - name: Promote validated digest to latest
         env:
@@ -670,6 +692,16 @@ jobs:
         run: |
           sudo podman image inspect "$IMAGE:${{ steps.version.outputs.tag }}" |
             python3 ./flatpaks/core-flatpaks.py check-image "${{ matrix.profile }}"
+
+      - name: Check image version annotation
+        # bootc reads the image version from the OCI manifest annotation, not
+        # from the config label (frostyard/snosi#1125).
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo ./shared/outformat/image/check-image-version.sh \
+            "containers-storage:$IMAGE:${{ steps.version.outputs.tag }}" \
+            "${{ steps.version.outputs.tag }}"
 
       - name: Smoke test - verify SUID bit and bcvk requirements
         env:

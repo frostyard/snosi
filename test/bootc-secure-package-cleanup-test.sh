@@ -91,10 +91,16 @@ case $1 in
     config)
         container=${!#}
         for ((i = 2; i < $#; i++)); do
-            [[ ${!i} != --label ]] || {
-                i=$((i + 1))
-                printf '%s\n' "${!i}" >>"$BUILD_FIXTURE_STATE/$container-labels"
-            }
+            case ${!i} in
+                --label)
+                    i=$((i + 1))
+                    printf '%s\n' "${!i}" >>"$BUILD_FIXTURE_STATE/$container-labels"
+                    ;;
+                --annotation)
+                    i=$((i + 1))
+                    printf '%s\n' "${!i}" >>"$BUILD_FIXTURE_STATE/$container-annotations"
+                    ;;
+            esac
         done
         ;;
     rm) rm -rf -- "$BUILD_FIXTURE_STATE/containers/$2" ;;
@@ -363,6 +369,7 @@ run_success_case() {
     ! grep -Fq 'io.snosi.bootc.secureboot-assembly=' "$state/container-1-labels" || fail "first candidate gained the assembly label"
     grep -Fxq 'io.snosi.bootc.secureboot-capable=true' "$state/container-2-labels" || fail "final container lost the secure label"
     grep -Fxq "io.snosi.bootc.secureboot-assembly=$BOOTC_SECURE_ASSEMBLY_COMPATIBILITY" "$state/container-2-labels" || fail "final container lost the assembly label"
+    grep -Fxq 'org.opencontainers.image.version=fixture' "$state/container-2-annotations" || fail "final container lost the version annotation"
     "$state/assembler" --remove-injected "$root"
 }
 
