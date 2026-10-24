@@ -20,9 +20,10 @@ Snosi builds four Debian Trixie bootc OCI products with mkosi:
 
 Firn's `shared/firn-installer/catalog.json` offers exactly these four bootc
 choices. **Snowfield is untested on representative Surface hardware.** Its
-catalog gate was waived, not passed. Fresh-install evidence for Snow, Floe
-and Sundog is pending: minideb lab installs will run after the Firn release
-is pinned; none exists yet. They will not prove secure update/rollback.
+catalog gate was waived, not passed. Snow and Floe have VM
+fresh-install PASS evidence from a minideb lab run (2026-10-24; see
+[testing](testing.md)); Sundog's evidence is pending after a failed run.
+This does not prove secure update/rollback.
 For the secure-bootc support and recovery boundary see
 [operations](../bootc-secure-operations.md). Firn's ISO is published under
 `isos/native/v1/`; the native-named URL does not offer an A/B product.

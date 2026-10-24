@@ -9,9 +9,10 @@ sequences. Revisit the horizons as work lands.
 **bootc is the only transport** built by snosi. Snow, Snowfield, Floe and
 Sundog are OCI products; sysexts add optional `/usr` payloads. Firn offers
 only these four bootc choices. Snowfield ships **untested** on representative
-Surface hardware: its inclusion gate was waived, not passed. Fresh-install
-evidence for Snow, Floe and Sundog is pending: no minideb lab install has
-produced any yet. Neither fixture results
+Surface hardware: its inclusion gate was waived, not passed. Snow and Floe
+have VM fresh-install PASS evidence from a minideb lab run (2026-10-24; see
+[testing](docs/design/testing.md)); it is not hardware qualification.
+Sundog's run failed and its evidence is pending. Neither fixture results
 nor catalog inclusion establishes live secure update and rollback proof.
 
 Native A/B and nbc support and routine publication ended **2026-09-30**
