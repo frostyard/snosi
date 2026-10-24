@@ -31,9 +31,13 @@ assembled image is checked again to ensure digest continuity. Registry
 authentication uses the run-scoped `GITHUB_TOKEN`; PR jobs have no registry
 write permission. Cosign signs/validates the immutable digest, and
 `latest` is promoted only after remote signature, label, policy-copy and
-artifact checks succeed. Syft SBOMs attach via ORAS. Snow release discovery
-requires a previous signed immutable Snow image with the exact Syft SBOM
-referrer, not an arbitrary tag. Every packaging lane stamps the product's
+artifact checks succeed. Every published image carries
+`org.opencontainers.image.version` as both a config label and a manifest
+annotation, equal to os-release `IMAGE_VERSION`; bootc reads the annotation.
+`shared/outformat/image/check-image-version.sh` checks the local image and
+the pushed digest before promotion. Syft SBOMs attach via ORAS. Snow release
+discovery requires a previous signed immutable Snow image with the exact Syft
+SBOM referrer, not an arbitrary tag. Every packaging lane stamps the product's
 `org.frostyard.core-flatpaks` label and checks it on the packaged image
 before any push ([core Flatpak sets](../integration-contracts.md#core-flatpak-sets)).
 
