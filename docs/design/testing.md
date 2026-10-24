@@ -26,6 +26,9 @@ dependency guards have fixture suites.
 base `nbc-update-download` units; installed-image tier 2 checks the package
 and binary are absent. `test/check-no-nbc-package-test.sh` fixtures the
 dpkg-status gate that blocks OCI publication when `frostyard-nbc` is installed.
+`test/updex-timer-guard-test.sh` fixtures the `updex-timer.finalize` build
+guard (updex's update timer must ship and be in the enablement manifest), its
+composition wiring and the base preset line.
 `test/ghostty-terminfo-test.sh` checks that base compiles the shipped
 `xterm-ghostty` terminfo (Debian ships only `ghostty`) into `/usr/share/terminfo`.
 `test/firn-catalog-test.sh` checks the

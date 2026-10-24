@@ -100,6 +100,7 @@ test-registry-test.sh	ci	validate.yml
 tss-user-initrd-static-test.sh	ci	validate.yml
 update-checksums-split-test.sh	ci	validate.yml
 update-notify-units-test.sh	ci	validate.yml
+updex-timer-guard-test.sh	ci	validate.yml
 upholds-guard-test.sh	ci	validate.yml
 verified-download-split-checksums-test.sh	ci	validate.yml
 verify-installer-redirect-test.sh	ci	validate.yml

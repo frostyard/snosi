@@ -1,0 +1,107 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Build guard: a preset that enables updex-update.timer must be consistent with
+# the image it is packed into.
+#
+# The base image installs frostyard-updex (`mkosi.images/base/mkosi.conf`),
+# whose package ships /usr/lib/systemd/system/updex-update.timer and
+# updex-update.service NOT enabled. `05-updex.preset` (base) is what turns the
+# timer on: automatic sysext updates, staged by updex and applied at the next
+# boot (updex ADR-0016). A preset line with no unit behind it would leave every
+# install without sysext updates, silently, and a preset line with no
+# enablement-manifest entry would leave an EXISTING host without the timer:
+# preset-reconcile only presets the units ADDED to
+# /usr/share/snosi/enablement-manifest.txt.
+#
+# This is a NON-chroot mkosi FinalizeScript: it runs on the host against
+# $BUILDROOT, after shared/outformat/image/finalize/mkosi.finalize.chroot has
+# written the manifest and stripped the /etc enablement links.
+#
+# It fails the build when any *.preset under usr/lib/systemd/system-preset or
+# etc/systemd/system-preset enables updex-update.timer AND
+#   - usr/lib/systemd/system/updex-update.timer or
+#     usr/lib/systemd/system/updex-update.service is not a regular file, or
+#   - the manifest is missing or lacks the exact line
+#     "system timers.target.wants/updex-update.timer".
+#
+# The guard fails closed: an unreadable preset directory, a find(1) error or a
+# grep(1) read error fails the build instead of reporting the image clean.
+set -euo pipefail
+
+: "${BUILDROOT:?updex-timer.finalize: \$BUILDROOT not set (must run as a FinalizeScript)}"
+
+USR_PRESET_DIR="$BUILDROOT/usr/lib/systemd/system-preset"
+ETC_PRESET_DIR="$BUILDROOT/etc/systemd/system-preset"
+TIMER_UNIT="$BUILDROOT/usr/lib/systemd/system/updex-update.timer"
+SERVICE_UNIT="$BUILDROOT/usr/lib/systemd/system/updex-update.service"
+MANIFEST="$BUILDROOT/usr/share/snosi/enablement-manifest.txt"
+MANIFEST_LINE="system timers.target.wants/updex-update.timer"
+PRESET_LINE='^[[:space:]]*enable[[:space:]]+updex-update\.timer([[:space:]]|$)'
+
+die() {
+    echo "updex-timer.finalize: $*" >&2
+    exit 1
+}
+
+# --- 1. the base preset directory must exist and be readable ----------------
+# base owns usr/lib/systemd/system-preset; a missing or unreadable directory
+# means the preset set cannot be judged, so the build fails.
+if [[ ! -d "$USR_PRESET_DIR" ]]; then
+    die "$USR_PRESET_DIR is missing (preset policy cannot be checked)"
+fi
+if [[ ! -r "$USR_PRESET_DIR" ]]; then
+    die "$USR_PRESET_DIR is unreadable (preset policy cannot be checked)"
+fi
+
+# --- 2. which presets enable the timer? -------------------------------------
+list=$(mktemp)
+trap 'rm -f "$list"' EXIT
+
+preset_dirs=("$USR_PRESET_DIR")
+[[ -d "$ETC_PRESET_DIR" ]] && preset_dirs+=("$ETC_PRESET_DIR")
+if ! find "${preset_dirs[@]}" -maxdepth 1 -type f -name '*.preset' -print >"$list" 2>/dev/null; then
+    die "cannot list the *.preset files under ${preset_dirs[*]}"
+fi
+
+enabled_by=""
+status=0
+while IFS= read -r preset; do
+    if grep -qE "$PRESET_LINE" "$preset"; then
+        enabled_by="$preset"
+        break
+    else
+        status=$?
+        # grep exits 1 for "no match" (clean) and 2 for a read error (fatal).
+        if [[ $status -ne 1 ]]; then
+            die "cannot read $preset (grep exit $status)"
+        fi
+    fi
+done <"$list"
+
+if [[ -z "$enabled_by" ]]; then
+    echo "updex-timer.finalize: no preset enables updex-update.timer; nothing to check"
+    exit 0
+fi
+
+echo "updex-timer.finalize: $(basename "$enabled_by") enables updex-update.timer"
+
+# --- 3. both units must ship ------------------------------------------------
+for unit in "$TIMER_UNIT" "$SERVICE_UNIT"; do
+    [[ -f "$unit" ]] || die "$enabled_by enables updex-update.timer but ${unit#"$BUILDROOT"} is missing or not a regular file"
+done
+
+# --- 4. an existing host needs the manifest entry to get the timer ----------
+[[ -f "$MANIFEST" ]] || die "$enabled_by enables updex-update.timer but ${MANIFEST#"$BUILDROOT"} is missing (preset-reconcile would never enable it on an existing host)"
+
+if grep -Fqx "$MANIFEST_LINE" "$MANIFEST"; then
+    :
+else
+    status=$?
+    if [[ $status -ne 1 ]]; then
+        die "cannot read ${MANIFEST#"$BUILDROOT"} (grep exit $status)"
+    fi
+    die "${MANIFEST#"$BUILDROOT"} lacks the entry \"$MANIFEST_LINE\" (preset-reconcile would never enable updex-update.timer on an existing host)"
+fi
+
+echo "updex-timer.finalize: updex-update.timer ships, is preset-enabled and is recorded in the enablement manifest"
