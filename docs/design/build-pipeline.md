@@ -57,6 +57,10 @@ Image builds have four phases, in order:
    `shared/composition/core-flatpaks.finalize` ships the product's
    [core Flatpak set](../integration-contracts.md#core-flatpak-sets) under
    `/usr/share/frostyard/`.
+   `shared/outformat/image/finalize/updex-timer.finalize` fails the build
+   when a preset enables `updex-update.timer` and the unit or its
+   enablement-manifest entry is missing (see
+   [sysexts](sysexts.md#automatic-sysext-updates-updex-update-timer)).
 4. **PostOutputScripts:** `shared/manifest/postoutput/mkosi.postoutput`
    records the image manifest; `shared/composition/core-flatpaks.postoutput`
    fails the build unless the output tree's core Flatpak set matches its

@@ -451,6 +451,61 @@ reboot; its vacuum (default `InstancesMax=3`, no `ProtectVersion=`) can
 delete the image an updex link points to; and it exits 1 whenever a component
 has only disabled features. Manual `systemd-sysupdate` runs stay available.
 
+### Automatic sysext updates (updex-update.timer)
+
+`frostyard-updex` 2.1.0 ships `updex-update.timer` and
+`updex-update.service` under `/usr/lib/systemd/system/`, not enabled.
+`mkosi.images/base/mkosi.extra/usr/lib/systemd/system-preset/05-updex.preset`
+enables the timer on every image, and a fresh install runs it from its first
+boot. The units stage only: the service runs
+`/usr/bin/updex features update --no-refresh`. That run downloads, verifies
+and links a revision, and the revision takes effect at the next boot. Nothing
+reboots the machine. The timer runs every 6 hours
+(`OnCalendar=*-*-* 00/6:00:00`) with a 1 hour random delay
+(`RandomizedDelaySec=3600s`), catches up after downtime (`Persistent=true`)
+and runs only on AC power (`ConditionACPower=true`). See
+[updex ADR-0016](https://github.com/frostyard/updex/blob/main/docs/adr/0016-automatic-sysext-updates-apply-at-next-boot.md).
+
+An existing host gets the timer through `preset-reconcile.service`, which
+presets the units later ADDED to
+`/usr/share/snosi/enablement-manifest.txt`. It runs after the boot
+transaction, so the timer runs from the second boot of the first image that
+carries the preset.
+
+`shared/outformat/image/finalize/updex-timer.finalize` is the build guard. It
+fails the image build when a preset enables `updex-update.timer` and either
+unit is missing, or when `/usr/share/snosi/enablement-manifest.txt` lacks the
+line `system timers.target.wants/updex-update.timer` (without it no existing
+host would get the timer). `test/updex-timer-guard-test.sh` fixtures the
+guard and its wiring; `test/bootc-secure-static-test.sh` pins the preset line
+and the absence of a mask.
+
+**Opt-out.** `systemctl mask updex-update.timer` is the durable per-host
+opt-out: a mask survives image updates, and `preset-reconcile` skips masked
+units. `systemctl disable --now updex-update.timer` also lasts, but only after
+the first image with the preset has enabled the timer once; a disable before
+that is not recorded, and `preset-reconcile` then enables the timer. Use
+`updex features disable <name>` to stop the updates of one sysext, and
+`updex features rollback <name>` to go back one revision: updex then skips
+the rejected version and links the next newer one when it is published.
+`systemd-sysupdate-update.timer` stays masked (see above).
+
+**Status.** `updex features check` and `updex features list` show, per
+transfer, the merged version (`RUNNING`), the linked version (`LINKED`, which
+the next boot merges) and the newest available one; `LINKED` different from
+`RUNNING` means an update waits for a reboot. `updex daemon status` shows
+whether the timer is enabled, its next run and the last result;
+`journalctl -u updex-update.service` shows the runs.
+
+**A revision that needs a base change.** When a sysext revision depends on a
+base change, set `UPDEX_MIN_IMAGE_VERSION=<14-digit IMAGE_VERSION>` in its
+`extension-release`, by hand, like `SYSEXT_REVISION`. updex then refuses that
+revision on a host whose image is older than the value, since that base cannot
+satisfy it. Not used yet: before the first use, confirm that published images
+carry the OCI manifest annotation `org.opencontainers.image.version`
+(frostyard/snosi#1126). Without that annotation every host with a staged
+image update refuses the revision until it reboots.
+
 ### Transfer file (`<name>.transfer`)
 
 Defines how systemd-sysupdate downloads the sysext:
@@ -834,7 +889,9 @@ Rules that follow:
 - **A base package removal invalidates every sysext published before it.**
   Deltas do not self-heal; `skip-duplicates` means an unchanged KEYPACKAGE
   version never republishes. Bump `SYSEXT_REVISION` on the affected sysexts
-  in the same change that shrinks the base.
+  in the same change that shrinks the base. A revision that needs the new
+  base must also set `UPDEX_MIN_IMAGE_VERSION` in its `extension-release`;
+  see "Automatic sysext updates (updex-update.timer)".
 - **Pin load-bearing library paths in `required-paths.txt`.** The check runs
   against the delta, so listing `/usr/lib/x86_64-linux-gnu/libepoxy.so.0`
   asserts "the delta ships it" — precisely the invariant that broke. Adding

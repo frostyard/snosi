@@ -298,6 +298,7 @@ jobs:
           ./test/duplicate-packages-test.sh
           bash ./test/no-nbc-test.sh
           ./test/no-private-keys-test.sh
+          ./test/updex-timer-guard-test.sh
           ./test/ghostty-terminfo-test.sh
           ./test/base-hardware-utils-test.sh
           ./test/wifi-backend-test.sh

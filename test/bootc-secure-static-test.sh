@@ -22,6 +22,18 @@ for timer in systemd-sysupdate.timer systemd-sysupdate-reboot.timer \
     fi
 done
 
+# updex is the only sysext updater (updex ADR-0016). Base enables its update
+# timer through 05-updex.preset, so that preset must carry the exact enable
+# line and the image finalize must NOT mask the timer: an /etc mask wins over
+# the preset and would leave every install without automatic sysext updates.
+updex_preset="$root/mkosi.images/base/mkosi.extra/usr/lib/systemd/system-preset/05-updex.preset"
+grep -Fqx 'enable updex-update.timer' "$updex_preset"
+if sed 's/#.*//' "$root/shared/outformat/image/finalize/mkosi.finalize.chroot" |
+    grep -Fq 'updex-update.timer'; then
+    echo "image finalize must not mask updex-update.timer" >&2
+    exit 1
+fi
+
 # Live validation executes the candidate image's pinned bootc through Podman;
 # it must not depend on an independently installed host bootc.
 grep -Fq 'for command in buildah jq objcopy objdump openssl podman sbverify; do' \

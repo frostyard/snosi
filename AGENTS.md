@@ -115,6 +115,15 @@ staged digest and writes `/run/snosi/update-check` and
 That shared library retains `version=` support as an API even though the
 only shipped stager publishes a bootc `digest=` identity; do not remove
 its version parser without a separate interface decision.
+Base enables the packaged `updex-update.timer` on every image through
+`mkosi.images/base/mkosi.extra/usr/lib/systemd/system-preset/05-updex.preset`.
+It stages sysext revisions with updex, and a staged revision applies at the
+next boot. `shared/outformat/image/finalize/updex-timer.finalize` fails the
+image build when a preset enables that timer and the unit or its
+enablement-manifest entry is missing; the host opt-out is
+`systemctl mask updex-update.timer`. A sysext revision that needs a base
+change must set `UPDEX_MIN_IMAGE_VERSION`; see
+[docs/design/sysexts.md](docs/design/sysexts.md#automatic-sysext-updates-updex-update-timer).
 
 `.github/workflows/build.yml` publishes sysexts; `build-images.yml` publishes
 signed OCI images by immutable digest before promoting `latest`. Published

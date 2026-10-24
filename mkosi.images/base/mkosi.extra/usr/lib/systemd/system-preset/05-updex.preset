@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Automatic sysext updates: frostyard-updex stages, verifies and links a
+# revision; it takes effect at the next boot, never by an immediate reboot.
+# Opt out on a host with `systemctl mask updex-update.timer`.
+# See updex ADR-0016.
+enable updex-update.timer
