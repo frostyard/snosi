@@ -184,7 +184,7 @@ jobs:
         run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
 
       - name: setup-mkosi
-        uses: systemd/mkosi@3c3a08fb07d27fbe473625aa0725655cfb2c68bf
+        uses: systemd/mkosi@5ca453ab6b1d442c3d31d7f4a60b68352aac3265
 
       - name: Build main and sysexts
         env:
@@ -209,7 +209,12 @@ jobs:
         # sandbox tree. That keeps the repository metadata sync for that source
         # out of every other build: an outage of the himmelblau repo must not
         # stop the other sysexts from being built and published (ADR-0020).
-        # `output/base` already exists, so mkosi skips it here.
+        # `--cache-only=never` forces a repository metadata sync here. Since
+        # mkosi 57907f58 the sync is skipped when the incremental base cache is
+        # current, so mkosi would never fetch the himmelblau source. Base
+        # rebuilds in this invocation. mkosi requires `--incremental=no` with
+        # `--cache-only=never` (check_inputs rejects Incremental=yes with
+        # CacheOnly=never), so base rebuilds non-incrementally.
         id: himmelblau
         continue-on-error: true
         env:
@@ -226,7 +231,7 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
-          sudo -E mkosi --dependency= --dependency=base --dependency=himmelblau --sandbox-tree=shared/himmelblau/sandbox build
+          sudo -E mkosi --dependency= --dependency=base --dependency=himmelblau --sandbox-tree=shared/himmelblau/sandbox --incremental=no --cache-only=never build
 
       - name: Collect sysext outputs
         # Both mkosi invocations write into output/; collect after the second

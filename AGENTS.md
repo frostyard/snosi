@@ -28,8 +28,10 @@ and `shared/outformat/image/mkosi.conf`. mkosi list-valued settings accumulate
 in `Include=` order: check the resolved summary when rearranging fragments.
 The himmelblau APT source is scoped to `shared/himmelblau/sandbox/` and its
 sysext builds in a separate mkosi invocation with
-`--sandbox-tree=shared/himmelblau/sandbox`, in both `just sysexts` and
-`build.yml` (ADR-0020). `test/third-party-apt-source-scope-test.sh` rejects a
+`--sandbox-tree=shared/himmelblau/sandbox --incremental=no --cache-only=never`,
+in both `just sysexts` and `build.yml` (ADR-0020). `--cache-only=never` forces
+the metadata sync (mkosi 57907f58 skips it when the base cache is current) and
+mkosi requires `--incremental=no` with it. `test/third-party-apt-source-scope-test.sh` rejects a
 new third-party source in `mkosi.sandbox/`.
 The image script phases are BuildScripts, PostInstallationScripts,
 FinalizeScripts and PostOutputScripts. Consult
