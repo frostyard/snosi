@@ -491,17 +491,20 @@ the rejected version and links the next newer one when it is published.
 `systemd-sysupdate-update.timer` stays masked (see above).
 
 **Status.** `updex features check` and `updex features list` show, per
-transfer, the merged version (`RUNNING`), the linked version (`LINKED`, which
-the next boot merges) and the newest available one; `LINKED` different from
-`RUNNING` means an update waits for a reboot. `updex daemon status` shows
+transfer, the merged version (`RUNNING`) and the linked version (`LINKED`,
+which the next boot merges); `features check` also shows the newest available
+version. `LINKED` different from `RUNNING` means an update waits for a
+reboot. `updex daemon status` shows
 whether the timer is enabled, its next run and the last result;
 `journalctl -u updex-update.service` shows the runs.
 
 **A revision that needs a base change.** When a sysext revision depends on a
 base change, set `UPDEX_MIN_IMAGE_VERSION=<14-digit IMAGE_VERSION>` in its
-`extension-release`, by hand, like `SYSEXT_REVISION`. updex then refuses that
-revision on a host whose image is older than the value, since that base cannot
-satisfy it. Not used yet: before the first use, confirm that published images
+`extension-release`, by hand, like `SYSEXT_REVISION`. updex compares it with
+the `IMAGE_VERSION` of the image that boots next: the staged deployment when
+`bootc status` reports one, else the booted image. When that image is older,
+updex keeps the old link and reports `needs image >= <value>`; a host with a
+new enough staged image takes the revision before it reboots. Not used yet: before the first use, confirm that published images
 carry the OCI manifest annotation `org.opencontainers.image.version`
 (frostyard/snosi#1126). Without that annotation every host with a staged
 image update refuses the revision until it reboots.
