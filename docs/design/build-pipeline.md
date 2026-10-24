@@ -67,11 +67,12 @@ The sysext build is two mkosi invocations (`just sysexts`, and the "Build
 main and sysexts" plus "Build himmelblau sysext" steps of `build.yml`). The
 first builds `base`, `gui-base` and every root `Dependencies=` sysext. The
 second runs with `--dependency= --dependency=base --dependency=himmelblau
---sandbox-tree=shared/himmelblau/sandbox --cache-only=never`: only the
-himmelblau APT source reaches that sandbox. `--cache-only=never` forces the
-repository metadata sync that brings in the himmelblau source; mkosi
-57907f58 skips the sync when the incremental base cache is current. Base
-rebuilds in the second invocation.
+--sandbox-tree=shared/himmelblau/sandbox --incremental=no --cache-only=never`:
+only the himmelblau APT source reaches that sandbox. `--cache-only=never`
+forces the repository metadata sync that brings in the himmelblau source; mkosi
+57907f58 skips the sync when the incremental base cache is current. mkosi
+requires `--incremental=no` with it. Base rebuilds non-incrementally in the
+second invocation.
 `SandboxTrees=` is universal, so a source in `mkosi.sandbox/` would apply to
 every image of every invocation ([ADR-0020](../adr/0020-scope-third-party-apt-sources.md)).
 Outputs of both invocations are collected after the second one.

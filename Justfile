@@ -142,11 +142,13 @@ _clean:
 # so it builds in a second invocation (ADR-0020). The second invocation forces
 # a metadata sync with --cache-only=never. Since mkosi 57907f58 the sync is
 # skipped when the incremental base cache is current, so mkosi would never
-# fetch the himmelblau source. Base rebuilds in that invocation.
+# fetch the himmelblau source. Base rebuilds in that invocation. mkosi requires
+# --incremental=no with --cache-only=never (check_inputs rejects Incremental=yes
+# with CacheOnly=never), so base rebuilds non-incrementally.
 [private]
 _sysexts: _clean
     {{mkosi}} build
-    {{mkosi}} --dependency= --dependency=base --dependency=himmelblau --sandbox-tree=shared/himmelblau/sandbox --cache-only=never build
+    {{mkosi}} --dependency= --dependency=base --dependency=himmelblau --sandbox-tree=shared/himmelblau/sandbox --incremental=no --cache-only=never build
 
 [private]
 _snow: _clean
