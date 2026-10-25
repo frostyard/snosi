@@ -9,6 +9,30 @@ Decisions: [ADR-0001](../adr/0001-var-factory-state-outcome-maps.md)
 (bootc-only output). Removed native mechanisms are recorded in
 [prototype history](../native-ab-prototype-history.md).
 
+## Deployment package metadata
+
+The product `package-metadata.finalize` runs after package installation and
+the main image finalize. It copies the full dpkg database into
+`/usr/lib/sysimage/dpkg`, preserves the Debian query binary under
+`/usr/libexec/snosi/`, and defaults `dpkg-query` and `dpkg` to the snapshot.
+See [ADR-0021](../adr/0021-query-deployment-package-metadata.md).
+
+The existing `/var/lib/dpkg` is retained, including administrator
+update-alternatives state. No boot-time migration deletes or replaces it.
+Explicit query `--admindir`/`--root` options and `DPKG_ADMINDIR`/`DPKG_ROOT`
+environment overrides continue to work. Tools that directly read a database
+must use `/usr/lib/sysimage/dpkg`; the persistent legacy database is not the
+image inventory. Mutable host package installs remain unsupported.
+
+The frozen `/usr/share/frostyard/<image>.packages.txt` API is unchanged.
+Run `python3 test/live/package-metadata.py` after a fresh installation, two
+successive image updates, and rollback: it compares representative package
+queries against the frozen inventory and running systemd/bootc versions.
+Fixture coverage in `test/package-metadata-test.py` does not replace those
+live lifecycle checks. Rollback selects the earlier deployment snapshot;
+rollback to a pre-fix image restores its earlier query behavior.
+
+
 ## Configuration and script phases
 
 The root `mkosi.conf` depends on `base` and all sysexts for `just sysexts`.

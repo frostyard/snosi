@@ -1,0 +1,8 @@
+#!/bin/sh
+# Use deployment-owned metadata by default. Keep upstream explicit-root and
+# admin-directory overrides for scanners, build roots and recovery tools.
+if [ -z "${DPKG_ADMINDIR+x}" ] && [ -z "${DPKG_ROOT+x}" ]; then
+    DPKG_ADMINDIR=/usr/lib/sysimage/dpkg
+    export DPKG_ADMINDIR
+fi
+exec /usr/libexec/snosi/dpkg-query "$@"

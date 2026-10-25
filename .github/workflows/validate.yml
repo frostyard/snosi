@@ -346,6 +346,9 @@ jobs:
       - name: Test gated retirement decision and plan
         run: python3 ./test/retirement-plan-test.py
 
+      - name: Test deployment package metadata
+        run: sudo python3 ./test/package-metadata-test.py
+
       - name: Test --pkg-diff parser, sidecar, and stager contract
         run: ./test/pkg-diff-test.sh
 

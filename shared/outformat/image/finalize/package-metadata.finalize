@@ -1,0 +1,26 @@
+#!/bin/bash
+# Snapshot package identity only after every package-install phase is complete.
+# Keep persistent /var/lib/dpkg (notably alternatives) untouched at runtime.
+set -euo pipefail
+: "${BUILDROOT:?BUILDROOT must name the assembled image}"
+: "${SRCDIR:?SRCDIR must name the source tree}"
+db="$BUILDROOT/var/lib/dpkg"
+snapshot="$BUILDROOT/usr/lib/sysimage/dpkg"
+query="$BUILDROOT/usr/bin/dpkg-query"
+real="$BUILDROOT/usr/libexec/snosi/dpkg-query"
+[[ -f "$db/status" && -x "$query" ]] || {
+    echo "package-metadata: missing installed dpkg database or query executable" >&2
+    exit 1
+}
+[[ ! -e "$snapshot" && ! -e "$real" ]] || {
+    echo "package-metadata: image already finalized; refusing to wrap twice" >&2
+    exit 1
+}
+mkdir -p "$(dirname "$snapshot")" "$(dirname "$real")" "$BUILDROOT/etc/dpkg/dpkg.cfg.d"
+cp -a "$db" "$snapshot"
+mv "$query" "$real"
+install -m 0755 "$SRCDIR/shared/outformat/image/dpkg-query" "$query"
+# dpkg itself reads this; dpkg-query does not read dpkg.cfg, hence the wrapper.
+# An explicit command-line --admindir/--root still wins.
+printf '%s\n' '# Query the booted deployment; mutable package installs are unsupported.' \
+    'admindir=/usr/lib/sysimage/dpkg' > "$BUILDROOT/etc/dpkg/dpkg.cfg.d/00-snosi-image"
