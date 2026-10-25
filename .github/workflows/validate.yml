@@ -313,6 +313,12 @@ jobs:
       - name: Test NFS system accounts and tmpfiles ownership
         run: sudo bash ./test/nfs-system-accounts-test.sh
 
+      - name: Test zram generator policy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y systemd-zram-generator
+          python3 ./test/zram-policy-test.py
+
       - name: Test memberships account provisioning
         run: sudo python3 ./test/service-account-memberships-test.py
 

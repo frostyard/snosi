@@ -86,6 +86,14 @@ runtime mutation and `.requires/` bans. `snosi-etc-diff` reports drift
 against the booted deployment's pristine `/etc`, with an optional restore
 operation; the bootc path bind-mounts `/` to see below the live `/etc` mount.
 
+All products use base's zram swap policy: LZ4 compression, half of RAM capped
+at 4 GiB. The generator package and configuration have one owner in base.
+An empty `/etc/systemd/zram-generator.conf` disables the vendor default;
+administrators can instead override its size/compression there. Run
+`python3 test/live/zram-policy.py` after a fresh boot and image update to
+check the active swap unit, device size and algorithm. Rolling back to an
+image without the generator stops creating zram on the next boot.
+
 ## Secure composition and boot experience
 
 The secure fragment uses an isolated, low-priority Forky APT source for a
