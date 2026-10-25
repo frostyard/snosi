@@ -14,7 +14,10 @@ if grep -q '^user default.target.wants/podman.service$' "$manifest"; then
     exit 1
 fi
 link="$root/etc/systemd/user/default.target.wants/podman.service"
-if [[ -L "$link" ]]; then
+override="$root/etc/systemd/user/podman.service"
+if [[ -e "$override" || -L "$override" ]] && [[ "$(readlink "$override" || true)" != /dev/null ]]; then
+    echo "podman-socket-policy: retaining administrator unit override"
+elif [[ -L "$link" ]]; then
     case "$(readlink "$link")" in
         /usr/lib/systemd/user/podman.service|/lib/systemd/user/podman.service)
             # etc-guard-allow: exactly the runtime-created global vendor link; current image ships no /etc enablement links and its manifest excludes this unit
