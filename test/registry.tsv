@@ -71,6 +71,7 @@ no-private-keys-test.sh	ci	validate.yml
 ghostty-terminfo-test.sh	ci	validate.yml
 openssh-agent-group-test.py	ci	validate.yml
 output-organizer-test.sh	ci	validate.yml
+package-metadata-test.py	ci	validate.yml
 pilothouse-sysext-test.sh	ci	validate.yml
 policy-as-code-test.py	ci	validate.yml
 publication-guards.bats	ci	validate.yml
