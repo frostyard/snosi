@@ -1,0 +1,14 @@
+[Unit]
+Description=Migrate the global Podman API startup policy
+DefaultDependencies=no
+After=local-fs.target preset-global.service preset-migration.service
+Before=shutdown.target
+Conflicts=shutdown.target
+ConditionPathExists=/var/lib/preset-enablement.done
+ConditionPathExists=!/var/lib/snosi/podman-socket-policy-v1.done
+ConditionPathIsReadWrite=/etc
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/podman-socket-policy
