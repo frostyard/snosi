@@ -43,6 +43,12 @@ order; inspect `mkosi summary` and run `check-profile-dependencies.sh` when
 changing profile includes. `shared/composition/var-audit.finalize` applies
 per-product `/var` outcome maps (ADR-0001).
 
+Snow and Snowfield support the screen-reader switches in both GDM and the
+GNOME session. Their package set explicitly supplies the AT-SPI accessibility
+bus (at-spi2-core), Orca and speech-dispatcher, since Recommends are disabled.
+Validate activation and a consumer with `python3 test/live/snow-accessibility.py`
+in each fresh session, then exercise Orca with the screen-reader switch.
+
 Sundog explicitly selects Plasma's executable helpers, settings and editors,
 System Monitor, Hunspell English spelling, Dolphin preview plugins, wallet
 management, GTK appearance/Preview integration, Thunderbolt controls, Info
