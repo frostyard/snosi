@@ -102,6 +102,31 @@ provides installation kernel arguments. For persistent custom arguments,
 [`snosi-kargs`](../snosi-kargs.md) signs a global ESP addon measured into PCR
 12, outside signed-PCR-11 LUKS unlock policy.
 
+## Rootless Podman API
+
+Base presets disable eager `podman.service` startup; the socket retains
+its package default. A request to `$XDG_RUNTIME_DIR/podman/podman.sock`
+activates the API. This applies to Snow, Snowfield, Floe and Sundog.
+
+Before user managers start, a one-time migration removes only the standard
+global `default.target.wants/podman.service` vendor link on installs already
+using the preset-owned enablement model. The current image manifest must
+exclude that link. This is a scoped exception to the runtime etc guard:
+the link was created at runtime, not shipped in the booted image.
+Masks, custom units/links, per-user choices and socket enablement are
+untouched; no preset-all or mass re-enable runs. A deliberately enabled
+per-user daemon remains enabled. The marker under `/var/lib/snosi/`
+prevents subsequent overrides being undone. Rolling back does not recreate
+the removed global link; an administrator can deliberately enable the API
+again if needed.
+
+Acceptance requires an actual `curl --unix-socket
+"$XDG_RUNTIME_DIR/podman/podman.sock" http://localhost/_ping` returning
+`OK`, plus Podman CLI and rootful bootc checks after fresh install/update.
+Do not add subordinate IDs to GDM. Isolated socket tests on Podman 5.4.2
+and systemd 262 are evidence for the protocol, not proof of all login-time
+behavior or of the original FD failure's precise cause.
+
 ## Updates and sysexts
 
 The base's `bootc-update-stage.timer` pulls the followed OCI image using
