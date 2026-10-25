@@ -411,7 +411,8 @@ rollback, and fallback gate.
 Task 10 still provides fixture, candidate, and nightly contract coverage.
 Live Task 9 execution is RETIRED under core ADR-0031; fresh-install evidence
 comes from Firn's E2E and minideb lab installs. Firn's E2E has produced none.
-A minideb lab run (2026-10-24) gave VM PASS evidence for Snow and Floe only;
+Minideb lab runs (2026-10-24/25) gave VM PASS evidence for Snow, Floe and
+Sundog;
 see [testing](design/testing.md).
 
 ESP repair is a recovery operation, not a new install: after authenticating the
