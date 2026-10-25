@@ -1,0 +1,10 @@
+#!/bin/bash
+# Fail the Snow/Snowfield build if GVfs loses its WSD runtime provider.
+set -euo pipefail
+: "${BUILDROOT:?BUILDROOT must name the assembled image}"
+for executable in usr/libexec/gvfsd-wsdd usr/bin/wsdd; do
+    if [[ ! -x "$BUILDROOT/$executable" ]]; then
+        echo "Snow WSD discovery requires /$executable" >&2
+        exit 1
+    fi
+done
