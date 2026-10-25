@@ -60,6 +60,7 @@ firn-catalog-test.sh	ci	validate.yml
 firn-installer-iso-test.sh	ci	validate.yml
 geoclue-state-scope-test.py	ci	validate.yml
 image-version-annotation-test.sh	ci	validate.yml
+inotify-policy-test.py	ci	validate.yml
 iso-publication-pipeline-test.sh	ci	nightly-compliance.yml,validate.yml
 latest-apt-version-test.sh	ci	validate.yml
 lemonade-sysext-test.sh	ci	validate.yml

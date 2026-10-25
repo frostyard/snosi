@@ -316,6 +316,9 @@ jobs:
       - name: Test memberships account provisioning
         run: sudo python3 ./test/service-account-memberships-test.py
 
+      - name: Test inotify configuration discovery and precedence
+        run: sudo python3 ./test/inotify-policy-test.py
+
       - name: Test RequiredBy guard
         run: ./test/required-by-guard-test.sh
 
