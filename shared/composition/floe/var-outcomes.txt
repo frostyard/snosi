@@ -14,27 +14,15 @@
 # custom overlay alike, not just the hand-authored ones in this repo).
 
 # --- image-metadata: belongs to the immutable root -------------------------
-# The dpkg database. Relocated by shared/outformat/image/finalize/
-# mkosi.finalize.chroot (native-gated) to /usr/lib/sysimage/dpkg. This one
-# glob covers BOTH shapes this map has to classify: on native builds
-# /var/lib/dpkg is the relative symlink left behind by the relocation (the
-# audit sees it as the single path "lib/dpkg", no further contents); on
-# bootc builds (unaffected by the relocation, real /var/lib/dpkg ships as
-# today) it's a real, populated directory, so the audit instead sees every
-# individual "lib/dpkg/<file>" underneath it. A trailing bare `*` (not
-# `/**`) is required so the SAME line matches both the exact "lib/dpkg"
-# path and every "lib/dpkg/..." path — this map is shared across both
-# output formats (see shared/composition/floe/mkosi.conf's FinalizeScripts=
-# ordering), and the audit's stale-glob check runs per build: a
-# native-only build never produces "lib/dpkg/**" candidates and a
-# bootc-only build never produces a bare "lib/dpkg" candidate, so two
-# separate globs would make one of them spuriously "stale" in every single
-# build depending on which format ran.
+# Retain /var/lib/dpkg as install seed and persistent administrator state,
+# notably update-alternatives. package-metadata.finalize snapshots package
+# identity under /usr/lib/sysimage/dpkg and redirects standard query defaults
+# there; no runtime migration replaces this populated directory.
 lib/dpkg*	image-metadata
 # aspell's dictionary directory — EMPTY on floe (aspell/aspell-en are
 # snow-only packages; only the base aspell.conf tmpfiles rule creates the
 # bare directory here), but relocated to /usr/lib/sysimage/aspell by the
-# same native-gated finalize block as dpkg above so every native product
+# retained native-gated aspell finalize block so every native product
 # ships the same /var/lib/aspell relocation-symlink shape and the shared
 # 00-snosi-aspell.conf tmpfiles rule (shared/outformat/ab-root/tree) never
 # creates a dangling symlink on a fresh /var. Same dual-shape bare-`*`

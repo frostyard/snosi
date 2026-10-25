@@ -9,8 +9,10 @@
 # the audit from the first real `mkosi --profile sundog build` (2026-08-26).
 
 # --- image-metadata: belongs to the immutable root -------------------------
-# See the snow map for the dpkg/aspell relocation rationale; Sundog is
-# bootc-only, so these show the real populated directories.
+# Retain /var/lib/dpkg as install seed and persistent administrator state,
+# notably update-alternatives. package-metadata.finalize snapshots package
+# identity under /usr/lib/sysimage/dpkg and redirects standard query defaults
+# there; no runtime migration replaces this populated directory.
 lib/dpkg*	image-metadata
 lib/aspell*	image-metadata
 
