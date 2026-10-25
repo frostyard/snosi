@@ -7,14 +7,9 @@ OS_PRETTY_NAME="Sundog Linux"
 OS_NAME="Sundog Linux"
 source "$SRCDIR"/shared/scripts/common-postinst.sh
 
-# Floe's tree is the current canonical copy of the shared bootc system
-# policy. Remove its sole product-specific payload and give the persistent
-# journal drop-in the Sundog name; the contents are profile-neutral.
+# Floe contributes the shared bootc tree; only this payload is product-specific.
+# Base owns the product-neutral journald persistence policy.
 rm -rf /usr/share/floe
-if [[ -f /usr/lib/systemd/system/journald.conf.d/10-floe-bootc-persistent.conf ]]; then
-    mv /usr/lib/systemd/system/journald.conf.d/10-floe-bootc-persistent.conf \
-        /usr/lib/systemd/system/journald.conf.d/10-sundog-bootc-persistent.conf
-fi
 
 # Keep Flathub configured exactly as on Snow. The descriptor (including the
 # signing key) remains canonical in Snow's tree until desktop infrastructure
