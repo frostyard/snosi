@@ -51,9 +51,9 @@ ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-reboot.timer
 ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-update.timer
 
 # package-metadata.finalize snapshots dpkg into /usr/lib/sysimage/dpkg
-# after this script and redirects query defaults to that deployment-owned
-# database. Keep /var/lib/dpkg intact for persisted update-alternatives state;
-# it must not be blindly replaced or moved on existing bootc installations.
+# after this script. Base tmpfiles links only the identity entries to that
+# snapshot at boot. Keep the parent /var/lib/dpkg directory and mutable state
+# (especially update-alternatives) in place on existing installations.
 
 # Compiled aspell dictionaries are the same problem in miniature: the
 # aspell-autobuildhash dpkg trigger generates /var/lib/aspell/*.rws at

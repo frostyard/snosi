@@ -16,8 +16,8 @@
 # --- image-metadata: belongs to the immutable root -------------------------
 # Retain /var/lib/dpkg as install seed and persistent administrator state,
 # notably update-alternatives. package-metadata.finalize snapshots package
-# identity under /usr/lib/sysimage/dpkg and redirects standard query defaults
-# there; no runtime migration replaces this populated directory.
+# identity under /usr/lib/sysimage/dpkg; base tmpfiles links identity entries
+# at boot while preserving this directory and mutable administrator state.
 lib/dpkg*	image-metadata
 # aspell's dictionary directory — EMPTY on floe (aspell/aspell-en are
 # snow-only packages; only the base aspell.conf tmpfiles rule creates the
