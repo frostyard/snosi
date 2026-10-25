@@ -19,7 +19,9 @@ After package installation and image cleanup, snapshot the complete dpkg
 database into `/usr/lib/sysimage/dpkg`. Ship base tmpfiles `L+` rules that
 maintain links from these `/var/lib/dpkg` entries to the same names in that
 immutable snapshot: `status`, `info`, `triggers`, `diversions`, `available`,
-and `arch-native`. Normal boot tmpfiles processing replaces old files and
+and `arch-native`. Install the rule in the product finalizer after copying the
+snapshot: mkosi's earlier automatic tmpfiles pass must leave the base and
+product package build databases intact. Normal boot tmpfiles processing replaces old files and
 populated identity directories and repairs links on later boots.
 
 Keep `/var/lib/dpkg` itself a real directory. Leave `alternatives/`,

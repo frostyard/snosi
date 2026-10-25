@@ -13,7 +13,10 @@ Decisions: [ADR-0001](../adr/0001-var-factory-state-outcome-maps.md)
 
 The product `package-metadata.finalize` runs after package installation and
 the main image finalize. It copies the full dpkg database into
-`/usr/lib/sysimage/dpkg`. Base `tmpfiles.d/dpkg.conf` maintains per-file `L+`
+`/usr/lib/sysimage/dpkg`, then installs `shared/outformat/image/dpkg.conf` as
+`/usr/lib/tmpfiles.d/dpkg.conf`. Installing this rule after the snapshot is
+essential: mkosi runs tmpfiles before finalizers, when base and product roots
+still need a normal writable database. The shipped rule maintains per-file `L+`
 links for `status`, `info`, `triggers`, `diversions`, `available` and
 `arch-native` from `/var/lib/dpkg` to that snapshot. At boot it replaces stale
 identity files and populated directories; repeated runs repair the same links.

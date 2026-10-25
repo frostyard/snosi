@@ -113,9 +113,16 @@ def make_image(root, version):
     inventory.parent.mkdir(parents=True)
     inventory.write_text(f"Listing...\nfixture/now {version} amd64 [installed,local]\n")
     shutil.copy2(repo / "mkosi.images/base/mkosi.extra" / rule, root / rule)
+    # mkosi's automatic tmpfiles pass precedes finalizers, including in the
+    # reusable base. It must leave the normal package database usable.
+    subprocess.run(["systemd-tmpfiles", f"--root={root}", "--boot", "--create", "dpkg.conf"],
+                   check=True, capture_output=True)
+    assert not (db / "info").is_symlink()
+    assert (db / "status").read_text() == status(version)
+    assert query(root, "/usr/bin/dpkg-query", "-W", "-f=${Version}", "fixture") == version
     before = (root / "usr/bin/dpkg-query").read_bytes()
     subprocess.run([str(repo / "shared/outformat/image/finalize/package-metadata.finalize")],
-                   env=dict(env, BUILDROOT=str(root)), check=True)
+                   env=dict(env, BUILDROOT=str(root), SRCDIR=str(repo)), check=True)
     assert (root / "usr/bin/dpkg-query").read_bytes() == before
     assert not (root / "usr/libexec/snosi/dpkg-query").exists()
     assert not (root / "etc/dpkg/dpkg.cfg.d/00-snosi-image").exists()

@@ -4,6 +4,7 @@
 # (especially alternatives) stays in /var/lib/dpkg.
 set -euo pipefail
 : "${BUILDROOT:?BUILDROOT must name the assembled image}"
+: "${SRCDIR:?SRCDIR must name the source tree}"
 db="$BUILDROOT/var/lib/dpkg"
 snapshot="$BUILDROOT/usr/lib/sysimage/dpkg"
 [[ -f "$db/status" && -d "$db/info" && -d "$db/triggers" ]] || {
@@ -16,3 +17,8 @@ snapshot="$BUILDROOT/usr/lib/sysimage/dpkg"
 }
 mkdir -p "$(dirname "$snapshot")"
 cp -a "$db" "$snapshot"
+# mkosi runs tmpfiles before finalizers. Install the identity links only now,
+# after the snapshot exists, so neither the base nor product package build
+# root is redirected during installation or inventory generation.
+install -D -m 0644 "$SRCDIR/shared/outformat/image/dpkg.conf" \
+    "$BUILDROOT/usr/lib/tmpfiles.d/dpkg.conf"
