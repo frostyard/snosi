@@ -1,6 +1,6 @@
 [Unit]
 Description=Reloading after merging extensions
-After=systemd-sysext.service
+After=systemd-sysext.service systemd-sysctl.service
 Before=sysinit.target
 DefaultDependencies=no
 ConditionDirectoryNotEmpty=|/etc/extensions
@@ -13,6 +13,10 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=systemd-sysusers --no-pager
 ExecStart=systemd-tmpfiles --create --graceful --no-pager
+# Reapply only reviewed resource limits from the merged effective config.
+# In particular, DO NOT apply Incus's AppArmor restriction relaxation.
+# --prefix retains sysctl.d ordering, same-name masks and /etc overrides.
+ExecStart=/usr/lib/systemd/systemd-sysctl --prefix=/fs/aio-max-nr --prefix=/fs/inotify/max_queued_events --prefix=/fs/inotify/max_user_instances --prefix=/fs/inotify/max_user_watches --prefix=/kernel/keys/maxbytes --prefix=/kernel/keys/maxkeys
 ExecStart=systemctl daemon-reload
 
 [Install]
