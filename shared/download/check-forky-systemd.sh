@@ -1,13 +1,14 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Detect a Debian Forky migration of the systemd source package.
+# Detect Debian Forky migrations of systemd and the Snow wsdd exception.
 #
 # The secure bootc (shared/bootc-secure) and Firn installer
 # (shared/firn-installer) compositions take their whole
 # systemd family from unpinned <pkg>/forky selections, so the family changes
 # whenever Forky migrates systemd, with no repository change.
-# forky-versions.json records the systemd source version whose AGENTS.md
-# recheck obligations were last discharged. When Forky serves a strictly newer
+# Snow/Snowfield also take wsdd from Forky, with Trixie Python dependencies.
+# forky-versions.json records source versions acknowledged after their
+# compatibility rechecks. When Forky serves a strictly newer
 # version, this rewrites the sentinel and writes a pull-request body that names
 # those obligations. check-packages.yml opens the PR.
 set -euo pipefail
@@ -34,40 +35,59 @@ forky_index_max_decompressed_bytes=134217728
 # JSON, GITHUB_OUTPUT, and a PR title, so anything else fails closed.
 version_re='^([0-9]+:)?[0-9][A-Za-z0-9.+~-]*$'
 
-current=$(jq -er '.systemd | strings' "$sentinel") || {
-    echo "ERROR: $sentinel has no string .systemd version" >&2
-    exit 1
-}
-[[ $current =~ $version_re ]] || {
-    echo "ERROR: $sentinel .systemd is not a Debian version: $current" >&2
-    exit 1
-}
-
-latest=$(APT_INDEX_MAX_DECOMPRESSED_BYTES=$forky_index_max_decompressed_bytes \
-    "$script_dir/latest-apt-version.sh" "$sources_url" systemd)
-[[ $latest =~ $version_re ]] || {
-    echo "ERROR: Forky Sources index served a non-Debian systemd version: $latest" >&2
-    exit 1
-}
-
+declare -A current_versions latest_versions changed
 has_update=false
-if [[ $latest == "$current" ]]; then
-    echo "Forky systemd unchanged: $current"
-elif dpkg --compare-versions "$latest" gt "$current"; then
-    has_update=true
-    echo "Forky systemd changed: $current -> $latest"
-else
-    # deb.debian.org is a CDN whose backends sync independently; main run
-    # 36479923888 installed 262-1 and 261.2-1 in different jobs. An older
-    # reading is a stale backend, not a downgrade to report.
-    echo "::warning::deb.debian.org served Forky systemd $latest, older than the acknowledged $current; treating it as a stale mirror"
-fi
+# Validate every baseline before querying the mirror. Do not acknowledge a
+# partial result if either package is absent, malformed or fails to download.
+for package in systemd wsdd; do
+    current=$(jq -er --arg p "$package" '.[$p] | strings' "$sentinel") || {
+        echo "ERROR: $sentinel has no string .$package version" >&2
+        exit 1
+    }
+    [[ $current =~ $version_re ]] || {
+        echo "ERROR: $sentinel .$package is not a Debian version: $current" >&2
+        exit 1
+    }
+    current_versions[$package]=$current
+done
+for package in systemd wsdd; do
+    current=${current_versions[$package]}
+    latest=$(APT_INDEX_MAX_DECOMPRESSED_BYTES=$forky_index_max_decompressed_bytes \
+        "$script_dir/latest-apt-version.sh" "$sources_url" "$package")
+    [[ $latest =~ $version_re ]] || {
+        echo "ERROR: Forky Sources index served a non-Debian $package version: $latest" >&2
+        exit 1
+    }
+    latest_versions[$package]=$latest
+    changed[$package]=false
+    if [[ $latest == "$current" ]]; then
+        echo "Forky $package unchanged: $current"
+    elif dpkg --compare-versions "$latest" gt "$current"; then
+        changed[$package]=true
+        has_update=true
+        echo "Forky $package changed: $current -> $latest"
+    else
+        # CDN backends sync independently; never acknowledge a downgrade.
+        echo "::warning::deb.debian.org served Forky $package $latest, older than the acknowledged $current; treating it as a stale mirror"
+    fi
+done
 
+current=${current_versions[systemd]}
+latest=${latest_versions[systemd]}
 if [[ $has_update == true ]]; then
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
-    jq --arg v "$latest" '.systemd = $v' "$sentinel" >"$tmp/forky-versions.json"
-    cat >"$body_file" <<EOF
+    cp "$sentinel" "$tmp/forky-versions.json"
+    for package in systemd wsdd; do
+        if [[ ${changed[$package]} == true ]]; then
+            jq --arg p "$package" --arg v "${latest_versions[$package]}" \
+                '.[$p] = $v' "$tmp/forky-versions.json" >"$tmp/next.json"
+            mv "$tmp/next.json" "$tmp/forky-versions.json"
+        fi
+    done
+    : >"$body_file"
+    if [[ ${changed[systemd]} == true ]]; then
+        cat >>"$body_file" <<EOF
 Debian Forky migrated the \`systemd\` source package: **${current} -> ${latest}**.
 
 The secure bootc profiles (\`shared/bootc-secure/mkosi.conf\`) and the Firn installer ISO (\`shared/firn-installer/mkosi.conf\`) take their whole systemd family from unpinned \`<pkg>/forky\` selections. Every build since the migration installs ${latest} whether or not this PR merges. A build that ran while deb.debian.org was mid-sync can mix ${current} and ${latest} across jobs in the same run.
@@ -83,6 +103,22 @@ This PR's CI runs only if it was opened with \`WORKFLOW_PAT\`, because PRs opene
 - Changelog: https://metadata.ftp-master.debian.org/changelogs/main/s/systemd/systemd_${latest#*:}_changelog
 - Package tracker: https://tracker.debian.org/pkg/systemd
 EOF
+    fi
+    if [[ ${changed[wsdd]} == true ]]; then
+        cat >>"$body_file" <<EOF
+
+Debian Forky migrated the \`wsdd\` source package: **${current_versions[wsdd]} -> ${latest_versions[wsdd]}**.
+
+Snow and Snowfield select \`Packages=wsdd\` in \`shared/packages/snow/mkosi.conf\` through the low-priority source in \`shared/bootc-secure/mkosi.conf\`. This is a deliberate non-systemd exception because Trixie omitted the GVfs WSD client. These versions are review sentinels, not package pins; later builds already consume the new version.
+
+- [ ] **Snow/Snowfield wsdd compatibility.** Build both desktop images with Forky pinned at 50 and plain \`wsdd\` selection (no \`/forky\` suffix). Check the new package's Python floor and dependency solve against Trixie; do not promote Python to Forky to make it solve. Run \`wsdd --help\`, confirm \`/usr/libexec/gvfsd-wsdd\` and \`/usr/bin/wsdd\` are executable, and exercise GVfs Windows discovery in a fresh desktop session. \`shared/snow/finalize/wsdd-provider.finalize\` catches a missing helper but cannot preflight an incompatible dependency solve.
+
+Merge this acknowledgment only after that compatibility check passes. CI image builds run when the review PR uses \`WORKFLOW_PAT\`; a PR opened with \`GITHUB_TOKEN\` does not trigger them.
+
+- Changelog: https://metadata.ftp-master.debian.org/changelogs/main/w/wsdd/wsdd_${latest_versions[wsdd]#*:}_changelog
+- Package tracker: https://tracker.debian.org/pkg/wsdd
+EOF
+    fi
     # Replace the sentinel only after every other write has succeeded.
     cat "$tmp/forky-versions.json" >"$sentinel"
 fi
