@@ -93,6 +93,18 @@ else
         ' <<<"$secure_job")
         require_text "$workflow secure-build" "$secure_job" '    environment: native-build'
         require_text "$workflow secure-build permissions" "$secure_job" '      packages: write'
+        # Publication is serialized per publication target. Every non-main run
+        # shares one group, so two branch dispatches cannot both publish the
+        # same backdated version tag; main keeps its own group. Nothing may
+        # cancel in progress: a queued publisher must wait for the run that may
+        # already have pushed.
+        require_text "$workflow secure-build concurrency" "$secure_job" \
+            "      group: \${{ github.ref == 'refs/heads/main' && format('secure-build-{0}', github.ref) || 'snosi-branch-snow-publication' }}"
+        require_text "$workflow secure-build concurrency" "$secure_job" \
+            '      cancel-in-progress: false'
+        if [[ $(grep -c -x -F '    concurrency:' <<<"$secure_job") -ne 1 ]]; then
+            fail_check "$workflow secure-build: expected exactly one job-level concurrency block"
+        fi
         # Publication runs on main, and on a workflow_dispatch over any other
         # branch (a branch-only path that publishes one signed Snow tag and
         # stops before the main-only side effects gated below). It never runs

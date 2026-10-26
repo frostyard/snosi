@@ -123,6 +123,18 @@ jobs:
     # any other branch runs this job only to publish ONE signed Snow version
     # tag for a lab lifecycle test; every main-only side effect below stays
     # behind its own `refs/heads/main` gate.
+    #
+    # Publication is serialized per publication target. Every non-main run
+    # shares ONE concurrency group, so two branch dispatches on different
+    # branches can never generate the same backdated version tag and replace
+    # each other's immutable tag: version generation, the existing-tag check
+    # and the push hold the group from start to publication. main keeps its own
+    # group, and the workflow-level group above still cancels a superseded main
+    # push, so main's behavior is unchanged. Nothing here cancels in progress:
+    # a queued publisher must wait for the run that may already have pushed.
+    concurrency:
+      group: ${{ github.ref == 'refs/heads/main' && format('secure-build-{0}', github.ref) || 'snosi-branch-snow-publication' }}
+      cancel-in-progress: false
     if: >-
       github.event_name != 'pull_request' &&
       (github.ref == 'refs/heads/main' ||

@@ -232,11 +232,13 @@ for name in \
 done
 
 # 7. No other side effect of the job reaches out off main. The job block is the
-#    authoritative scope: the trigger filters live outside it.
+#    authoritative scope: the trigger filters live outside it. Comments are
+#    stripped first: prose about dispatches is not a dispatch call.
+secure_code=$(grep -v -E '^[[:space:]]*#' <<<"$secure")
 no_other_side_effect=1
 for token in 'cloudflare' 'Cloudflare' 'gh workflow run' 'dispatches' \
     'build-installer-iso' 'awslabs' 'rclone'; do
-    if grep -Fq -- "$token" <<<"$secure"; then
+    if grep -Fq -- "$token" <<<"$secure_code"; then
         fail "secure-build must not reach '$token' at all"
         no_other_side_effect=0
     fi
@@ -436,7 +438,69 @@ SHIM
     trap - EXIT
 fi
 
-# 10. Mutation fixtures: each guard above must be load-bearing. Each one mutates
+# 10. Publication is serialized for every non-main ref: one shared job-level
+#     concurrency group with no cancel, so two branch dispatches on different
+#     branches cannot both generate and push the same backdated version tag.
+#     main keeps its own group and its workflow-level cancel.
+if [[ $(grep -c -x -F '    concurrency:' <<<"$secure") -eq 1 ]]; then
+    pass 'the secure build has exactly one job-level concurrency block'
+else
+    fail 'the secure build must have exactly one job-level concurrency block'
+fi
+job_concurrency=$(awk '
+    /^    concurrency:$/ { capture = 1; next }
+    capture && /^    [A-Za-z0-9_-]+:/ { exit }
+    capture { print }
+' <<<"$secure")
+job_group=$(sed -n 's/^      group: //p' <<<"$job_concurrency")
+job_cancel=$(sed -n 's/^      cancel-in-progress: //p' <<<"$job_concurrency")
+# shellcheck disable=SC2016 # Workflow expression, not an expansion.
+if [[ $job_group == "\${{ github.ref == 'refs/heads/main' && format('secure-build-{0}', github.ref) || 'snosi-branch-snow-publication' }}" ]]; then
+    pass 'the job concurrency group names the shared non-main group'
+else
+    fail "the job concurrency group must name the shared non-main group (got: ${job_group:-none})"
+fi
+if [[ $job_cancel == 'false' ]]; then
+    pass 'the job concurrency never cancels in progress'
+else
+    fail "the job concurrency must not cancel in progress (got: ${job_cancel:-none})"
+fi
+main_group_part=${job_group%%||*}
+off_main_group=${job_group#*|| }
+# shellcheck disable=SC2016 # Workflow expression, not an expansion.
+if grep -Fq "github.ref == 'refs/heads/main' && format('secure-build-{0}', github.ref)" \
+        <<<"$main_group_part"; then
+    pass 'main keeps its own concurrency group'
+else
+    fail 'main must keep its own concurrency group'
+fi
+if ! grep -Eq 'github\.|matrix\.|needs\.|inputs\.' <<<"$off_main_group"; then
+    pass 'every non-main ref shares one concurrency group'
+else
+    fail 'every non-main ref must share one concurrency group'
+fi
+
+workflow_concurrency=$(awk '
+    /^concurrency:$/ { capture = 1; next }
+    capture && /^[a-z]/ { exit }
+    capture { print }
+' "$workflow_file")
+# shellcheck disable=SC2016 # Workflow literal, not an expansion.
+if grep -Fqx '  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}' \
+        <<<"$workflow_concurrency"; then
+    pass 'the workflow-level concurrency group is unchanged'
+else
+    fail 'the workflow-level concurrency group must stay unchanged'
+fi
+# shellcheck disable=SC2016 # Workflow literal, not an expansion.
+if grep -Fqx "  cancel-in-progress: \${{ github.event_name == 'push' || github.event_name == 'pull_request' }}" \
+        <<<"$workflow_concurrency"; then
+    pass 'main and PR runs keep their workflow-level cancel'
+else
+    fail 'main and PR runs must keep their workflow-level cancel'
+fi
+
+# 11. Mutation fixtures: each guard above must be load-bearing. Each one mutates
 #     a copy of the workflow and re-runs this test against it, which must fail.
 mut_remove_backdate() {
     python3 - "$1" <<'PY'
@@ -528,6 +592,65 @@ path.write_text(text.replace(old, new, 1))
 PY
 }
 
+mut_remove_job_concurrency() {
+    python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+lines = path.read_text().splitlines(keepends=True)
+start = lines.index("    concurrency:\n")
+end = start + 1
+while lines[end].startswith("      "):
+    end += 1
+del lines[start:end]
+path.write_text("".join(lines))
+PY
+}
+
+mut_per_ref_group() {
+    python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+text = path.read_text()
+old = (
+    "      group: ${{ github.ref == 'refs/heads/main' && "
+    "format('secure-build-{0}', github.ref) || 'snosi-branch-snow-publication' }}\n"
+)
+assert old in text
+path.write_text(text.replace(
+    old, "      group: ${{ format('secure-build-{0}', github.ref) }}\n", 1))
+PY
+}
+
+mut_enable_job_cancel() {
+    python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+text = path.read_text()
+old = "      cancel-in-progress: false\n"
+assert text.count(old) == 1
+path.write_text(text.replace(old, "      cancel-in-progress: true\n", 1))
+PY
+}
+
+mut_drop_main_group() {
+    python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+text = path.read_text()
+old = (
+    "      group: ${{ github.ref == 'refs/heads/main' && "
+    "format('secure-build-{0}', github.ref) || 'snosi-branch-snow-publication' }}\n"
+)
+assert old in text
+path.write_text(text.replace(
+    old, "      group: ${{ 'snosi-branch-snow-publication' }}\n", 1))
+PY
+}
+
 mutate_and_expect_failure() { # description mutation-function
     local dir
     [[ -n ${SNOSI_BRANCH_DISPATCH_NO_FIXTURES:-} ]] && return 0
@@ -553,6 +676,14 @@ mutate_and_expect_failure 'an existence check after the push fails' \
     mut_move_check_after_push
 mutate_and_expect_failure 'a tag-list error read as an absent tag fails' \
     mut_ignore_lookup_error
+mutate_and_expect_failure 'a removed job-level concurrency fails' \
+    mut_remove_job_concurrency
+mutate_and_expect_failure 'a per-ref job concurrency group fails' \
+    mut_per_ref_group
+mutate_and_expect_failure 'a cancelling job concurrency fails' \
+    mut_enable_job_cancel
+mutate_and_expect_failure 'a shared group for main and branches fails' \
+    mut_drop_main_group
 
 printf '\n%d passing assertions, %d failures\n' "$PASS" "$FAIL"
 ((FAIL == 0))

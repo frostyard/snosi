@@ -64,6 +64,16 @@ that the tag is free. Without the check a second run would replace the first
 run's immutable tag. The same 14-digit value still flows to the config label,
 the manifest annotation and os-release `IMAGE_VERSION`.
 
+The check and the push are not atomic, so job-level concurrency closes the
+window between two runs: `secure-build` puts every non-main run into the single
+group `snosi-branch-snow-publication`, from version generation to publication,
+with `cancel-in-progress: false`. Two branch dispatches on different branches
+therefore publish one after the other, and a queued run waits instead of
+killing the run that may already have pushed. (GitHub Actions keeps at most one
+pending run per group, so a third dispatch replaces a pending one.) `main` keeps
+its own group, `secure-build-<ref>`, and the workflow-level group still cancels a
+superseded main push, so main's cancel behavior does not change.
+
 `build-installer-iso.yml` retains the scripts at `shared/native-ab/publish/`
 and the mkosi pin helpers at `shared/native-ab/ci/`. `native` in their names
 and in `isos/native/v1/` does not mean an A/B product. The ISO's published
