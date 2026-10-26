@@ -122,11 +122,9 @@ jobs:
           branch: auto-update-packages
           delete-branch: true
 
-  # The secure bootc, production native A/B, and installer compositions take
-  # their whole systemd family from unpinned <pkg>/forky selections, so a Forky
-  # migration changes every later build with no repository change. The
-  # sentinel records the systemd source version whose AGENTS.md recheck
-  # obligations were last discharged; a newer one opens a PR naming them.
+  # Monitor the secure bootc/Firn systemd family and Snow's deliberate wsdd
+  # exception. Source migrations change later builds without a repository
+  # change; one sentinel PR names the applicable compatibility rechecks.
   check-forky-systemd:
     runs-on: ubuntu-latest
     # Bound repository-write token exposure if the Debian mirror stalls.
@@ -140,7 +138,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check Forky systemd source version
+      - name: Check Forky systemd and wsdd source versions
         id: forky
         # The PR body goes to RUNNER_TEMP so it never lands in the commit.
         run: ./shared/download/check-forky-systemd.sh "$RUNNER_TEMP/forky-systemd-pr-body.md"
@@ -153,8 +151,8 @@ jobs:
           # image builds that exercise the new family.
           token: ${{ secrets.WORKFLOW_PAT || secrets.GITHUB_TOKEN }}
           add-paths: shared/download/forky-versions.json
-          commit-message: "chore: acknowledge Forky systemd ${{ steps.forky.outputs.latest }}"
-          title: "chore: Forky systemd moved to ${{ steps.forky.outputs.latest }} (rechecks required)"
+          commit-message: "chore: acknowledge updated Forky packages"
+          title: "chore: review updated Forky packages (rechecks required)"
           body-path: ${{ runner.temp }}/forky-systemd-pr-body.md
           branch: auto-update-forky-systemd
           delete-branch: true

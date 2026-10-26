@@ -93,7 +93,11 @@ our UKIs lack the initrd NvPCR definitions and `--sign-initrd-pcrs` policy,
 while signed-PCR-11 LUKS unlock remains active. Recheck mask coverage on
 Forky updates. The daily sentinel `shared/download/forky-versions.json`
 opens a review PR when the source version advances; `test/check-forky-systemd-test.sh`
-guards its consumers and three recheck obligations.
+guards its systemd consumers and three recheck obligations. Snow/Snowfield's
+`wsdd` is the deliberate non-systemd Forky exception (absent from Trixie),
+also tracked by this sentinel. Its updates require checking the Python floor,
+the Trixie dependency solve, and GVfs discovery; never select `wsdd/forky`
+to promote its Python dependencies.
 
 The secure bootc CLI `snosi-kargs` writes a signed global cmdline addon to
 the ESP; arguments are append-only, measured into PCR 12 and excluded from

@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Fixture test for the Forky systemd family sentinel:
+# Fixture test for the Forky systemd and wsdd sentinel:
 # shared/download/check-forky-systemd.sh (driving the real
 # latest-apt-version.sh through a PATH-stubbed curl), the committed
 # shared/download/forky-versions.json, the recheck obligations its PR body
@@ -47,7 +47,7 @@ selects_forky_family() { # conf
 # A Sources index in the real stanza shape: a multi-line Binary field, a
 # Package-List whose continuation lines name systemd, and neighbouring source
 # packages whose names contain "systemd" with larger versions.
-make_sources() { # systemd-version -> $work/Sources.gz
+make_sources() { # systemd-version [wsdd-version] -> $work/Sources.gz
     cat >"$work/Sources" <<EOF
 Package: python-systemd
 Binary: python3-systemd
@@ -65,6 +65,10 @@ Package-List:
 
 Package: systemd-cron
 Version: 1000-1
+
+Package: wsdd
+Binary: wsdd, wsdd-server
+Version: ${2:-2:0.8-5}
 EOF
     gzip -c "$work/Sources" >"$work/Sources.gz"
 }
@@ -94,7 +98,7 @@ export MOCK_CURL_ARGS="$work/curl.args"
 
 # --- A newer Forky version rewrites the sentinel and writes the PR body.
 make_sources 262-1
-run_check '{"systemd": "261.2-1", "other": "kept"}'
+run_check '{"systemd": "261.2-1", "other": "kept", "wsdd": "2:0.8-5"}'
 check 'a newer Forky systemd succeeds' test "$status" -eq 0
 check 'has_update=true is emitted' output_has 'has_update=true'
 check 'previous acknowledged version is emitted' output_has 'previous=261.2-1'
@@ -136,7 +140,7 @@ check "every repository path in the PR body exists${missing:+ (missing:$missing)
 cp "$work/body.md" "$work/generated-body.md"
 
 # --- Same version: nothing changes and no PR body is written.
-run_check '{"systemd": "262-1"}'
+run_check '{"systemd": "262-1", "wsdd": "2:0.8-5"}'
 check 'an unchanged Forky systemd succeeds' test "$status" -eq 0
 check 'unchanged: has_update=false' output_has 'has_update=false'
 check 'unchanged: sentinel is byte-identical' sentinel_unchanged
@@ -144,7 +148,7 @@ check 'unchanged: no PR body is written' test ! -e "$work/body.md"
 
 # --- An older reading is a stale CDN backend, never a downgrade PR.
 make_sources 261.2-1
-run_check '{"systemd": "262-1"}'
+run_check '{"systemd": "262-1", "wsdd": "2:0.8-5"}'
 check 'a stale mirror reading succeeds' test "$status" -eq 0
 check 'stale mirror: has_update=false' output_has 'has_update=false'
 check 'stale mirror: a workflow warning is printed' contains "$output" '::warning::'
@@ -153,13 +157,13 @@ check 'stale mirror: no PR body is written' test ! -e "$work/body.md"
 
 # --- Ordering is Debian's, not lexical.
 make_sources 261.10-1
-run_check '{"systemd": "261.9-1"}'
+run_check '{"systemd": "261.9-1", "wsdd": "2:0.8-5"}'
 check 'dpkg ordering: 261.10-1 is newer than 261.9-1' output_has 'has_update=true'
 make_sources 262-1
-run_check '{"systemd": "262~rc3-1"}'
+run_check '{"systemd": "262~rc3-1", "wsdd": "2:0.8-5"}'
 check 'dpkg ordering: 262-1 is newer than 262~rc3-1' output_has 'has_update=true'
 make_sources 1:263-1
-run_check '{"systemd": "262-1"}'
+run_check '{"systemd": "262-1", "wsdd": "2:0.8-5"}'
 check 'an epoch version is accepted' output_has 'latest=1:263-1'
 check 'the changelog URL drops the epoch' \
     body_has 'https://metadata.ftp-master.debian.org/changelogs/main/s/systemd/systemd_263-1_changelog'
@@ -175,24 +179,24 @@ assert_fails_closed() { # description expected-message
 
 make_sources 262-1
 export MOCK_CURL_STATUS=28
-run_check '{"systemd": "261.2-1"}'
+run_check '{"systemd": "261.2-1", "wsdd": "2:0.8-5"}'
 assert_fails_closed 'a failed download' 'failed to download bounded APT index'
 unset MOCK_CURL_STATUS
 
 sed '/^Package: systemd$/,/^$/d' "$work/Sources" | gzip -c >"$work/Sources.gz"
-run_check '{"systemd": "261.2-1"}'
+run_check '{"systemd": "261.2-1", "wsdd": "2:0.8-5"}'
 assert_fails_closed 'systemd missing from Forky' 'no version found for systemd'
 
 make_sources '262-1;touch'
-run_check '{"systemd": "261.2-1"}'
+run_check '{"systemd": "261.2-1", "wsdd": "2:0.8-5"}'
 assert_fails_closed 'a non-Debian served version' 'non-Debian systemd version'
 
 make_sources 262-1
-run_check '{}'
+run_check '{"wsdd": "2:0.8-5"}'
 assert_fails_closed 'a sentinel without .systemd' 'has no string .systemd version'
-run_check '{"systemd": 262}'
+run_check '{"systemd": 262, "wsdd": "2:0.8-5"}'
 assert_fails_closed 'a non-string sentinel version' 'has no string .systemd version'
-run_check '{"systemd": "not a version"}'
+run_check '{"systemd": "not a version", "wsdd": "2:0.8-5"}'
 assert_fails_closed 'a malformed sentinel version' 'is not a Debian version'
 
 set +e
@@ -216,12 +220,54 @@ set -e
 check 'the large fixture fails under the helper default cap' test "$default_status" -ne 0
 check 'the large fixture exceeds the 50 MiB decompressed default' \
     contains "$default_output" 'decompressed APT index exceeds 52428800 bytes'
-run_check '{"systemd": "261.2-1"}'
+run_check '{"systemd": "261.2-1", "wsdd": "2:0.8-5"}'
 check 'a >50 MiB Forky Sources index is accepted' output_has 'latest=262-1'
 
+# --- wsdd-only and simultaneous migrations, including stale/failure paths.
+make_sources 262-1 2:0.8-6
+run_check '{"systemd":"262-1","wsdd":"2:0.8-5"}'
+check 'a wsdd-only update succeeds' test "$status" -eq 0
+check 'a wsdd-only update opens a PR' output_has 'has_update=true'
+check 'wsdd sentinel advances' test "$(jq -r '.wsdd' "$work/forky-versions.json")" = 2:0.8-6
+check 'systemd stays unchanged during a wsdd update' test "$(sentinel_version)" = 262-1
+check 'wsdd body states the version change' body_has '**2:0.8-5 -> 2:0.8-6**'
+check 'wsdd body requires a Trixie Python dependency solve' body_has 'Python floor and dependency solve against Trixie'
+check 'wsdd body requires both desktop builds' body_has 'Build both desktop images'
+check 'wsdd body names the Snow package consumer' body_has '`shared/packages/snow/mkosi.conf`'
+check 'wsdd body requires GVfs discovery' body_has 'GVfs Windows discovery in a fresh desktop session'
+check 'wsdd body has only its own recheck' test "$(grep -c '^- \[ \] ' "$work/body.md")" -eq 1
+check 'wsdd changelog drops the epoch' body_has 'https://metadata.ftp-master.debian.org/changelogs/main/w/wsdd/wsdd_0.8-6_changelog'
+run_check '{"systemd":"261.2-1","wsdd":"2:0.8-5"}'
+check 'simultaneous updates advance both versions' \
+    test "$(jq -c '[.systemd,.wsdd]' "$work/forky-versions.json")" = '["262-1","2:0.8-6"]'
+check 'simultaneous updates require all four rechecks' test "$(grep -c '^- \[ \] ' "$work/body.md")" -eq 4
+make_sources 261.2-1 2:0.8-6
+run_check '{"systemd":"262-1","wsdd":"2:0.8-5"}'
+check 'a wsdd update does not downgrade stale systemd' test "$(sentinel_version)" = 262-1
+make_sources 262-1 2:0.8-4
+run_check '{"systemd":"262-1","wsdd":"2:0.8-5"}'
+check 'stale wsdd never opens a downgrade PR' output_has 'has_update=false'
+check 'stale wsdd preserves the sentinel' sentinel_unchanged
+make_sources 262-1
+sed '/^Package: wsdd$/,/^$/d' "$work/Sources" | gzip -c >"$work/Sources.gz"
+run_check '{"systemd":"261.2-1","wsdd":"2:0.8-5"}'
+assert_fails_closed 'wsdd missing while systemd advances' 'no version found for wsdd'
+make_sources 262-1 '2:0.8-6;touch'
+run_check '{"systemd":"261.2-1","wsdd":"2:0.8-5"}'
+assert_fails_closed 'a malformed wsdd served version' 'non-Debian wsdd version'
+make_sources 262-1
+run_check '{"systemd":"262-1"}'
+assert_fails_closed 'a sentinel without wsdd' 'has no string .wsdd version'
+run_check '{"systemd":"262-1","wsdd":8}'
+assert_fails_closed 'a non-string wsdd baseline' 'has no string .wsdd version'
+run_check '{"systemd":"262-1","wsdd":"not a version"}'
+assert_fails_closed 'a malformed wsdd baseline' 'is not a Debian version'
+
 # --- The committed sentinel.
-check 'committed forky-versions.json holds only .systemd' \
-    test "$(jq -c 'keys' "$SENTINEL")" = '["systemd"]'
+check 'committed forky-versions.json holds systemd and wsdd' \
+    test "$(jq -c 'keys' "$SENTINEL")" = '["systemd","wsdd"]'
+check 'committed wsdd version is a Debian version' \
+    is_debian_version "$(jq -r '.wsdd' "$SENTINEL")"
 committed=$(jq -r '.systemd' "$SENTINEL")
 check "committed Forky systemd version is a Debian version ($committed)" \
     is_debian_version "$committed"

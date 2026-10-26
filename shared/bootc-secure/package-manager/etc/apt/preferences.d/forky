@@ -1,4 +1,6 @@
-# Forky packages must be selected explicitly by the secure bootc profiles.
+# The secure bootc profiles explicitly select the Forky systemd family.
+# Snow/Snowfield also select wsdd, absent from Trixie; the low pin retains
+# Trixie's Python dependencies. Both sources are tracked by forky-versions.json.
 Package: *
 Pin: release n=forky
 Pin-Priority: 50
