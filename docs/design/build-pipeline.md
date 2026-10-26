@@ -9,6 +9,42 @@ Decisions: [ADR-0001](../adr/0001-var-factory-state-outcome-maps.md)
 (bootc-only output). Removed native mechanisms are recorded in
 [prototype history](../native-ab-prototype-history.md).
 
+## Deployment package metadata
+
+The product `package-metadata.finalize` runs after package installation and
+the main image finalize. It copies the full dpkg database into
+`/usr/lib/sysimage/dpkg`, then installs `shared/outformat/image/dpkg.conf` as
+`/usr/lib/tmpfiles.d/dpkg.conf`. Installing this rule after the snapshot is
+essential: mkosi runs tmpfiles before finalizers, when base and product roots
+still need a normal writable database. The shipped rule maintains per-file `L+`
+links for `status`, `info`, `triggers`, `diversions`, `available` and
+`arch-native` from `/var/lib/dpkg` to that snapshot. At boot it replaces stale
+identity files and populated directories; repeated runs repair the same links.
+See [ADR-0021](../adr/0021-query-deployment-package-metadata.md).
+
+The parent `/var/lib/dpkg` remains a real directory. `alternatives/`,
+`statoverride`, `lock*`, `updates/` and `parts/` remain real writable state.
+Debian's dpkg-query binary and dpkg defaults stay unchanged. apt, PackageKit,
+python-apt and scanners reading the standard status path therefore see the
+same deployment identity after tmpfiles runs. Administrator alternatives
+choices remain writable and persist across updates.
+
+Mutable host package changes remain unsupported. In particular,
+`dpkg-divert --add` can replace the `diversions` link with a local file;
+the next tmpfiles run restores the link, discarding those local metadata
+changes. Rollback between fixed images selects the earlier snapshot.
+**Rollback to a pre-fix image leaves dangling links** because it lacks the
+snapshot: dpkg-query reports no packages and apt lists none until rolling
+forward. This is the one rollback across the transition.
+
+The frozen `/usr/share/frostyard/<image>.packages.txt` API is unchanged.
+Run `python3 test/live/package-metadata.py` after a fresh installation, two
+successive image updates, and rollback: it compares package queries and apt
+against the frozen inventory and running systemd/bootc versions, and checks
+the link layout. Fixture coverage in `test/package-metadata-test.py` does not
+replace these live lifecycle checks.
+
+
 ## Configuration and script phases
 
 The root `mkosi.conf` depends on `base` and all sysexts for `just sysexts`.

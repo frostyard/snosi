@@ -1,0 +1,26 @@
+#!/bin/bash
+# Snapshot package identity only after every package-install phase is complete.
+# Runtime tmpfiles links select identity files; mutable administrator state
+# (especially alternatives) stays in /var/lib/dpkg.
+set -euo pipefail
+: "${BUILDROOT:?BUILDROOT must name the assembled image}"
+: "${SRCDIR:?SRCDIR must name the source tree}"
+db="$BUILDROOT/var/lib/dpkg"
+snapshot="$BUILDROOT/usr/lib/sysimage/dpkg"
+[[ -f "$db/status" && -d "$db/info" && -d "$db/triggers" ]] || {
+    echo "package-metadata: missing installed dpkg database" >&2
+    exit 1
+}
+[[ ! -e "$snapshot" ]] || {
+    echo "package-metadata: image already finalized; refusing to snapshot twice" >&2
+    exit 1
+}
+mkdir -p "$(dirname "$snapshot")"
+cp -a "$db" "$snapshot"
+# mkosi runs tmpfiles before finalizers. Install the identity links only now,
+# after the snapshot exists, so neither the base nor product package build
+# root is redirected during installation or inventory generation.
+# Intentionally replace the base dpkg.conf: a separate filename would leave
+# competing d and L+ rules for /var/lib/dpkg/triggers; tmpfiles ignores one.
+install -D -m 0644 "$SRCDIR/shared/outformat/image/dpkg.conf" \
+    "$BUILDROOT/usr/lib/tmpfiles.d/dpkg.conf"

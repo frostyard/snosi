@@ -50,27 +50,10 @@ ln -sf /dev/null /etc/systemd/system/systemd-sysupdate.timer
 ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-reboot.timer
 ln -sf /dev/null /etc/systemd/system/systemd-sysupdate-update.timer
 
-# Native /var factory state: the installer creates a fresh per-machine /var,
-# so nothing written to image /var at build time survives (see CLAUDE.md
-# "Native A/B Prototype" and docs/plans/2026-07-14-.../"Native /var Factory
-# State"). Package identity (the dpkg database) belongs to the immutable
-# root instead: relocate it to /usr/lib/sysimage/dpkg and leave a RELATIVE
-# symlink at /var/lib/dpkg so `dpkg-query`/`dpkg -l` keep working against
-# the currently booted image (and naturally change across A/B roots). The
-# symlink is relative (not absolute) so out-of-chroot consumers that resolve
-# it against a different root prefix (e.g. mkosi's own manifest generation,
-# which runs `dpkg-query --admindir=$BUILDROOT/var/lib/dpkg` from the host
-# BEFORE finalize scripts run, so it is unaffected by this move) still
-# resolve correctly if ever read relative to a prefix other than /.
-# bootc images are explicitly unchanged: real /var/lib/dpkg ships as today,
-# since bootc's ostree-managed /var is not wiped fresh on every install the
-# way the native installer's /var is.
-if [[ -e /usr/lib/snosi/native-ab ]]; then
-  mkdir -p /usr/lib/sysimage
-  rm -rf /usr/lib/sysimage/dpkg
-  mv /var/lib/dpkg /usr/lib/sysimage/dpkg
-  ln -sf ../../usr/lib/sysimage/dpkg /var/lib/dpkg
-fi
+# package-metadata.finalize snapshots dpkg into /usr/lib/sysimage/dpkg
+# after this script. Base tmpfiles links only the identity entries to that
+# snapshot at boot. Keep the parent /var/lib/dpkg directory and mutable state
+# (especially update-alternatives) in place on existing installations.
 
 # Compiled aspell dictionaries are the same problem in miniature: the
 # aspell-autobuildhash dpkg trigger generates /var/lib/aspell/*.rws at
@@ -80,8 +63,8 @@ fi
 # dict-dir. On a fresh installer-created /var those symlinks dangle and
 # spell-checking silently has no dictionaries. The trigger only ever reruns
 # at package-configure time — never on a booted immutable image — so the
-# compiled dictionaries belong to the immutable root: relocate exactly like
-# dpkg above, leaving the same relative symlink so the whole lookup chain
+# compiled dictionaries belong to the immutable root: the retired native
+# path relocates them, leaving a relative symlink so the whole lookup chain
 # (dict-dir symlink -> /var/lib/aspell -> relocated file) keeps resolving.
 # The retired native tree recreated the /var/lib/aspell symlink
 # on a fresh /var. Every image has the directory (base ships the aspell.conf
