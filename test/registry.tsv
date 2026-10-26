@@ -105,5 +105,5 @@ upholds-guard-test.sh	ci	validate.yml
 verified-download-split-checksums-test.sh	ci	validate.yml
 verify-installer-redirect-test.sh	ci	validate.yml
 wifi-backend-test.sh	ci	validate.yml
-wsdd-provider-test.sh	ci	validate.yml
 workflow-path-filter-test.sh	ci	validate.yml
+wsdd-provider-test.sh	ci	validate.yml
