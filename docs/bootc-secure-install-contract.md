@@ -289,10 +289,15 @@ as `EFI/BOOT/mmx64.efi`, and the MOK-signed systemd-boot second stage as
 for one-time operator approval and must provide a restage action that repeats
 only this enrollment staging without repartitioning or reinstalling.
 
-While Secure Boot is enabled, or its state cannot be read, the bootc bootloader
-reconciler requires that second stage and fails when it is missing. With Secure
-Boot disabled and no shim second stage installed it skips and succeeds, and it
-reconciles once a shim installation provides the stage.
+The bootc bootloader reconciler requires the shim second stage while Secure Boot
+is enabled or its state is unknown, and fails when the stage is missing. The
+state is unknown when efivarfs is missing, not mounted, unreadable or empty, or
+when the `SecureBoot` variable is unreadable, truncated or non-boolean. The
+reconciler skips and succeeds when no second stage is installed and either
+Secure Boot is disabled (value 0) or the firmware does not support it: efivarfs
+is mounted and readable and has no `SecureBoot` variable, which UEFI defines
+only on firmware that supports Secure Boot (#928, #1160). It reconciles an
+installed second stage in every state.
 
 After the installed Type #2 UKI is present, resolve the installed BLS `efi=`
 entry and extract its `.pcrpkey` to a private temporary file. Byte-compare the

@@ -40,8 +40,18 @@ setup_fixture() {
     # Fixture Secure Boot variable: 4 attribute bytes, then the value. The
     # default is enabled so unrelated tests keep the fail-closed behaviour.
     printf '\x06\x00\x00\x00\x01' >"$WORK/efivars/SecureBoot"
+    printf '\x06\x00\x00\x00\x01\x00' >"$WORK/efivars/BootCurrent"
     write_layout "$WORK/layout.json" /dev/vda3
 
+    cat >"$WORK/bin/stat" <<'EOF'
+#!/bin/bash
+if [[ ${1:-} == -f && ${2:-} == -c && ${3:-} == %T && ${4:-} == -- ]]; then
+    [[ ${SNOSI_TEST_EFIVARS_STAT_FAIL:-0} != 1 ]] || exit 1
+    printf '%s\n' "${SNOSI_TEST_EFIVARS_FSTYPE:-efivarfs}"
+    exit 0
+fi
+exec /usr/bin/stat "$@"
+EOF
     cat >"$WORK/bin/cryptsetup" <<'EOF'
 #!/bin/bash
 printf '  device:  /dev/vda1\n'
@@ -313,23 +323,124 @@ test_secure_boot_enabled_without_second_stage() {
     cleanup; WORK=""
 }
 
+# Assert an unknown state fails closed and creates no second stage. The caller
+# prepares the fixture (without a second stage) and any env.
+assert_unknown_state_fails_closed() { # description
+    assert_missing_stage_fails "$1"
+    if [[ ! -e "$WORK/esp/EFI/BOOT/grubx64.efi" ]]; then
+        pass "$1 creates no second stage"
+    else
+        fail "$1 creates no second stage"
+    fi
+}
+
 test_unreadable_secure_boot_state() {
     setup_fixture
     rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi"
-    rm -f -- "$WORK/efivars/SecureBoot"
-    assert_missing_stage_fails "missing Secure Boot variable"
+    rm -rf -- "$WORK/efivars"
+    assert_unknown_state_fails_closed "missing efivars directory"
+    cleanup; WORK=""
+
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi" "$WORK/efivars/SecureBoot"
+    SNOSI_TEST_EFIVARS_FSTYPE=sysfs assert_unknown_state_fails_closed "efivars directory that is not efivarfs"
+    cleanup; WORK=""
+
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi" "$WORK/efivars/SecureBoot"
+    SNOSI_TEST_EFIVARS_STAT_FAIL=1 assert_unknown_state_fails_closed "failed efivarfs type check"
+    cleanup; WORK=""
+
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi" "$WORK/efivars/SecureBoot" "$WORK/efivars/BootCurrent"
+    assert_unknown_state_fails_closed "empty efivarfs listing"
+    cleanup; WORK=""
+
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi" "$WORK/efivars/SecureBoot"
+    if [[ $EUID -ne 0 ]]; then
+        chmod 000 "$WORK/efivars"
+        assert_unknown_state_fails_closed "unreadable efivars directory"
+        chmod 755 "$WORK/efivars"
+    else
+        printf 'ok - unreadable efivars directory fails closed (skipped as root)\n'
+    fi
+    cleanup; WORK=""
+
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi" "$WORK/efivars/SecureBoot"
+    ln -s "$WORK/efivars/nonexistent-target" "$WORK/efivars/SecureBoot"
+    assert_unknown_state_fails_closed "dangling Secure Boot symlink"
+    cleanup; WORK=""
+
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi" "$WORK/efivars/SecureBoot"
+    mkdir "$WORK/efivars/SecureBoot"
+    assert_unknown_state_fails_closed "Secure Boot directory"
+    cleanup; WORK=""
+
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi"
+    if [[ $EUID -ne 0 ]]; then
+        chmod 000 "$WORK/efivars/SecureBoot"
+        assert_unknown_state_fails_closed "unreadable Secure Boot variable"
+        chmod 644 "$WORK/efivars/SecureBoot"
+    else
+        printf 'ok - unreadable Secure Boot variable fails closed (skipped as root)\n'
+    fi
     cleanup; WORK=""
 
     setup_fixture
     rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi"
     printf '\x06\x00\x00\x00\x02' >"$WORK/efivars/SecureBoot"
-    assert_missing_stage_fails "non-boolean Secure Boot value"
+    assert_unknown_state_fails_closed "non-boolean Secure Boot value"
     cleanup; WORK=""
 
     setup_fixture
     rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi"
     printf '\x06\x00\x00\x00' >"$WORK/efivars/SecureBoot"
-    assert_missing_stage_fails "truncated Secure Boot variable"
+    assert_unknown_state_fails_closed "truncated Secure Boot variable"
+    cleanup; WORK=""
+
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi"
+    : >"$WORK/efivars/SecureBoot"
+    assert_unknown_state_fails_closed "empty Secure Boot variable"
+    cleanup; WORK=""
+}
+
+test_secure_boot_unsupported_without_second_stage() {
+    local output
+    setup_fixture
+    rm -f -- "$WORK/esp/EFI/BOOT/grubx64.efi" "$WORK/efivars/SecureBoot"
+    if output=$(SNOSI_TEST_MOUNTED_ESP=1 run_reconciler 2>&1); then
+        pass "unsupported Secure Boot without second stage succeeds"
+    else
+        fail "unsupported Secure Boot without second stage succeeds"
+    fi
+    if [[ $output == 'snosi-bootc-bootloader-reconcile: firmware has no Secure Boot support (no SecureBoot variable in efivarfs) and no shim second stage is installed; nothing to reconcile' ]]; then
+        pass "unsupported Secure Boot without second stage reports one skip line"
+    else
+        fail "unsupported Secure Boot without second stage reports one skip line"
+    fi
+    if [[ $(cd "$WORK/esp/EFI/BOOT" && printf '%s\n' * | sort | tr '\n' ' ') == 'BOOTX64.EFI mmx64.efi ' ]]; then
+        pass "unsupported Secure Boot skip creates no second stage"
+    else
+        fail "unsupported Secure Boot skip creates no second stage"
+    fi
+    if [[ ! -s "$WORK/log" ]]; then pass "unsupported Secure Boot skip does not mount or sync"; else fail "unsupported Secure Boot skip does not mount or sync"; fi
+    cleanup; WORK=""
+}
+
+test_secure_boot_unsupported_with_second_stage() {
+    setup_fixture
+    rm -f -- "$WORK/efivars/SecureBoot"
+    if SNOSI_TEST_MOUNTED_ESP=1 run_reconciler; then
+        pass "unsupported Secure Boot still reconciles an installed second stage"
+    else
+        fail "unsupported Secure Boot still reconciles an installed second stage"
+    fi
+    assert_same "unsupported Secure Boot installs the immutable source" "$WORK/root/usr/lib/snosi/bootc/systemd-bootx64.efi" "$WORK/esp/EFI/BOOT/grubx64.efi"
     cleanup; WORK=""
 }
 
@@ -361,6 +472,8 @@ test_missing_or_ambiguous_esp
 test_temporary_mount
 test_secure_boot_disabled_without_second_stage
 test_secure_boot_enabled_without_second_stage
+test_secure_boot_unsupported_without_second_stage
+test_secure_boot_unsupported_with_second_stage
 test_unreadable_secure_boot_state
 test_secure_boot_disabled_with_second_stage
 

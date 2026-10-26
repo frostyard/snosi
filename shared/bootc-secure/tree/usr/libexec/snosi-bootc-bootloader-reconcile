@@ -8,17 +8,40 @@ readonly CERT="${SNOSI_BOOTC_RECONCILE_CERT:-/usr/lib/snosi/mok.crt}"
 readonly RUN_DIR="${SNOSI_BOOTC_RECONCILE_RUN_DIR:-/run/snosi-bootloader-reconcile}"
 readonly ESP_LIBRARY="${SNOSI_ESP_LIBRARY:-/usr/lib/snosi/esp.sh}"
 readonly SECUREBOOT_VAR="${SNOSI_BOOTC_RECONCILE_SECUREBOOT_VAR:-/sys/firmware/efi/efivars/SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c}"
+readonly EFIVARS_DIR="${SECUREBOOT_VAR%/*}"
 RECONCILE_TEMP=""
 RECONCILE_BACKUP=""
 
 die() { printf 'snosi-bootc-bootloader-reconcile: %s\n' "$*" >&2; exit 1; }
 
-# Print the UEFI Secure Boot state from efivarfs: 1 is enabled, 0 is disabled.
-# A missing, unreadable, truncated or non-boolean value returns non-zero so the
-# caller can treat an unknown state as enabled (fail closed).
+# True only when efivarfs is mounted, accessible and lists variables. A mounted
+# efivarfs on UEFI firmware always lists variables, so an empty listing is not
+# proof that the firmware exposes its variable store.
+efivarfs_readable() {
+    local fstype first
+
+    [[ -d "$EFIVARS_DIR" && -r "$EFIVARS_DIR" && -x "$EFIVARS_DIR" ]] || return 1
+    fstype=$(stat -f -c %T -- "$EFIVARS_DIR" 2>/dev/null) || return 1
+    [[ $fstype == efivarfs ]] || return 1
+    first=$(find "$EFIVARS_DIR" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null) || return 1
+    [[ -n $first ]]
+}
+
+# Print the UEFI Secure Boot state from efivarfs: 1 is enabled, 0 is disabled,
+# unsupported means efivarfs is readable but has no SecureBoot variable (UEFI
+# defines it only on firmware that supports Secure Boot; #1160). Every other
+# case returns non-zero so the caller can treat the state as unknown and fail
+# closed: efivarfs missing, not mounted, unreadable or empty; a SecureBoot
+# entry that is a dangling symlink, not a regular file or not readable; and a
+# truncated or non-boolean value.
 read_secureboot_state() {
     local value
 
+    if [[ ! -e "$SECUREBOOT_VAR" && ! -L "$SECUREBOOT_VAR" ]]; then
+        efivarfs_readable || return 1
+        printf 'unsupported\n'
+        return 0
+    fi
     [[ -f "$SECUREBOOT_VAR" && -r "$SECUREBOOT_VAR" ]] || return 1
     value=$(od -An -t u1 -j4 -N1 "$SECUREBOOT_VAR" 2>/dev/null) || return 1
     value="${value//[[:space:]]/}"
@@ -54,12 +77,19 @@ main() {
     if [[ ! -d "$destination_dir" || ! -f "$destination" ]]; then
         # An install that boots systemd-boot directly, without shim, has no
         # second stage to reconcile. Skip only when Secure Boot is definitely
-        # disabled (#928); an enabled or unknown state still fails closed.
+        # disabled (#928) or the firmware does not support it (#1160); an
+        # enabled or unknown state still fails closed.
         secureboot=$(read_secureboot_state) || secureboot=unknown
-        if [[ $secureboot == 0 ]]; then
-            printf 'snosi-bootc-bootloader-reconcile: Secure Boot is disabled and no shim second stage is installed; nothing to reconcile\n' >&2
-            exit 0
-        fi
+        case $secureboot in
+            0)
+                printf 'snosi-bootc-bootloader-reconcile: Secure Boot is disabled and no shim second stage is installed; nothing to reconcile\n' >&2
+                exit 0
+                ;;
+            unsupported)
+                printf 'snosi-bootc-bootloader-reconcile: firmware has no Secure Boot support (no SecureBoot variable in efivarfs) and no shim second stage is installed; nothing to reconcile\n' >&2
+                exit 0
+                ;;
+        esac
         die "installed shim second stage is missing"
     fi
     # The source lives under /usr so an existing /boot ESP mount cannot shadow it.
