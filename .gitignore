@@ -32,6 +32,8 @@ shared/snow/tree/usr/share/glib-2.0/schemas/org.gnome.shell.extensions.logo-menu
 # firn binary provisioned at build time by `just _firn-binary`
 # (shared/firn-installer/README.md); never committed.
 shared/firn-installer/tree/usr/bin/firn
+# firn-gui binary provisioned the same way by `just _firn-gui-binary`.
+shared/firn-installer/tree/usr/libexec/firn-gui/
 
 # Offline flatpak seed tree + scratch built by `just firn-flatpak-seed`
 # (multi-GiB; shared/firn-installer/README.md). Under output/ (already ignored

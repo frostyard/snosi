@@ -31,17 +31,17 @@ sundog: ensure-mkosi
 floe: ensure-mkosi
     sudo PATH="$PATH" {{just}} _floe
 
-# Firn installer ISO (see shared/firn-installer/README.md). The firn binary is
-# built from a sibling firn checkout by _firn-binary, which runs as the
-# invoking user BEFORE sudo (same reasoning as ensure-mkosi: the artifact
-# must not be root-owned, and root has no Go toolchain/module cache).
-# FIRN_SRC defaults to ../firn relative to this repo's root -- worktree
-# users must set it to a real checkout, e.g.:
+# Firn installer ISO (see shared/firn-installer/README.md). The firn and
+# firn-gui binaries are built from a sibling firn checkout by _firn-binary
+# and _firn-gui-binary, which run as the invoking user BEFORE sudo (same
+# reasoning as ensure-mkosi: the artifacts must not be root-owned, and root
+# has no Go toolchain/module cache). FIRN_SRC defaults to ../firn relative
+# to this repo's root -- worktree users must set it to a real checkout, e.g.:
 #   FIRN_SRC=~/projects/frostyard/firn just firn-installer
-firn-installer: ensure-mkosi _firn-binary
+firn-installer: ensure-mkosi _firn-binary _firn-gui-binary
     sudo PATH="$PATH" {{just}} _firn-installer
 
-firn-installer-iso: ensure-mkosi _firn-binary
+firn-installer-iso: ensure-mkosi _firn-binary _firn-gui-binary
     sudo PATH="$PATH" {{just}} _firn-installer-iso
 
 # Build the offline flatpak seed tree consumed by the installer ISO (firn
@@ -193,6 +193,32 @@ _firn-binary:
     (cd "$src" && CGO_ENABLED=0 go build \
         -ldflags "-X main.version=$version -X main.commit=$commit -X main.date=$build_time -X main.builtBy=snosi-justfile" \
         -o "$out" ./cmd/firn-cli)
+    echo "built $out ($version, $commit)"
+
+# Build firn-gui into shared/firn-installer/tree/usr/libexec/firn-gui/firn-gui
+# (gitignored), overriding the packaged binary the same way _firn-binary
+# overrides firn. firn-gui is a nested Go module (gui/) that needs a newer Go
+# than firn itself, so GOTOOLCHAIN=auto lets the go command fetch it. It stays
+# alone in its own directory: its UI toolkit deletes `.*.old-*` files beside
+# the executable. A checkout that predates firn-gui (no gui/go.mod) builds
+# nothing, and the ISO keeps the packaged firn-gui.
+[private]
+_firn-gui-binary:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    src="${FIRN_SRC:-{{justfile_directory()}}/../firn}"
+    [[ -d "$src" ]] || { echo "Error: firn checkout not found at $src -- set FIRN_SRC (see shared/firn-installer/README.md)" >&2; exit 1; }
+    [[ -f "$src/gui/go.mod" ]] || { echo "firn checkout at $src has no gui/ module; using the packaged firn-gui"; exit 0; }
+    version=$(git -C "$src" describe --tags --always --dirty 2>/dev/null || echo dev)
+    commit=$(git -C "$src" rev-parse --short HEAD 2>/dev/null || echo none)
+    build_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    out="{{justfile_directory()}}/shared/firn-installer/tree/usr/libexec/firn-gui/firn-gui"
+    export GOCACHE="${GOCACHE:-{{justfile_directory()}}/output/.go-build-cache}"
+    export GOPATH="${GOPATH:-{{justfile_directory()}}/output/.go-path}"
+    mkdir -p "$GOCACHE" "$GOPATH" "$(dirname "$out")"
+    (cd "$src/gui" && CGO_ENABLED=0 GOTOOLCHAIN=auto go build \
+        -ldflags "-X main.version=$version -X main.commit=$commit -X main.date=$build_time -X main.builtBy=snosi-justfile" \
+        -o "$out" ./cmd/firn-gui)
     echo "built $out ($version, $commit)"
 
 [private]

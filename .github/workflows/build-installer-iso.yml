@@ -29,6 +29,8 @@ on:
       - "shared/native-ab/publish/**"
       - "shared/bootc-secure/package-manager/**"
       - "test/native-iso-boot-smoke-test.sh"
+      - "test/firn-installer-ui-boot-test.sh"
+      - "test/lib/ssh.sh"
       - "test/lib/vm.sh"
   workflow_dispatch:
 
@@ -223,14 +225,35 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      - name: Boot-entry test (console and graphical entries own tty1 as designed)
+        # docs/adr/0022-installer-graphical-and-console-boot-entries.md: both
+        # GRUB entries, from the CD and the USB-stick layout, plus the
+        # no-display fallback, on the same candidate bytes.
+        if: steps.smoke.outcome == 'success'
+        id: ui
+        run: |
+          sudo UI_SCREENSHOT_DIR=/var/tmp/ui-boot/screens UI_CONSOLE_DIR=/var/tmp/ui-boot/console \
+            ./test/firn-installer-ui-boot-test.sh \
+            /var/tmp/native-publish/iso \
+            https://repository.frostyard.org/isos/native/v1
+
+      - name: Upload boot-entry screenshots and console logs
+        if: always() && steps.smoke.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-ui-boot-iso
+          path: /var/tmp/ui-boot
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Record verified marker
-        if: steps.verify.outcome == 'success' && steps.smoke.outcome == 'success'
+        if: steps.verify.outcome == 'success' && steps.smoke.outcome == 'success' && steps.ui.outcome == 'success'
         run: |
           mkdir -p /var/tmp/native-verified
           echo "iso verified $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/tmp/native-verified/iso
 
       - name: Upload verified marker
-        if: steps.verify.outcome == 'success' && steps.smoke.outcome == 'success'
+        if: steps.verify.outcome == 'success' && steps.smoke.outcome == 'success' && steps.ui.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-verified-iso

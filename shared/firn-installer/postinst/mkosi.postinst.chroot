@@ -29,6 +29,46 @@ ln -sf usr/lib/systemd/systemd /init
 }
 chmod 0755 /usr/bin/firn
 
+# The graphical entry's frontend and compositor: Packages=frostyard-firn-gui
+# and Packages=cage (or a `just _firn-gui-binary` dev build of firn-gui).
+# Without them the graphical entry would only ever fall back to the TUI.
+for f in /usr/libexec/firn-gui/firn-gui /usr/bin/firn-gui /usr/bin/cage; do
+    [[ -e "$f" ]] || {
+        echo "ERROR: $f missing -- the graphical boot entry needs it (see shared/firn-installer/mkosi.conf)" >&2
+        exit 1
+    }
+done
+chmod 0755 /usr/libexec/firn-gui/firn-gui
+
+# firn-gui dlopens its native libraries, so neither apt nor the dynamic
+# linker checks them at build time. Missing GLib/GTK/Cairo libraries make it
+# exit at start, and a missing Pango makes it draw no text at all, with no
+# error. These are the sonames firn-gui's UI toolkit (mygo) opens; the
+# Packages= block in mkosi.conf supplies them.
+for so in libglib-2.0.so.0 libgobject-2.0.so.0 libgio-2.0.so.0 \
+    libgdk-3.so.0 libgtk-3.so.0 libcairo.so.2 libgdk_pixbuf-2.0.so.0 \
+    libpango-1.0.so.0 libpangocairo-1.0.so.0 libpangoft2-1.0.so.0 \
+    libharfbuzz.so.0 libfontconfig.so.1 libepoxy.so.0; do
+    compgen -G "/usr/lib/*-linux-gnu/$so" >/dev/null || {
+        echo "ERROR: $so missing -- firn-gui loads it at runtime (see the firn-gui Packages= block in shared/firn-installer/mkosi.conf)" >&2
+        exit 1
+    }
+done
+# firn-gui asks fontconfig for sans-serif and monospace.
+for f in DejaVuSans.ttf DejaVuSansMono.ttf; do
+    [[ -f /usr/share/fonts/truetype/dejavu/$f ]] || {
+        echo "ERROR: font $f missing -- firn-gui needs a sans-serif and a monospace font" >&2
+        exit 1
+    }
+done
+
+# A boot without systemd.unit= (a hand-edited GRUB command line) gets the
+# console installer, the same as the menu's default entry. Each GRUB entry
+# names its own target (shared/firn-installer/tools/build-iso.sh). This ISO's
+# /etc lives in the all-in-RAM rootfs; ADR-0002's no-/etc-symlink rule is for
+# golden bootc images.
+ln -sf /usr/lib/systemd/system/firn-console.target /etc/systemd/system/default.target
+
 # openssh-server's postinst generated SSH host keys at build time. Every
 # download of the ISO would present them, so anyone could impersonate any
 # booted installer to an SSH client (ADR-0019). Each boot generates fresh

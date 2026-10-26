@@ -41,14 +41,33 @@ label, and the on-disk copy each product composition installs and checks.
 untested/waived status, historical status markers and the no-R2-deletion
 boundary; it never accesses R2.
 `test/firn-installer-iso-test.sh --static` checks Firn's Forky sandbox,
-that the ISO installs exactly one unpinned `frostyard-firn`, and that it
-removes the build's SSH host keys and generates them at boot;
-the removed native install live mode is not a bootc proof.
+that the ISO installs exactly one unpinned `frostyard-firn` and
+`frostyard-firn-gui`, that it removes the build's SSH host keys and
+generates them at boot, and the boot-entry contract of
+[ADR-0022](../adr/0022-installer-graphical-and-console-boot-entries.md):
+two GRUB entries that differ only in `systemd.unit=`, console as the timed
+default, each tty1 frontend wanted only by its target, and a
+condition-free `firn-gui.service` whose every exit hands tty1 to the TUI.
+The removed native install live mode is not a bootc proof.
 `test/firn-gui-scope-test.sh` keeps `frostyard-firn-gui`, Firn's
 disk-erasing graphical installer, on the ISO: outside `shared/firn-installer/`
 and `mkosi.profiles/firn-installer`, no mkosi package setting (first or
 continuation line, any tracked `*.conf` or `Include=` target) or build script
 may name it, and no other config may include the installer fragments.
+
+`build-installer-iso.yml` boots each candidate ISO before promotion.
+`test/native-iso-boot-smoke-test.sh` boots the default entry with no display
+and waits for firn on the serial console.
+`test/firn-installer-ui-boot-test.sh` then boots the same bytes four
+times. It selects GRUB entries by hotkey through the QEMU monitor and reaches
+the guest over SSH with an SMBIOS `ssh.authorized_keys.root` credential, so
+the ISO is not modified. The legs are the console entry, the graphical entry
+on virtio-vga followed by a Quit that must hand tty1 to the TUI, the graphical
+entry from the USB-stick (ESP) layout on std VGA, and the graphical entry
+with no display, which must fall back to the TUI at once. It saves
+screenshots and prints guest memory use. Both tests boot with 6 GiB, because
+the all-in-RAM rootfs is a tmpfs capped at half of RAM and the ISO needs about
+4.5 GiB to unpack.
 
 `test/iso-publication-pipeline-test.sh` rehearses the retained Firn ISO
 publisher in a local `isos/native/v1/` namespace with an ephemeral OpenPGP

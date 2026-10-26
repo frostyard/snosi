@@ -161,11 +161,22 @@ initrd="$WORK/initrd.img"
 echo "  initrd: $(du -h "$initrd" | cut -f1)"
 
 # ---------------------------------------------------------------------------
-# 3. grub.cfg -- non-interactive (timeout=0), no serial terminal dependency
-#    on GRUB itself (only the kernel needs console=ttyS0; GRUB's own text
-#    output isn't asserted on and the monolithic signed image's exact
-#    compiled-in module set, e.g. whether `serial`/`terminal_output` are
-#    present, was not independently verified).
+# 3. grub.cfg -- a two-entry menu (docs/adr/0022-installer-graphical-and-
+#    console-boot-entries.md). Each entry boots the same kernel and initramfs
+#    and picks the installer frontend for tty1 with systemd's own
+#    systemd.unit= flag:
+#      "Install snosi (graphical)" -> firn-graphical.target: firn-gui in the
+#        cage kiosk, falling back to the TUI when there is no display.
+#      "Install snosi (console)"   -> firn-console.target: the firn TUI kiosk.
+#    The serial TUI kiosk runs under both. Console is the default, so a boot
+#    nobody touches behaves as before; the 5-second visible menu lets a user
+#    pick graphical. The hotkeys (g, t) boot an entry in one keypress, which
+#    test/firn-installer-ui-boot-test.sh uses through the QEMU monitor.
+#    Still no serial terminal dependency on GRUB itself: the menu reaches a
+#    serial console through the firmware's console redirection (OVMF, BMCs),
+#    not GRUB's `serial`/`terminal_output` modules, whose presence in the
+#    monolithic signed image's compiled-in module set was not independently
+#    verified.
 #
 # DUAL console: `console=tty0 console=ttyS0,115200n8`. firn is THE snosi
 # installer, including on desktop/laptop hardware with a GPU and no serial
@@ -189,12 +200,19 @@ echo "  initrd: $(du -h "$initrd" | cut -f1)"
 # every desktop install.
 # ---------------------------------------------------------------------------
 cat >"$WORK/grub.cfg" <<'EOF'
-set timeout=0
-set default=0
+set timeout=5
+set timeout_style=menu
+set default=console
 
-menuentry "Snosi Installer" {
+menuentry "Install snosi (graphical)" --id=graphical --hotkey=g {
     search --no-floppy --set=root --file /firn-installer/vmlinuz
-    linux /firn-installer/vmlinuz console=tty0 console=ttyS0,115200n8 ro quiet loglevel=3 audit=0 systemd.show_status=false vt.global_cursor_default=0
+    linux /firn-installer/vmlinuz console=tty0 console=ttyS0,115200n8 ro quiet loglevel=3 audit=0 systemd.show_status=false vt.global_cursor_default=0 systemd.unit=firn-graphical.target
+    initrd /firn-installer/initrd.img
+}
+
+menuentry "Install snosi (console)" --id=console --hotkey=t {
+    search --no-floppy --set=root --file /firn-installer/vmlinuz
+    linux /firn-installer/vmlinuz console=tty0 console=ttyS0,115200n8 ro quiet loglevel=3 audit=0 systemd.show_status=false vt.global_cursor_default=0 systemd.unit=firn-console.target
     initrd /firn-installer/initrd.img
 }
 EOF

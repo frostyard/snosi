@@ -8,7 +8,10 @@ Sundog have VM fresh-install PASS evidence (lab runs
 `bootc-only-iso-install-54wr4` and `-fjrk8`, minideb, 2026-10-24/25; the
 earlier Sundog `boot:no_report` was a lab-harness race,
 [#1123](https://github.com/frostyard/snosi/issues/1123)).
-The Firn ISO takes the newest published Firn release (no pin).
+The Firn ISO takes the newest published Firn release (no pin). Its GRUB
+menu boots the TUI (default) or firn-gui in cage, with the TUI always on
+serial; that graphics stack needs about 4.5 GiB of RAM to boot
+([ADR-0022](docs/adr/0022-installer-graphical-and-console-boot-entries.md)).
 Native A/B and NBC build/runtime lanes were removed; see
 [ADR-0018](docs/adr/0018-remove-native-ab-and-nbc-lanes.md) and
 [native prototype history](docs/native-ab-prototype-history.md).

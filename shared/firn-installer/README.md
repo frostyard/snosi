@@ -2,23 +2,30 @@
 
 Successor to `shared/native-installer` per firn's ADR-0010: **one**
 installer ISO for all four snosi bootc products, with
-[firn](https://github.com/frostyard/firn)'s TUI as the kiosk frontend
-(no cage/GTK/python — a single static Go binary on tty1 and ttyS0) and
-a package payload for firn's bootc installer steps. `mokutil` (Secure Boot
+[firn](https://github.com/frostyard/firn)'s frontends as kiosks and a
+package payload for firn's bootc installer steps. A GRUB menu picks the tty1
+frontend: firn's TUI (the default) or firn-gui in the cage compositor; the
+TUI always runs on ttyS0 too (see [Boot menu](#boot-menu-graphical-or-console)
+and [ADR-0022](../../docs/adr/0022-installer-graphical-and-console-boot-entries.md)). `mokutil` (Secure Boot
 mok-stage) and `flatpak` (flatpaks step and offline seed) stay in the payload
 because Firn's bootc steps declare them.
 
-## The firn binary comes from the frostyard apt repo
+## The firn binaries come from the frostyard apt repo
 
-`mkosi.conf` installs `Packages=frostyard-firn` unpinned (published by
-firn's release via repogen), so CI needs no sibling firn checkout and each
-ISO build takes the newest Firn release. The image postinst still fails the
-build loudly if `/usr/bin/firn` is missing.
+`mkosi.conf` installs `Packages=frostyard-firn` and
+`Packages=frostyard-firn-gui` unpinned (published by firn's release via
+repogen), so CI needs no sibling firn checkout and each ISO build takes the
+newest Firn release. The image postinst still fails the build loudly if
+`/usr/bin/firn`, `/usr/libexec/firn-gui/firn-gui`, cage, or a library or
+font firn-gui loads at runtime is missing: `frostyard-firn-gui` declares no
+dependencies, so `mkosi.conf` lists its graphics stack explicitly.
 
 For dev testing of *unreleased* firn, the `just firn-installer` /
-`just firn-installer-iso` recipes still run `_firn-binary` first, which
-builds from a sibling checkout into the gitignored `tree/usr/bin/firn`
-(ExtraTrees then overrides the packaged binary):
+`just firn-installer-iso` recipes still run `_firn-binary` and
+`_firn-gui-binary` first, which build from a sibling checkout into the
+gitignored `tree/usr/bin/firn` and `tree/usr/libexec/firn-gui/firn-gui`
+(ExtraTrees then overrides the packaged binaries; a checkout without the
+`gui/` module keeps the packaged firn-gui):
 
 ```sh
 # FIRN_SRC defaults to ../firn relative to this repo's root;
@@ -40,14 +47,49 @@ verification — firn's preflight requires both.
 
 ## Kiosk units
 
-`tree/usr/lib/systemd/system/firn-kiosk.service` and
-`firn-kiosk-serial@.service` are verbatim copies of firn's
-`dist/` units (firn owns them; ADR-0010 repo boundary — re-copy on firn
-changes, do not fork). They are enabled the same way native-installer
-enables `snosi-setup.service`: static wants links in
-`tree/usr/lib/systemd/system/multi-user.target.wants/` for
-`firn-kiosk.service` (tty1) and `firn-kiosk-serial@ttyS0.service`
-(serial, matching the ISO's `console=ttyS0` kernel argument).
+`tree/usr/lib/systemd/system/firn-kiosk.service` (TUI on tty1) and
+`firn-kiosk-serial@.service` (TUI on a serial console) started as copies of
+firn's kiosk units. Firn's tree no longer carries them, so this directory
+holds the live copies. `firn-gui.service` and
+`/usr/lib/firn/firn-gui-session` (the graphical kiosk) belong to the snosi
+ISO, like `firn-flatpak-seed.service`.
+
+All are enabled with static wants links, never `[Install]`:
+
+| Link | Starts | Under |
+|---|---|---|
+| `multi-user.target.wants/firn-kiosk-serial@ttyS0.service` | TUI on ttyS0 (the ISO's `console=ttyS0`) | both entries |
+| `multi-user.target.wants/firn-flatpak-seed.service` | the offline seed mount | both entries |
+| `firn-console.target.wants/firn-kiosk.service` | TUI on tty1 | console entry, `default.target` |
+| `firn-graphical.target.wants/firn-gui.service` | firn-gui in cage on tty1 | graphical entry |
+
+## Boot menu: graphical or console
+
+`tools/build-iso.sh` writes one `grub.cfg`, used by both the optical
+(ISO9660) and USB-stick (GPT ESP) boot paths. It shows a five-second menu on
+the display and, through firmware console redirection, on serial:
+
+| Entry | Hotkey | Kernel argument |
+|---|---|---|
+| Install snosi (graphical) | `g` | `systemd.unit=firn-graphical.target` |
+| Install snosi (console), the default | `t` | `systemd.unit=firn-console.target` |
+
+`firn-gui-session` waits up to 10 s for a DRM device. Without one (a
+serial-only server, a VM without a display, a GPU no kernel driver
+supports) it exits 77 and `firn-gui.service` hands tty1 to the TUI at once.
+Three crashes in 60 s and a clean exit (Quit or Close) do the same, so tty1
+always ends with an installer. firn-gui runs as root under cage, so it skips
+pkexec, and it draws on the CPU where there is no GPU acceleration.
+
+The graphics stack costs RAM on every boot, because both entries share one
+initramfs. Measured against the TUI-only ISO: 121 more packages, +292 MiB of
+rootfs (191 MiB of it Mesa and LLVM, which cage's wlroots and Xwayland pull
+through `libgbm1`), +90 MiB of initramfs and +103 MiB of ISO (783 MiB). The
+rootfs is a tmpfs capped at half of RAM, and the compressed initramfs is
+held until it is unpacked, so the minimum RAM to boot rose from 3584–3840 MiB
+to 4352–4480 MiB (QEMU probes; the docs say 4.5 GiB). A 4 GiB machine no
+longer boots the ISO.
+`test/firn-installer-ui-boot-test.sh` boots each entry in QEMU with 6 GiB.
 
 ## SSH host keys
 

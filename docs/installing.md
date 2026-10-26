@@ -128,8 +128,20 @@ such as `/dev/sdb`, not a partition such as `/dev/sdb1`.
 
 ## Install with Firn
 
-Firn starts automatically as a terminal wizard on the local display and the
-serial console. It applies the bootc storage and trust pipeline.
+The installer runs entirely from RAM and needs at least 4.5 GiB of memory to
+start. Its boot menu waits five seconds and then boots the default entry:
+
+- **Install snosi (console)**, the default, runs Firn as a terminal wizard on
+  the local display.
+- **Install snosi (graphical)** runs Firn's graphical installer on the local
+  display. It needs no GPU acceleration. On a machine with no usable display
+  it falls back to the terminal wizard, and quitting it returns to the
+  terminal wizard.
+
+Under both entries the terminal wizard also runs on the serial console
+(`ttyS0`), so a headless machine can always be installed over serial. Run
+only one installation at a time. Both frontends apply the bootc storage and
+trust pipeline.
 
 1. Select the bootc product.
 2. Ensure networking is available if the selected payload or optional
