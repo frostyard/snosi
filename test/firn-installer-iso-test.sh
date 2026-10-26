@@ -25,6 +25,21 @@ if [[ $unpinned -ne 1 || $any -ne 1 ]]; then
     exit 1
 fi
 
+# ADR-0019: every download shares the ISO's bytes, so the build's SSH host
+# keys must not ship (test/no-private-keys-test.sh checks that the profile
+# runs the guard). Keys come from sshd-keygen on each boot, keyed on the
+# missing ed25519 key rather than on first-boot detection.
+grep -Fqx 'rm -f /etc/ssh/ssh_host_*' \
+    "$root/shared/firn-installer/postinst/mkosi.postinst.chroot" || {
+    echo 'Firn ISO postinst must remove the build-time SSH host keys' >&2
+    exit 1
+}
+dropin=usr/lib/systemd/system/sshd-keygen.service.d/10-run-when-keys-missing.conf
+grep -Fqx "ExtraTrees=%D/mkosi.images/base/mkosi.extra/$dropin:/$dropin" "$conf" || {
+    echo 'Firn ISO must ship the sshd-keygen drop-in that generates missing host keys' >&2
+    exit 1
+}
+
 # Firn reads each image's org.frostyard.core-flatpaks label (firn
 # ADR-0018); the retired ISO fallback gave every product Snow's set.
 fallback=usr/share/firn/core-flatpaks.json
