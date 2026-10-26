@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Graphical firn installer on tty1: the cage kiosk compositor running exactly
+# one client, firn-gui (frostyard/firn ADR-0021), as root. Run as root,
+# firn-gui skips its pkexec re-exec. Only firn-graphical.target (the
+# "Install snosi (graphical)" GRUB entry) wants this unit, and it replaces
+# firn-kiosk.service on tty1. REPO BOUNDARY: this unit is the snosi ISO's own,
+# like firn-flatpak-seed.service (docs/adr/0022-installer-graphical-and-console-boot-entries.md).
+#
+# No Condition* lines, so Conflicts= is safe (see firn-kiosk.service for the
+# Conflicts-vs-Conditions lesson). The target, not a condition, decides
+# whether this unit runs. firn-gui-session handles the no-display case: it
+# exits 77, RestartPreventExitStatus= skips the retries, the unit fails at
+# once, and OnFailure= hands tty1 to the TUI kiosk. Three crashes inside 60 s
+# take the same path. OnSuccess= covers a clean exit: firn-gui exits 0 on
+# Quit and Close, even after a failed or cancelled install, and tty1 then
+# gets the TUI instead of a dead screen. The TUI's own crash-loop escape
+# hands tty1 to a login getty after that.
+#
+# Seat and runtime settings come from the retired native-installer cage
+# kiosk (snosi-setup.service, proven live 2026-07-17):
+#   LIBSEAT_BACKEND=builtin: everything runs as root with no logind session;
+#     wlroots' builtin seat takes DRM and input directly.
+#   WLR_NO_HARDWARE_CURSORS=1: virtio-vga/llvmpipe have no hardware cursor
+#     plane.
+# GDK_BACKEND=wayland keeps GTK off cage's lazy Xwayland; NO_AT_BRIDGE=1
+# skips the accessibility bus, since there is no session bus here.
+[Unit]
+Description=firn installer (graphical kiosk on tty1)
+Documentation=https://github.com/frostyard/firn/blob/main/docs/adr/0021-graphical-installer-separate-executable.md
+Conflicts=getty@tty1.service firn-kiosk.service
+After=getty@tty1.service systemd-user-sessions.service
+OnFailure=firn-kiosk.service
+OnSuccess=firn-kiosk.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+# Same VT activation as firn-kiosk.service: systemd opens tty1 but does not
+# make it the visible VT.
+ExecStartPre=-/usr/bin/chvt 1
+ExecStart=/usr/lib/firn/firn-gui-session
+Restart=on-failure
+RestartSec=2
+RestartPreventExitStatus=77
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+RuntimeDirectory=firn-gui
+Environment=XDG_RUNTIME_DIR=/run/firn-gui
+Environment=LIBSEAT_BACKEND=builtin
+Environment=WLR_NO_HARDWARE_CURSORS=1
+Environment=GDK_BACKEND=wayland
+Environment=NO_AT_BRIDGE=1

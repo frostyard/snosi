@@ -20,6 +20,10 @@
 # Environment:
 #   SMOKE_CONSOLE_COPY  copy the serial log here (pass and fail alike)
 #   ISO_BOOT_TIMEOUT    seconds to wait for the firn installer (default 420)
+#   VM_MEMORY           guest RAM in MiB (default 6144: the all-in-RAM rootfs
+#                       is a tmpfs capped at half of RAM, and the ISO needs
+#                       about 4.5 GiB to unpack -- docs/adr/0022-installer-
+#                       graphical-and-console-boot-entries.md)
 set -euo pipefail
 
 usage() {
@@ -33,7 +37,7 @@ PREPARED_DIR="$1"
 BASE_URL="${2:-}"
 BASE_URL="${BASE_URL%/}"
 : "${ISO_BOOT_TIMEOUT:=420}"
-: "${VM_MEMORY:=4096}"
+: "${VM_MEMORY:=6144}"
 : "${VM_CPUS:=2}"
 
 [[ $EUID -eq 0 ]] || { echo "Error: must run as root (KVM)" >&2; exit 1; }

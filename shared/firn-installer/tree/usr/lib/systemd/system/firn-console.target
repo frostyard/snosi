@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Boot target of the ISO's "Install snosi (console)" GRUB entry
+# (systemd.unit=firn-console.target, shared/firn-installer/tools/build-iso.sh)
+# and the default target (the postinst sets it, so a hand-edited command line
+# without systemd.unit= still gets the console installer). It pulls the firn
+# TUI kiosk onto tty1 through the static firn-console.target.wants/ link; the
+# serial kiosk and the flatpak seed stay in multi-user.target.wants/ and run
+# under both entries (docs/adr/0022-installer-graphical-and-console-boot-entries.md).
+# Modelled on systemd's graphical.target.
+[Unit]
+Description=firn installer (console)
+Requires=multi-user.target
+Conflicts=rescue.service rescue.target
+After=multi-user.target rescue.service rescue.target
+AllowIsolate=yes

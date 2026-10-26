@@ -1,0 +1,39 @@
+#!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# ExecStart of firn-gui.service: run firn-gui full screen in the cage kiosk
+# compositor, or exit 77 when this machine has no display, so the unit fails
+# at once and its OnFailure= gives tty1 to the firn TUI kiosk.
+#
+# cage needs a KMS (DRM) device. The ISO's stock Debian kernel has no
+# simpledrm (only the efifb fbdev console), so /dev/dri/card* appears only
+# when udev coldplug loads a native driver (i915, amdgpu, nouveau, bochs,
+# virtio-gpu, hyperv_drm, vmwgfx, ...). Waiting first matters on two kinds of
+# machine:
+#   - A machine with a GPU: settling the udev queue lets the native driver
+#     load and bind before cage looks for a card.
+#   - A machine with no usable display (a serial-only server, a VM with
+#     -vga none, a GPU no kernel DRM driver supports): no card ever appears.
+#     Waiting a bounded time and giving up keeps the console fallback quick.
+# firn-gui picks OpenGL or CPU drawing itself (llvmpipe and display-only
+# DRM drivers draw on the CPU), so no GPU acceleration is needed.
+set -eu
+
+log() { echo "firn-gui-session: $*" >&2; }
+
+udevadm settle --timeout=15 || log "udev queue not settled after 15s; continuing"
+
+i=0
+while ! ls /dev/dri/card* >/dev/null 2>&1; do
+    if [ "$i" -ge 20 ]; then
+        log "no DRM display device after 10s; the console installer takes tty1"
+        exit 77
+    fi
+    i=$((i + 1))
+    sleep 0.5
+done
+
+# -d: ask clients to leave window decorations to the compositor, which draws
+# none, so GTK drops its titlebar where it honours the request.
+# -s: allow VT switching, as on the TUI kiosk's console.
+exec /usr/bin/cage -d -s -- /usr/bin/firn-gui

@@ -40,6 +40,7 @@ states intent; the categories below hold the record.
 - [adr/0019-no-build-time-private-keys-in-images.md](adr/0019-no-build-time-private-keys-in-images.md) — build-time private keys (ssl-cert snakeoil, SSH host keys) are removed in finalize and a build guard rejects any that remain
 - [adr/0020-scope-third-party-apt-sources.md](adr/0020-scope-third-party-apt-sources.md) — the himmelblau APT source is scoped to its own build invocation, and a guard rejects new shared third-party sources
 - [adr/0021-query-deployment-package-metadata.md](adr/0021-query-deployment-package-metadata.md) — **Accepted:** per-file dpkg identity links to the deployment snapshot with writable alternatives preserved
+- [adr/0022-installer-graphical-and-console-boot-entries.md](adr/0022-installer-graphical-and-console-boot-entries.md) — **Proposed:** the installer ISO boots firn-gui in cage or the TUI from a GRUB menu (console default, serial TUI always); costs about +290 MiB RAM rootfs and a 4.5 GiB minimum
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design

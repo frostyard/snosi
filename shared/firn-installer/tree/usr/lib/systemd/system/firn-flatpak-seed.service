@@ -17,11 +17,12 @@ Documentation=https://github.com/frostyard/firn/blob/main/docs/adr/0006-install-
 # device/filesystem setup so the by-label symlink can exist (the helper also
 # polls for it).
 After=local-fs.target
-# Must be mounted BEFORE firn runs its flatpak provisioning step, which the TUI
-# kiosk drives -- order before every kiosk entry point (tty1 + the enabled
-# serial instance). Ordering only (no Requires=): a missing/failed seed must
-# not stop the kiosk from starting.
-Before=firn-kiosk.service firn-kiosk-serial@ttyS0.service
+# Must be mounted BEFORE firn runs its flatpak provisioning step, which the
+# installer frontends drive -- order before every kiosk entry point (the tty1
+# TUI or firn-gui, whichever the boot entry chose, + the enabled serial
+# instance). Ordering only (no Requires=): a missing/failed seed must not stop
+# a kiosk from starting.
+Before=firn-kiosk.service firn-kiosk-serial@ttyS0.service firn-gui.service
 
 [Service]
 Type=oneshot
