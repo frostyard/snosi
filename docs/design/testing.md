@@ -43,6 +43,11 @@ boundary; it never accesses R2.
 `test/firn-installer-iso-test.sh --static` checks Firn's Forky sandbox
 and that the ISO installs exactly one unpinned `frostyard-firn`;
 the removed native install live mode is not a bootc proof.
+`test/firn-gui-scope-test.sh` keeps `frostyard-firn-gui`, Firn's
+disk-erasing graphical installer, on the ISO: outside `shared/firn-installer/`
+and `mkosi.profiles/firn-installer`, no mkosi package setting (first or
+continuation line, any tracked `*.conf` or `Include=` target) or build script
+may name it, and no other config may include the installer fragments.
 
 `test/iso-publication-pipeline-test.sh` rehearses the retained Firn ISO
 publisher in a local `isos/native/v1/` namespace with an ephemeral OpenPGP
