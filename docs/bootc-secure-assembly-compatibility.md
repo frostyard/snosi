@@ -82,6 +82,40 @@ There is no protected post-assembly chunk pass. The final image is labelled
 credential scan pass. Non-secure builds explicitly carry `false`; key presence
 is never a capability signal.
 
+## Build-input package pin
+
+`shared/packages/bootc/mkosi.conf` selects one exact Frostyard build pair for
+every OCI bootc profile:
+
+- `bootc=1.16.8-frostyard202610040153~deb13`
+- `libostree-1-1=2026.3-frostyard202610040153~deb13`
+
+The pin scope is that fragment only. It adds no global APT preference and
+changes no sysext or base package selection; every other entry in the fragment
+stays a floating Debian or Forky selector. `test/bootc-secure-static-test.sh`
+enforces both exact selectors, requires the upstream part of the bootc package
+version to agree with `assembly.bootc_version` in
+`shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json` (the full Debian
+version does not equal that field), requires all four product profiles
+(`floe`, `snow`, `snowfield`, `sundog`) to include the fragment, and rejects a
+removed, floating or disagreeing entry. The guard proves selector values and
+version agreement only; it cannot show that revalidation occurred.
+
+Evidence for this pair, from source SHA
+`6b0e980ef6b77e27e60602c85d4e1cd1101c01ce`:
+
+- [Run 40229646374](https://github.com/frostyard/snosi/actions/runs/40229646374)
+  built all four products with exactly these two versions.
+- [Run 40245723511](https://github.com/frostyard/snosi/actions/runs/40245723511)
+  built all four rootfs products and then failed before publication with
+  `expected bootc 1.16.8, observed bootc 1.17.1`. The floating entries had
+  resolved to the then-current APT candidates: bootc 1.17.1, and libostree
+  2026.5.
+
+The pin is not a compatibility claim for any other version. bootc 1.17.1 is
+unvalidated against this adapter and needs its own evidence before it can
+replace the pin.
+
 ## Credentials and rotation
 
 The public positional interface is:
@@ -106,3 +140,13 @@ tests against a newly built rootfs. Treat any change to the hidden command,
 digest equality, UKI sections, PCR signature shape, Type #2 BLS layout, or
 signed systemd-boot output as a hard stop. Update this compatibility contract
 only with replacement evidence; do not silently normalize the changed shape.
+
+An upgrade of either package needs the revalidation above on the complete
+pair. Either package can keep its companion after that revalidation; the pair
+is the unit of evidence, not of change. When bootc changes, these contract
+fields move with it in one change: `assembly.bootc_version`,
+`assembly.compatibility`, `installer.minimum_versions.bootc` and the bootc
+selector in `shared/packages/bootc/mkosi.conf`. The same change must update the
+expected pins in `test/bootc-secure-static-test.sh`; a mismatch between that
+file and the fragment fails the guard. Until revalidation passes, the pin
+stays.

@@ -34,7 +34,10 @@ Image builds have four phases, in order:
    Downloads use `shared/download/verified-download.sh` and pinned SHA-256
    metadata, not unchecked network content. Frostyard's `bootc` and
    `libostree-1-1` arrive as debs from the configured APT source, not an
-   in-tree source build.
+   in-tree source build, and `shared/packages/bootc/mkosi.conf` pins that pair
+   to one exact Frostyard build: they are revalidated together, because secure
+   assembly depends on both
+   ([compatibility contract](../bootc-secure-assembly-compatibility.md)).
 2. **PostInstallationScripts:** kernel dracut postinstall, shared
    `shared/scripts/common-postinst.sh`, and the product's setup prepare
    os-release, package inventory and service state. Package `/opt` payloads
@@ -110,7 +113,10 @@ read-only credential binds, a public-only writable work area and no retained
 private material. See the
 [compatibility contract](../bootc-secure-assembly-compatibility.md) for
 revalidation triggers and [secure operations](../bootc-secure-operations.md)
-for support/evidence limits.
+for support/evidence limits. The Frostyard bootc/libostree package pair that
+this adapter binds is pinned exactly in `shared/packages/bootc/mkosi.conf` and
+guarded by `test/bootc-secure-static-test.sh`; a change to either version is a
+revalidation trigger, not a routine bump.
 
 Forky can change independently of the Frostyard bootc/libostree debs. The
 daily `shared/download/forky-versions.json` sentinel creates a review PR

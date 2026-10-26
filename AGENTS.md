@@ -79,6 +79,13 @@ package-manager guarantee. Repeat that build/root check when either the
 Frostyard debs or the selected systemd family changes: build a secure OCI
 profile and run `bootc --version` and `bootc container --help` inside a
 build-root-only bwrap sandbox, then validate the assembled artifact.
+`shared/packages/bootc/mkosi.conf` pins that pair exactly.
+`test/bootc-secure-static-test.sh` checks only the selector values, that the
+upstream part of the bootc package version matches
+`.assembly.bootc_version` (the full Debian version does not equal that field),
+and that all four profiles consume the fragment. It cannot show that
+revalidation happened: do that work when either package or the systemd family
+changes. See `docs/bootc-secure-assembly-compatibility.md`.
 **Last repeated 2026-09-29:** Floe built against bootc 1.16.8, libostree
 2026.3 and Forky systemd 262-1; bwrap commands and local artifact validation
 passed. That run does not prove an installed boot on systemd 262.

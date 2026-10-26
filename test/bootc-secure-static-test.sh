@@ -184,7 +184,8 @@ snosi_bootc_secure_load_compatibility "$contract"
     "bootc-$BOOTC_SECURE_VERSION-storage-digest-v1" ]]
 
 compatibility_fixture=$(mktemp)
-trap 'rm -f "$compatibility_fixture"' EXIT
+pin_fixture=$(mktemp)
+trap 'rm -f "${compatibility_fixture:-}" "${pin_fixture:-}"' EXIT
 jq '.installer.minimum_versions.bootc = "9.9.9"' "$contract" \
     >"$compatibility_fixture"
 if snosi_bootc_secure_load_compatibility "$compatibility_fixture" 2>/dev/null; then
@@ -235,8 +236,89 @@ grep -Fq '/usr/lib/snosi/bootc/systemd-bootx64.efi' "$root/shared/bootc-secure/a
 grep -Fq 'snosi_esp_resolve "$RUN_DIR" root' "$reconciler"
 grep -Fq '/usr/lib/snosi/esp.sh' "$reconciler"
 
-# All OCI bootc profiles consume the fragment.
+# Secure assembly uses bootc's hidden storage-digest command, so one validated
+# Frostyard bootc/libostree package pair stays under the signed contract: a
+# floating entry lets an APT index advance change the package without review.
+# Run 40245723511 built all four rootfs products and then failed with
+# `expected bootc 1.16.8, observed bootc 1.17.1`; run 40229646374 built these
+# exact versions in all four products. Revalidate the complete pair whenever
+# either package changes.
+#
+# These checks enforce selector values and agreement with
+# assembly.bootc_version only; they cannot show that revalidation happened.
+bootc_packages="$root/shared/packages/bootc/mkosi.conf"
+bootc_pin=1.16.8-frostyard202610040153~deb13
+libostree_pin=2026.3-frostyard202610040153~deb13
+
+bootc_package_entries() { # mkosi-conf
+    # Entries of the fragment's Packages= list, one per line. Indented comments
+    # inside the continuation belong to the list and must not end it.
+    awk '
+        /^Packages=/ { print substr($0, 10); in_packages = 1; next }
+        in_packages && /^[[:space:]]*#/ { next }
+        in_packages && /^[[:space:]]+[^[:space:]]/ {
+            sub(/^[[:space:]]+/, ""); print; next
+        }
+        { in_packages = 0 }
+    ' "$1"
+}
+
+check_bootc_pair_pins() { # mkosi-conf
+    local file=$1 entries entry package pinned
+    entries=$(bootc_package_entries "$file")
+    for entry in "bootc=$bootc_pin" "libostree-1-1=$libostree_pin"; do
+        package=${entry%%=*}
+        pinned=$(grep -E "^${package}(=.*)?$" <<<"$entries" || true)
+        if [[ $pinned != "$entry" ]]; then
+            echo "${file#"$root"/} must select exactly $entry (found: ${pinned:-none})" >&2
+            return 1
+        fi
+    done
+}
+
+# The pinned bootc upstream version and the assembly contract name one version.
+check_bootc_contract_version() { # mkosi-conf contract
+    local file=$1 upstream pinned
+    upstream=$(jq -er '.assembly.bootc_version' "$2")
+    pinned=$(sed -n 's/^bootc=\([0-9][0-9.]*\)-[^[:space:]]*$/\1/p' \
+        <<<"$(bootc_package_entries "$file")")
+    if [[ $pinned != "$upstream" ]]; then
+        echo "bootc pin ($pinned) must agree with .assembly.bootc_version ($upstream)" >&2
+        return 1
+    fi
+}
+
+check_bootc_pair_pins "$bootc_packages"
+check_bootc_contract_version "$bootc_packages" \
+    "$root/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
+
+# Negative cases: a removed or floating pin, and a pin that disagrees with the
+# assembly contract, must each be rejected by the check that owns them.
+sed '/^[[:space:]]*libostree-1-1=/d' "$bootc_packages" >"$pin_fixture"
+if check_bootc_pair_pins "$pin_fixture" 2>/dev/null; then
+    echo "a removed libostree pin was accepted" >&2
+    exit 1
+fi
+sed 's/^Packages=bootc=.*$/Packages=bootc/' "$bootc_packages" >"$pin_fixture"
+if check_bootc_pair_pins "$pin_fixture" 2>/dev/null; then
+    echo "a floating bootc entry was accepted" >&2
+    exit 1
+fi
+sed 's/^Packages=bootc=.*$/Packages=bootc=1.17.1-frostyard202610040153~deb13/' \
+    "$bootc_packages" >"$pin_fixture"
+if check_bootc_contract_version "$pin_fixture" \
+    "$root/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json" 2>/dev/null; then
+    echo "a bootc pin that disagrees with the assembly contract was accepted" >&2
+    exit 1
+fi
+
+# All OCI bootc profiles consume the pinned runtime and the secure fragment.
 for profile in floe snow snowfield sundog; do
+    grep -q '^Include=%D/shared/packages/bootc/mkosi.conf$' \
+        "$root/mkosi.profiles/$profile/mkosi.conf" || {
+        echo "$profile must consume the pinned bootc runtime" >&2
+        exit 1
+    }
     grep -q '^Include=%D/shared/bootc-secure/mkosi.conf$' \
         "$root/mkosi.profiles/$profile/mkosi.conf"
 done
