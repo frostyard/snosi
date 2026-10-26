@@ -3,8 +3,8 @@
 # Contract test for the image version manifest annotation
 # (frostyard/snosi#1125).
 #
-# bootc 1.16.8 reads org.opencontainers.image.version from the OCI manifest
-# annotation. Published snosi images carried only the config label, so
+# bootc (since 1.16.8) reads org.opencontainers.image.version from the OCI
+# manifest annotation. Published snosi images carried only the config label, so
 # `bootc status` showed a null version. Pin the contract:
 #  - check-image-version.sh accepts a matching annotation and label, and
 #    rejects a missing annotation, a wrong annotation, a mismatched label,

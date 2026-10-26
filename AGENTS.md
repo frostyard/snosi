@@ -93,9 +93,14 @@ upstream part of the bootc package version matches
 and that all four profiles consume the fragment. It cannot show that
 revalidation happened: do that work when either package or the systemd family
 changes. See `docs/bootc-secure-assembly-compatibility.md`.
-**Last repeated 2026-09-29:** Floe built against bootc 1.16.8, libostree
-2026.3 and Forky systemd 262-1; bwrap commands and local artifact validation
-passed. That run does not prove an installed boot on systemd 262.
+**Last repeated 2026-10-26:** bootc 1.17.1 / libostree 2026.5 with Forky
+systemd 262-1. In the signed Snow candidate `20261026133822` (run
+40370164077), `bootc --version`, `bootc container --help` and the hidden
+`compute-composefs-digest-from-storage --help` ran in a rootfs-only bwrap
+sandbox; that run's secure assembly and artifact validation passed, and lab
+run `run-snow-bootc-lifecycle-l6596` updated 1.16.8 to 1.17.1 and rolled
+back. Secure assembly on 1.17.1 is proven on Snow only until the first main
+build assembles the other three products.
 
 **Issue 517:** Forky moved `gpt-auto-root-luks` udev rules to
 `90-image-dissect.rules`, which dracut 106 did not automatically include.
