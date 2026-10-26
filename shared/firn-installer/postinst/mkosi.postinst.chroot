@@ -29,6 +29,19 @@ ln -sf usr/lib/systemd/systemd /init
 }
 chmod 0755 /usr/bin/firn
 
+# Every root filesystem both firn wizards offer (ext4, btrfs, xfs) and the
+# FAT ESP need their mkfs tools on the medium: firn's preflight refuses a
+# recipe whose tools are missing, so a missing one breaks that choice for
+# every image (#1158: no mkfs.xfs, so every XFS install failed). The names
+# mirror firn's declarations (internal/steps/assemble.go rootFsTools and its
+# format-boot step); test/firn-installer-iso-test.sh pins their packages.
+for tool in mkfs.fat mkfs.ext4 mkfs.btrfs btrfs mkfs.xfs; do
+    PATH=/usr/sbin:/usr/bin command -v "$tool" >/dev/null || {
+        echo "ERROR: $tool missing -- firn needs it for a filesystem its wizards offer (see the storage Packages= block in shared/firn-installer/mkosi.conf)" >&2
+        exit 1
+    }
+done
+
 # The graphical entry's frontend and compositor: Packages=frostyard-firn-gui
 # and Packages=cage (or a `just _firn-gui-binary` dev build of firn-gui).
 # Without them the graphical entry would only ever fall back to the TUI.

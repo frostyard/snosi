@@ -52,6 +52,22 @@ if grep -v '^[[:space:]]*#' "$conf" "$root/Justfile" | grep -F "$fallback" >/dev
     exit 1
 fi
 
+# Both firn wizards offer ext4, btrfs and xfs roots for every image, on a
+# FAT ESP; each needs the package with its mkfs tools (#1158: no xfsprogs,
+# so every XFS install failed preflight). The postinst checks the binaries.
+for choice in ext4:e2fsprogs btrfs:btrfs-progs xfs:xfsprogs esp:dosfstools; do
+    pkg=${choice#*:}
+    grep -qE "^(Packages=|[[:space:]]+)$pkg([[:space:]=/]|$)" "$conf" || {
+        echo "Firn ISO must install $pkg for firn's ${choice%%:*} filesystem" >&2
+        exit 1
+    }
+done
+grep -Fqx 'for tool in mkfs.fat mkfs.ext4 mkfs.btrfs btrfs mkfs.xfs; do' \
+    "$root/shared/firn-installer/postinst/mkosi.postinst.chroot" || {
+    echo 'Firn ISO postinst must check every mkfs tool firn uses' >&2
+    exit 1
+}
+
 # The graphical entry's frontend, unpinned like frostyard-firn
 # (docs/adr/0022-installer-graphical-and-console-boot-entries.md).
 gui_unpinned=$(grep -Fxc 'Packages=frostyard-firn-gui' "$conf" || true)

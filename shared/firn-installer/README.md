@@ -87,8 +87,11 @@ rootfs (191 MiB of it Mesa and LLVM, which cage's wlroots and Xwayland pull
 through `libgbm1`), +90 MiB of initramfs and +103 MiB of ISO (783 MiB). The
 rootfs is a tmpfs capped at half of RAM, and the compressed initramfs is
 held until it is unpacked, so the minimum RAM to boot rose from 3584–3840 MiB
-to 4352–4480 MiB (QEMU probes; the docs say 4.5 GiB). A 4 GiB machine no
-longer boots the ISO.
+to 4352–4480 MiB (QEMU probes). `xfsprogs`, added so XFS installs work
+(#1158), brings `libicu76` and a minimal Python 3.13: 14 more packages and
++72 MiB of rootfs, raising the minimum to 4480–4608 MiB. The documented
+4.5 GiB minimum still holds, with no margin left. A 4 GiB machine no longer
+boots the ISO.
 `test/firn-installer-ui-boot-test.sh` boots each entry in QEMU with 6 GiB.
 
 ## SSH host keys
