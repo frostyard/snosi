@@ -66,9 +66,11 @@ through the single shared helper `shared/bootc-secure/storage-digest-probe.sh`
 (`snosi_storage_composefs_digest`, sourced by `buildah-package.sh`,
 `assemble-uki.sh`, and `test/bootc-secure-spike-test.sh` — never re-inline the
 `podman run` shape). The helper binds a host-filesystem scratch directory over
-the container's `/var/tmp`: bootc 1.16.8 hardcodes its temporary composefs
-repository at `/var/tmp` inside the container (`TMPDIR` is ignored) and
-composefs object writes use `O_TMPFILE`, which fuse-overlayfs does not support
+the container's `/var/tmp`: bootc keeps its temporary composefs repository at
+`/var/tmp` inside the container (`TMPDIR` is ignored; observed on 1.16.8, and
+the 1.17.1 candidate keeps the bind until a probe pair proves it unnecessary)
+and composefs object writes use `O_TMPFILE`, which fuse-overlayfs does not
+support
 — GitHub runner image ubuntu24/20260810.271 (podman 5.8.4) forces
 `mount_program = fuse-overlayfs`, and without the bind every probe fails with
 `os error 95`. The mount changes only the execution environment; the digest is
@@ -87,34 +89,52 @@ is never a capability signal.
 `shared/packages/bootc/mkosi.conf` selects one exact Frostyard build pair for
 every OCI bootc profile:
 
-- `bootc=1.16.8-frostyard202610040153~deb13`
-- `libostree-1-1=2026.3-frostyard202610040153~deb13`
+- `bootc=1.17.1-frostyard202610252315~deb13`
+- `libostree-1-1=2026.5-frostyard202610252315~deb13`
 
-The pin scope is that fragment only. It adds no global APT preference and
-changes no sysext or base package selection; every other entry in the fragment
-stays a floating Debian or Forky selector. `test/bootc-secure-static-test.sh`
-enforces both exact selectors, requires the upstream part of the bootc package
-version to agree with `assembly.bootc_version` in
+Both debs are in the Frostyard `debian trixie main` repository (existence
+checked 2026-10-26). **This pair is a candidate under test, not a revalidated
+pair.** It is pinned on the `murbella/bootc-1.17.1-lifecycle` branch only, in
+one change with the contract fields `assembly.bootc_version` (`1.17.1`),
+`assembly.compatibility` (`bootc-1.17.1-storage-digest-v1`) and
+`installer.minimum_versions.bootc` (`1.17.1`).
+
+This document makes no compatibility claim for bootc 1.17.1. The mandatory
+revalidation has not been recorded as passed. That revalidation is:
+
+1. the CI secure build of this branch itself, where the two storage-digest
+   probes must agree (the chunked candidate's own bootc and the final
+   candidate's own bootc return the authoritative digest) and the artifact
+   checks must pass; and
+2. the lab lifecycle run that installs and updates this image as N+1 over a
+   bootc 1.16.8 deployment (N).
+
+Until both pass, treat the pair as unproven. The pin scope is that fragment
+only. It adds no global APT preference and changes no sysext or base package
+selection; every other entry in the fragment stays a floating Debian or Forky
+selector. `test/bootc-secure-static-test.sh` enforces both exact selectors,
+requires the upstream part of the bootc package version to agree with
+`assembly.bootc_version` in
 `shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json` (the full Debian
 version does not equal that field), requires all four product profiles
 (`floe`, `snow`, `snowfield`, `sundog`) to include the fragment, and rejects a
 removed, floating or disagreeing entry. The guard proves selector values and
 version agreement only; it cannot show that revalidation occurred.
 
-Evidence for this pair, from source SHA
-`6b0e980ef6b77e27e60602c85d4e1cd1101c01ce`:
+Previous, validated pin (history): `bootc=1.16.8-frostyard202610040153~deb13`
+with `libostree-1-1=2026.3-frostyard202610040153~deb13`. Evidence for that
+pair, from source SHA `6b0e980ef6b77e27e60602c85d4e1cd1101c01ce`:
 
 - [Run 40229646374](https://github.com/frostyard/snosi/actions/runs/40229646374)
-  built all four products with exactly these two versions.
+  built all four products with exactly those two versions.
 - [Run 40245723511](https://github.com/frostyard/snosi/actions/runs/40245723511)
   built all four rootfs products and then failed before publication with
   `expected bootc 1.16.8, observed bootc 1.17.1`. The floating entries had
   resolved to the then-current APT candidates: bootc 1.17.1, and libostree
   2026.5.
 
-The pin is not a compatibility claim for any other version. bootc 1.17.1 is
-unvalidated against this adapter and needs its own evidence before it can
-replace the pin.
+That evidence belongs to the 1.16.8 pair. It is not evidence for bootc 1.17.1,
+which needs its own runs under the mandatory revalidation above.
 
 ## Credentials and rotation
 
@@ -148,5 +168,6 @@ fields move with it in one change: `assembly.bootc_version`,
 `assembly.compatibility`, `installer.minimum_versions.bootc` and the bootc
 selector in `shared/packages/bootc/mkosi.conf`. The same change must update the
 expected pins in `test/bootc-secure-static-test.sh`; a mismatch between that
-file and the fragment fails the guard. Until revalidation passes, the pin
-stays.
+file and the fragment fails the guard. Until revalidation passes, a validated
+pin stays, and a candidate pair such as bootc 1.17.1 is pinned on its own
+test branch only, never on main.

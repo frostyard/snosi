@@ -6,10 +6,12 @@
 # ONE place (sibling copies of this shape have drifted before; see CLAUDE.md
 # "move the behaviour rather than copying the fix").
 #
-# The /var/tmp bind mount is load-bearing: bootc 1.16.8 hardcodes its
-# temporary composefs repository at /var/tmp INSIDE the container
+# The /var/tmp bind mount is load-bearing: bootc hardcodes its temporary
+# composefs repository at /var/tmp INSIDE the container
 # (tempfile::tempdir_in("/var/tmp") in bootc_composefs/digest.rs; TMPDIR is
-# ignored), and composefs object writes open temp files with O_TMPFILE, which
+# ignored). Observed on 1.16.8; the 1.17.1 candidate keeps the bind until a
+# probe pair proves it unnecessary. composefs object writes open temp files
+# with O_TMPFILE, which
 # fuse-overlayfs does not support (EOPNOTSUPP, "os error 95"). GitHub runner
 # image ubuntu24/20260810.271 (podman 5.8.4) sets
 # mount_program = fuse-overlayfs in storage.conf, so without the bind the

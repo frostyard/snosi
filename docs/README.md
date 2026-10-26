@@ -89,7 +89,7 @@ when next rewritten.
 - [native-ab-contracts.md](native-ab-contracts.md) — historical native OS contract; §7 public keys and installer ISO publication remain in use
 - [integration-contracts.md](integration-contracts.md) — cross-tool producer→consumer contract map with fragility ratings
 - [bootc-secure-install-contract.md](bootc-secure-install-contract.md) — frozen legacy Task 9 adapter contract; Firn consumes the image's schema-1 contract directly
-- [bootc-secure-assembly-compatibility.md](bootc-secure-assembly-compatibility.md) — assemble-uki.sh compatibility contract with bootc 1.16.8
+- [bootc-secure-assembly-compatibility.md](bootc-secure-assembly-compatibility.md) — assemble-uki.sh compatibility contract with the pinned Frostyard bootc/libostree pair
 - [bootc-secure-operations.md](bootc-secure-operations.md) — normative secure-bootc operations runbook (pinned by `test/bootc-secure-docs-test.sh`)
 - [native-ab-publication.md](native-ab-publication.md) — historical native OS publication; ISO publication sections still apply
 - [native-ab-capacities.md](native-ab-capacities.md) — historical native OS partition measurements

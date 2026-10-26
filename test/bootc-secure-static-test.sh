@@ -159,7 +159,7 @@ for package in mokutil cryptsetup cryptsetup-bin tpm2-tools \
 done
 
 # Directory-format bootc profiles do not build a UKI through mkosi, so
-# KernelCommandLine= is inert. Pinned bootc 1.16.8 reads sorted *.toml files
+# KernelCommandLine= is inert. The pinned bootc reads sorted *.toml files
 # from /usr/lib/bootc/kargs.d; its strict schema requires a kargs array.
 if grep -q '^KernelCommandLine=' "$secure"; then
     echo "bootc secure fragment must use bootc kargs.d, not mkosi KernelCommandLine=" >&2
@@ -236,19 +236,20 @@ grep -Fq '/usr/lib/snosi/bootc/systemd-bootx64.efi' "$root/shared/bootc-secure/a
 grep -Fq 'snosi_esp_resolve "$RUN_DIR" root' "$reconciler"
 grep -Fq '/usr/lib/snosi/esp.sh' "$reconciler"
 
-# Secure assembly uses bootc's hidden storage-digest command, so one validated
+# Secure assembly uses bootc's hidden storage-digest command, so one exact
 # Frostyard bootc/libostree package pair stays under the signed contract: a
 # floating entry lets an APT index advance change the package without review.
 # Run 40245723511 built all four rootfs products and then failed with
-# `expected bootc 1.16.8, observed bootc 1.17.1`; run 40229646374 built these
-# exact versions in all four products. Revalidate the complete pair whenever
-# either package changes.
+# `expected bootc 1.16.8, observed bootc 1.17.1`; run 40229646374 built the
+# 1.16.8/2026.3 pair in all four products. The current pin is the bootc 1.17.1
+# candidate, whose evidence is the secure CI build and the lab lifecycle run.
+# Revalidate the complete pair whenever either package changes.
 #
 # These checks enforce selector values and agreement with
 # assembly.bootc_version only; they cannot show that revalidation happened.
 bootc_packages="$root/shared/packages/bootc/mkosi.conf"
-bootc_pin=1.16.8-frostyard202610040153~deb13
-libostree_pin=2026.3-frostyard202610040153~deb13
+bootc_pin=1.17.1-frostyard202610252315~deb13
+libostree_pin=2026.5-frostyard202610252315~deb13
 
 bootc_package_entries() { # mkosi-conf
     # Entries of the fragment's Packages= list, one per line. Indented comments
@@ -304,7 +305,7 @@ if check_bootc_pair_pins "$pin_fixture" 2>/dev/null; then
     echo "a floating bootc entry was accepted" >&2
     exit 1
 fi
-sed 's/^Packages=bootc=.*$/Packages=bootc=1.17.1-frostyard202610040153~deb13/' \
+sed 's/^Packages=bootc=.*$/Packages=bootc=1.18.0-frostyard202610040153~deb13/' \
     "$bootc_packages" >"$pin_fixture"
 if check_bootc_contract_version "$pin_fixture" \
     "$root/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json" 2>/dev/null; then
