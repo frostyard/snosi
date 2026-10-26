@@ -34,6 +34,9 @@ in both `just sysexts` and `build.yml` (ADR-0020). `--cache-only=never` forces
 the metadata sync (mkosi 57907f58 skips it when the base cache is current) and
 mkosi requires `--incremental=no` with it. `test/third-party-apt-source-scope-test.sh` rejects a
 new third-party source in `mkosi.sandbox/`.
+Only the firn-installer profile may install `frostyard-firn-gui`, which
+erases disks; `test/firn-gui-scope-test.sh` rejects it in every other
+package list and build script.
 The image script phases are BuildScripts, PostInstallationScripts,
 FinalizeScripts and PostOutputScripts. Consult
 [build pipeline](docs/design/build-pipeline.md) for the detailed composition.
