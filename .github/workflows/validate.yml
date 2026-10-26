@@ -121,6 +121,13 @@ jobs:
         # include the installer fragments. No root, network, or image build.
         run: ./test/firn-gui-scope-test.sh
 
+      - name: Validate GDM ships no autologin
+        # Static guard: no shipped image creates the user a GDM autologin
+        # would name, so a tracked config or build script must not set
+        # AutomaticLogin*, TimedLogin* or TimedLoginDelay. The installer
+        # creates the only user. No root, network, or image build.
+        run: ./test/gdm-autologin-scope-test.sh
+
       - name: Validate installer ISO publication pipeline
         # Ephemeral OpenPGP key, local Range-capable HTTP origin, no R2 writes.
         run: ./test/iso-publication-pipeline-test.sh

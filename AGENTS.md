@@ -39,7 +39,9 @@ mkosi requires `--incremental=no` with it. `test/third-party-apt-source-scope-te
 new third-party source in `mkosi.sandbox/`.
 Only the firn-installer profile may install `frostyard-firn-gui`, which
 erases disks; `test/firn-gui-scope-test.sh` rejects it in every other
-package list and build script.
+package list and build script. No image may enable GDM automatic or timed
+login, because no image creates the user it would name;
+`test/gdm-autologin-scope-test.sh` enforces this.
 The image script phases are BuildScripts, PostInstallationScripts,
 FinalizeScripts and PostOutputScripts. Consult
 [build pipeline](docs/design/build-pipeline.md) for the detailed composition.
