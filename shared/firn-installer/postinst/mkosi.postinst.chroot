@@ -68,3 +68,12 @@ done
 # /etc lives in the all-in-RAM rootfs; ADR-0002's no-/etc-symlink rule is for
 # golden bootc images.
 ln -sf /usr/lib/systemd/system/firn-console.target /etc/systemd/system/default.target
+
+# openssh-server's postinst generated SSH host keys at build time. Every
+# download of the ISO would present them, so anyone could impersonate any
+# booted installer to an SSH client (ADR-0019). Each boot generates fresh
+# keys instead: sshd-keygen.service runs `ssh-keygen -A` before sshd (the
+# drop-in shipped from the base image keys it on the missing ed25519 key,
+# not on first-boot detection). shared/security/no-private-keys.finalize
+# fails the build if a host key is still here.
+rm -f /etc/ssh/ssh_host_*

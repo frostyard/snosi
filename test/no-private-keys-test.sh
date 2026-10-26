@@ -1,8 +1,9 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Fixtures for shared/security/no-private-keys.finalize and its sysext
-# wrapper, plus wiring checks: every OCI composition and every sysext runs
-# the guard, and the image finalize removes the ssl-cert snakeoil pair.
+# wrapper, plus wiring checks: every OCI composition, the installer ISO and
+# every sysext run the guard, and the image finalize removes the ssl-cert
+# snakeoil pair.
 # Fixture keys are fake PEM bodies; no real key material. No root needed.
 set -euo pipefail
 
@@ -316,6 +317,15 @@ for composition in floe snow sundog; do
         fail "$composition must list shared/security/no-private-keys.finalize after mkosi.finalize.chroot"
     fi
 done
+
+# The installer ISO has no image finalize: its postinst removes the SSH host
+# keys and the guard is its own FinalizeScript.
+if grep -qx 'FinalizeScripts=%D/shared/security/no-private-keys.finalize' \
+    "$ROOT_DIR/shared/firn-installer/mkosi.conf"; then
+    pass "firn-installer runs the guard"
+else
+    fail "shared/firn-installer/mkosi.conf must list shared/security/no-private-keys.finalize"
+fi
 
 for conf in "$ROOT_DIR"/mkosi.images/*/mkosi.conf; do
     grep -q '^Format=sysext' "$conf" || continue

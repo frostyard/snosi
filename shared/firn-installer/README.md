@@ -91,6 +91,20 @@ to 4352–4480 MiB (QEMU probes; the docs say 4.5 GiB). A 4 GiB machine no
 longer boots the ISO.
 `test/firn-installer-ui-boot-test.sh` boots each entry in QEMU with 6 GiB.
 
+## SSH host keys
+
+The ISO runs sshd as a debug and lab path, with Debian's default
+`PermitRootLogin prohibit-password` and no shipped `authorized_keys`. It
+ships no SSH host keys: every download shares the ISO's bytes, so a baked
+key would let anyone impersonate any booted installer
+([ADR-0019](../../docs/adr/0019-no-build-time-private-keys-in-images.md)).
+The postinst removes the keys openssh-server generated during the build,
+and `shared/security/no-private-keys.finalize` fails the build if one
+remains. On every boot `sshd-keygen.service` runs `ssh-keygen -A` before
+sshd, through the base image's drop-in that keys it on the missing ed25519
+key instead of first-boot detection. Each boot therefore presents new host
+keys, and an SSH client sees a changed key after every reboot.
+
 ## Offline flatpak seed (firn ADR-0006 media obligation)
 
 firn provisions system flatpaks into the target **at install time,

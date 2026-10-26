@@ -42,7 +42,8 @@ untested/waived status, historical status markers and the no-R2-deletion
 boundary; it never accesses R2.
 `test/firn-installer-iso-test.sh --static` checks Firn's Forky sandbox,
 that the ISO installs exactly one unpinned `frostyard-firn` and
-`frostyard-firn-gui`, and the boot-entry contract of
+`frostyard-firn-gui`, that it removes the build's SSH host keys and
+generates them at boot, and the boot-entry contract of
 [ADR-0022](../adr/0022-installer-graphical-and-console-boot-entries.md):
 two GRUB entries that differ only in `systemd.unit=`, console as the timed
 default, each tty1 frontend wanted only by its target, and a
