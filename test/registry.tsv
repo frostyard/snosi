@@ -57,6 +57,7 @@ core-flatpaks-test.sh	ci	validate.yml
 dps-luks-cleanup-test.sh	unwired	-
 duplicate-packages-test.sh	ci	validate.yml
 firn-catalog-test.sh	ci	validate.yml
+firn-gui-scope-test.sh	ci	validate.yml
 firn-installer-iso-test.sh	ci	validate.yml
 firn-installer-ui-boot-test.sh	ci	build-installer-iso.yml
 geoclue-state-scope-test.py	ci	validate.yml

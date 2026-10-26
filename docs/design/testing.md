@@ -49,6 +49,11 @@ two GRUB entries that differ only in `systemd.unit=`, console as the timed
 default, each tty1 frontend wanted only by its target, and a
 condition-free `firn-gui.service` whose every exit hands tty1 to the TUI.
 The removed native install live mode is not a bootc proof.
+`test/firn-gui-scope-test.sh` keeps `frostyard-firn-gui`, Firn's
+disk-erasing graphical installer, on the ISO: outside `shared/firn-installer/`
+and `mkosi.profiles/firn-installer`, no mkosi package setting (first or
+continuation line, any tracked `*.conf` or `Include=` target) or build script
+may name it, and no other config may include the installer fragments.
 
 `build-installer-iso.yml` boots each candidate ISO before promotion.
 `test/native-iso-boot-smoke-test.sh` boots the default entry with no display
