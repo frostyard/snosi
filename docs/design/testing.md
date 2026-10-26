@@ -58,8 +58,9 @@ continuation line, any tracked `*.conf` or `Include=` target) or build script
 may name it, and no other config may include the installer fragments.
 `test/gdm-autologin-scope-test.sh` keeps GDM from logging in a user that no
 shipped image creates: outside `docs/`, `.memory/`, `saved-unused/` and
-`test/`, no tracked file or build script may set a GDM `AutomaticLogin*`,
-`TimedLogin*` or `TimedLoginDelay` key on a line that is not a comment. The retired live-ISO
+`test/`, no tracked file or build script may name a GDM automatic or timed
+login key (`AutomaticLogin`, `TimedLogin`) on a line that is not a comment,
+with or without an `=`. The retired live-ISO
 `shared/snow/tree/etc/gdm3/daemon.conf` set `AutomaticLogin=snow`; the Firn
 installer creates the only user an installed system has.
 

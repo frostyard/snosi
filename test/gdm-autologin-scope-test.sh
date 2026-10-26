@@ -9,9 +9,10 @@
 # installer creates the only user an installed system has.
 #
 # This test rejects every non-comment line in a tracked file (outside docs/,
-# .memory/, saved-unused/, test/ and *.md / *.svg) that sets a GDM autologin
-# key, which also catches a build script that writes it with sed, echo or a
-# heredoc. It reads the same scan function for the real tree and its fixtures.
+# .memory/, saved-unused/, test/ and *.md / *.svg) that names a GDM automatic
+# or timed login key, with or without an '=': a build script can also uncomment
+# the packaged keys with sed, or write them with echo or a heredoc. It reads the
+# same scan function for the real tree and its fixtures.
 #
 # No root, no network, no image build.
 set -euo pipefail
@@ -35,10 +36,12 @@ root = os.path.abspath(sys.argv[1])
 # the guard's own fixtures.
 SKIP_DIRS = ("docs/", ".memory/", "saved-unused/", "test/")
 SKIP_SUFFIXES = (".md", ".svg")
-KEYS = ("AutomaticLoginEnable", "AutomaticLogin", "TimedLoginEnable", "TimedLogin", "TimedLoginDelay")
-# A word boundary keeps AutomaticLogin from matching AutomaticLoginEnable's
-# prefix, and optional spaces allow "AutomaticLogin = snow".
-KEY = re.compile(r"\b(" + "|".join(KEYS) + r")\s*=", re.I)
+# The base names cover the Enable and Delay forms, and no '=' is required: a
+# build script can also uncomment the packaged keys with sed.
+# sed -i '/AutomaticLogin/s/^[[:space:]]*#[[:space:]]*//' /etc/gdm3/daemon.conf
+KEYS = ("AutomaticLogin", "TimedLogin")
+# A word start keeps a longer unrelated identifier from matching.
+KEY = re.compile(r"\b(" + "|".join(KEYS) + r")", re.I)
 
 
 def is_comment(line):
@@ -68,7 +71,8 @@ for rel in tracked:
             match = KEY.search(line)
             if match:
                 hits.append(
-                    f"{rel}:{number}: sets {match.group(1)}; GDM must not name an "
+                    f"{rel}:{number}: names {match.group(1)}; GDM must not "
+                    "name an "
                     "autologin user because no shipped image creates one; the "
                     "installer creates the only user"
                 )
@@ -81,7 +85,10 @@ if scanned == 0:
     print("not ok - read 0 tracked files; the scanner is not reading the tree")
     failed = True
 elif not hits:
-    print(f"ok - no tracked file outside docs/.memory/test/ enables GDM automatic or timed login ({scanned} files)")
+    print(
+        "ok - no tracked file outside docs/.memory/test/ names a GDM "
+        f"automatic or timed login key ({scanned} files)"
+    )
 sys.exit(1 if failed else 0)
 PY
 }
@@ -153,6 +160,13 @@ printf 'echo "TimedLoginEnable=true" >> /etc/gdm3/custom.conf\n' \
     >>"$dir/shared/snow/scripts/postinstall/snow.postinst.chroot"
 expect "TimedLoginEnable=true echoed by snow.postinst.chroot" reject "$dir" \
     "shared/snow/scripts/postinstall/snow.postinst.chroot:"
+
+# A build script that uncomments the packaged keys, with no '=' in its line.
+dir=$(fixture script-sed)
+printf '%s\n' "sed -i '/AutomaticLogin/s/^[[:space:]]*#[[:space:]]*//' /etc/gdm3/daemon.conf" \
+    >>"$dir/mkosi.images/base/mkosi.postinst.chroot"
+expect "a sed that uncomments AutomaticLogin in base postinst" reject "$dir" \
+    "mkosi.images/base/mkosi.postinst.chroot:"
 
 # Commented keys set nothing.
 dir=$(fixture comments)
