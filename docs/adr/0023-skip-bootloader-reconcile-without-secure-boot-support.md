@@ -35,8 +35,10 @@ every state.
 - A firmware that enforces Secure Boot but hides the variable from a working
   efivarfs would skip. No such case is known. The skip changes only what the
   unit reports: the reconciler never creates a missing second stage, so in
-  that case it writes nothing to the ESP either way, and the boot chain is not
-  weakened. The cost is one lost failure signal on such firmware.
+  that case it changes no bootloader file either way, and the boot chain is
+  not weakened. (The ESP resolver can still mount and unmount the ESP before
+  the check, as before.) The cost is one lost failure signal on such
+  firmware.
 - This changes the fail-closed policy that #928 set: an absent `SecureBoot`
   variable is no longer "unknown" when efivarfs is readable.
 - Unknown states still fail closed.

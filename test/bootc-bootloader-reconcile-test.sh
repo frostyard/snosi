@@ -45,7 +45,8 @@ setup_fixture() {
 
     cat >"$WORK/bin/stat" <<'EOF'
 #!/bin/bash
-if [[ ${1:-} == -f && ${2:-} == -c && ${3:-} == %T && ${4:-} == -- ]]; then
+# Answer only the exact efivarfs type query for the fixture efivars directory.
+if [[ $# -eq 5 && $1 == -f && $2 == -c && $3 == %T && $4 == -- && $5 == "$SNOSI_TEST_EFIVARS_DIR" ]]; then
     [[ ${SNOSI_TEST_EFIVARS_STAT_FAIL:-0} != 1 ]] || exit 1
     printf '%s\n' "${SNOSI_TEST_EFIVARS_FSTYPE:-efivarfs}"
     exit 0
@@ -115,6 +116,7 @@ run_reconciler() {
     SNOSI_BOOTC_RECONCILE_CERT="$WORK/root/usr/lib/snosi/mok.crt" \
     SNOSI_BOOTC_RECONCILE_RUN_DIR="$WORK/run" \
     SNOSI_BOOTC_RECONCILE_SECUREBOOT_VAR="$WORK/efivars/SecureBoot" \
+    SNOSI_TEST_EFIVARS_DIR="$WORK/efivars" \
     SNOSI_ESP_LIBRARY="$ESP_LIBRARY" \
     SNOSI_TEST_LAYOUT="$WORK/layout.json" \
     SNOSI_TEST_CERT="$WORK/root/usr/lib/snosi/mok.crt" \
