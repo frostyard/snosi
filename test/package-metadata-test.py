@@ -15,6 +15,10 @@ assert os.geteuid() == 0, "run with sudo python3"
 repo = Path(__file__).resolve().parents[1]
 identity = ("status", "info", "triggers", "diversions", "available", "arch-native")
 rule = "usr/lib/tmpfiles.d/dpkg.conf"
+# Products inherit the base rule until the finalizer replaces it. A product
+# tree copy would be silently overwritten and must not become a second owner.
+product_rules = sorted((repo / "shared").glob(f"**/tree/{rule}"))
+assert not product_rules, f"product trees must inherit the base dpkg.conf: {product_rules}"
 env = dict(os.environ, LC_ALL="C")
 for name in ("DPKG_ROOT", "DPKG_ADMINDIR", "APT_CONFIG"):
     env.pop(name, None)

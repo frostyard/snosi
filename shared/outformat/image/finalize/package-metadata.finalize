@@ -20,5 +20,7 @@ cp -a "$db" "$snapshot"
 # mkosi runs tmpfiles before finalizers. Install the identity links only now,
 # after the snapshot exists, so neither the base nor product package build
 # root is redirected during installation or inventory generation.
+# Intentionally replace the base dpkg.conf: a separate filename would leave
+# competing d and L+ rules for /var/lib/dpkg/triggers; tmpfiles ignores one.
 install -D -m 0644 "$SRCDIR/shared/outformat/image/dpkg.conf" \
     "$BUILDROOT/usr/lib/tmpfiles.d/dpkg.conf"
