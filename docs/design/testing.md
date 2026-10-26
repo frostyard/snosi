@@ -114,7 +114,7 @@ path is feasibility evidence, not Firn installation evidence. The
 `test/bootc-secure-update-test.sh --fixtures` and rotation fixtures validate
 protocol shapes and failure handling, not installed update or rollback.
 
-Fresh-install evidence exists for **Snow and Floe** as VM evidence only.
+Fresh-install evidence exists for **Snow, Floe and Sundog** as VM evidence only.
 Argo workflow `bootc-only-iso-install-54wr4` (frostyard/lab
 `argo/bootc-only-iso-install-test.yaml`, minideb 10.0.1.175, 2026-10-24)
 installed `snosi-installer_20261023195508_x86-64.iso` (Firn 0.8.0, commit
@@ -136,10 +136,26 @@ qualification and does not prove encrypted (LUKS/TPM) unlock, graphical
 login, updates, rollback or the signed N/N+1 lifecycle. Firn's own
 enforced-Secure-Boot E2E has still produced no evidence.
 
-**Sundog** failed `boot:no_report` (the installed system did not report) in
-the same run; see [frostyard/snosi#1123](https://github.com/frostyard/snosi/issues/1123).
-Its evidence stays pending. The
-bootc-only installer also lists **Snowfield untested** on representative
+**Sundog** passed in a later run, Argo workflow
+`bootc-only-iso-install-fjrk8` (same lab file, Sundog cell only, minideb
+10.0.1.175, 2026-10-25):
+
+- ISO `snosi-installer_20261024172447_x86-64.iso`, SHA-256
+  `7618eb104914ad99a80164eb3b4094eaf50ea7c55522ce66db4bec5f71ac6a65`
+  (checksum authenticated by the signed `SHA256SUMS.gpg` index, signer
+  fingerprint F37282A35CB6BDFEBFC8FE775A2EAC5C8216FD68); Firn 0.8.0, commit
+  f3c4b5dd.
+- `PASS: bootc/sundog/none/sb=true image=ghcr.io/frostyard/sundog:latest
+  digest=sha256:f8937384af78aa7ded64528a9993364dbcc1dd86308e96b4bc2cc5f15ba6f7be`
+  (image version 20261024185607).
+
+The earlier Sundog `boot:no_report` (runs `bootc-only-iso-install-54wr4` and
+`-xh2jv`) was a lab-harness race, not a Sundog defect: the serial getty's
+vhangup cut the QA check's serial output. It is fixed by
+[frostyard/lab#143](https://github.com/frostyard/lab/pull/143) (merge
+`c7b84004`); root cause in
+[frostyard/snosi#1123](https://github.com/frostyard/snosi/issues/1123).
+The bootc-only installer also lists **Snowfield untested** on representative
 Surface hardware: its catalog gate was waived, not passed. The
 [manual Snow lab handoff](../specs/bootc-secure-lab-handoff.md) describes
 how a Firn-installed host and distinct signed N/N+1 images can prove a

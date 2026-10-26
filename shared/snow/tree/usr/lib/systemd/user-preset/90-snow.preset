@@ -2,7 +2,7 @@
 # User-scope preset policy for snow desktops. Applied at image build by
 # mkosi (`systemctl --global preset-all`) and again on first boot by
 # preset-global.service. Units not listed here fall through to systemd's
-# default-enable, which covers gnome-remote-desktop, pipewire, podman, etc.
+# default-enable, which covers gnome-remote-desktop, pipewire, etc. Podman has base's socket-only policy.
 #
 # These replace the manual symlink surgery that used to live in
 # snow.postinst.chroot: mkosi runs --global preset-all AFTER postinst

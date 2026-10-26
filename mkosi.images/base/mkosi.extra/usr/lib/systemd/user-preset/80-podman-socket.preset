@@ -1,0 +1,3 @@
+# Start the rootless API only through podman.socket. The package's socket
+# keeps its default preset; do not re-enable admin-disabled sockets on update.
+disable podman.service

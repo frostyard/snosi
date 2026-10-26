@@ -22,9 +22,9 @@ handoff).
 
 Secure image assembly, static contracts, fixture contracts, and CI mechanics are
 implemented. Firn is the sole secure bootc installer under core ADR-0031.
-Firn's enforced-Secure-Boot E2E has produced no evidence yet. A minideb
-lab run (2026-10-24) gave VM fresh-install PASS evidence for Snow and Floe;
-Sundog's evidence is pending (see [testing](design/testing.md)). This is
+Firn's enforced-Secure-Boot E2E has produced no evidence yet. Minideb
+lab runs (2026-10-24/25) gave VM fresh-install PASS evidence for Snow, Floe
+and Sundog (see [testing](design/testing.md)). This is
 not hardware qualification, nor encrypted-unlock or lifecycle evidence.
 Production support still requires authorized signed secure N/N+1/N+2
 and transition OCI artifacts, a Firn-native Snosi lifecycle lane, and

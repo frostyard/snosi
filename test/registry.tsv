@@ -60,7 +60,9 @@ firn-catalog-test.sh	ci	validate.yml
 firn-installer-iso-test.sh	ci	validate.yml
 geoclue-state-scope-test.py	ci	validate.yml
 image-version-annotation-test.sh	ci	validate.yml
+inotify-policy-test.py	ci	validate.yml
 iso-publication-pipeline-test.sh	ci	nightly-compliance.yml,validate.yml
+journald-config-test.py	ci	validate.yml
 latest-apt-version-test.sh	ci	validate.yml
 lemonade-sysext-test.sh	ci	validate.yml
 native-iso-boot-smoke-test.sh	ci	build-installer-iso.yml
@@ -72,6 +74,7 @@ ghostty-terminfo-test.sh	ci	validate.yml
 openssh-agent-group-test.py	ci	validate.yml
 output-organizer-test.sh	ci	validate.yml
 pilothouse-sysext-test.sh	ci	validate.yml
+podman-socket-policy-test.py	ci	validate.yml
 policy-as-code-test.py	ci	validate.yml
 publication-guards.bats	ci	validate.yml
 required-by-guard-test.sh	ci	validate.yml
@@ -92,6 +95,7 @@ sysext-postoutput-test.sh	ci	validate.yml
 sysext-required-paths-test.sh	ci	validate.yml
 sysext-signature-verification-test.sh	ci	nightly-compliance.yml,validate.yml
 sysext-account-order-test.py	ci	validate.yml
+sysext-sysctl-test.py	ci	validate.yml
 sysext-udev-reload-test.sh	ci	validate.yml
 sysext-upholds-guard-test.sh	ci	validate.yml
 task2-recovery-key-bytes-test.sh	ci	test-bootc-secure.yml,validate.yml
@@ -107,3 +111,4 @@ verify-installer-redirect-test.sh	ci	validate.yml
 wifi-backend-test.sh	ci	validate.yml
 workflow-path-filter-test.sh	ci	validate.yml
 wsdd-provider-test.sh	ci	validate.yml
+zram-policy-test.py	ci	validate.yml

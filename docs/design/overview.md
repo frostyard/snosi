@@ -20,9 +20,9 @@ Snosi builds four Debian Trixie bootc OCI products with mkosi:
 
 Firn's `shared/firn-installer/catalog.json` offers exactly these four bootc
 choices. **Snowfield is untested on representative Surface hardware.** Its
-catalog gate was waived, not passed. Snow and Floe have VM
-fresh-install PASS evidence from a minideb lab run (2026-10-24; see
-[testing](testing.md)); Sundog's evidence is pending after a failed run.
+catalog gate was waived, not passed. Snow, Floe and Sundog
+have VM fresh-install PASS evidence from minideb lab runs (2026-10-24/25; see
+[testing](testing.md)).
 This does not prove secure update/rollback.
 For the secure-bootc support and recovery boundary see
 [operations](../bootc-secure-operations.md). Firn's ISO is published under
@@ -42,6 +42,12 @@ uses its own KDE composition. mkosi accumulates list settings in `Include=`
 order; inspect `mkosi summary` and run `check-profile-dependencies.sh` when
 changing profile includes. `shared/composition/var-audit.finalize` applies
 per-product `/var` outcome maps (ADR-0001).
+
+Snow and Snowfield support the screen-reader switches in both GDM and the
+GNOME session. Their package set explicitly supplies the AT-SPI accessibility
+bus (at-spi2-core), Orca and speech-dispatcher, since Recommends are disabled.
+Validate activation and a consumer with `python3 test/live/snow-accessibility.py`
+in each fresh session, then exercise Orca with the screen-reader switch.
 
 Sundog explicitly selects Plasma's executable helpers, settings and editors,
 System Monitor, Hunspell English spelling, Dolphin preview plugins, wallet
@@ -80,6 +86,14 @@ runtime mutation and `.requires/` bans. `snosi-etc-diff` reports drift
 against the booted deployment's pristine `/etc`, with an optional restore
 operation; the bootc path bind-mounts `/` to see below the live `/etc` mount.
 
+All products use base's zram swap policy: LZ4 compression, half of RAM capped
+at 4 GiB. The generator package and configuration have one owner in base.
+An empty `/etc/systemd/zram-generator.conf` disables the vendor default;
+administrators can instead override its size/compression there. Run
+`python3 test/live/zram-policy.py` after a fresh boot and image update to
+check the active swap unit, device size and algorithm. Rolling back to an
+image without the generator stops creating zram on the next boot.
+
 ## Secure composition and boot experience
 
 The secure fragment uses an isolated, low-priority Forky APT source for a
@@ -101,6 +115,31 @@ Plymouth otherwise races DRM discovery or the fbcon handoff. Bootc/Firn
 provides installation kernel arguments. For persistent custom arguments,
 [`snosi-kargs`](../snosi-kargs.md) signs a global ESP addon measured into PCR
 12, outside signed-PCR-11 LUKS unlock policy.
+
+## Rootless Podman API
+
+Base presets disable eager `podman.service` startup; the socket retains
+its package default. A request to `$XDG_RUNTIME_DIR/podman/podman.sock`
+activates the API. This applies to Snow, Snowfield, Floe and Sundog.
+
+Before user managers start, a one-time migration removes only the standard
+global `default.target.wants/podman.service` vendor link on installs already
+using the preset-owned enablement model. The current image manifest must
+exclude that link. This is a scoped exception to the runtime etc guard:
+the link was created at runtime, not shipped in the booted image.
+Masks, custom units/links, per-user choices and socket enablement are
+untouched; no preset-all or mass re-enable runs. A deliberately enabled
+per-user daemon remains enabled. The marker under `/var/lib/snosi/`
+prevents subsequent overrides being undone. Rolling back does not recreate
+the removed global link; an administrator can deliberately enable the API
+again if needed.
+
+Acceptance requires an actual `curl --unix-socket
+"$XDG_RUNTIME_DIR/podman/podman.sock" http://localhost/_ping` returning
+`OK`, plus Podman CLI and rootful bootc checks after fresh install/update.
+Do not add subordinate IDs to GDM. Isolated socket tests on Podman 5.4.2
+and systemd 262 are evidence for the protocol, not proof of all login-time
+behavior or of the original FD failure's precise cause.
 
 ## Updates and sysexts
 

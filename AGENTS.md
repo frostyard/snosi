@@ -3,10 +3,11 @@
 Snosi builds four Debian Trixie bootc OCI products (`snow`, `snowfield`,
 `floe`, `sundog`) and `/usr`-only sysexts. Firn offers these four bootc choices
 only. Snowfield ships **untested** on representative Surface hardware: its
-catalog inclusion gate is waived, not passed. Snow and Floe have VM
-fresh-install PASS evidence (lab run `bootc-only-iso-install-54wr4`,
-minideb, 2026-10-24); Sundog failed `boot:no_report`
-([#1123](https://github.com/frostyard/snosi/issues/1123)) and stays pending.
+catalog inclusion gate is waived, not passed. Snow, Floe and
+Sundog have VM fresh-install PASS evidence (lab runs
+`bootc-only-iso-install-54wr4` and `-fjrk8`, minideb, 2026-10-24/25; the
+earlier Sundog `boot:no_report` was a lab-harness race,
+[#1123](https://github.com/frostyard/snosi/issues/1123)).
 The Firn ISO takes the newest published Firn release (no pin).
 Native A/B and NBC build/runtime lanes were removed; see
 [ADR-0018](docs/adr/0018-remove-native-ab-and-nbc-lanes.md) and

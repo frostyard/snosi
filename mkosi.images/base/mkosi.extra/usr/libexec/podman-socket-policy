@@ -1,0 +1,32 @@
+#!/bin/bash
+# Migrate only the vendor-created global eager-start link. No preset-all.
+set -euo pipefail
+root=${1:-}
+marker="$root/var/lib/snosi/podman-socket-policy-v1.done"
+[[ ! -e "$marker" ]] || exit 0
+# This marker proves the install uses runtime-created enablement, not old
+# image-shipped /etc links. Never touch an install outside that model.
+[[ -f "$root/var/lib/preset-enablement.done" ]] || exit 0
+manifest="$root/usr/share/snosi/enablement-manifest.txt"
+[[ -f "$manifest" ]] || exit 1
+if grep -q '^user default.target.wants/podman.service$' "$manifest"; then
+    echo "podman-socket-policy: image still presets eager startup" >&2
+    exit 1
+fi
+link="$root/etc/systemd/user/default.target.wants/podman.service"
+override="$root/etc/systemd/user/podman.service"
+if [[ -e "$override" || -L "$override" ]] && [[ "$(readlink "$override" || true)" != /dev/null ]]; then
+    echo "podman-socket-policy: retaining administrator unit override"
+elif [[ -L "$link" ]]; then
+    case "$(readlink "$link")" in
+        /usr/lib/systemd/user/podman.service|/lib/systemd/user/podman.service)
+            # etc-guard-allow: exactly the runtime-created global vendor link; current image ships no /etc enablement links and its manifest excludes this unit
+            rm -- "$link"
+            ;;
+        *) echo "podman-socket-policy: retaining administrator link: $link" ;;
+    esac
+fi
+# Leave top-level masks, custom units, socket state, per-user enablement
+# and all unrelated units alone. A deliberately user-enabled API remains so.
+mkdir -p "$(dirname "$marker")"
+touch "$marker"

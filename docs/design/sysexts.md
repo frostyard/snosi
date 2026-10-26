@@ -5,6 +5,30 @@ Decision record shaping this document:
 `/usr`-only payloads, `/opt` relocation, scoped factory-`/etc` capture,
 `Upholds=` activation, `required-paths.txt` manifests).
 
+## Post-merge sysctl policy
+
+`reload-sysext.service` runs after both the initial `systemd-sysctl.service`
+and the sysext merge, before `sysinit.target`. It reapplies only reviewed
+resource limits: `fs.aio-max-nr`, the three inotify limits, and the two
+`kernel.keys` limits. Reading the complete effective configuration with
+`--prefix` preserves filename ordering, same-name masks and administrator
+overrides; it does not apply a package file in isolation.
+
+This deliberately excludes Incus's
+`kernel.apparmor_restrict_unprivileged_unconfined=0`, network tuning and
+`vm.max_map_count`. They are not approved by this resource-limit repair.
+In particular, do not replace the restricted invocation with an unrestricted
+sysctl replay. The contract also handles already-published Incus r5 images,
+without requiring an extension update before the base fix.
+
+The separate inotify discovery fix (#1134) places base defaults before
+`50-incus.conf`, so merging Incus raises rather than lowers its limits.
+Use a later administrator file such as `/etc/sysctl.d/90-local.conf` for
+local values. Unmerging an extension does not undo kernel values; reboot
+after changing the extension set. Rollback to the earlier base removes the
+post-merge replay. Validate fresh and upgraded Snow/Floe boots, both with
+and without Incus, and recheck other base consumers separately.
+
 ## Overview
 
 Sysexts are overlay images that extend the immutable base OS by adding files under `/usr`. They are distributed as EROFS images and managed by systemd-sysext at runtime and systemd-sysupdate for downloads.

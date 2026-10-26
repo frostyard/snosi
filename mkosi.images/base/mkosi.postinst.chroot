@@ -26,3 +26,6 @@ rm -rf /etc/systemd/system/basic.target.wants/bls-garbage-collect.service
 # into /usr so first SSH logins work without `infocmp | ssh tic`.
 tic -x -o /usr/share/terminfo /usr/share/snosi/terminfo/xterm-ghostty.src
 test -f /usr/share/terminfo/x/xterm-ghostty
+
+# The shared zram policy must have an executable consumer in every image.
+test -x /usr/lib/systemd/system-generators/zram-generator

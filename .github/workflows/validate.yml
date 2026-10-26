@@ -313,8 +313,17 @@ jobs:
       - name: Test NFS system accounts and tmpfiles ownership
         run: sudo bash ./test/nfs-system-accounts-test.sh
 
+      - name: Test zram generator policy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y systemd-zram-generator
+          python3 ./test/zram-policy-test.py
+
       - name: Test memberships account provisioning
         run: sudo python3 ./test/service-account-memberships-test.py
+
+      - name: Test inotify configuration discovery and precedence
+        run: sudo python3 ./test/inotify-policy-test.py
 
       - name: Test RequiredBy guard
         run: ./test/required-by-guard-test.sh
@@ -337,11 +346,20 @@ jobs:
       - name: Test base-owned VM runtime sysext guard
         run: ./test/sysext-no-base-owned-test.sh
 
+      - name: Test journald configuration discovery
+        run: python3 ./test/journald-config-test.py
+
       - name: Test Sundog KDE bootc profile contract
         run: ./test/sundog-profile-test.sh
 
+      - name: Test post-merge sysctl application
+        run: sudo python3 ./test/sysext-sysctl-test.py
+
       - name: Test order account provisioning
         run: sudo python3 ./test/sysext-account-order-test.py
+
+      - name: Test Podman socket policy migration
+        run: python3 ./test/podman-socket-policy-test.py
 
       - name: Test staged-update notify unit trigger shape
         run: ./test/update-notify-units-test.sh
