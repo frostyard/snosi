@@ -455,7 +455,7 @@ job_concurrency=$(awk '
 job_group=$(sed -n 's/^      group: //p' <<<"$job_concurrency")
 job_cancel=$(sed -n 's/^      cancel-in-progress: //p' <<<"$job_concurrency")
 # shellcheck disable=SC2016 # Workflow expression, not an expansion.
-if [[ $job_group == "\${{ github.ref == 'refs/heads/main' && format('secure-build-{0}', github.ref) || 'snosi-branch-snow-publication' }}" ]]; then
+if [[ $job_group == "\${{ github.ref == 'refs/heads/main' && format('secure-build-{0}-{1}', github.ref, matrix.profile) || 'snosi-branch-snow-publication' }}" ]]; then
     pass 'the job concurrency group names the shared non-main group'
 else
     fail "the job concurrency group must name the shared non-main group (got: ${job_group:-none})"
@@ -468,7 +468,7 @@ fi
 main_group_part=${job_group%%||*}
 off_main_group=${job_group#*|| }
 # shellcheck disable=SC2016 # Workflow expression, not an expansion.
-if grep -Fq "github.ref == 'refs/heads/main' && format('secure-build-{0}', github.ref)" \
+if grep -Fq "github.ref == 'refs/heads/main' && format('secure-build-{0}-{1}', github.ref, matrix.profile)" \
         <<<"$main_group_part"; then
     pass 'main keeps its own concurrency group'
 else
@@ -478,6 +478,69 @@ if ! grep -Eq 'github\.|matrix\.|needs\.|inputs\.' <<<"$off_main_group"; then
     pass 'every non-main ref shares one concurrency group'
 else
     fail 'every non-main ref must share one concurrency group'
+fi
+
+# Evaluate the group the way the expression reads: main formats the template
+# with (github.ref, matrix.profile), every other ref gets the constant.
+main_format=$(sed -n "s/^.*github.ref == 'refs\/heads\/main' && \(format([^)]*)\).*$/\1/p" \
+    <<<"$job_group")
+group_template=$(sed -n "s/^format('\([^']*\)'.*$/\1/p" <<<"$main_format")
+main_args=$(sed -n "s/^format('[^']*', \(.*\))$/\1/p" <<<"$main_format")
+fallback_group=$(sed -n "s/^'\([^']*\)'.*$/\1/p" <<<"$off_main_group")
+
+arg_names=()
+if [[ -n $main_args ]]; then
+    IFS=',' read -r -a arg_names <<<"$main_args"
+    for index in "${!arg_names[@]}"; do
+        name=${arg_names[index]# }
+        arg_names[index]=${name% }
+    done
+fi
+
+main_ref_literal=$(sed -n "s/^.*github.ref == '\([^']*\)'.*$/\1/p" <<<"$job_group")
+
+group_name() { # ref profile
+    local ref=$1 profile=$2 out index value
+    if [[ $ref != "$main_ref_literal" ]]; then
+        printf '%s' "$fallback_group"
+        return
+    fi
+    out=$group_template
+    for index in "${!arg_names[@]}"; do
+        case ${arg_names[index]} in
+            github.ref) value=$ref ;;
+            matrix.profile) value=$profile ;;
+            *) value='?' ;;
+        esac
+        out=${out//\{$index\}/$value}
+    done
+    printf '%s' "$out"
+}
+
+if [[ $group_template == *'{1}'* && $main_args == *'matrix.profile'* ]]; then
+    pass 'the main concurrency group is keyed by profile'
+else
+    fail 'the main concurrency group must be keyed by profile'
+fi
+
+main_groups=''
+for profile in $main_profiles; do
+    main_groups+="$(group_name refs/heads/main "$profile")"$'\n'
+done
+distinct_main_groups=$(printf '%s' "$main_groups" | sort -u | grep -c . )
+if [[ $distinct_main_groups -eq 4 ]] && [[ $(printf '%s' "$main_groups" | grep -c .) -eq 4 ]]; then
+    pass 'the four main profiles get four distinct concurrency groups'
+else
+    fail "the four main profiles must get four distinct concurrency groups (found: $distinct_main_groups)"
+fi
+
+first_branch_group=$(group_name refs/heads/lab-one '')
+second_branch_group=$(group_name refs/heads/lab-two '')
+if [[ -n $fallback_group && $first_branch_group == "$fallback_group" &&
+        $second_branch_group == "$fallback_group" ]]; then
+    pass 'different non-main refs get the same concurrency group'
+else
+    fail "different non-main refs must get the same concurrency group (got: ${first_branch_group:-none} / ${second_branch_group:-none})"
 fi
 
 workflow_concurrency=$(awk '
@@ -615,11 +678,12 @@ path = Path(sys.argv[1])
 text = path.read_text()
 old = (
     "      group: ${{ github.ref == 'refs/heads/main' && "
-    "format('secure-build-{0}', github.ref) || 'snosi-branch-snow-publication' }}\n"
+    "format('secure-build-{0}-{1}', github.ref, matrix.profile) || "
+    "'snosi-branch-snow-publication' }}\n"
 )
 assert old in text
 path.write_text(text.replace(
-    old, "      group: ${{ format('secure-build-{0}', github.ref) }}\n", 1))
+    old, "      group: ${{ format('secure-build-{0}-{1}', github.ref, matrix.profile) }}\n", 1))
 PY
 }
 
@@ -635,6 +699,18 @@ path.write_text(text.replace(old, "      cancel-in-progress: true\n", 1))
 PY
 }
 
+mut_drop_profile_from_main_group() {
+    python3 - "$1" <<'PY'
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+text = path.read_text()
+old = "format('secure-build-{0}-{1}', github.ref, matrix.profile)"
+assert old in text
+path.write_text(text.replace(old, "format('secure-build-{0}', github.ref)", 1))
+PY
+}
+
 mut_drop_main_group() {
     python3 - "$1" <<'PY'
 import sys
@@ -643,7 +719,8 @@ path = Path(sys.argv[1])
 text = path.read_text()
 old = (
     "      group: ${{ github.ref == 'refs/heads/main' && "
-    "format('secure-build-{0}', github.ref) || 'snosi-branch-snow-publication' }}\n"
+    "format('secure-build-{0}-{1}', github.ref, matrix.profile) || "
+    "'snosi-branch-snow-publication' }}\n"
 )
 assert old in text
 path.write_text(text.replace(
@@ -684,6 +761,8 @@ mutate_and_expect_failure 'a cancelling job concurrency fails' \
     mut_enable_job_cancel
 mutate_and_expect_failure 'a shared group for main and branches fails' \
     mut_drop_main_group
+mutate_and_expect_failure 'a main group without the profile fails' \
+    mut_drop_profile_from_main_group
 
 printf '\n%d passing assertions, %d failures\n' "$PASS" "$FAIL"
 ((FAIL == 0))

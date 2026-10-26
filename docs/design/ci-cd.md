@@ -71,8 +71,11 @@ with `cancel-in-progress: false`. Two branch dispatches on different branches
 therefore publish one after the other, and a queued run waits instead of
 killing the run that may already have pushed. (GitHub Actions keeps at most one
 pending run per group, so a third dispatch replaces a pending one.) `main` keeps
-its own group, `secure-build-<ref>`, and the workflow-level group still cancels a
-superseded main push, so main's cancel behavior does not change.
+its own group, `secure-build-<ref>-<profile>`: the profile is part of the name
+because a group holds only one running and one pending job, so one shared main
+group would make the four matrix legs cancel each other. The workflow-level
+group still cancels a superseded main push, so main's cancel behavior does not
+change.
 
 `build-installer-iso.yml` retains the scripts at `shared/native-ab/publish/`
 and the mkosi pin helpers at `shared/native-ab/ci/`. `native` in their names

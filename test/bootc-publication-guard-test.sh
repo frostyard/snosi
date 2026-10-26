@@ -86,7 +86,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' &&
       startsWith(github.ref, 'refs/heads/')))
     concurrency:
-      group: ${{ github.ref == 'refs/heads/main' && format('secure-build-{0}', github.ref) || 'snosi-branch-snow-publication' }}
+      group: ${{ github.ref == 'refs/heads/main' && format('secure-build-{0}-{1}', github.ref, matrix.profile) || 'snosi-branch-snow-publication' }}
       cancel-in-progress: false
     environment: native-build
     permissions:
@@ -239,6 +239,10 @@ remove_dispatch_clause() {
 }
 remove_secure_concurrency() {
     perl -0pi -e "s/    concurrency:\n      group: .*\n      cancel-in-progress: false\n//" \
+        "$1/.github/workflows/build-images.yml"
+}
+drop_profile_from_main_group() {
+    perl -0pi -e "s/format\('secure-build-\\{0\\}-\\{1\\}', github\\.ref, matrix\\.profile\)/format('secure-build-{0}', github.ref)/" \
         "$1/.github/workflows/build-images.yml"
 }
 enable_secure_cancel() {
@@ -410,6 +414,8 @@ assert_guard 'branch dispatch widened to any ref fails' 1 allow_tag_dispatch
 assert_guard 'removed branch dispatch clause fails' 1 remove_dispatch_clause
 assert_guard 'removed job-level concurrency fails' 1 remove_secure_concurrency
 assert_guard 'cancelling job-level concurrency fails' 1 enable_secure_cancel
+assert_guard 'main concurrency group without the profile fails' 1 \
+    drop_profile_from_main_group
 assert_guard 'promotion without a main-only gate fails' 1 remove_promotion_gate
 assert_guard 'promotion gated by always() fails' 1 weaken_promotion_gate
 assert_guard 'R2 upload without a main-only gate fails' 1 remove_r2_gate

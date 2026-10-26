@@ -99,7 +99,7 @@ else
         # cancel in progress: a queued publisher must wait for the run that may
         # already have pushed.
         require_text "$workflow secure-build concurrency" "$secure_job" \
-            "      group: \${{ github.ref == 'refs/heads/main' && format('secure-build-{0}', github.ref) || 'snosi-branch-snow-publication' }}"
+            "      group: \${{ github.ref == 'refs/heads/main' && format('secure-build-{0}-{1}', github.ref, matrix.profile) || 'snosi-branch-snow-publication' }}"
         require_text "$workflow secure-build concurrency" "$secure_job" \
             '      cancel-in-progress: false'
         if [[ $(grep -c -x -F '    concurrency:' <<<"$secure_job") -ne 1 ]]; then

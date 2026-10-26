@@ -129,11 +129,14 @@ jobs:
     # branches can never generate the same backdated version tag and replace
     # each other's immutable tag: version generation, the existing-tag check
     # and the push hold the group from start to publication. main keeps its own
-    # group, and the workflow-level group above still cancels a superseded main
-    # push, so main's behavior is unchanged. Nothing here cancels in progress:
-    # a queued publisher must wait for the run that may already have pushed.
+    # group, keyed by ref AND profile: GitHub Actions keeps only one running and
+    # one pending job per group, so a shared main group would make the four main
+    # matrix legs cancel each other. The workflow-level group above still
+    # cancels a superseded main push, so main's behavior is unchanged. Nothing
+    # here cancels in progress: a queued publisher must wait for the run that
+    # may already have pushed.
     concurrency:
-      group: ${{ github.ref == 'refs/heads/main' && format('secure-build-{0}', github.ref) || 'snosi-branch-snow-publication' }}
+      group: ${{ github.ref == 'refs/heads/main' && format('secure-build-{0}-{1}', github.ref, matrix.profile) || 'snosi-branch-snow-publication' }}
       cancel-in-progress: false
     if: >-
       github.event_name != 'pull_request' &&
