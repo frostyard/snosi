@@ -40,8 +40,9 @@ label, and the on-disk copy each product composition installs and checks.
 `test/retirement-plan-test.py` pins ADR-0018's documentation, Snowfield's
 untested/waived status, historical status markers and the no-R2-deletion
 boundary; it never accesses R2.
-`test/firn-installer-iso-test.sh --static` checks Firn's Forky sandbox
-and that the ISO installs exactly one unpinned `frostyard-firn`;
+`test/firn-installer-iso-test.sh --static` checks Firn's Forky sandbox,
+that the ISO installs exactly one unpinned `frostyard-firn`, and that it
+removes the build's SSH host keys and generates them at boot;
 the removed native install live mode is not a bootc proof.
 
 `test/iso-publication-pipeline-test.sh` rehearses the retained Firn ISO
