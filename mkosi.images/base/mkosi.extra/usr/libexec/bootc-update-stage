@@ -144,8 +144,8 @@ remote_version=$(podman image inspect \
     "$image" 2>/dev/null) || remote_version=""
 
 # A registry pull retains both a local storage/config ID (`podman .Id`) and
-# the registry manifest digest (`podman .Digest`). bootc 1.16.8 records the
-# latter as imageDigest even when consuming the image through
+# the registry manifest digest (`podman .Digest`). bootc records the latter
+# (observed on 1.16.8) as imageDigest even when consuming the image through
 # containers-storage. The two values are normally different; comparing .Id
 # made successful upgrades look like silent failures and made an already
 # current image look perpetually out of date.

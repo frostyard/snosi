@@ -66,9 +66,11 @@ through the single shared helper `shared/bootc-secure/storage-digest-probe.sh`
 (`snosi_storage_composefs_digest`, sourced by `buildah-package.sh`,
 `assemble-uki.sh`, and `test/bootc-secure-spike-test.sh` — never re-inline the
 `podman run` shape). The helper binds a host-filesystem scratch directory over
-the container's `/var/tmp`: bootc 1.16.8 hardcodes its temporary composefs
-repository at `/var/tmp` inside the container (`TMPDIR` is ignored) and
-composefs object writes use `O_TMPFILE`, which fuse-overlayfs does not support
+the container's `/var/tmp`: bootc hardcodes its temporary composefs repository
+at `/var/tmp` inside the container (`TMPDIR` is ignored), observed on 1.16.8
+and not re-checked on 1.17.1, so the bind stays; the 1.17.1 probes passed with
+it. composefs object writes use `O_TMPFILE`, which fuse-overlayfs does not
+support
 — GitHub runner image ubuntu24/20260810.271 (podman 5.8.4) forces
 `mount_program = fuse-overlayfs`, and without the bind every probe fails with
 `os error 95`. The mount changes only the execution environment; the digest is
@@ -87,8 +89,8 @@ is never a capability signal.
 `shared/packages/bootc/mkosi.conf` selects one exact Frostyard build pair for
 every OCI bootc profile:
 
-- `bootc=1.16.8-frostyard202610040153~deb13`
-- `libostree-1-1=2026.3-frostyard202610040153~deb13`
+- `bootc=1.17.1-frostyard202610252315~deb13`
+- `libostree-1-1=2026.5-frostyard202610252315~deb13`
 
 The pin scope is that fragment only. It adds no global APT preference and
 changes no sysext or base package selection; every other entry in the fragment
@@ -102,19 +104,48 @@ removed, floating or disagreeing entry. The guard proves selector values and
 version agreement only; it cannot show that revalidation occurred.
 
 Evidence for this pair, from source SHA
-`6b0e980ef6b77e27e60602c85d4e1cd1101c01ce`:
+`7927290da94822f05a0b2ae9cb15c67187db7e4a` (draft PR #1151, never merged):
 
-- [Run 40229646374](https://github.com/frostyard/snosi/actions/runs/40229646374)
-  built all four products with exactly these two versions.
-- [Run 40245723511](https://github.com/frostyard/snosi/actions/runs/40245723511)
-  built all four rootfs products and then failed before publication with
-  `expected bootc 1.16.8, observed bootc 1.17.1`. The floating entries had
-  resolved to the then-current APT candidates: bootc 1.17.1, and libostree
-  2026.5.
+- [Run 40315411491](https://github.com/frostyard/snosi/actions/runs/40315411491)
+  built all four products (floe, snow, snowfield, sundog) as mechanics builds
+  with exactly these two versions.
+- [Run 40370164077](https://github.com/frostyard/snosi/actions/runs/40370164077)
+  built Snow secure. Both storage-digest probes agreed, the locally assembled
+  and the policy-copied secure artifact validation passed, and it published
+  the signed tag `20261026133822`. `latest` did not move.
+- Lab run `run-snow-bootc-lifecycle-l6596` (2026-10-26, frostyard/lab#160): N
+  `20261025113924` (bootc 1.16.8) staged and booted N+1 `20261026133822`
+  (bootc 1.17.1), `bootc rollback` ran on 1.17.1, and N booted again. Result
+  `PASS: verified_five_fresh_boots;fsverity_known_defect=7.2.11+deb14-amd64`.
+- Rootfs check (2026-10-26): in the signed tag `20261026133822`, with Forky
+  systemd 262-1, `bootc --version`, `bootc container --help` and
+  `bootc container compute-composefs-digest-from-storage --help` ran in a
+  rootfs-only bwrap sandbox.
 
-The pin is not a compatibility claim for any other version. bootc 1.17.1 is
-unvalidated against this adapter and needs its own evidence before it can
-replace the pin.
+The secure assembly on 1.17.1 is proven on Snow only. Floe, Snowfield and
+Sundog get their first 1.17.1 secure assembly in the first main build after
+this change. That build is the remaining check.
+
+Previous pin (history): `bootc=1.16.8-frostyard202610040153~deb13` with
+`libostree-1-1=2026.3-frostyard202610040153~deb13`. Its evidence was
+[run 40229646374](https://github.com/frostyard/snosi/actions/runs/40229646374),
+which built all four products with exactly those two versions, and
+[run 40245723511](https://github.com/frostyard/snosi/actions/runs/40245723511),
+which built all four rootfs products and then failed before publication with
+`expected bootc 1.16.8, observed bootc 1.17.1`. The floating entries had
+resolved to the then-current APT candidates: bootc 1.17.1, and libostree
+2026.5. That failure is why the pin exists.
+
+The pin is not a compatibility claim for any other version. A later bootc
+needs its own evidence before it can replace the pin.
+
+Follow-up to #1130: upstream bootc commit `9aad3dd87` (first in v1.16.12,
+contained in v1.17.1) passes the config verity and skips the full composefs
+re-hash of every layer at stage time. That re-read was the stage-time trigger
+of the spurious Btrfs fs-verity `FILE CORRUPTED!` reports in
+[#1130](https://github.com/frostyard/snosi/issues/1130). In l6596 the stager
+was still 1.16.8, so the effect is first observable when a 1.17.1 host stages
+a later update. The kernel defect stays.
 
 ## Credentials and rotation
 
