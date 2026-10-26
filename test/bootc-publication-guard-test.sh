@@ -82,10 +82,15 @@ jobs:
   secure-build:
     if: >-
       github.event_name != 'pull_request' &&
-      github.ref == 'refs/heads/main'
+      (github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' &&
+      startsWith(github.ref, 'refs/heads/')))
     environment: native-build
     permissions:
       packages: write
+    strategy:
+      matrix:
+        include: ${{ github.ref == 'refs/heads/main' && fromJSON('[{"profile":"floe","description":"Floe Linux Server Image"},{"profile":"snow","description":"Snow Linux OS Image"},{"profile":"snowfield","description":"Snowfield Linux OS Image"},{"profile":"sundog","description":"Sundog Linux OS Image"}]') || fromJSON('[{"profile":"snow","description":"Snow Linux OS Image"}]') }}
     steps:
       - name: Materialize protected bootc signing credentials
         env:
@@ -140,6 +145,7 @@ jobs:
           sudo ./test/bootc-secure-artifact-test.sh \
             "output/${{ matrix.profile }}" "$LOCAL_REF" mok.crt pcr.pub
        - name: Promote validated digest to latest
+        if: github.ref == 'refs/heads/main'
         run: |
           AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
           ./shared/bootc-secure/ci/promote-published-image.sh \
@@ -154,10 +160,16 @@ jobs:
        - name: Sign SBOM
        - name: Attest build provenance
        - name: Upload manifests to R2
+        if: github.ref == 'refs/heads/main'
+        uses: ryand56/r2-upload-action@33ebb7a494b3a8a3c5ed2ea6bbdc72e707090317
+        with:
+          r2-bucket: frostyardrepo
+          source-dir: output/manifests
+          destination-dir: manifests/
        - name: Record snow tag for release job
-        if: matrix.profile == 'snow'
+        if: github.ref == 'refs/heads/main' && matrix.profile == 'snow'
        - name: Upload snow tag artifact
-        if: matrix.profile == 'snow'
+        if: github.ref == 'refs/heads/main' && matrix.profile == 'snow'
   release:
     permissions:
       packages: read
@@ -206,8 +218,50 @@ remove_secure_include() { rm "$1/mkosi.profiles/floe/mkosi.conf"; }
 remove_required_file() { rm "$2/$1"; }
 remove_environment() { perl -0pi -e 's/    environment: native-build\n//' "$1/.github/workflows/build-images.yml"; }
 permit_pull_request() { perl -0pi -e "s/github\.event_name != 'pull_request'/github.event_name == 'pull_request'/" "$1/.github/workflows/build-images.yml"; }
-permit_pull_request_with_or() { perl -0pi -e "s/ &&\n      github\.ref == 'refs\/heads\/main'/ || github.ref == 'refs\/heads\/main'/" "$1/.github/workflows/build-images.yml"; }
-remove_main_condition() { perl -0pi -e "s/      github\.ref == 'refs\/heads\/main'\n//" "$1/.github/workflows/build-images.yml"; }
+permit_branch_disjunction() {
+    perl -0pi -e "s/      \(github\.ref == 'refs\/heads\/main' \|\|/      (github.ref == 'refs\/heads\/main' || github.ref == 'refs\/heads\/dev' ||/" \
+        "$1/.github/workflows/build-images.yml"
+}
+remove_main_condition() {
+    perl -0pi -e "s/      \(github\.ref == 'refs\/heads\/main' \|\|\n//" \
+        "$1/.github/workflows/build-images.yml"
+}
+allow_tag_dispatch() {
+    perl -0pi -e "s/startsWith\(github\.ref, 'refs\/heads\/'\)/startsWith(github.ref, 'refs\/')/" \
+        "$1/.github/workflows/build-images.yml"
+}
+remove_dispatch_clause() {
+    perl -0pi -e "s/      \(github\.event_name == 'workflow_dispatch' &&\n      startsWith\(github\.ref, 'refs\/heads\/'\)\)\)\n//" \
+        "$1/.github/workflows/build-images.yml"
+}
+remove_promotion_gate() {
+    perl -0pi -e "s/(      - name: Promote validated digest to latest\n)        if: github\.ref == 'refs\/heads\/main'\n/\$1/" \
+        "$1/.github/workflows/build-images.yml"
+}
+weaken_promotion_gate() {
+    perl -0pi -e "s/(      - name: Promote validated digest to latest\n)        if: github\.ref == 'refs\/heads\/main'\n/\$1        if: always()\n/" \
+        "$1/.github/workflows/build-images.yml"
+}
+remove_r2_gate() {
+    perl -0pi -e "s/(      - name: Upload manifests to R2\n)        if: github\.ref == 'refs\/heads\/main'\n/\$1/" \
+        "$1/.github/workflows/build-images.yml"
+}
+weaken_snow_tag_record_gate() {
+    perl -0pi -e "s/(      - name: Record snow tag for release job\n)        if: github\.ref == 'refs\/heads\/main' && /\$1        if: /" \
+        "$1/.github/workflows/build-images.yml"
+}
+weaken_snow_tag_artifact_gate() {
+    perl -0pi -e "s/(      - name: Upload snow tag artifact\n)        if: github\.ref == 'refs\/heads\/main' && /\$1        if: /" \
+        "$1/.github/workflows/build-images.yml"
+}
+widen_off_main_matrix() {
+    perl -0pi -e 's/\|\| fromJSON\(\x27\[\{"profile":"snow"/|| fromJSON(\x27[{"profile":"floe","description":"Floe Linux Server Image"},{"profile":"snow"/' \
+        "$1/.github/workflows/build-images.yml"
+}
+add_second_r2_step() {
+    perl -0pi -e 's{(      - name: Upload manifests to R2\n)}{      - name: Second manifests upload\n        uses: ryand56/r2-upload-action\@33ebb7a494b3a8a3c5ed2ea6bbdc72e707090317\n$1}' \
+        "$1/.github/workflows/build-images.yml"
+}
 allow_shell_or() { perl -0pi -e 's{(        run: sudo rm -rf /var/tmp/bootc-secure-credentials)}{$1 || exit 1}' "$1/.github/workflows/build-images.yml"; }
 remove_package_variable() { perl -0pi -e "s/          $1:.*\n//" "$2/.github/workflows/build-images.yml"; }
 remove_forwarded_package_variable() {
@@ -295,11 +349,16 @@ remove_promotion_inspect_authfile() { perl -0pi -e 's/skopeo inspect --authfile 
 inline_promotion_copy() {
     perl -0pi -e 's|\./shared/bootc-secure/ci/promote-published-image\.sh|skopeo copy --all|' "$1/.github/workflows/build-images.yml"
 }
+snow_tag_gate='if: github\.ref == \x27refs/heads/main\x27 && matrix\.profile == \x27snow\x27'
 move_snow_tag_before_signing() {
-    perl -0pi -e 's/(      - name: Sign SBOM\n)(      - name: Attest build provenance\n)(      - name: Upload manifests to R2\n)(      - name: Record snow tag for release job\n)/$4$1$2$3/' "$1/.github/workflows/build-images.yml"
+    # Move the Snow tag record step, with its main-only gate, above SBOM signing.
+    perl -0pi -e "s{      - name: Record snow tag for release job\n        $snow_tag_gate\n}{}; s{(      - name: Sign SBOM\n)}{      - name: Record snow tag for release job\n        $snow_tag_gate\n\$1}" \
+        "$1/.github/workflows/build-images.yml"
 }
 move_snow_tag_artifact_before_manifests() {
-    perl -0pi -e "s/(      - name: Upload manifests to R2\\n)(      - name: Record snow tag for release job\\n        if: matrix\\.profile == 'snow'\\n)(      - name: Upload snow tag artifact\\n        if: matrix\\.profile == 'snow'\\n)/\$2\$3\$1/" "$1/.github/workflows/build-images.yml"
+    # Move the Snow tag artifact step, with its main-only gate, above the R2 upload.
+    perl -0pi -e "s{      - name: Upload snow tag artifact\n        $snow_tag_gate\n}{}; s{(      - name: Upload manifests to R2\n)}{      - name: Upload snow tag artifact\n        $snow_tag_gate\n\$1}" \
+        "$1/.github/workflows/build-images.yml"
 }
 remove_release_resolver() {
     perl -0pi -e 's{^          \./shared/bootc-secure/ci/resolve-snow-release-predecessor\.sh.*?^            "\$GITHUB_REPOSITORY" "\$IMAGE" "\$CURRENT" "\$GITHUB_OUTPUT"\n}{}ms' "$1/.github/workflows/build-images.yml"
@@ -311,10 +370,10 @@ remove_release_checkout() {
     perl -0pi -e 's/^        uses: actions\/checkout\@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\.0\.1\n//m' "$1/.github/workflows/build-images.yml"
 }
 remove_snow_tag_record_condition() {
-    perl -0pi -e "s/(      - name: Record snow tag for release job\\n)        if: matrix\\.profile == 'snow'\\n/\$1/" "$1/.github/workflows/build-images.yml"
+    perl -0pi -e "s{(      - name: Record snow tag for release job\n)        $snow_tag_gate\n}{\$1}" "$1/.github/workflows/build-images.yml"
 }
 remove_snow_tag_artifact_condition() {
-    perl -0pi -e "s/(      - name: Upload snow tag artifact\\n)        if: matrix\\.profile == 'snow'\\n/\$1/" "$1/.github/workflows/build-images.yml"
+    perl -0pi -e "s{(      - name: Upload snow tag artifact\n)        $snow_tag_gate\n}{\$1}" "$1/.github/workflows/build-images.yml"
 }
 corrupt_release_resolver_arguments() {
     perl -0pi -e 's/"\$GITHUB_REPOSITORY" "\$IMAGE" "\$CURRENT" "\$GITHUB_OUTPUT"/"\$GITHUB_REPOSITORY" "\$IMAGE" "\$BROKEN" "\$GITHUB_OUTPUT"/' "$1/.github/workflows/build-images.yml"
@@ -333,8 +392,18 @@ for required in \
 done
 assert_guard 'missing protected environment fails' 1 remove_environment
 assert_guard 'pull-request publishing condition fails' 1 permit_pull_request
-assert_guard 'permissive publishing condition with || fails' 1 permit_pull_request_with_or
+assert_guard 'permissive branch disjunction in the publishing condition fails' 1 \
+    permit_branch_disjunction
 assert_guard 'missing main publishing condition fails' 1 remove_main_condition
+assert_guard 'branch dispatch widened to any ref fails' 1 allow_tag_dispatch
+assert_guard 'removed branch dispatch clause fails' 1 remove_dispatch_clause
+assert_guard 'promotion without a main-only gate fails' 1 remove_promotion_gate
+assert_guard 'promotion gated by always() fails' 1 weaken_promotion_gate
+assert_guard 'R2 upload without a main-only gate fails' 1 remove_r2_gate
+assert_guard 'snow tag record gated off main fails' 1 weaken_snow_tag_record_gate
+assert_guard 'snow tag artifact gated off main fails' 1 weaken_snow_tag_artifact_gate
+assert_guard 'non-main matrix widened past snow fails' 1 widen_off_main_matrix
+assert_guard 'second R2 upload step fails' 1 add_second_r2_step
 assert_guard 'shell || in a secure-build run block passes' 0 allow_shell_or
 assert_guard 'long-lived GHCR PAT reference fails' 1 add_ghcr_pat_reference
 assert_guard 'missing secure packages write permission fails' 1 remove_secure_packages_write

@@ -421,6 +421,8 @@ jobs:
         run: ./check-bootc-publication-guard.sh
       - name: Validate bootc publication guard fixtures
         run: ./test/bootc-publication-guard-test.sh
+      - name: Validate the branch-only image publication path
+        run: ./test/build-images-branch-dispatch-test.sh
       - name: Validate bootc release predecessor fixtures
         run: ./test/bootc-release-predecessor-test.sh
       - name: Validate bootc secure artifact fixtures

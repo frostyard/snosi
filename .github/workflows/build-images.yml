@@ -96,6 +96,12 @@ on:
       # it is the canonical mkosi pin source.
       - ".github/workflows/test-bootc-secure.yml"
       - ".github/workflows/validate.yml"
+  # workflow_dispatch on main publishes all four products exactly as a push
+  # does. A dispatch on any other branch exists only to publish ONE signed
+  # Snow version tag for a lab lifecycle test: that path builds snow alone and
+  # stops before every main-only side effect (latest promotion, R2 manifests,
+  # the snow-tag artifact and the release job). See the secure-build job
+  # condition and the main-only step gates below.
   workflow_dispatch:
 
 permissions: {}
@@ -113,9 +119,15 @@ concurrency:
 
 jobs:
   secure-build:
+    # main publishes all four products, on push or on a dispatch. A dispatch on
+    # any other branch runs this job only to publish ONE signed Snow version
+    # tag for a lab lifecycle test; every main-only side effect below stays
+    # behind its own `refs/heads/main` gate.
     if: >-
       github.event_name != 'pull_request' &&
-      github.ref == 'refs/heads/main'
+      (github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' &&
+      startsWith(github.ref, 'refs/heads/')))
     environment: native-build
     runs-on: ubuntu-latest
     # A hung mkosi/apt otherwise burns the 6-hour default per matrix leg.
@@ -130,16 +142,9 @@ jobs:
       # the other in-flight builds. Each variant is independent.
       fail-fast: false
       matrix:
-        include:
-          - profile: floe
-            description: "Floe Linux Server Image"
-          - profile: snow
-            description: "Snow Linux OS Image"
-          - profile: snowfield
-            description: "Snowfield Linux OS Image"
-          - profile: sundog
-            description: "Sundog Linux OS Image"
-
+        # main gets the full product matrix. The branch-dispatch path gets snow
+        # alone, so a lab test cannot publish a second product's signed tag.
+        include: ${{ github.ref == 'refs/heads/main' && fromJSON('[{"profile":"floe","description":"Floe Linux Server Image"},{"profile":"snow","description":"Snow Linux OS Image"},{"profile":"snowfield","description":"Snowfield Linux OS Image"},{"profile":"sundog","description":"Sundog Linux OS Image"}]') || fromJSON('[{"profile":"snow","description":"Snow Linux OS Image"}]') }}
     steps:
       - name: Show disk space (before)
         run: sudo df -h
@@ -469,6 +474,9 @@ jobs:
             "docker://$IMAGE@$DIGEST" "${{ steps.version.outputs.tag }}" "$AUTH_FILE"
 
       - name: Promote validated digest to latest
+        # main only. A branch dispatch publishes one immutable version tag and
+        # must never move `latest`.
+        if: github.ref == 'refs/heads/main'
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
         run: |
@@ -536,9 +544,10 @@ jobs:
         # preflight above all) actually sees. This step re-runs the exact
         # pinned-cosign key verification against the attested digest so a
         # future cosign bump that reintroduces the breakage fails THIS job.
-        # Note `latest` has already moved by this point (see the deferred
-        # publication follow-ups in AGENTS.md); a failure here is a loud
-        # after-the-fact alarm, not a promotion gate.
+        # Note that on main `latest` has already moved by this point (see the
+        # deferred publication follow-ups in AGENTS.md); a failure here is a
+        # loud after-the-fact alarm, not a promotion gate. A branch dispatch
+        # promotes nothing, so there it only guards the tag it just pushed.
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
           DIGEST: ${{ steps.push.outputs.digest }}
@@ -550,6 +559,9 @@ jobs:
           sudo ./manifestmv.sh
 
       - name: Upload manifests to R2
+        # main only: manifests describe the published product set, which a
+        # branch dispatch does not represent.
+        if: github.ref == 'refs/heads/main'
         uses: ryand56/r2-upload-action@33ebb7a494b3a8a3c5ed2ea6bbdc72e707090317
         with:
           r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
@@ -560,12 +572,14 @@ jobs:
           destination-dir: manifests/
 
       - name: Record snow tag for release job
-        # The tag travels to the release job because matrix outputs are last-writer-wins.
-        if: matrix.profile == 'snow'
+        # The tag travels to the release job because matrix outputs are
+        # last-writer-wins. main only: a branch dispatch publishes a version tag
+        # but no release.
+        if: github.ref == 'refs/heads/main' && matrix.profile == 'snow'
         run: echo "${{ steps.version.outputs.tag }}" > snow-tag.txt
 
       - name: Upload snow tag artifact
-        if: matrix.profile == 'snow'
+        if: github.ref == 'refs/heads/main' && matrix.profile == 'snow'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: snow-tag

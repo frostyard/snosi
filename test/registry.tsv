@@ -45,6 +45,7 @@ bootc-secure-update-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,va
 bootc-update-test.sh	unwired	-
 bootstrap-mkosi-test.sh	ci	validate.yml
 brew-installer-retry-test.sh	ci	validate.yml
+build-images-branch-dispatch-test.sh	ci	validate.yml
 build-workflow-permissions-test.py	ci	validate.yml
 check-dependencies-workflow-token-test.sh	ci	validate.yml
 check-forky-systemd-test.sh	ci	validate.yml

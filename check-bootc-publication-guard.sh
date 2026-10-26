@@ -93,10 +93,48 @@ else
         ' <<<"$secure_job")
         require_text "$workflow secure-build" "$secure_job" '    environment: native-build'
         require_text "$workflow secure-build permissions" "$secure_job" '      packages: write'
-        require_text "$workflow secure-build condition" "$job_condition" "      github.event_name != 'pull_request' &&"
-        require_text "$workflow secure-build condition" "$job_condition" "      github.ref == 'refs/heads/main'"
-        if grep -Fq '||' <<<"$job_condition"; then
+        # Publication runs on main, and on a workflow_dispatch over any other
+        # branch (a branch-only path that publishes one signed Snow tag and
+        # stops before the main-only side effects gated below). It never runs
+        # for a pull request.
+        require_text "$workflow secure-build condition" "$job_condition" \
+            "      github.event_name != 'pull_request' &&"
+        require_text "$workflow secure-build condition" "$job_condition" \
+            "      (github.ref == 'refs/heads/main' ||"
+        require_text "$workflow secure-build condition" "$job_condition" \
+            "      (github.event_name == 'workflow_dispatch' &&"
+        require_text "$workflow secure-build condition" "$job_condition" \
+            "      startsWith(github.ref, 'refs/heads/')))"
+        if grep -Fq "event_name == 'pull_request'" <<<"$job_condition"; then
             fail_check "$workflow secure-build: publishing condition must not permit pull requests"
+        fi
+        # `||` belongs to exactly one clause, the one that adds the branch
+        # dispatch. Any other disjunction widens publication (to another event,
+        # another ref shape or an unconditional run) without review.
+        if grep -F '||' <<<"$job_condition" |
+                grep -Fqv "      (github.ref == 'refs/heads/main' ||" ; then
+            fail_check "$workflow secure-build: publishing condition must not add another disjunction"
+        fi
+
+        # The matrix is main's four products, or snow alone off main: a branch
+        # dispatch must not build a second product's signed tag.
+        matrix_include=$(grep -F '        include: ' <<<"$secure_job" || true)
+        if [[ $(wc -l <<<"$matrix_include") -ne 1 ]]; then
+            fail_check "$workflow secure-build: expected exactly one matrix include expression"
+        else
+            if ! grep -Fq "        include: \${{ github.ref == 'refs/heads/main' &&" \
+                    <<<"$matrix_include"; then
+                fail_check "$workflow secure-build matrix: main must be an exact condition"
+            fi
+            for product in floe snow snowfield sundog; do
+                if ! grep -Fq "{\"profile\":\"$product\"," <<<"$matrix_include"; then
+                    fail_check "$workflow secure-build matrix: main must build $product"
+                fi
+            done
+            off_main=${matrix_include#*|| }
+            if [[ $off_main != "fromJSON('[{\"profile\":\"snow\",\"description\":\"Snow Linux OS Image\"}]') }}" ]]; then
+                fail_check "$workflow secure-build matrix: a non-main ref must build snow alone"
+            fi
         fi
 
         secrets=(
@@ -254,6 +292,10 @@ EOF
         if ! grep -Fq './shared/bootc-secure/ci/promote-published-image.sh' <<<"$promotion_step"; then
             fail_check "$workflow secure-build: missing authenticated promotion helper call"
         fi
+        # A branch dispatch publishes one immutable version tag and must never
+        # move `latest`.
+        require_text "$workflow secure promotion gate" "$promotion_step" \
+            "        if: github.ref == 'refs/heads/main'"
         # shellcheck disable=SC2016 # Match the literal workflow shell source.
         require_text "$workflow secure promotion auth path" \
             "$promotion_step" '          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"'
@@ -302,14 +344,29 @@ EOF
         capture { print }
     ' "$workflow")
     require_text "$workflow Snow tag record" "$snow_tag_record_step" \
-        "        if: matrix.profile == 'snow'"
+        "        if: github.ref == 'refs/heads/main' && matrix.profile == 'snow'"
     snow_tag_artifact_step=$(awk '
         /^      - name: Upload snow tag artifact$/ { capture=1 }
         capture && /^      - name: / && $0 != "      - name: Upload snow tag artifact" { exit }
         capture { print }
     ' "$workflow")
     require_text "$workflow Snow tag artifact" "$snow_tag_artifact_step" \
-        "        if: matrix.profile == 'snow'"
+        "        if: github.ref == 'refs/heads/main' && matrix.profile == 'snow'"
+
+    # R2 manifests are main-only: a branch dispatch publishes an image tag, not
+    # the repository's published product set.
+    r2_step=$(awk '
+        /^      - name: Upload manifests to R2$/ { capture=1 }
+        capture && /^      - name: / && $0 != "      - name: Upload manifests to R2" { exit }
+        capture { print }
+    ' "$workflow")
+    require_text "$workflow R2 manifest gate" "$r2_step" \
+        "        if: github.ref == 'refs/heads/main'"
+    # A second R2 upload would sit outside the gate above.
+    r2_uploads=$(grep -c 'r2-upload-action@' "$workflow" || true)
+    if [[ $r2_uploads -gt 1 ]]; then
+        fail_check "$workflow: expected at most one R2 upload step"
+    fi
 
     release_job=$(awk '
         /^  release:$/ { capture=1 }
