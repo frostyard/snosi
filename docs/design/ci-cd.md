@@ -41,6 +41,29 @@ SBOM referrer, not an arbitrary tag. Every packaging lane stamps the product's
 `org.frostyard.core-flatpaks` label and checks it on the packaged image
 before any push ([core Flatpak sets](../integration-contracts.md#core-flatpak-sets)).
 
+### Branch-dispatch publication
+
+`workflow_dispatch` on `main` publishes all four products exactly as a push
+does. A dispatch on any other branch exists only to publish one signed Snow
+version tag for a lab lifecycle test: that matrix holds `snow` alone, and
+`latest` promotion, the R2 manifest upload, the snow-tag artifact and the
+release job each stay behind `github.ref == 'refs/heads/main'`. The build,
+secure assembly, artifact validation, the push of the immutable version tag,
+Cosign signing, the SBOM, the provenance attestation and the re-verification
+still run. `test/build-images-branch-dispatch-test.sh` pins this shape.
+
+The version tag is the UTC timestamp to the second. On a non-main ref the
+workflow backdates it by four hours (`date -u -d '-4 hours'`), and the job
+fails immediately before the push when `ghcr.io/frostyard/<profile>:<version>`
+already exists. The backdate keeps the tag out of reach of a later main run: a
+main run that took that earlier second has already pushed the tag, or it was
+killed, and its `timeout-minutes: 180` is shorter than four hours, so it can
+never create that tag afterwards. The existence check fails closed on a
+registry, authentication or tag-list error, because such an error is not proof
+that the tag is free. Without the check a second run would replace the first
+run's immutable tag. The same 14-digit value still flows to the config label,
+the manifest annotation and os-release `IMAGE_VERSION`.
+
 `build-installer-iso.yml` retains the scripts at `shared/native-ab/publish/`
 and the mkosi pin helpers at `shared/native-ab/ci/`. `native` in their names
 and in `isos/native/v1/` does not mean an A/B product. The ISO's published

@@ -203,7 +203,26 @@ jobs:
 
       - name: Generate version tag
         id: version
-        run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
+        # The tag is the UTC timestamp to the second, and it is the immutable
+        # version of the pushed image (label, manifest annotation and os-release
+        # IMAGE_VERSION). A branch dispatch backdates it by four hours: a main
+        # run that took that earlier second has either pushed that tag already
+        # (the existence check below then refuses it), or it was killed, and
+        # `timeout-minutes: 180` is shorter than four hours, so main can never
+        # create that tag afterwards. main always uses "now".
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [[ $REF == 'refs/heads/main' ]]; then
+            tag=$(date +%Y%m%d%H%M%S)
+          else
+            tag=$(date -u -d '-4 hours' +%Y%m%d%H%M%S)
+          fi
+          [[ $tag =~ ^[0-9]{14}$ ]] || {
+            echo "::error::malformed version tag: $tag" >&2
+            exit 1
+          }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: setup-mkosi
         uses: systemd/mkosi@5ca453ab6b1d442c3d31d7f4a60b68352aac3265
@@ -375,6 +394,43 @@ jobs:
           sudo TMPDIR="$TMPDIR" "${SYFT_CMD}" --source-name "${PROFILE}" "output/${PROFILE}" -o "syft-json=${SBOM}"
           du -sh "${SBOM}"
           echo "SBOM=${SBOM}" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse an existing version tag
+        # Branch dispatch only: its backdated tag must be free, or this run
+        # would replace another run's immutable version tag. This fails closed:
+        # a registry, authentication or tag-list error is not proof that the tag
+        # is absent. main keeps its existing behavior.
+        if: github.ref != 'refs/heads/main'
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          VERSION_TAG: ${{ steps.version.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          auth_dir=$(mktemp -d)
+          trap 'rm -rf "$auth_dir"' EXIT
+          auth_file="$auth_dir/config.json"
+          printf '%s' "$GH_TOKEN" |
+            skopeo login --authfile "$auth_file" -u "$GHCR_USER" \
+              --password-stdin ghcr.io || {
+            echo "::error::ghcr.io login failed; cannot prove the tag is free" >&2
+            exit 1
+          }
+          if ! tags=$(skopeo list-tags --authfile "$auth_file" \
+                  "docker://$IMAGE" 2>&1); then
+            echo "::error::cannot list tags for $IMAGE: $tags" >&2
+            exit 1
+          fi
+          jq -e '.Tags | type == "array"' <<<"$tags" >/dev/null || {
+            echo "::error::cannot read the tag list for $IMAGE: $tags" >&2
+            exit 1
+          }
+          if jq -e --arg tag "$VERSION_TAG" 'any(.Tags[]; . == $tag)' \
+                  <<<"$tags" >/dev/null; then
+            echo "::error::$IMAGE:$VERSION_TAG already exists; refusing to replace it" >&2
+            exit 1
+          fi
+          echo "$IMAGE:$VERSION_TAG is free"
 
       - name: Push immutable version tag
         id: push
