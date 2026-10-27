@@ -290,7 +290,7 @@ and checks fresh and previously root-owned Coder homes.
 - `usr/lib/systemd/system/multi-user.target.d/10-incus.conf` — `Upholds=` drop-in for reliable boot activation (sockets + startup + sysext-setup; incus.service itself is socket-activated). `incus-lxcfs.service` is deliberately not upheld: it has `ConditionVirtualization=!container`, and systemd retries an upheld unit with a failed condition forever (snosi#1100). `sysext-upholds-guard.sh` found it (#1113); `incus-sysext-setup.service` `Wants=` it instead (a single clean skip inside a container), and `incus-lxcfs.service` keeps `Restart=on-failure` for crash recovery. `SYSEXT_REVISION=5` republishes the fix at the same incus version
 - `usr/lib/systemd/system/incus-sysext-setup.service` — Oneshot (`RemainAfterExit=yes`) post-merge setup (subuid/subgid); also the upheld unit that `Wants=incus-lxcfs.service`
 - `usr/lib/incus/incus-sysext-setup` — The setup script the service runs
-- `usr/lib/sysusers.d/{dnsmasq,rdma}.conf` — User/group definitions
+- `usr/lib/sysusers.d/rdma.conf` — User/group definition (base owns the dnsmasq user: base ships the same `dnsmasq.conf` path, so an incus copy never shipped)
 - `usr/lib/tmpfiles.d/incus.conf` — Factory config injection + runtime dirs + xz alternatives links
 - `required-paths.txt` pins `libepoxy.so.0`, `libopus.so.0`, `libgstreamer-1.0.so.0` and `libgtk-3.so.0` in addition to the incus payload: the deb bundles its own `/usr/incus/bin/qemu-system-x86_64` (incusd's wrapper puts `/usr/incus/bin` first on `PATH`, so it, not Debian's qemu, is what gets probed) and the delta must carry that binary's GTK3/media closure itself — see "A Sysext Delta Is Only Valid Against the Base It Was Built On"
 
@@ -326,7 +326,9 @@ access for a group member, denial for a nonmember, and existing-GID preservation
 - `usr/lib/systemd/system/multi-user.target.d/10-nix.conf` — `Upholds=nix.mount nix-sysext-setup.service` drop-in for reliable boot activation. `nix-sysext-setup.service` is a `Type=oneshot` + `RemainAfterExit=yes` unit with no Condition (`After=nix.mount`, `Before=` the daemon units) that `Wants=nix-daemon.socket nix-daemon.service`. Upholding the daemon units directly was wrong: both carry `ConditionPathIsReadWrite=/nix/var/nix/daemon-socket`, and systemd retries an upheld unit with a failed condition forever (snosi#1100). `sysext-upholds-guard.sh` found it (#1113). `nix-daemon.service` has no `Restart=`; `nix-daemon.socket` re-activates it on the next connection. `SYSEXT_REVISION=3` republishes the fix at the same nix version
 - `usr/lib/systemd/system/nix-sysext-setup.service` — The upheld activation oneshot described above
 - `usr/lib/sysusers.d/nix.conf` — Nix user/group
-- `usr/lib/tmpfiles.d/nix.conf` — `/nix` hierarchy + factory config injection
+- `usr/lib/tmpfiles.d/nix-sysext.conf` — Root:nixbld 1775 store (`/var/lib/nix/store`) and factory `/etc/nix` copy; base's `nix.conf` keeps the `/var/lib/nix` backing directory
+
+`nixbld` is a group only, never an owner. The sysext file name must not equal a base path: mkosi `Overlay=yes` drops such files from the delta (snosi#1111; `test/sysext-authoring-contract-test.sh` enforces it). `test/nix-state-ownership-test.py` tests the base+sysext composition, retained store outputs and local-config preservation.
 
 ### pilothouse
 - `mkosi.postinst.chroot` — Downloads the frostyard-pilothouse .deb (GitHub release, no apt repo) via `verified_download()`, then uses `shared/download/deb-dependencies.sh` to verify its declared `Depends` against the merged buildroot before `dpkg -i` can mutate it. Runtime dependencies must be explicit in `Packages=` or supplied by the base; everything ships natively under `/usr`, so no relocation is needed
