@@ -60,4 +60,25 @@ with tempfile.TemporaryDirectory() as tmp:
     subprocess.run(["systemd-tmpfiles", f"--root={root}", "--create"], check=True)
     assert item.read_text() == "retain store contents" and item.stat().st_mode & 0o777 == 0o444
     assert (root / "etc/nix/nix.conf").read_text() == "local administrator config\n"
-print("PASS: root-owned multi-user store, factory config, retained outputs and local settings")
+# mkosi.finalize: it deletes Debian's unchanged nix-daemon.conf, and fails on a
+# changed Debian file or on any system tmpfiles rule that targets /nix.
+DEBIAN = ("#Type Path        Mode User Group Age Argument\n"
+          "d     /nix/var/nix/daemon-socket 770 root nix-users\n"
+          "e!    /nix/var/nix/daemon-socket - - - 0\n"
+          "d     /nix/var/nix/gcroots/per-user 1777\n"
+          "d     /nix/var/nix/profiles/per-user 1777\n")
+for debian, extra, ok in ((DEBIAN, None, True),
+                          (DEBIAN.replace("770", "775"), None, False),
+                          (DEBIAN, "d /nix/var/nix/other 0755 - - -\n", False)):
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpfiles = Path(tmp) / "usr/lib/tmpfiles.d"
+        tmpfiles.mkdir(parents=True)
+        (tmpfiles / "nix-daemon.conf").write_text(debian)
+        if extra:
+            (tmpfiles / "other.conf").write_text(extra)
+        result = subprocess.run([str(nix / "mkosi.finalize")], env={**os.environ, "BUILDROOT": tmp},
+                                capture_output=True, text=True)
+        assert (result.returncode == 0) == ok, (debian, extra, result.stderr)
+        if ok:
+            assert not (tmpfiles / "nix-daemon.conf").exists(), "finalize must delete Debian's nix-daemon.conf"
+print("PASS: root-owned multi-user store, socket and per-user dirs on /var/lib/nix, finalize rule check, retained outputs and local settings")
