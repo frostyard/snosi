@@ -23,15 +23,17 @@ for existing in (False, True):
         shutil.copyfile(repo / "mkosi.images/nix/mkosi.extra/usr/lib/sysusers.d/nix.conf", dest / "nix.conf")
         dest = root / "usr/lib/tmpfiles.d"
         dest.mkdir(parents=True)
-        # The access rule shipped by Debian nix-setup-systemd 2.26.3+dfsg-1.
-        (dest / "nix-daemon.conf").write_text("d /nix/var/nix/daemon-socket 770 root nix-users\n")
+        # The real sysext rules: the daemon-socket directory lives in the mount source.
+        shutil.copyfile(repo / "mkosi.images/nix/mkosi.extra/usr/lib/tmpfiles.d/nix-sysext.conf", dest / "nix-sysext.conf")
+        (root / "usr/share/factory/etc/nix").mkdir(parents=True)
+        (root / "usr/share/factory/etc/nix/nix.conf").write_text("")
         subprocess.run(["systemd-sysusers", f"--root={root}"], check=True)
-        subprocess.run(["systemd-tmpfiles", f"--root={root}", "--create", "nix-daemon.conf"], check=True)
+        subprocess.run(["systemd-tmpfiles", f"--root={root}", "--create", "nix-sysext.conf"], check=True)
         group = next(l.split(":") for l in (root / "etc/group").read_text().splitlines() if l.startswith("nix-users:"))
         gid = int(group[2])
         assert gid != 0 and (not existing or gid == 432)
         assert group[3] == "", "client membership must remain an administrator decision"
-        directory = root / "nix/var/nix/daemon-socket"
+        directory = root / "var/lib/nix/var/nix/daemon-socket"
         assert (directory.stat().st_uid, directory.stat().st_gid) == (0, gid)
         assert directory.stat().st_mode & 0o777 == 0o770
         path = str(directory / "socket")

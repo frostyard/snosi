@@ -1,3 +1,6 @@
+# snosi#1164: tmpfiles rules run before this mount (the sysext supplies the
+# unit, so PID 1 loads it only at the last daemon-reload of
+# reload-sysext.service). They must target /var/lib/nix, not /nix.
 [Unit]
 Description=Nix package manager bind mount
 Documentation=man:nix(1)
