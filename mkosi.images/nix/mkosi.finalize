@@ -11,3 +11,49 @@ mkdir -p "$BUILDROOT/usr/share/factory/etc"
 if [ -d "$BUILDROOT/etc/nix" ]; then
     cp --archive --update=none "$BUILDROOT/etc/nix" "$BUILDROOT/usr/share/factory/etc/"
 fi
+
+# snosi#1164: replace Debian's nix-daemon.conf with nix-sysext.conf.
+# Debian's rules create /nix/var/nix/daemon-socket and the per-user
+# directories under /nix. systemd-tmpfiles-setup.service and
+# reload-sysext.service run them before nix.mount, while /nix is an empty
+# directory on the read-only root, so they fail with exit 73 (CANTCREAT).
+# nix-sysext.conf ships the same rules for the mount source /var/lib/nix.
+# Fail if Debian changed the file, so that the change is ported by hand.
+debian_conf="$BUILDROOT/usr/lib/tmpfiles.d/nix-daemon.conf"
+expected_rules='d /nix/var/nix/daemon-socket 770 root nix-users
+e! /nix/var/nix/daemon-socket - - - 0
+d /nix/var/nix/gcroots/per-user 1777
+d /nix/var/nix/profiles/per-user 1777'
+
+if [ -e "$debian_conf" ]; then
+    actual_rules="$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$debian_conf" |
+        { grep -v -e '^#' -e '^$' || true; } |
+        sed -e 's/[[:space:]][[:space:]]*/ /g')"
+    if [ "$actual_rules" != "$expected_rules" ]; then
+        echo "nix finalize: Debian changed /usr/lib/tmpfiles.d/nix-daemon.conf (snosi#1164)." >&2
+        echo "Port the change to mkosi.extra/usr/lib/tmpfiles.d/nix-sysext.conf, then update expected_rules here." >&2
+        echo "Expected rules:" >&2
+        printf '%s\n' "$expected_rules" | sed -e 's/^/  /' >&2
+        echo "Actual rules:" >&2
+        printf '%s\n' "$actual_rules" | sed -e 's/^/  /' >&2
+        exit 1
+    fi
+    rm -f "$debian_conf"
+fi
+
+# No tmpfiles.d rule may target /nix: it is an empty directory on the
+# read-only root until nix.mount binds /var/lib/nix over it.
+bad_rules=""
+for f in "$BUILDROOT"/usr/lib/tmpfiles.d/*.conf; do
+    [ -e "$f" ] || continue
+    found="$(awk '$1 !~ /^#/ && $2 ~ /^\/nix(\/|$)/ { print FILENAME ": " $0 }' "$f")"
+    if [ -n "$found" ]; then
+        bad_rules="$bad_rules$found
+"
+    fi
+done
+if [ -n "$bad_rules" ]; then
+    echo "nix finalize: tmpfiles.d rules must target /var/lib/nix, not /nix (snosi#1164):" >&2
+    printf '%s' "$bad_rules" >&2
+    exit 1
+fi
