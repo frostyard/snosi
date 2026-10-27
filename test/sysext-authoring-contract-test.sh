@@ -49,6 +49,16 @@ validate_inventory() {
             validation_error "$name: required-paths.txt has no path entries"
         fi
 
+        # mkosi Overlay=yes removes every sysext path that also exists in base,
+        # so such a file never reaches the delta (snosi#1111).
+        while IFS= read -r file; do
+            remainder=${file#"mkosi.images/$name/mkosi.extra/"}
+            if git -C "$root" ls-files --error-unmatch -- \
+                "mkosi.images/base/mkosi.extra/$remainder" >/dev/null 2>&1; then
+                validation_error "$name: $remainder also exists in base; mkosi drops the sysext copy (snosi#1111)"
+            fi
+        done < <(git -C "$root" ls-files -- "mkosi.images/$name/mkosi.extra/")
+
         mapfile -t key_packages < <(
             grep -E '^[[:space:]]*Environment=' "$config_path" |
                 grep -Eo 'KEYPACKAGE=[^[:space:],]+' || true
@@ -238,6 +248,13 @@ run_negative_fixture() {
             sed -i '/^[[:space:]]*zstd$/d' "$root/mkosi.images/base/mkosi.conf"
             git -C "$root" add mkosi.images/base/mkosi.conf
             ;;
+        base-path-collision)
+            mkdir -p "$root/mkosi.images/fixture/mkosi.extra/usr/lib/tmpfiles.d" \
+                "$metadata_dir/tmpfiles.d"
+            printf 'd /x\n' >"$root/mkosi.images/fixture/mkosi.extra/usr/lib/tmpfiles.d/x.conf"
+            printf 'd /x\n' >"$metadata_dir/tmpfiles.d/x.conf"
+            git -C "$root" add -A
+            ;;
         orphan-metadata)
             mkdir -p "$metadata_dir/sysupdate.orphan.d"
             printf '[Feature]\nDescription=Orphan\n' \
@@ -291,6 +308,7 @@ run_negative_fixture unsigned-transfer "transfer must set Verify=true"
 run_negative_fixture orphan-metadata "orphan component-scoped sysext metadata"
 run_negative_fixture uncompressed-output "must set CompressOutput=zstd"
 run_negative_fixture base-without-zstd "must list the zstd package"
+run_negative_fixture base-path-collision "mkosi drops the sysext copy"
 
 # A GdkPixbuf loaders.cache is authoritative for the whole merged /usr. Prove
 # the shared finalizer accepts a cache that registers SVG and rejects both

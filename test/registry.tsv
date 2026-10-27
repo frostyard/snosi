@@ -70,6 +70,7 @@ latest-apt-version-test.sh	ci	validate.yml
 lemonade-sysext-test.sh	ci	validate.yml
 native-iso-boot-smoke-test.sh	ci	build-installer-iso.yml
 nix-client-group-test.py	ci	validate.yml
+nix-state-ownership-test.py	ci	validate.yml
 nfs-system-accounts-test.sh	ci	validate.yml
 no-nbc-test.sh	ci	validate.yml
 no-private-keys-test.sh	ci	validate.yml
