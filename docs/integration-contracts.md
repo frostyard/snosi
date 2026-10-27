@@ -17,7 +17,7 @@ before changing an interface.
 | `frostyard-updex` deb | Base sysext `.feature`/`.transfer` registrations, chairlift and Pilothouse | Per-component systemd-sysupdate discovery and Updex's CLI/Go SDK schema; keep the component-capable release ahead of clients. |
 | `frostyard-chairlift` / `snow-first-setup` debs | Snow/Snowfield package set | Desktop feature UI and setup functionality; the retired native OS firstboot backend does not ship. |
 | Pilothouse deb | Optional `pilothouse` sysext | Broker probes Updex and container backends independently; absent endpoints must not prevent startup. |
-| frostyard/apt-publisher | Snosi APT sandbox (`frostyard.sources`) | Signed `trixie` indexes under `https://repository.frostyard.org/debian/`, signed with the same `frostyard.gpg` key; a `build` dispatch to Snosi after each publication from a producer that notifies it. |
+| frostyard/apt-publisher | Snosi APT sandbox (`frostyard.sources`) | Signed `trixie` indexes (components `main` and `image`) under `https://repository.frostyard.org/debian/`, signed with the same `frostyard.gpg` key; a `build` dispatch to Snosi after each publication from a producer that notifies it. |
 | repogen | Sysext transfers | Per-component `SHA256SUMS.gpg` and versioned EROFS filenames under `ext/<component>/`. |
 | Snosi ISO publisher | Firn download and `workers/native-installer-redirect/` | Signed `isos/native/v1/SHA256SUMS` and detached signature; Worker reads the index and redirects to the named immutable ISO. |
 
@@ -131,8 +131,14 @@ only `just firn-flatpak-seed`. The `snow-first-setup` package's own
 ## Public repository and ISO signing
 
 frostyard/apt-publisher publishes signed Frostyard APT indexes under
-`debian/dists/<codename>/`; Snosi reads `trixie`
-([core ADR-0055](https://github.com/frostyard/core/blob/main/docs/adr/0055-publish-debian-packages-through-the-apt-publisher.md)).
+`debian/dists/<codename>/`; Snosi reads the `main` and `image` components of
+`trixie`
+([core ADR-0055](https://github.com/frostyard/core/blob/main/docs/adr/0055-publish-debian-packages-through-the-apt-publisher.md),
+[ADR-0059](https://github.com/frostyard/core/blob/main/docs/adr/0059-publish-image-only-packages-in-a-separate-apt-component.md)).
+`image` holds Frostyard image-only builds; it is empty until ADR-0059 step 5
+moves `bootc`, `libostree-1-1` and `incus*` into it. Only the build sandbox
+(`frostyard.sources`) enables it; installed images carry no Frostyard APT
+source.
 The legacy `dists/stable/` suite is frozen. Repogen publishes signed sysext
 metadata under `ext/<component>/`. Sysext object names follow
 `<name>_<version>_<os-version>_<arch>.raw.zst`; feature/transfer discovery

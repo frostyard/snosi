@@ -208,6 +208,11 @@ jobs:
         # (ADR-0020), so one down repository cannot fail every build.
         run: ./test/third-party-apt-source-scope-test.sh
 
+      - name: Validate Frostyard APT image component
+        # Static guard: the build sandbox lists `main image` (frostyard/core
+        # ADR-0059) and no other tracked APT source names the Frostyard repo.
+        run: ./test/frostyard-apt-image-component-test.sh
+
       - name: Validate sysext authoring inventory
         # Discover every tracked Overlay=yes image and reject missing manifests,
         # package identity, finalizers, update metadata, or orphan metadata.

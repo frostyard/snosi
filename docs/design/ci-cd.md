@@ -21,6 +21,10 @@ workflows are documented only in
 Neither OCI workflow passes `--sandbox-tree=shared/himmelblau/sandbox`, so
 himmelblau's third-party APT source never reaches an image build
 ([ADR-0020](../adr/0020-scope-third-party-apt-sources.md)).
+The `mechanics-build` job also runs `test/frostyard-apt-image-component-test.sh
+--live` on each built image: it checks that the image ships no Frostyard APT
+source and that `apt-get update` against the live repository, with only the
+sandbox `frostyard.sources` (`main image`, core ADR-0059), prints no warning.
 Protected assembly obtains signing credentials through transient mode-0600
 runner files. The supplied MOK certificate and derived PCR public key must
 match `shared/native-ab/keys/mok-2026.crt` and

@@ -1,7 +1,9 @@
+# Build sandbox only; installed images ship no Frostyard APT source. `image`
+# holds image-only builds (core ADR-0059).
 Types: deb
 URIs: https://repository.frostyard.org/debian/
 Suites: trixie
-Components: main
+Components: main image
 Architectures: all amd64
 Enabled: yes
 Signed-By: /etc/apt/keyrings/frostyard.gpg
