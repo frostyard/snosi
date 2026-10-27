@@ -138,17 +138,26 @@ except OSError as err:
     bad(f"cannot read {sandbox_rel}: {err}")
 
 if text is not None:
-    stanzas, current = [], {}
+    stanzas, current, last = [], {}, None
     for line in text.splitlines():
         if not line.strip():
             if current:
                 stanzas.append(current)
-                current = {}
-        elif line.lstrip().startswith("#"):
+                current, last = {}, None
+        elif line.startswith("#"):
             continue
-        elif ":" in line and not line[0].isspace():
+        elif line[0].isspace():
+            # deb822 continuation: APT folds it into the previous field.
+            if last is None:
+                bad(f"{sandbox_rel}: continuation line with no field: {line!r}")
+            else:
+                current[last] = f"{current[last]} {line.strip()}".strip()
+        elif ":" in line:
             key, _, value = line.partition(":")
-            current[key.strip()] = value.strip()
+            last = key.strip()
+            current[last] = value.strip()
+        else:
+            bad(f"{sandbox_rel}: line is not a deb822 field: {line!r}")
     if current:
         stanzas.append(current)
     if len(stanzas) != 1:
@@ -255,6 +264,7 @@ FIX
     expect "Components: main image" pass "$(mkfixture ok 'main image')"
     expect "Components: main only" reject "$(mkfixture main-only 'main')" "Components is 'main'"
     expect "Components: main image bogus" reject "$(mkfixture bogus 'main image bogus')" "Components is 'main image bogus'"
+    expect "a continuation line that adds bogus" reject "$(mkfixture continued $'main image\n bogus')" "Components is 'main image bogus'"
     local dir
     dir=$(mkfixture shipped 'main image')
     mkdir -p "$dir/shared/x/tree/etc/apt/sources.list.d"
