@@ -703,6 +703,15 @@ jobs:
             "containers-storage:$IMAGE:${{ steps.version.outputs.tag }}" \
             "${{ steps.version.outputs.tag }}"
 
+      - name: Check Frostyard APT image component
+        # The build sandbox enables the `image` component (frostyard/core
+        # ADR-0059); the image itself must ship no Frostyard APT source.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo ./test/frostyard-apt-image-component-test.sh \
+            --live "$IMAGE:${{ steps.version.outputs.tag }}"
+
       - name: Smoke test - verify SUID bit and bcvk requirements
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}

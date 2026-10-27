@@ -60,6 +60,7 @@ firn-catalog-test.sh	ci	validate.yml
 firn-gui-scope-test.sh	ci	validate.yml
 firn-installer-iso-test.sh	ci	validate.yml
 firn-installer-ui-boot-test.sh	ci	build-installer-iso.yml
+frostyard-apt-image-component-test.sh	ci	build-images.yml,validate.yml
 gdm-autologin-scope-test.sh	ci	validate.yml
 geoclue-state-scope-test.py	ci	validate.yml
 image-version-annotation-test.sh	ci	validate.yml

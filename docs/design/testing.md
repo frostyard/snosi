@@ -63,6 +63,12 @@ login key (`AutomaticLogin`, `TimedLogin`) on a line that is not a comment,
 with or without an `=`. The retired live-ISO
 `shared/snow/tree/etc/gdm3/daemon.conf` set `AutomaticLogin=snow`; the Firn
 installer creates the only user an installed system has.
+`test/frostyard-apt-image-component-test.sh` keeps the Frostyard `image` APT
+component (core ADR-0059) in the build sandbox only: `frostyard.sources` must
+list exactly `main image`, and no other tracked APT source may name
+`repository.frostyard.org`; its `--live IMAGE_REF` mode (root, podman, network;
+run by `mechanics-build`) runs `apt-get update --error-on=any` with that source
+and rejects any `W:` or `E:` line.
 
 `build-installer-iso.yml` boots each candidate ISO before promotion.
 `test/native-iso-boot-smoke-test.sh` boots the default entry with no display
