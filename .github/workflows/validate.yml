@@ -381,6 +381,9 @@ jobs:
       - name: Test order account provisioning
         run: sudo python3 ./test/sysext-account-order-test.py
 
+      - name: Test post-merge tmpfiles failure keeps the reload
+        run: sudo python3 ./test/reload-sysext-tmpfiles-test.py
+
       - name: Test Podman socket policy migration
         run: python3 ./test/podman-socket-policy-test.py
 
