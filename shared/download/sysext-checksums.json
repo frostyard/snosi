@@ -20,9 +20,9 @@
     "version": "1.18.2"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_156.0.4314.42-1_amd64.deb",
-    "sha256": "a8642f829e105fe7a4ac440548e6fa7eb726b49fff8ffc6a27f3d0fb25a5b405",
-    "version": "156.0.4314.42-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_156.0.4314.50-1_amd64.deb",
+    "sha256": "0d0bc6303a8b935424e20afa7116c61dd7e7ccbca249c3cf49803ae343eacf8d",
+    "version": "156.0.4314.50-1"
   },
   "code-server": {
     "url": "https://github.com/coder/code-server/releases/download/v4.143.1/code-server_4.143.1_amd64.deb",
@@ -30,19 +30,19 @@
     "version": "4.143.1"
   },
   "coder": {
-    "url": "https://github.com/coder/coder/releases/download/v2.37.6/coder_2.37.6_linux_amd64.deb",
-    "sha256": "53bdeb1e3df5a2e2c427af7b036532f5abfb3ad604da9d5342c2ebd5ea85aac7",
-    "version": "2.37.6"
+    "url": "https://github.com/coder/coder/releases/download/v2.37.7/coder_2.37.7_linux_amd64.deb",
+    "sha256": "f228cc949903a46f80be19a07e92a113d2054e1060f1b92b6b33373b3853657d",
+    "version": "2.37.7"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.32/GitHub-Copilot-linux-x64.deb",
-    "sha256": "6ce7e018f8dd9f84e029b9d81eeb5f05deaef23d54f962a1074b77891bff5415",
-    "version": "1.1.32"
+    "url": "https://github.com/github/app/releases/download/v1.1.33/GitHub-Copilot-linux-x64.deb",
+    "sha256": "56d51c6eba14e285bff0bd98ae3f7d6538dee544f4b67cf213ade5d3c15805e4",
+    "version": "1.1.33"
   },
   "gitdesktop": {
-    "url": "https://github.com/theBGuy/GitDesktop/releases/download/v0.13.6/GitDesktop_0.13.6_amd64.deb",
-    "sha256": "ad06ce3e4ca4620100a3dc73bf016108f25e51af6902db76ad8e35fbaf0a5a5c",
-    "version": "0.13.6"
+    "url": "https://github.com/theBGuy/GitDesktop/releases/download/v0.13.7/GitDesktop_0.13.7_amd64.deb",
+    "sha256": "6033d22bb70ed61907b61b6b08d0a0d5871851aafe5840cb85b5d4afa59f063a",
+    "version": "0.13.7"
   },
   "k3s": {
     "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.5%2Bk3s1/k3s",
