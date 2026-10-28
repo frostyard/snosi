@@ -398,7 +398,7 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 - The deb ships `notesd`, `notesctl`, `frostnotes.service`, `frostnotes-lodge.socket`, `usr/lib/sysusers.d/frostnotes.conf` (user `frostnotes` and the groups `lodge` and `lodge-apps`, so the socket starts without Lodge's own sysext) and the Lodge app under `/usr/share/lodge/apps/notes/` (`app.json`, `web/`). Lodge itself is a separate component and is not part of this sysext
 - `usr/lib/systemd/system-preset/40-notesd.preset` — Enables `frostnotes-lodge.socket` and `frostnotes.service`
 - `usr/lib/systemd/system/multi-user.target.d/10-notesd.conf` — `Upholds=frostnotes-lodge.socket frostnotes.service` (core ADR-0063). Neither unit has a `Condition*=`
-- `usr/lib/extension-release.d/extension-release.notesd` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext refresh` reloads PID 1 and PID 1 sees the new and changed unit files. An update still takes effect at the next boot, when `reload-sysext.service` runs `systemd-sysusers` and `systemd-tmpfiles` first; a first enable without a reboot needs those 2 commands and a start of the units by hand (core ADR-0058). mkosi keeps the keys of a shipped file and only adds the missing ones (`ID`, `SYSEXT_ID`, `SYSEXT_SCOPE`, `ARCHITECTURE`, ...) after the extra trees and the postinst
+- `usr/lib/extension-release.d/extension-release.notesd` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext refresh` reloads PID 1 and PID 1 sees the new and changed unit files. When an update takes effect depends on the refresh: see [When a sysext update takes effect](#when-a-sysext-update-takes-effect). mkosi keeps the keys of a shipped file and only adds the missing ones (`ID`, `SYSEXT_ID`, `SYSEXT_SCOPE`, `ARCHITECTURE`, ...) after the extra trees and the postinst
 - `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.notesd.d/notesd.transfer` has no `RequisiteFeatures=`: core ADR-0058 keeps every suite transfer free of it, and each app's own documentation says to enable `lodge` first. ADR-0058 gave updex#455 (no enforcement) as its reason; updex 2.1.1 and later enforce `RequisiteFeatures=` as an AND gate, so adding it now needs a core decision that amends ADR-0058 first
 
 ### maild
@@ -582,7 +582,8 @@ has only disabled features. Manual `systemd-sysupdate` runs stay available.
 enables the timer on every image, and a fresh install runs it from its first
 boot. The units stage only: the service runs
 `/usr/bin/updex features update --no-refresh`. That run downloads, verifies
-and links a revision, and the revision takes effect at the next boot. Nothing
+and links a revision, and the revision takes effect at the next boot (see
+[When a sysext update takes effect](#when-a-sysext-update-takes-effect)). Nothing
 reboots the machine. The timer runs every 6 hours
 (`OnCalendar=*-*-* 00/6:00:00`) with a 1 hour random delay
 (`RandomizedDelaySec=3600s`), catches up after downtime (`Persistent=true`)
@@ -615,9 +616,9 @@ the rejected version and links the next newer one when it is published.
 
 **Status.** `updex features check` and `updex features list` show, per
 transfer, the merged version (`RUNNING`) and the linked version (`LINKED`,
-which the next boot merges); `features check` also shows the newest available
-version. `LINKED` different from `RUNNING` means an update waits for a
-reboot. `updex daemon status` shows
+which the next live refresh or boot merges); `features check` also shows the
+newest available version. `LINKED` different from `RUNNING` means an update
+waits for a live refresh or a reboot. `updex daemon status` shows
 whether the timer is enabled, its next run and the last result;
 `journalctl -u updex-update.service` shows the runs.
 
@@ -627,10 +628,48 @@ base change, set `UPDEX_MIN_IMAGE_VERSION=<14-digit IMAGE_VERSION>` in its
 the `IMAGE_VERSION` of the image that boots next: the staged deployment when
 `bootc status` reports one, else the booted image. When that image is older,
 updex keeps the old link and reports `needs image >= <value>`; a host with a
-new enough staged image takes the revision before it reboots. Not used yet: before the first use, confirm that published images
+new enough staged image links the revision before it reboots. When the running
+image is also new enough, a live refresh can merge the revision at once. When the
+running image is older than `<value>`, updex skips the live refresh and warns
+`refresh skipped: <component> needs image >= <value> (running image
+<running>); it takes effect at the next boot`. Not used yet: before the first use, confirm that published images
 carry the OCI manifest annotation `org.opencontainers.image.version`
 (frostyard/snosi#1126). Without that annotation every host with a staged
 image update refuses the revision until it reboots.
+
+### When a sysext update takes effect
+
+updex first links a new revision. The revision takes effect when
+`systemd-sysext` merges it: at once by a live refresh, or at the next boot.
+
+- **Live refresh.** An interactive `sudo updex features update` (without
+  `--no-refresh`) refreshes after it links, and the new files are merged into
+  `/usr` at once. With updex 2.1.3 and later
+  ([updex ADR-0019](https://github.com/frostyard/updex/blob/main/docs/adr/0019-apply-merged-sysusers-and-tmpfiles-on-a-live-refresh.md)),
+  updex runs `systemd-sysext refresh --no-reload`, then
+  `systemd-sysusers` and `systemd-tmpfiles --create --graceful`, then a second
+  refresh that reloads PID 1 (`EXTENSION_RELOAD_MANAGER=1`). A unit that the
+  reload starts, for example through `Upholds=`, finds its accounts and paths,
+  as at boot. `updex features enable <name> --now`, `disable --now` and
+  `rollback --now` use the same refresh, so a first enable needs no reboot.
+  Older updex reloaded PID 1 before any `systemd-sysusers` run.
+- **Running daemons.** The reload loads the new unit files but restarts no
+  running unit: no suite sysext sets `EXTENSION_RESTART_UNITS=`. A daemon that
+  runs during the refresh keeps its old binary until it restarts. Run
+  `systemctl restart <unit>`, or reboot, to run the new version. A unit that
+  the reload starts runs the new binary.
+- **Next boot.** `updex features update --no-refresh`, the
+  `updex-update.timer` run (it uses `--no-refresh`) and a run that warns
+  `refresh skipped: …; it takes effect at the next boot` only link the
+  revision. updex skips the refresh when it cannot confirm that the running
+  image meets the `UPDEX_MIN_IMAGE_VERSION` of a linked revision. The next boot
+  merges the revision, and `reload-sysext.service` runs `systemd-sysusers` and
+  `systemd-tmpfiles` before its `daemon-reload`.
+- **By hand.** A plain `systemd-sysext refresh` keeps the old order: it
+  reloads PID 1 before the accounts exist. Then run `systemd-sysusers` and
+  `systemd-tmpfiles --create`, and start the units by hand (core ADR-0058). A
+  unit that hit its start limit in a failed refresh needs
+  `systemctl reset-failed <unit>` first.
 
 ### Transfer file (`<name>.transfer`)
 
