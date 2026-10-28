@@ -10,8 +10,9 @@ import tempfile
 repo = Path(__file__).resolve().parents[1]
 assert os.geteuid() == 0, "run with sudo python3"
 unit = repo / "mkosi.images/base/mkosi.extra/usr/lib/systemd/system/reload-sysext.service"
-commands = [shlex.split(line.split("=", 1)[1]) for line in unit.read_text().splitlines()
-            if line.startswith("ExecStart=systemd-")]
+commands = [shlex.split(line.split("=", 1)[1].lstrip("-@:+!"))
+            for line in unit.read_text().splitlines() if line.startswith("ExecStart=")]
+commands = [c for c in commands if c[0] in ("systemd-sysusers", "systemd-tmpfiles")]
 assert {c[0] for c in commands} == {"systemd-sysusers", "systemd-tmpfiles"}
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)

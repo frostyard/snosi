@@ -12,7 +12,9 @@ ConditionDirectoryNotEmpty=|/.extra/sysext
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=systemd-sysusers --no-pager
-ExecStart=systemd-tmpfiles --create --graceful --no-pager
+# A failing rule in any merged sysext must not skip the daemon-reload for every
+# sysext (snosi#1167). tmpfiles logs each failing rule to the journal.
+ExecStart=-systemd-tmpfiles --create --graceful --no-pager
 # Reapply only reviewed resource limits from the merged effective config.
 # In particular, DO NOT apply Incus's AppArmor restriction relaxation.
 # --prefix retains sysctl.d ordering, same-name masks and /etc overrides.
