@@ -112,7 +112,7 @@ and [testing](testing.md).
 
 ## Dependency and maintenance workflows
 
-`check-dependencies.yml` checks pinned direct downloads and image-tool pins;
+`check-dependencies.yml` checks pinned direct downloads and image-tool pins (a pinned first-party `.deb` with `attestation` metadata, notesd and maild, is pinned only after `shared/download/verify-attestations.sh` passes on the candidate, and `build.yml` runs the same script before `Build main and sysexts`; ADR-0024);
 `check-packages.yml` opens PRs for external APT package changes and a
 separate Forky systemd source-version sentinel in
 `shared/download/forky-versions.json`. A Forky change requires repeating

@@ -92,6 +92,7 @@ secure-vm-fixture-test.sh	ci	validate.yml
 snosi-etc-diff-test.sh	ci	validate.yml
 snosi-kargs-test.sh	ci	validate.yml
 socat-package-test.sh	ci	validate.yml
+suite-sysexts-test.sh	ci	validate.yml
 sundog-profile-test.sh	ci	validate.yml
 sunshine-capabilities-test.sh	ci	validate.yml
 sunshine-package-dependencies-test.sh	ci	validate.yml
@@ -113,6 +114,7 @@ update-notify-units-test.sh	ci	validate.yml
 updex-timer-guard-test.sh	ci	validate.yml
 upholds-guard-test.sh	ci	validate.yml
 verified-download-split-checksums-test.sh	ci	validate.yml
+verify-attestations-test.sh	ci	validate.yml
 verify-installer-redirect-test.sh	ci	validate.yml
 wifi-backend-test.sh	ci	validate.yml
 workflow-path-filter-test.sh	ci	validate.yml

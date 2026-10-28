@@ -156,9 +156,14 @@ change must set `UPDEX_MIN_IMAGE_VERSION`; see
 [docs/design/sysexts.md](docs/design/sysexts.md#automatic-sysext-updates-updex-update-timer).
 
 `.github/workflows/build.yml` publishes sysexts; `build-images.yml` publishes
-signed OCI images by immutable digest before promoting `latest`. Published
-images carry `org.opencontainers.image.version` as both a config label and a
-manifest annotation equal to os-release `IMAGE_VERSION`; bootc reads the
+signed OCI images by immutable digest before promoting `latest`. The
+first-party sysexts `notesd` and `maild` pin attested `.deb` files;
+`shared/download/verify-attestations.sh` checks their GitHub build-provenance
+attestation at pin time and in every `build.yml` run
+([ADR-0024](docs/adr/0024-verify-attestations-of-first-party-sysext-debs.md)).
+maild's `frostmail-secrets-key.service` stays out of `Upholds=` and its preset.
+Published images carry `org.opencontainers.image.version` as both a config
+label and a manifest annotation equal to os-release `IMAGE_VERSION`; bootc reads the
 annotation.
 `build-installer-iso.yml` builds and signed-index-publishes the Firn ISO to
 `isos/native/v1/`. `deploy-native-installer-redirect.yml` deploys the

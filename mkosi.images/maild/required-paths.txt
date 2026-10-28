@@ -1,0 +1,17 @@
+# maild sysext: installed via verified_download + dpkg -i in postinst
+/usr/bin/maild
+/usr/bin/mailctl
+/usr/lib/systemd/system/frostmail.service
+/usr/lib/systemd/system/frostmail.socket
+# Pulled by frostmail.service with Requires=/After=; never upheld, never enabled
+/usr/lib/systemd/system/frostmail-secrets-key.service
+/usr/libexec/frostmail/make-secrets-key
+# Deb-shipped sysusers fragment (creates the frostmail user and the lodge groups at boot)
+/usr/lib/sysusers.d/frostmail.conf
+# Lodge app manifest and web build (lodge discovers apps under /usr/share/lodge/apps)
+/usr/share/lodge/apps/mail/app.json
+/usr/share/lodge/apps/mail/web/index.html
+# Boot-time activation and manager reload
+/usr/lib/systemd/system-preset/40-maild.preset
+/usr/lib/systemd/system/multi-user.target.d/10-maild.conf
+/usr/lib/extension-release.d/extension-release.maild

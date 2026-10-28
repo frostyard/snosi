@@ -166,6 +166,24 @@ jobs:
             echo "pilothouse_version=$LATEST_PH" >> $GITHUB_OUTPUT
           fi
 
+          # Check notesd (Frostnotes notes daemon; first-party release, GitHub-attested)
+          CURRENT_NOTESD=$(jq -r '.notesd.version' "$CHECKSUMS")
+          LATEST_NOTESD=$(gh_api https://api.github.com/repos/frostyard/frostnotes/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_NOTESD" && "$LATEST_NOTESD" != "null" ]] && ver_gt "$LATEST_NOTESD" "$CURRENT_NOTESD"; then
+            UPDATES="${UPDATES}notesd: $CURRENT_NOTESD -> $LATEST_NOTESD\n"
+            echo "notesd_update=true" >> "$GITHUB_OUTPUT"
+            echo "notesd_version=$LATEST_NOTESD" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check maild (Frostmail mail engine; first-party release, GitHub-attested)
+          CURRENT_MAILD=$(jq -r '.maild.version' "$CHECKSUMS")
+          LATEST_MAILD=$(gh_api https://api.github.com/repos/frostyard/frostmail/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_MAILD" && "$LATEST_MAILD" != "null" ]] && ver_gt "$LATEST_MAILD" "$CURRENT_MAILD"; then
+            UPDATES="${UPDATES}maild: $CURRENT_MAILD -> $LATEST_MAILD\n"
+            echo "maild_update=true" >> "$GITHUB_OUTPUT"
+            echo "maild_version=$LATEST_MAILD" >> "$GITHUB_OUTPUT"
+          fi
+
           # Check Microsoft Edge Stable
           CURRENT_EDGE=$(jq -r '.["microsoft-edge-stable"].version' "$CHECKSUMS")
           LATEST_EDGE=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
@@ -194,6 +212,7 @@ jobs:
           fi
 
       - name: Update sysext checksums
+        id: update
         if: steps.check.outputs.has_updates == 'true'
         # Step outputs derive from external release/commit data; passing them
         # through env (rather than inline ${{ }} interpolation in the script)
@@ -223,12 +242,53 @@ jobs:
           PASEO_VERSION: ${{ steps.check.outputs.paseo_version }}
           PILOTHOUSE_UPDATE: ${{ steps.check.outputs.pilothouse_update }}
           PILOTHOUSE_VERSION: ${{ steps.check.outputs.pilothouse_version }}
+          NOTESD_UPDATE: ${{ steps.check.outputs.notesd_update }}
+          NOTESD_VERSION: ${{ steps.check.outputs.notesd_version }}
+          MAILD_UPDATE: ${{ steps.check.outputs.maild_update }}
+          MAILD_VERSION: ${{ steps.check.outputs.maild_version }}
           EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
           EDGE_VERSION: ${{ steps.check.outputs.edge_version }}
           ONEPASSWORD_UPDATE: ${{ steps.check.outputs.onepassword_update }}
           ONEPASSWORD_VERSION: ${{ steps.check.outputs.onepassword_version }}
+          # verify-attestations.sh runs `gh attestation verify` (ADR-0024).
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           CHECKSUMS="shared/download/sysext-checksums.json"
+          ATTESTATION_FAILED=""
+
+          # Pin a first-party release that has attestation metadata (notesd,
+          # maild) only when its GitHub build-provenance attestation verifies
+          # (ADR-0024). The candidate pin (URL, SHA-256 of the download, version;
+          # `.attestation` is kept) goes into a temporary copy of the checksums
+          # file. verify-attestations.sh checks that copy, and the copy replaces
+          # the real file only when the check passes. On failure nothing is
+          # pinned, the key is recorded, and the final step fails the job after
+          # the PR step, so the other updates still get their PR.
+          pin_attested() {
+            local key="$1" ver="$2" url="$3" tmp cand sha
+            if [[ ! "$ver" =~ ^[0-9][0-9A-Za-z.+~-]*$ ]]; then
+              echo "::error::Refusing the ${key} release: its tag is not a plain version"
+              ATTESTATION_FAILED="${ATTESTATION_FAILED}${key} "
+              return 0
+            fi
+            tmp=$(mktemp)
+            cand=$(mktemp)
+            if curl -fsSL --max-time 120 --retry 3 -o "$tmp" "$url"; then
+              sha=$(sha256sum "$tmp" | cut -d' ' -f1)
+              jq --arg k "$key" --arg u "$url" --arg s "$sha" --arg v "$ver" \
+                '.[$k].url=$u | .[$k].sha256=$s | .[$k].version=$v' \
+                "$CHECKSUMS" > "$cand"
+              if CHECKSUMS_FILE="$cand" ./shared/download/verify-attestations.sh "$key"; then
+                mv "$cand" "$CHECKSUMS"
+                echo "Pinned ${key} ${ver}"
+                rm -f "$tmp" "$cand"
+                return 0
+              fi
+            fi
+            echo "::error::${key} ${ver} is not pinned: its download or its GitHub build-provenance attestation did not verify"
+            ATTESTATION_FAILED="${ATTESTATION_FAILED}${key} "
+            rm -f "$tmp" "$cand"
+          }
 
           if [[ "$BITWARDEN_UPDATE" == "true" ]]; then
             VER="$BITWARDEN_VERSION"
@@ -380,6 +440,16 @@ jobs:
             rm -f "$TMP"
           fi
 
+          if [[ "$NOTESD_UPDATE" == "true" ]]; then
+            pin_attested notesd "$NOTESD_VERSION" \
+              "https://github.com/frostyard/frostnotes/releases/download/v${NOTESD_VERSION}/frostyard-notesd_${NOTESD_VERSION}_amd64.deb"
+          fi
+
+          if [[ "$MAILD_UPDATE" == "true" ]]; then
+            pin_attested maild "$MAILD_VERSION" \
+              "https://github.com/frostyard/frostmail/releases/download/v${MAILD_VERSION}/frostyard-maild_${MAILD_VERSION}_amd64.deb"
+          fi
+
           if [[ "$EDGE_UPDATE" == "true" ]]; then
             VER="$EDGE_VERSION"
             URL="https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_${VER}_amd64.deb"
@@ -404,6 +474,9 @@ jobs:
             rm -f "$TMP"
           fi
 
+          # Key names only: the final step fails the job from this output.
+          echo "attestation_failed=${ATTESTATION_FAILED% }" >> "$GITHUB_OUTPUT"
+
       - name: Create sysext dependency PR
         if: steps.check.outputs.has_updates == 'true'
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
@@ -424,6 +497,16 @@ jobs:
             **Please verify the sysext build works before merging.**
           branch: auto-update-sysext-checksums
           delete-branch: true
+
+      - name: Fail when an attestation did not verify
+        # Runs after the PR step, so a failed attestation holds back only its
+        # own pin while the other updates still get their PR (ADR-0024).
+        if: ${{ !cancelled() && steps.update.outputs.attestation_failed != '' }}
+        env:
+          ATTESTATION_FAILED: ${{ steps.update.outputs.attestation_failed }}
+        run: |
+          echo "::error::No pin for: ${ATTESTATION_FAILED}. Check their GitHub build-provenance attestations."
+          exit 1
 
   check-image-updates:
     name: Check image dependency updates

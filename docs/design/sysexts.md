@@ -63,7 +63,9 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **incus** | incus | Incus container/VM manager (Frostyard rebuild of Zabbly's deb, which bundles its own qemu/OVMF/swtpm/virtiofsd under `/usr/incus`), dnsmasq, virt-viewer. Ships no Debian qemu (r4, #1014) |
 | **k3s** | k3s | k3s lightweight Kubernetes node — pinned static binary via `verified_download()` from k3s-io/k3s GitHub releases, dpkg-registered through a build-local stub deb |
 | **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
+| **maild** | frostyard-maild | Frostmail mail engine (`maild`, `mailctl`) and Lodge mail app — downloaded via `verified_download()` from frostyard/frostmail GitHub releases after its build-provenance attestation is checked ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)); sealed secrets key made at first start |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
+| **notesd** | frostyard-notesd | Frostnotes notes daemon (`notesd`, `notesctl`) and Lodge notes app — downloaded via `verified_download()` from frostyard/frostnotes GitHub releases after its build-provenance attestation is checked ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)) |
 | **paseo** | paseo | Paseo coding agent workspace desktop app (pinned .deb via verified_download from getpaseo/paseo GitHub releases, relocated from /opt) |
 | **pilothouse** | frostyard-pilothouse | Pilothouse web administration with capability-gated Updex/container backends (web UI + root broker) — downloaded via `verified_download()` from frostyard/pilothouse GitHub releases |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
@@ -124,6 +126,45 @@ When adding a new sysext direct download, add the checksum entry to
 `sysext-checksums.json` and add the upstream version check to the
 `check-sysext-updates` job.
 
+### Attested downloads (notesd, maild)
+
+A first-party release `.deb` that the upstream workflow attests (GitHub
+build-provenance attestation) carries an `attestation` object in its
+`sysext-checksums.json` entry:
+
+```json
+"attestation": {"repository": "frostyard/frostnotes", "signer_workflow": ".github/workflows/release.yml"}
+```
+
+`shared/download/verify-attestations.sh [KEY...]` downloads each such pin with
+`verified_download()` (so the pinned SHA-256 must match first) and runs
+`gh attestation verify FILE --repo R --signer-workflow R/W --source-ref
+refs/tags/v<version> --deny-self-hosted-runners`. The source ref is always the
+tag of the pinned `version`. It reads `${CHECKSUMS_FILE:-<dir>/sysext-checksums.json}`,
+uses `${GH:-gh}`, and fails closed: a named key without attestation metadata, a
+missing field, a failed download, a SHA-256 mismatch, a failed verify, or no
+attested key at all exits non-zero. It prints key names and outcomes only.
+
+The check runs at two points ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)):
+
+- **Pin time.** `check-dependencies.yml` (`check-sysext-updates`) writes a
+  candidate pin to a temporary copy of the JSON, runs the script on it, and
+  moves it over the real file only when it passes. On failure nothing is pinned,
+  the job logs `::error::` and fails in its last step, after the PR step, so
+  the other updates still get their PR. Use the same script by hand after
+  `shared/download/update-checksums.sh <key> <url> <version>` on an attested key
+  (the update script keeps `.attestation` but does not verify).
+- **Every build.** `build.yml` runs the script in the step `Verify attested
+  sysext downloads`, just before `Build main and sysexts`, with
+  `GH_TOKEN: ${{ github.token }}`. The job keeps `permissions: contents: read`:
+  the attestations API of a public repository needs no other scope. The
+  pinned SHA-256 binds the bytes that mkosi downloads later to the attested
+  digest. The check is a workflow step because `gh` is not in the mkosi
+  buildroot.
+
+`test/verify-attestations-test.sh` fixtures the script with a stub `gh`;
+`test/suite-sysexts-test.sh` checks the two sysexts and their pins.
+
 Every sysext must also have a `mkosi.images/<name>/required-paths.txt`: one
 absolute path per line (comments with `#`) that must exist in the finished
 buildroot. The shared finalize script
@@ -172,7 +213,7 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server`, `coder`, `edge`, `bitwarden`, `gitdesktop`, `github-copilot`, `paseo`, and `sunshine` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb` and `gitdesktop` uses the upstream GitDesktop `.deb`; both Tauri payloads already have a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, used by the Edge sysext. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
+`code-server`, `coder`, `edge`, `bitwarden`, `gitdesktop`, `github-copilot`, `maild`, `notesd`, `paseo`, and `sunshine` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb` and `gitdesktop` uses the upstream GitDesktop `.deb`; both Tauri payloads already have a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, used by the Edge sysext. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
 
 ## Sysext-Specific Extra Files
 
@@ -348,6 +389,23 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 - `usr/lib/systemd/system-preset/40-pilothouse.preset` — Enables `pilothoused.service` (root broker on `/run/pilothouse/broker.sock`) and `pilothouse.service` (web UI on 127.0.0.1:8888)
 - `usr/lib/systemd/system/multi-user.target.d/10-pilothouse.conf` — `Upholds=pilothoused.service pilothouse.service` drop-in for reliable boot activation
 - `usr/lib/systemd/system/pilothoused.service.d/10-snosi-backends.conf` — Resets only `pilothoused.service`'s broker command while retaining the package's socket, socket-group, and sudo admin-group arguments. It explicitly opts in to `--updex /usr/bin/updex`, `--podman-socket /run/podman/podman.sock`, `--docker unix:///var/run/docker.sock`, `--incus`, and `--k3s /usr/bin/k3s`. These flags permit Pilothouse probes but do not force registration or make startup fail when an executable or socket endpoint is unavailable
+
+### notesd
+- `mkosi.postinst.chroot` — Downloads the frostyard-notesd .deb (frostyard/frostnotes GitHub release, no apt repo) via `verified_download()`, checks its `Depends: systemd` against the merged buildroot with `shared/download/deb-dependencies.sh`, then `dpkg -i`. The pin carries attestation metadata, checked at pin time and at every build (see [Attested downloads](#attested-downloads-notesd-maild)). No maintainer scripts, no `/etc` file and no tmpfiles (the units use `StateDirectory=`/`RuntimeDirectory=`), so there is no `mkosi.finalize`
+- The deb ships `notesd`, `notesctl`, `frostnotes.service`, `frostnotes-lodge.socket`, `usr/lib/sysusers.d/frostnotes.conf` (user `frostnotes` and the groups `lodge` and `lodge-apps`, so the socket starts without Lodge's own sysext) and the Lodge app under `/usr/share/lodge/apps/notes/` (`app.json`, `web/`). Lodge itself is a separate component and is not part of this sysext
+- `usr/lib/systemd/system-preset/40-notesd.preset` — Enables `frostnotes-lodge.socket` and `frostnotes.service`
+- `usr/lib/systemd/system/multi-user.target.d/10-notesd.conf` — `Upholds=frostnotes-lodge.socket frostnotes.service` (core ADR-0063). Neither unit has a `Condition*=`
+- `usr/lib/extension-release.d/extension-release.notesd` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext refresh` reloads PID 1 and PID 1 sees the new and changed unit files. An update still takes effect at the next boot, when `reload-sysext.service` runs `systemd-sysusers` and `systemd-tmpfiles` first; a first enable without a reboot needs those 2 commands and a start of the units by hand (core ADR-0058). mkosi keeps the keys of a shipped file and only adds the missing ones (`ID`, `SYSEXT_ID`, `SYSEXT_SCOPE`, `ARCHITECTURE`, ...) after the extra trees and the postinst
+- `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.notesd.d/notesd.transfer` has no `RequisiteFeatures=`: snosi defines no `lodge` feature, and updex 2.1.1 and later never enables a transfer whose required feature is not loaded
+
+### maild
+- `mkosi.postinst.chroot` — Same as notesd, for frostyard-maild from frostyard/frostmail (core ADR-0058). No `mkosi.finalize`: the sealed secrets key lives in `/etc/credstore.encrypted/`, which the sysext never ships, and `frostmail-secrets-key.service` creates it at first start
+- The deb ships `maild`, `mailctl`, `frostmail.service`, `frostmail.socket`, `frostmail-secrets-key.service`, `/usr/libexec/frostmail/make-secrets-key`, `usr/lib/sysusers.d/frostmail.conf` and the Lodge app under `/usr/share/lodge/apps/mail/`
+- `frostmail-secrets-key.service` is a oneshot with `ConditionPathExists=!` and no `[Install]` section. `frostmail.service` pulls it with `Requires=`/`After=`. It is **not** upheld and **not** in the preset, because an upheld unit with a failing condition is retried forever (see [Service Activation Pattern](#service-activation-pattern-upholds)). `test/suite-sysexts-test.sh` enforces this
+- `usr/lib/systemd/system-preset/40-maild.preset` — Enables `frostmail.socket` and `frostmail.service`
+- `usr/lib/systemd/system/multi-user.target.d/10-maild.conf` — `Upholds=frostmail.socket frostmail.service` (core ADR-0058)
+- `usr/lib/extension-release.d/extension-release.maild` — `EXTENSION_RELOAD_MANAGER=1`, as for notesd
+- No `RequisiteFeatures=` in the transfer, as for notesd
 
 ### tailscale
 - `mkosi.finalize` — Captures `/etc/default/tailscaled` to factory defaults (tailscaled requires the EnvironmentFile)
