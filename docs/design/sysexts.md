@@ -628,10 +628,11 @@ base change, set `UPDEX_MIN_IMAGE_VERSION=<14-digit IMAGE_VERSION>` in its
 the `IMAGE_VERSION` of the image that boots next: the staged deployment when
 `bootc status` reports one, else the booted image. When that image is older,
 updex keeps the old link and reports `needs image >= <value>`; a host with a
-new enough staged image links the revision before it reboots, but its running
-image is older, so updex skips the live refresh and warns `refresh skipped:
-<component> needs image >= <value> (running image <running>); it takes effect
-at the next boot`. Not used yet: before the first use, confirm that published images
+new enough staged image links the revision before it reboots. When the running
+image is also new enough, a live refresh can merge the revision at once. When the
+running image is older than `<value>`, updex skips the live refresh and warns
+`refresh skipped: <component> needs image >= <value> (running image
+<running>); it takes effect at the next boot`. Not used yet: before the first use, confirm that published images
 carry the OCI manifest annotation `org.opencontainers.image.version`
 (frostyard/snosi#1126). Without that annotation every host with a staged
 image update refuses the revision until it reboots.
