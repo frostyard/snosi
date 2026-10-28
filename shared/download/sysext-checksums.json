@@ -64,6 +64,24 @@
     "sha256": "2147936916593be990b8f33847840502f22aa3e421d0cfcc34aed61306201466",
     "version": "0.9.0"
   },
+  "notesd": {
+    "url": "https://github.com/frostyard/frostnotes/releases/download/v0.2.0/frostyard-notesd_0.2.0_amd64.deb",
+    "sha256": "b2f768d0d9ac48aad86d490e98d3c08f2efa9c9cf068f25f1a6ea1bd90481fd6",
+    "version": "0.2.0",
+    "attestation": {
+      "repository": "frostyard/frostnotes",
+      "signer_workflow": ".github/workflows/release.yml"
+    }
+  },
+  "maild": {
+    "url": "https://github.com/frostyard/frostmail/releases/download/v0.2.0/frostyard-maild_0.2.0_amd64.deb",
+    "sha256": "2c7b698f1495108207fde3020c961a724edde449726b573cb2a781933833ab4a",
+    "version": "0.2.0",
+    "attestation": {
+      "repository": "frostyard/frostmail",
+      "signer_workflow": ".github/workflows/release.yml"
+    }
+  },
   "sunshine": {
     "url": "https://github.com/LizardByte/Sunshine/releases/download/v2026.914.233613/sunshine_2026.914.233613-1+debiantrixie_amd64.deb",
     "sha256": "a86f858cbae57f60ecebd445402ee0295c1c057b857bd45d44c2ea2d255cbbfb",

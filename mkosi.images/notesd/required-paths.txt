@@ -1,0 +1,14 @@
+# notesd sysext: installed via verified_download + dpkg -i in postinst
+/usr/bin/notesd
+/usr/bin/notesctl
+/usr/lib/systemd/system/frostnotes.service
+/usr/lib/systemd/system/frostnotes-lodge.socket
+# Deb-shipped sysusers fragment (creates the frostnotes user and the lodge groups at boot)
+/usr/lib/sysusers.d/frostnotes.conf
+# Lodge app manifest and web build (lodge discovers apps under /usr/share/lodge/apps)
+/usr/share/lodge/apps/notes/app.json
+/usr/share/lodge/apps/notes/web/index.html
+# Boot-time activation and manager reload
+/usr/lib/systemd/system-preset/40-notesd.preset
+/usr/lib/systemd/system/multi-user.target.d/10-notesd.conf
+/usr/lib/extension-release.d/extension-release.notesd

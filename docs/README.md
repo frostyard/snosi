@@ -42,6 +42,7 @@ states intent; the categories below hold the record.
 - [adr/0021-query-deployment-package-metadata.md](adr/0021-query-deployment-package-metadata.md) — **Accepted:** per-file dpkg identity links to the deployment snapshot with writable alternatives preserved
 - [adr/0022-installer-graphical-and-console-boot-entries.md](adr/0022-installer-graphical-and-console-boot-entries.md) — **Proposed:** the installer ISO boots firn-gui in cage or the TUI from a GRUB menu (console default, serial TUI always); costs about +290 MiB RAM rootfs and a 4.5 GiB minimum
 - [adr/0023-skip-bootloader-reconcile-without-secure-boot-support.md](adr/0023-skip-bootloader-reconcile-without-secure-boot-support.md) — **Proposed:** the bootc bootloader reconciler also skips when no shim second stage is installed and readable efivarfs has no `SecureBoot` variable (firmware without Secure Boot support)
+- [adr/0024-verify-attestations-of-first-party-sysext-debs.md](adr/0024-verify-attestations-of-first-party-sysext-debs.md) — **Accepted:** pinned first-party sysext debs (notesd, maild) must pass `gh attestation verify` at pin time in `check-dependencies.yml` and in every `build.yml` run, before mkosi downloads them
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design

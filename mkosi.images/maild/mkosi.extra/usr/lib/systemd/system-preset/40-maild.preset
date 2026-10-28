@@ -1,0 +1,2 @@
+enable frostmail.socket
+enable frostmail.service

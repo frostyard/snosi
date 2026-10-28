@@ -32,6 +32,10 @@ Work to do:
    URL and an entry in `shared/download/sysext-checksums.json`, plus a check
    in `.github/workflows/check-dependencies.yml` (or `check-packages.yml` for
    APT sentinels).
+   A first-party release `.deb` that its workflow attests also gets an
+   `attestation` object in that entry (ADR-0024); `build.yml` and
+   `check-dependencies.yml` then verify it with
+   `shared/download/verify-attestations.sh`.
 
 Validate: `just sysexts` (or a targeted build of the one image), then the
 relevant scripts under `test/` and the checks in `.github/workflows/validate.yml`.

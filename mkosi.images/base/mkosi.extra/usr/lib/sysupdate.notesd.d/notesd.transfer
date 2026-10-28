@@ -1,0 +1,20 @@
+[Transfer]
+Features=notesd
+Verify=true
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/notesd/
+MatchPattern=notesd_@v_%w_%a.raw.zst \
+             notesd_@v_%w_%a.raw.xz \
+             notesd_@v_%w_%a.raw.gz \
+             notesd_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=notesd_@v_%w_%a.raw.zst \
+             notesd_@v_%w_%a.raw.xz \
+             notesd_@v_%w_%a.raw.gz \
+             notesd_@v_%w_%a.raw
+CurrentSymlink=notesd.raw
