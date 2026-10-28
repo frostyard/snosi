@@ -223,6 +223,16 @@ wait_state() { # unit state seconds
     return 1
 }
 
+# A kiosk unit can still be "activating" when SSH first answers: wait for it,
+# as the graphical legs do, instead of a single sample.
+check_active() { # name unit seconds
+    if wait_state "$2" active "$3"; then
+        pass "$1"
+    else
+        fail "$1" "$2 $(state "$2")"
+    fi
+}
+
 report_memory() {
     echo "# $LEG guest memory:"
     guest 'free -m; df -m / | tail -1; ps -o rss=,comm= -C cage,firn-gui,firn 2>/dev/null' |
@@ -242,7 +252,7 @@ screenshot() {
 }
 
 check_serial_tui() {
-    check_eq "the serial TUI kiosk runs" "$(state firn-kiosk-serial@ttyS0.service)" active
+    check_active "the serial TUI kiosk runs" firn-kiosk-serial@ttyS0.service 30
 }
 
 check_cmdline() {
@@ -273,7 +283,7 @@ check_gui_up() {
 # ---------------------------------------------------------------------------
 boot_leg console cdrom virtio
 check_cmdline firn-console.target
-check_eq "the TUI kiosk owns tty1" "$(state firn-kiosk.service)" active
+check_active "the TUI kiosk owns tty1" firn-kiosk.service 30
 check_eq "firn-gui.service is not started" "$(state firn-gui.service)" inactive
 check "no compositor runs" guest '! pgrep -x cage'
 check_serial_tui
