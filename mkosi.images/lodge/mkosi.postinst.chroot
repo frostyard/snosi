@@ -1,0 +1,27 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+# shellcheck source=/dev/null
+source "$SRCDIR/shared/download/verified-download.sh"
+# shellcheck source=/dev/null
+source "$SRCDIR/shared/download/deb-dependencies.sh"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "lodge" "$DEBS/lodge.deb"
+assert_deb_dependencies_satisfied "$DEBS/lodge.deb"
+
+# The DEB is installed directly because it is downloaded from GitHub rather
+# than an APT repository. Its declared dependencies must already be satisfied
+# by the merged buildroot; the guard above fails before dpkg mutates the root
+# if the base drifts behind a new release. Everything ships under /usr: the
+# deb ships its own sysusers.d and tmpfiles.d fragments (lodge.service must
+# not use RuntimeDirectory=, because systemd would then remove /run/lodge and
+# the apps' sockets with it), so no mkosi.finalize is needed and nothing is
+# captured from /etc. /etc/lodge/config.json and /etc/lodge/lodge.env belong
+# to the administrator; the sysext does not ship them and the daemon starts
+# with its defaults.
+dpkg -i "$DEBS/lodge.deb"

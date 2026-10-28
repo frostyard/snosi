@@ -1,0 +1,14 @@
+# readd sysext: installed via verified_download + dpkg -i in postinst
+/usr/bin/readd
+/usr/bin/readctl
+/usr/lib/systemd/system/frostread.service
+/usr/lib/systemd/system/frostread.socket
+# Deb-shipped sysusers fragment (creates the frostread user and the lodge groups at boot)
+/usr/lib/sysusers.d/frostread.conf
+# Lodge app manifest and web build (lodge discovers apps under /usr/share/lodge/apps)
+/usr/share/lodge/apps/read/app.json
+/usr/share/lodge/apps/read/web/index.html
+# Boot-time activation and manager reload
+/usr/lib/systemd/system-preset/40-readd.preset
+/usr/lib/systemd/system/multi-user.target.d/10-readd.conf
+/usr/lib/extension-release.d/extension-release.readd

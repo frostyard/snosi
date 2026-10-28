@@ -216,8 +216,11 @@ Firn supplies the bootc installation kernel arguments.
 ## Publication input metadata
 
 `shared/download/sysext-checksums.json` pins direct sysext downloads and
-triggers sysext builds. An entry with an `attestation` object is also checked by
-`shared/download/verify-attestations.sh` ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)). `shared/download/image-checksums.json` pins OCI
+triggers sysext builds. An entry with an `attestation` object (the first-party
+suite sysexts `lodge`, `notesd`, `maild`, `porterd` and `readd`) is also checked
+by `shared/download/verify-attestations.sh`
+([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)).
+`shared/download/image-checksums.json` pins OCI
 profile downloads and triggers image builds. `package-versions.json` tracks
 external sysext APT changes as a review sentinel, not an APT version pin;
 `forky-versions.json` records the last acknowledged Forky systemd source

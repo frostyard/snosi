@@ -1,0 +1,20 @@
+[Transfer]
+Features=lodge
+Verify=true
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/lodge/
+MatchPattern=lodge_@v_%w_%a.raw.zst \
+             lodge_@v_%w_%a.raw.xz \
+             lodge_@v_%w_%a.raw.gz \
+             lodge_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=lodge_@v_%w_%a.raw.zst \
+             lodge_@v_%w_%a.raw.xz \
+             lodge_@v_%w_%a.raw.gz \
+             lodge_@v_%w_%a.raw
+CurrentSymlink=lodge.raw

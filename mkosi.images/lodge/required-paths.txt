@@ -1,0 +1,16 @@
+# lodge sysext: installed via verified_download + dpkg -i in postinst
+/usr/bin/lodge
+/usr/bin/lodgectl
+/usr/lib/systemd/system/lodge.service
+# Deb-shipped sysusers and tmpfiles fragments (creates the lodge user and the
+# lodge-apps and lodge-agents groups, plus /run/lodge and /run/lodge/apps,
+# because lodge.service has no RuntimeDirectory=)
+/usr/lib/sysusers.d/lodge.conf
+/usr/lib/tmpfiles.d/lodge.conf
+# The web shell and its example configuration; apps arrive with their own sysexts
+/usr/share/lodge/shell/index.html
+/usr/share/lodge/config.example.json
+# Boot-time activation and manager reload
+/usr/lib/systemd/system-preset/40-lodge.preset
+/usr/lib/systemd/system/multi-user.target.d/10-lodge.conf
+/usr/lib/extension-release.d/extension-release.lodge

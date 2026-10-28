@@ -1,9 +1,9 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Static checks for the Frostyard suite sysexts notesd and maild: unit sets,
-# presets, extension-release, required paths, pinned releases with their
-# attestation metadata, and the sysupdate component. No root, no network, no
-# image build.
+# Static checks for the Frostyard suite sysexts lodge, notesd, maild, porterd
+# and readd: unit sets, presets, extension-release, required paths, pinned
+# releases with their attestation metadata, and the sysupdate component. No
+# root, no network, no image build.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -95,13 +95,19 @@ check_sysext() {
     done
     for path in \
         "/usr/lib/sysusers.d/$sysusers.conf" \
-        "/usr/share/lodge/apps/$app/app.json" \
-        "/usr/share/lodge/apps/$app/web/index.html" \
         "/usr/lib/systemd/system-preset/40-$name.preset" \
         "/usr/lib/systemd/system/multi-user.target.d/10-$name.conf" \
         "/usr/lib/extension-release.d/extension-release.$name"; do
         check "$name: required-paths lists $path" has_line "$required" "$path"
     done
+    # lodge is the shell itself and ships no Lodge app manifest.
+    if [[ -n "$app" ]]; then
+        for path in \
+            "/usr/share/lodge/apps/$app/app.json" \
+            "/usr/share/lodge/apps/$app/web/index.html"; do
+            check "$name: required-paths lists $path" has_line "$required" "$path"
+        done
+    fi
 
     check "$name: transfer selects the component, verifies, and sets the current link" \
         has_all "$transfer" "Features=$name" Verify=true "CurrentSymlink=$name.raw"
@@ -110,7 +116,7 @@ check_sysext() {
             count_is "$transfer" "${name}_@v_%w_%a\\.$suffix" 2
     done
     check "$name: feature is disabled by default" has_line "$feature" 'Enabled=false'
-    check "$name: no RequisiteFeatures= (snosi has no lodge feature)" lacks_text 'RequisiteFeatures=' "$transfer" "$feature"
+    check "$name: no RequisiteFeatures= (core ADR-0058)" lacks_text 'RequisiteFeatures=' "$transfer" "$feature"
 }
 
 # check_pin <key> <repository> <package>
@@ -131,20 +137,40 @@ check_pin() {
 
 check_sysext notesd frostyard-notesd frostnotes notes frostnotes-lodge.socket frostnotes.service
 check_sysext maild frostyard-maild frostmail mail frostmail.socket frostmail.service
+check_sysext lodge frostyard-lodge lodge '' lodge.service
+check_sysext porterd frostyard-porterd frostporter porter frostporter.socket frostporter.service
+check_sysext readd frostyard-readd frostread read frostread.socket frostread.service
 
 check_pin notesd frostyard/frostnotes frostyard-notesd
 check_pin maild frostyard/frostmail frostyard-maild
+check_pin lodge frostyard/lodge frostyard-lodge
+check_pin porterd frostyard/porter frostyard-porterd
+check_pin readd frostyard/frostread frostyard-readd
 
 notesd_required="$ROOT_DIR/mkosi.images/notesd/required-paths.txt"
 maild_required="$ROOT_DIR/mkosi.images/maild/required-paths.txt"
+lodge_required="$ROOT_DIR/mkosi.images/lodge/required-paths.txt"
+porterd_required="$ROOT_DIR/mkosi.images/porterd/required-paths.txt"
+readd_required="$ROOT_DIR/mkosi.images/readd/required-paths.txt"
 check 'notesd: required-paths lists notesd and notesctl' \
     has_all "$notesd_required" /usr/bin/notesd /usr/bin/notesctl
 check 'maild: required-paths lists maild and mailctl' \
     has_all "$maild_required" /usr/bin/maild /usr/bin/mailctl
+check 'lodge: required-paths lists lodge and lodgectl' \
+    has_all "$lodge_required" /usr/bin/lodge /usr/bin/lodgectl
+check 'porterd: required-paths lists porterd' \
+    has_all "$porterd_required" /usr/bin/porterd
+check 'readd: required-paths lists readd and readctl' \
+    has_all "$readd_required" /usr/bin/readd /usr/bin/readctl
 # The secrets-key oneshot ships and frostmail.service pulls it, but it has a
 # condition and no [Install]: it must stay out of Upholds= and the preset.
 check 'maild: required-paths lists the secrets-key unit and its helper' \
     has_all "$maild_required" /usr/lib/systemd/system/frostmail-secrets-key.service /usr/libexec/frostmail/make-secrets-key
+# lodge.service must not use RuntimeDirectory= (systemd would remove /run/lodge
+# and the apps' sockets with it), so the deb's tmpfiles.d fragment ships, with
+# the shell and its example configuration; /etc/lodge stays the administrator's.
+check 'lodge: required-paths lists the tmpfiles fragment, the shell and the example config' \
+    has_all "$lodge_required" /usr/lib/tmpfiles.d/lodge.conf /usr/share/lodge/shell/index.html /usr/share/lodge/config.example.json
 
 # The comparison helpers must reject a wrong set, not only accept the right one.
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/suite-sysexts-test.XXXXXX")

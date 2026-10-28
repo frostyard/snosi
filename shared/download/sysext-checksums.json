@@ -82,6 +82,33 @@
       "signer_workflow": ".github/workflows/release.yml"
     }
   },
+  "lodge": {
+    "url": "https://github.com/frostyard/lodge/releases/download/v0.1.0/frostyard-lodge_0.1.0_amd64.deb",
+    "sha256": "0841d7376b0fbdc1e0f0f36987c516995bd92d70722118ef38ab850450243a3e",
+    "version": "0.1.0",
+    "attestation": {
+      "repository": "frostyard/lodge",
+      "signer_workflow": ".github/workflows/release.yml"
+    }
+  },
+  "porterd": {
+    "url": "https://github.com/frostyard/porter/releases/download/v0.1.0/frostyard-porterd_0.1.0_amd64.deb",
+    "sha256": "f541a649275b767e644eaf58bc476b01adc7261cd6bbbf8afc2f317ae274acd7",
+    "version": "0.1.0",
+    "attestation": {
+      "repository": "frostyard/porter",
+      "signer_workflow": ".github/workflows/release.yml"
+    }
+  },
+  "readd": {
+    "url": "https://github.com/frostyard/frostread/releases/download/v0.1.0/frostyard-readd_0.1.0_amd64.deb",
+    "sha256": "d879d6fd345ff374d63562cb9080f5075c669574e75e1bf4d8411ead88e1beff",
+    "version": "0.1.0",
+    "attestation": {
+      "repository": "frostyard/frostread",
+      "signer_workflow": ".github/workflows/release.yml"
+    }
+  },
   "sunshine": {
     "url": "https://github.com/LizardByte/Sunshine/releases/download/v2026.914.233613/sunshine_2026.914.233613-1+debiantrixie_amd64.deb",
     "sha256": "a86f858cbae57f60ecebd445402ee0295c1c057b857bd45d44c2ea2d255cbbfb",

@@ -1,0 +1,20 @@
+[Transfer]
+Features=readd
+Verify=true
+
+[Source]
+Type=url-file
+Path=https://repository.frostyard.org/ext/readd/
+MatchPattern=readd_@v_%w_%a.raw.zst \
+             readd_@v_%w_%a.raw.xz \
+             readd_@v_%w_%a.raw.gz \
+             readd_@v_%w_%a.raw
+
+[Target]
+Type=regular-file
+Path=/var/lib/extensions.d/
+MatchPattern=readd_@v_%w_%a.raw.zst \
+             readd_@v_%w_%a.raw.xz \
+             readd_@v_%w_%a.raw.gz \
+             readd_@v_%w_%a.raw
+CurrentSymlink=readd.raw

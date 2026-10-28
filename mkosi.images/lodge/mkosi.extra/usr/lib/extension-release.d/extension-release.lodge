@@ -1,0 +1,7 @@
+# mkosi keeps the keys of this file and adds the missing ones (ID, SYSEXT_ID,
+# SYSEXT_SCOPE, ARCHITECTURE and the rest) after the postinst. With this key,
+# systemd-sysext reloads PID 1 after a merge or refresh, so PID 1 sees the new
+# and changed unit files. An update still takes effect at the next boot, when
+# reload-sysext.service runs systemd-sysusers and systemd-tmpfiles first (core
+# ADR-0058).
+EXTENSION_RELOAD_MANAGER=1

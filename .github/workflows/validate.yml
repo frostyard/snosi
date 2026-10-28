@@ -260,7 +260,7 @@ jobs:
         # network, live endpoints, or image build.
         run: ./test/pilothouse-sysext-test.sh
 
-      - name: Validate suite sysexts (notesd, maild)
+      - name: Validate suite sysexts (lodge, notesd, maild, porterd, readd)
         # Static unit/preset/extension-release/required-paths/pin checks for the
         # Frostyard suite sysexts. No root, network, or image build.
         run: ./test/suite-sysexts-test.sh
