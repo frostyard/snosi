@@ -157,9 +157,9 @@ change must set `UPDEX_MIN_IMAGE_VERSION`; see
 
 `.github/workflows/build.yml` publishes sysexts; `build-images.yml` publishes
 signed OCI images by immutable digest before promoting `latest`. The
-first-party sysexts `notesd` and `maild` pin attested `.deb` files;
-`shared/download/verify-attestations.sh` checks their GitHub build-provenance
-attestation at pin time and in every `build.yml` run
+first-party sysexts `lodge`, `notesd`, `maild`, `porterd` and `readd` pin
+attested `.deb` files; `shared/download/verify-attestations.sh` checks their
+GitHub build-provenance attestation at pin time and in every `build.yml` run
 ([ADR-0024](docs/adr/0024-verify-attestations-of-first-party-sysext-debs.md)).
 maild's `frostmail-secrets-key.service` stays out of `Upholds=` and its preset.
 Published images carry `org.opencontainers.image.version` as both a config

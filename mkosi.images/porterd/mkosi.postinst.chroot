@@ -1,0 +1,23 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${DEBUG_BUILD:-0}" == "1" ]]; then
+    set -x
+fi
+
+# shellcheck source=/dev/null
+source "$SRCDIR/shared/download/verified-download.sh"
+# shellcheck source=/dev/null
+source "$SRCDIR/shared/download/deb-dependencies.sh"
+DEBS=$(mktemp -d)
+trap 'rm -rf "$DEBS"' EXIT
+verified_download "porterd" "$DEBS/porterd.deb"
+assert_deb_dependencies_satisfied "$DEBS/porterd.deb"
+
+# The DEB is installed directly because it is downloaded from GitHub rather
+# than an APT repository. Its declared dependencies must already be satisfied
+# by the merged buildroot; the guard above fails before dpkg mutates the root
+# if the base drifts behind a new release. Everything ships under /usr: the
+# service uses StateDirectory= and the deb ships its own
+# sysusers.d fragment, so no mkosi.finalize and no tmpfiles are needed.
+dpkg -i "$DEBS/porterd.deb"

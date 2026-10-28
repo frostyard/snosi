@@ -188,14 +188,14 @@ jobs:
 
       - name: Verify attested sysext downloads
         # First-party debs pinned in shared/download/sysext-checksums.json with
-        # an `attestation` entry (notesd, maild) must carry a valid GitHub
-        # build-provenance attestation from their release workflow at the tag
-        # of the pinned version (ADR-0024). The pinned SHA-256 binds the bytes
-        # that mkosi downloads later to the attested digest, so this step only
-        # has to check the pinned file once. `gh` is not in the mkosi buildroot,
-        # which is why the check is a step and not part of a postinst. The job
-        # keeps `contents: read`: the attestations API of a public repository
-        # needs no other scope.
+        # an `attestation` entry (lodge, notesd, maild, porterd, readd) must
+        # carry a valid GitHub build-provenance attestation from their release
+        # workflow at the tag of the pinned version (ADR-0024). The pinned
+        # SHA-256 binds the bytes that mkosi downloads later to the attested
+        # digest, so this step only has to check the pinned file once. `gh` is
+        # not in the mkosi buildroot, which is why the check is a step and not
+        # part of a postinst. The job keeps `contents: read`: the attestations
+        # API of a public repository needs no other scope.
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./shared/download/verify-attestations.sh

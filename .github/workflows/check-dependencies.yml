@@ -184,6 +184,33 @@ jobs:
             echo "maild_version=$LATEST_MAILD" >> "$GITHUB_OUTPUT"
           fi
 
+          # Check lodge (Lodge tailnet web shell; first-party release, GitHub-attested)
+          CURRENT_LODGE=$(jq -r '.lodge.version' "$CHECKSUMS")
+          LATEST_LODGE=$(gh_api https://api.github.com/repos/frostyard/lodge/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_LODGE" && "$LATEST_LODGE" != "null" ]] && ver_gt "$LATEST_LODGE" "$CURRENT_LODGE"; then
+            UPDATES="${UPDATES}lodge: $CURRENT_LODGE -> $LATEST_LODGE\n"
+            echo "lodge_update=true" >> "$GITHUB_OUTPUT"
+            echo "lodge_version=$LATEST_LODGE" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check porterd (Porter assistant daemon; first-party release, GitHub-attested)
+          CURRENT_PORTERD=$(jq -r '.porterd.version' "$CHECKSUMS")
+          LATEST_PORTERD=$(gh_api https://api.github.com/repos/frostyard/porter/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_PORTERD" && "$LATEST_PORTERD" != "null" ]] && ver_gt "$LATEST_PORTERD" "$CURRENT_PORTERD"; then
+            UPDATES="${UPDATES}porterd: $CURRENT_PORTERD -> $LATEST_PORTERD\n"
+            echo "porterd_update=true" >> "$GITHUB_OUTPUT"
+            echo "porterd_version=$LATEST_PORTERD" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Check readd (frostread feed reader daemon; first-party release, GitHub-attested)
+          CURRENT_READD=$(jq -r '.readd.version' "$CHECKSUMS")
+          LATEST_READD=$(gh_api https://api.github.com/repos/frostyard/frostread/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          if [[ -n "$LATEST_READD" && "$LATEST_READD" != "null" ]] && ver_gt "$LATEST_READD" "$CURRENT_READD"; then
+            UPDATES="${UPDATES}readd: $CURRENT_READD -> $LATEST_READD\n"
+            echo "readd_update=true" >> "$GITHUB_OUTPUT"
+            echo "readd_version=$LATEST_READD" >> "$GITHUB_OUTPUT"
+          fi
+
           # Check Microsoft Edge Stable
           CURRENT_EDGE=$(jq -r '.["microsoft-edge-stable"].version' "$CHECKSUMS")
           LATEST_EDGE=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
@@ -246,6 +273,12 @@ jobs:
           NOTESD_VERSION: ${{ steps.check.outputs.notesd_version }}
           MAILD_UPDATE: ${{ steps.check.outputs.maild_update }}
           MAILD_VERSION: ${{ steps.check.outputs.maild_version }}
+          LODGE_UPDATE: ${{ steps.check.outputs.lodge_update }}
+          LODGE_VERSION: ${{ steps.check.outputs.lodge_version }}
+          PORTERD_UPDATE: ${{ steps.check.outputs.porterd_update }}
+          PORTERD_VERSION: ${{ steps.check.outputs.porterd_version }}
+          READD_UPDATE: ${{ steps.check.outputs.readd_update }}
+          READD_VERSION: ${{ steps.check.outputs.readd_version }}
           EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
           EDGE_VERSION: ${{ steps.check.outputs.edge_version }}
           ONEPASSWORD_UPDATE: ${{ steps.check.outputs.onepassword_update }}
@@ -256,14 +289,15 @@ jobs:
           CHECKSUMS="shared/download/sysext-checksums.json"
           ATTESTATION_FAILED=""
 
-          # Pin a first-party release that has attestation metadata (notesd,
-          # maild) only when its GitHub build-provenance attestation verifies
-          # (ADR-0024). The candidate pin (URL, SHA-256 of the download, version;
-          # `.attestation` is kept) goes into a temporary copy of the checksums
-          # file. verify-attestations.sh checks that copy, and the copy replaces
-          # the real file only when the check passes. On failure nothing is
-          # pinned, the key is recorded, and the final step fails the job after
-          # the PR step, so the other updates still get their PR.
+          # Pin a first-party release that has attestation metadata (lodge,
+          # notesd, maild, porterd, readd) only when its GitHub build-provenance
+          # attestation verifies (ADR-0024). The candidate pin (URL, SHA-256 of
+          # the download, version; `.attestation` is kept) goes into a temporary
+          # copy of the checksums file. verify-attestations.sh checks that copy,
+          # and the copy replaces the real file only when the check passes. On
+          # failure nothing is pinned, the key is recorded, and the final step
+          # fails the job after the PR step, so the other updates still get
+          # their PR.
           pin_attested() {
             local key="$1" ver="$2" url="$3" tmp cand sha
             if [[ ! "$ver" =~ ^[0-9][0-9A-Za-z.+~-]*$ ]]; then
@@ -448,6 +482,21 @@ jobs:
           if [[ "$MAILD_UPDATE" == "true" ]]; then
             pin_attested maild "$MAILD_VERSION" \
               "https://github.com/frostyard/frostmail/releases/download/v${MAILD_VERSION}/frostyard-maild_${MAILD_VERSION}_amd64.deb"
+          fi
+
+          if [[ "$READD_UPDATE" == "true" ]]; then
+            pin_attested readd "$READD_VERSION" \
+              "https://github.com/frostyard/frostread/releases/download/v${READD_VERSION}/frostyard-readd_${READD_VERSION}_amd64.deb"
+          fi
+
+          if [[ "$PORTERD_UPDATE" == "true" ]]; then
+            pin_attested porterd "$PORTERD_VERSION" \
+              "https://github.com/frostyard/porter/releases/download/v${PORTERD_VERSION}/frostyard-porterd_${PORTERD_VERSION}_amd64.deb"
+          fi
+
+          if [[ "$LODGE_UPDATE" == "true" ]]; then
+            pin_attested lodge "$LODGE_VERSION" \
+              "https://github.com/frostyard/lodge/releases/download/v${LODGE_VERSION}/frostyard-lodge_${LODGE_VERSION}_amd64.deb"
           fi
 
           if [[ "$EDGE_UPDATE" == "true" ]]; then
