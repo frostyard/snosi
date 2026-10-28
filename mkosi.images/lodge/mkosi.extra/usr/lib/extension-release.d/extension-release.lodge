@@ -1,7 +1,11 @@
 # mkosi keeps the keys of this file and adds the missing ones (ID, SYSEXT_ID,
 # SYSEXT_SCOPE, ARCHITECTURE and the rest) after the postinst. With this key,
 # systemd-sysext reloads PID 1 after a merge or refresh, so PID 1 sees the new
-# and changed unit files. An update still takes effect at the next boot, when
+# and changed unit files. An interactive "sudo updex features update" merges
+# an update at once: updex 2.1.3 and later run systemd-sysusers and
+# systemd-tmpfiles before that reload (updex ADR-0019). A running daemon keeps
+# its old binary until it restarts. "--no-refresh", updex-update.timer and a
+# "refresh skipped" warning leave the update to the next boot, when
 # reload-sysext.service runs systemd-sysusers and systemd-tmpfiles first (core
-# ADR-0058).
+# ADR-0058). See docs/design/sysexts.md.
 EXTENSION_RELOAD_MANAGER=1
