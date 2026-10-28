@@ -32,7 +32,10 @@ An entry of `sysext-checksums.json` can carry an `attestation` object with the
 `shared/download/verify-attestations.sh [KEY...]` downloads each pinned file
 through `verified_download()` and runs `gh attestation verify` with `--repo`,
 `--signer-workflow`, `--source-ref` and `--deny-self-hosted-runners`. It fails
-closed. The pin is checked twice:
+closed, and every key, from the JSON file or from an argument, must match
+`^[A-Za-z0-9][A-Za-z0-9._+-]*$`: an attested entry with another key name fails
+the run, so a crafted key cannot hide an entry from the check. The pin is
+checked twice:
 
 1. **At pin time.** `check-dependencies.yml` writes a candidate pin into a
    temporary copy of the JSON, runs the script on the copy, and replaces the

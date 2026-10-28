@@ -141,7 +141,7 @@ build-provenance attestation) carries an `attestation` object in its
 `gh attestation verify FILE --repo R --signer-workflow R/W --source-ref
 refs/tags/v<version> --deny-self-hosted-runners`. The source ref is always the
 tag of the pinned `version`. It reads `${CHECKSUMS_FILE:-<dir>/sysext-checksums.json}`,
-uses `${GH:-gh}`, and fails closed: a named key without attestation metadata, a
+uses `${GH:-gh}`, accepts only key names that match `^[A-Za-z0-9][A-Za-z0-9._+-]*$` (an argument that does not match fails before any file path is built; in the no-argument mode jq checks the key names of the JSON file before it builds the list, so a key with a newline cannot split into 2 keys, and an entry with an `attestation` field and a bad key name fails the run), and fails closed: a named key without attestation metadata, a
 missing field, a failed download, a SHA-256 mismatch, a failed verify, or no
 attested key at all exits non-zero. It prints key names and outcomes only.
 

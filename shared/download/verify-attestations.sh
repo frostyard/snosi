@@ -39,22 +39,48 @@ command -v "$gh_bin" >/dev/null 2>&1 || die "GitHub CLI not found: $gh_bin"
 jq -e 'type == "object"' "$CHECKSUMS_FILE" >/dev/null 2>&1 ||
     die "checksums file is not a JSON object: $CHECKSUMS_FILE"
 
-keys=("$@")
-if ((${#keys[@]} == 0)); then
-    mapfile -t keys < <(jq -r 'to_entries[]
-        | select((.value | type) == "object" and .value.attestation != null)
-        | .key' "$CHECKSUMS_FILE")
-    ((${#keys[@]} > 0)) || die "no entry with attestation metadata in $CHECKSUMS_FILE"
-fi
-
-work=$(mktemp -d)
-trap 'rm -rf -- "$work"' EXIT
+# A key is a plain name: it becomes a file name, a log line and a list item, so
+# it must not carry a newline, a slash or a space. The same rule is applied to
+# the keys from the JSON file (in jq, before any list is built from them: a key
+# with a newline would otherwise turn into 2 list items) and to the arguments.
+# jq (Oniguruma) needs \A and \z, because its ^ and $ also match at a newline.
+key_re_jq='\A[A-Za-z0-9][A-Za-z0-9._+-]*\z'
+key_re_bash='^[A-Za-z0-9][A-Za-z0-9._+-]*$'
 
 failed=0
 fail_key() {
     printf 'FAIL %s: %s\n' "$1" "$2" >&2
     failed=1
 }
+
+keys=()
+if (($# > 0)); then
+    for arg in "$@"; do
+        if [[ "$arg" =~ $key_re_bash ]]; then
+            keys+=("$arg")
+        else
+            fail_key "$(printf '%q' "$arg")" "invalid key name"
+        fi
+    done
+else
+    # Entries that have an `attestation` field and a bad key name fail the run
+    # (printed with @json, so a newline shows as \n and cannot split a line).
+    bad=$(jq -c --arg re "$key_re_jq" '[to_entries[]
+        | select((.value | type) == "object" and (.value | has("attestation")))
+        | select(.key | test($re) | not)
+        | .key]' "$CHECKSUMS_FILE") || die "cannot read $CHECKSUMS_FILE"
+    if [[ "$bad" != "[]" ]]; then
+        fail_key "$bad" "attested entries with invalid key names"
+    fi
+    mapfile -t keys < <(jq -r --arg re "$key_re_jq" 'to_entries[]
+        | select((.value | type) == "object" and (.value | has("attestation")))
+        | select(.key | test($re))
+        | .key' "$CHECKSUMS_FILE")
+    ((${#keys[@]} > 0)) || die "no entry with attestation metadata in $CHECKSUMS_FILE"
+fi
+
+work=$(mktemp -d)
+trap 'rm -rf -- "$work"' EXIT
 
 # Reads one string field of the current key's attestation object ('' if absent).
 field() {
@@ -65,7 +91,7 @@ field() {
           then ($e.attestation[$field] // "") else "" end' "$CHECKSUMS_FILE"
 }
 
-for key in "${keys[@]}"; do
+for key in ${keys[@]+"${keys[@]}"}; do
     if ! jq -e --arg key "$key" '(.[$key] | type) == "object" and (.[$key].attestation | type) == "object"' \
         "$CHECKSUMS_FILE" >/dev/null 2>&1; then
         fail_key "$key" "no attestation metadata"
