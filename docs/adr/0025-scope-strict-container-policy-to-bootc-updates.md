@@ -59,8 +59,12 @@ and `/etc`.
    Automatic updates accept only signed Frostyard images, from any spec.
 3. `/etc/containers/policy.json` changes its `default` to
    `insecureAcceptAnything` and keeps the five Frostyard `sigstoreSigned`
-   scopes. Any tool, any user, that pulls a Frostyard product repository by
-   name still verifies its signature. Other images pull as on stock Debian.
+   scopes. A caller that reads the system policy and pulls a Frostyard
+   product repository by name still verifies its signature. Other images
+   pull as on stock Debian. The only mandatory guarantee is the stager's
+   (point 2): any process with a `$HOME/.config/containers/policy.json`
+   (every user who has the rootless copy, or a root dotfile) does not read
+   the system file, which is also true today.
 4. Schema-1 `oci.policy` names `/usr/lib/snosi/containers/bootc-policy.json`.
    The schema number does not change: no consumer reads the field.
 5. A static test keeps the `transports.docker` blocks of both files equal.
@@ -71,7 +75,9 @@ and `/etc`.
   quadlets work without per-unit flags.
 - Automatic updates gain a guard they lacked: a root
   `~/.config/containers/policy.json` or a 3-way-merged `/etc` edit no longer
-  replaces the update policy.
+  replaces the update policy. Manual registry operations (`bootc switch`,
+  `bootc upgrade` on a `registry` spec, root `podman pull`) gain nothing:
+  they still read whichever policy file applies to the caller.
 - A manual `bootc switch` to a non-Frostyard registry image is no longer
   refused by policy. What still stands in its way: (a) the stager refuses to
   auto-update from it; (b) under Secure Boot its UKI is not signed by the

@@ -31,7 +31,10 @@ Facts checked on Snow `20261029102309`, as an account with no
   account. Root reads the same file (when it has no dotfile), so it gets the
   same results.
 
-So the exact command passes on a current host. A rejection means one of:
+So the exact source passes the current signature policy on a current host.
+This does not prove the push: write access to `floe:qa-controlled` is a
+separate registry permission, and its failure is not a policy rejection.
+A policy rejection means one of:
 
 | Cause | Sign | Fix |
 | --- | --- | --- |
@@ -75,7 +78,8 @@ skopeo --policy /usr/share/snosi/containers/user-policy.json copy …
 | T1 Forged image pushed to a Frostyard repo (GHCR or token compromise) reaches an automatic update | yes | yes (stager uses `/usr` policy) | yes | yes |
 | T2 Same, by a manual `bootc switch`/`upgrade` to a Frostyard repo | yes | yes (scopes stay signed) | yes | yes |
 | T3 Manual `bootc switch` to a foreign registry image | yes (policy) | stager refuses updates from it; Secure Boot expected to refuse its UKI (Phase 4 proof) | yes | foreign: as A; namespace lookalikes: yes |
-| T4 Root dotfile or `/etc` drift weakens update policy | **no** | yes | no | yes |
+| T4a Root dotfile or `/etc` drift weakens the automatic update policy | **no** | yes | no | yes |
+| T4b Same, for manual registry operations (`bootc switch`, root `podman pull`) | **no** | no | no | no |
 | Normal root/service-account use | **blocked** | works | blocked unless every command adds a flag | works, except other `ghcr.io/frostyard/*` images |
 
 Firn is outside all three: it verifies with `cosign verify --key` and pins the
@@ -94,8 +98,10 @@ digest before install, and never reads the target's policy.
   - run the existing strict assertions (`default` reject, exact scopes,
     `sigstoreSigned` only, no catch-all, local transports) against
     `bootc-policy.json`;
-  - new: the stager passes `--signature-policy` with that path (static check,
-    and the podman stub in `run_updater_fixture` fails a pull without it);
+  - new: the stager passes `--signature-policy` with that path. Keep a
+    static check, and also record the `podman pull` arguments in the stub of
+    `run_updater_digest_fixture` (a successful staging run) and assert the
+    flag and path there; a failing stub alone cannot prove the flag;
   - keep the `podman pull --policy` ban (that flag is the pull policy);
   - `verify_vm_registry_policy` derives the VM policy from `bootc-policy.json`.
 - **Done when:** `validate.yml` is green and a lab update run stages a signed
@@ -124,7 +130,9 @@ digest before install, and never reads the target's policy.
 - With a permissive system default, `user-tmpfiles.d/snosi-containers-policy.conf`
   is redundant. Remove the `C`/`d` lines; keep
   `/usr/share/snosi/containers/user-policy.json` for the workaround above.
-  Existing user copies stay and stay harmless.
+  Existing user copies stay. For those users the copy still replaces the
+  system file, so their manual pulls of Frostyard repositories stay
+  unverified, as today; the stager does not depend on them.
 - **Done when:** the test drops the two provisioning checks and nothing else
   references the tmpfiles file.
 
