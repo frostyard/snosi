@@ -169,9 +169,14 @@ are masked. The most recent build-root compatibility recheck is in `AGENTS.md`.
 
 The base's `bootc-update-stage.timer` invokes
 `mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage`: it uses
-Podman to pull under restrictive containers/image policy, prunes stale
-transfer images before pulling, stages through bootc without forcing reboot,
-and verifies the staged digest equals the pulled manifest digest. It writes
+Podman to pull under the strict update policy in
+`/usr/lib/snosi/containers/bootc-policy.json` (ADR-0025; the system
+`/etc/containers/policy.json` accepts workload images), prunes stale
+transfer images before pulling, stages locked (`--download-only`), checks that
+the staged digest equals the pulled manifest digest, and only then unlocks the
+deployment with `bootc upgrade --from-downloaded`, which performs no new fetch.
+A deployment staged from a tag that moved stays locked, so it never applies. No
+reboot is forced. It writes
 `/run/snosi/update-check` on each run and `/run/snosi/update-staged` on a
 successful stage. Outcomes include `current`, `staged`, `held-rollback` and
 `failed`. The motd hook, desktop notification and `snosi-update-status`

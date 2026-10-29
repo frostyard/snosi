@@ -83,7 +83,7 @@ for shared keys and installer ISO publication references.
 - [plans/2026-10-05-sundog-desktop-completeness-plan.md](plans/2026-10-05-sundog-desktop-completeness-plan.md) — **In progress:** native desktop payload composed and VM package validation recorded; manual laptop/hardware validation deferred
 - [plans/2026-10-05-sundog-flatpak-defaults-plan.md](plans/2026-10-05-sundog-flatpak-defaults-plan.md) — **In progress:** all phases implemented (Firn v0.7.0); post-merge evidence (published images, an out-of-band ISO install) remains
 - [plans/2026-10-05-sundog-printer-support-plan.md](plans/2026-10-05-sundog-printer-support-plan.md) — **Planned:** immediate, independent addition of KDE's recommended printer helpers with package-availability and static checks
-- [plans/2026-10-29-container-policy-scope-plan.md](plans/2026-10-29-container-policy-scope-plan.md) — **Planned (option A chosen):** diagnosis of the Floe `qa-controlled` copy, a per-command workaround, and phases to scope the strict container policy to bootc updates (ADR-0025)
+- [plans/2026-10-29-container-policy-scope-plan.md](plans/2026-10-29-container-policy-scope-plan.md) — **Phases 1-2 implemented, lab proof passed (Snow and Floe, Secure Boot):** diagnosis of the Floe `qa-controlled` copy, a per-command workaround, and the strict container policy scoped to bootc updates (ADR-0025)
 - [plans/ab-deploy-checklist.md](plans/ab-deploy-checklist.md) — native A/B production-deploy checklist
 
 ### Contracts and runbooks (indexed in place)

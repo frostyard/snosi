@@ -7,9 +7,17 @@
 #
 # podman does the transfer because bootc's registry-transport composefs pull
 # currently fails on snosi images (known upstream bug; see the findings log
-# in docs/plans/2026-07-03-bootc-update-validation-plan.md). podman also
-# enforces containers-policy.json at pull time.
+# in docs/plans/2026-07-03-bootc-update-validation-plan.md). podman enforces
+# the strict update policy below at pull time: that policy lives in immutable
+# /usr, so it is not the system policy (/etc/containers/policy.json) and root
+# dotfiles or /etc drift cannot weaken it (ADR-0025).
 set -euo pipefail
+
+# The strict signature policy this stager enforces on its own pull. A literal
+# path with no environment override: the file is in immutable /usr, so a root
+# ~/.config/containers/policy.json or a 3-way-merged /etc edit cannot replace
+# it (ADR-0025).
+readonly BOOTC_POLICY=/usr/lib/snosi/containers/bootc-policy.json
 
 # Check-result state: written on EVERY run (not only when staging) so that
 # "current", "update staged", and "checker broken" are distinguishable
@@ -18,6 +26,21 @@ set -euo pipefail
 # Lives in /run: stale results do not survive a reboot.
 RUN_DIR=${SNOSI_RUN_DIR:-/run/snosi}
 CHECK="$RUN_DIR/update-check"
+
+# Serialize stager runs. The staged deployment is shared state: this run checks
+# a locked digest and then unlocks it with `bootc upgrade --from-downloaded`,
+# which unlocks WHATEVER is staged at that moment. A second run could stage a
+# different locked deployment in between, so two runs must never overlap. The
+# lock is held by this process on the fd below and released when it exits.
+# It serializes stager runs only: an operator who runs `bootc switch` or
+# `bootc upgrade` by hand at the same moment is a trusted root action.
+mkdir -p "$RUN_DIR"
+exec {lock_fd}>"$RUN_DIR/update-stage.lock"
+if ! flock -n "$lock_fd"; then
+    echo "Another bootc-update-stage run holds $RUN_DIR/update-stage.lock; not running concurrently."
+    # Write no check result: the run that holds the lock writes it.
+    exit 0
+fi
 
 # Shared staged-package sidecar publisher (ADR-0014). Sourced here (publish
 # side) and by snosi-update-status (resolve side). SNOSI_RUN_DIR, honored
@@ -37,7 +60,9 @@ STAGED_PACKAGES_LIB="${SNOSI_STAGED_PACKAGES_LIB:-/usr/lib/snosi/staged-packages
 capture_pulled_packages() { # image
     local image=$1 cid extract tmp
     extract="$(mktemp -d)" || return 1
-    if ! cid="$(podman create --quiet "$image")"; then
+    # --pull=never: the image is already in local storage from the verified
+    # pull; never let this step pull again under the relaxed system policy.
+    if ! cid="$(podman create --quiet --pull=never "$image")"; then
         rm -rf "$extract"
         return 1
     fi
@@ -105,12 +130,36 @@ transport=$(jq -r '.spec.image.transport // empty' <<<"$status")
 
 booted=$(jq -r '.status.booted.image.imageDigest // empty' <<<"$status")
 staged=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$status")
+# A download-only deployment is staged but locked: bootc-finalize-staged never
+# finalizes it at shutdown, so it never boots until it is unlocked.
+staged_locked=$(jq -r '.status.staged.downloadOnly // false' <<<"$status")
 rollback=$(jq -r '.status.rollback.image.imageDigest // empty' <<<"$status")
 
 write_staged_semaphore() {
     mkdir -p "$RUN_DIR"
     printf 'image=%s\ndigest=%s\nstaged_at=%s\n' \
         "$image" "$1" "$(date --iso-8601=seconds)" >"$RUN_DIR/update-staged"
+}
+
+# unlock_staged DIGEST -- unlock the locked deployment that was just staged and
+# prove the result: `bootc upgrade --from-downloaded` performs no new fetch and
+# reads no image reference, so it cannot pick up a tag that moved after the
+# digest check. Afterwards the staged deployment must still be DIGEST and must
+# no longer be download-only, or it would never apply.
+unlock_staged() { # digest
+    local digest=$1 after staged_now locked_now
+    bootc upgrade --quiet --from-downloaded
+    after=$(bootc status --format json)
+    staged_now=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$after")
+    locked_now=$(jq -r '.status.staged.downloadOnly // false' <<<"$after")
+    if [[ "$staged_now" != "$digest" ]]; then
+        echo "ERROR: staged deployment changed during unlock: staged is '${staged_now:-none}', expected $digest" >&2
+        return 1
+    fi
+    if [[ "$locked_now" != false ]]; then
+        echo "ERROR: staged deployment is still download-only after unlock, so it will not apply" >&2
+        return 1
+    fi
 }
 
 # Prune BEFORE pulling, not only after a successful switch: a previous run's
@@ -122,7 +171,7 @@ podman image prune -f >/dev/null || true
 
 # A failed pull does not invalidate a real deployment staged earlier. Reassert
 # it when bootc reports one; otherwise remove a stale runtime semaphore.
-if ! podman pull --quiet "$image" >/dev/null; then
+if ! pulled_id=$(podman pull --quiet --signature-policy "$BOOTC_POLICY" "$image"); then
     if [[ -n "$staged" ]]; then
         write_staged_semaphore "$staged"
     else
@@ -130,7 +179,13 @@ if ! podman pull --quiet "$image" >/dev/null; then
     fi
     exit 1
 fi
-pulled=$(podman image inspect --format '{{.Digest}}' "$image")
+# The pull prints the image ID that policy actually accepted. Every later
+# inspection and the packages capture address that ID, never the mutable tag.
+if [[ ! $pulled_id =~ ^[[:xdigit:]]{64}$ ]]; then
+    echo "ERROR: podman pull printed no valid image ID: '${pulled_id:-none}'" >&2
+    exit 1
+fi
+pulled=$(podman image inspect --format '{{.Digest}}' "$pulled_id")
 if [[ ! $pulled =~ ^sha256:[[:xdigit:]]{64}$ ]]; then
     echo "ERROR: pulled image has no valid registry manifest digest: '${pulled:-none}'" >&2
     exit 1
@@ -141,7 +196,7 @@ fi
 # between registry, ISO, and podman-loaded copies of the same build).
 remote_version=$(podman image inspect \
     --format '{{index .Config.Labels "org.opencontainers.image.version"}}' \
-    "$image" 2>/dev/null) || remote_version=""
+    "$pulled_id" 2>/dev/null) || remote_version=""
 
 # A registry pull retains both a local storage/config ID (`podman .Id`) and
 # the registry manifest digest (`podman .Digest`). bootc records the latter
@@ -172,12 +227,21 @@ fi
 # staging: once a deployment is staged, a copy failure can no longer unstage
 # it, and the next timer run would only re-assert the semaphore. This applies
 # to both the already-staged and the new-stage paths below.
-if ! pkg_temp="$(capture_pulled_packages "$image")"; then
+if ! pkg_temp="$(capture_pulled_packages "$pulled_id")"; then
     echo "ERROR: could not extract packages.txt from the pulled image before staging; aborting." >&2
     exit 1
 fi
 
 if [[ "$pulled" == "$staged" ]]; then
+    # A previous run can stage the deployment locked and then fail or be
+    # interrupted before the unlock. Leave it locked and it never applies, so
+    # unlock it here before reporting anything.
+    if [[ "$staged_locked" == true ]]; then
+        echo "Unlocking the download-only deployment already staged for $image."
+        if ! unlock_staged "$pulled"; then
+            exit 1
+        fi
+    fi
     echo "$image ($pulled) is already staged; will apply at next reboot."
     # Publish the sidecar FIRST: this branch is what repairs a prior run that
     # staged but failed to publish it (ADR-0014). Then re-assert the semaphore
@@ -188,7 +252,22 @@ if [[ "$pulled" == "$staged" ]]; then
     exit 0
 fi
 
-echo "Staging update: $image ($pulled)"
+# Refuse early when the local tag no longer points at the image the strict
+# policy accepted above. This check is cheap but NOT atomic: bootc resolves the
+# mutable local tag again itself, so another root process can retag between
+# this check and the staging command.
+tag_id=$(podman image inspect --format '{{.Id}}' "$image" 2>/dev/null) || tag_id=""
+if [[ "$tag_id" != "$pulled_id" ]]; then
+    echo "ERROR: local tag no longer points at the verified image: local tag is '${tag_id:-none}', verified image is $pulled_id" >&2
+    exit 1
+fi
+
+# Stage LOCKED (download-only), check the staged digest, and unlock only then.
+# That closes the race: a deployment staged from a tag that moved stays locked,
+# bootc-finalize-staged never finalizes it, and it never boots. A wrong
+# deployment can therefore be staged but not applied, and the next run
+# replaces it.
+echo "Staging update: $image ($pulled), locked until verified"
 if [[ "$transport" == "containers-storage" ]]; then
     # The spec already follows containers-storage:<image> — the steady state
     # after the FIRST staged update flips the transport. `bootc switch` to an
@@ -197,16 +276,26 @@ if [[ "$transport" == "containers-storage" ]]; then
     # install unable to take a second update while this script reported
     # success (root-caused 2026-07-06 on minisnow). `bootc upgrade` pulls the
     # spec's image and stages it properly.
-    bootc upgrade --quiet
+    bootc upgrade --quiet --download-only
 else
-    bootc switch --quiet --transport containers-storage "$image"
+    bootc switch --quiet --download-only --transport containers-storage "$image"
 fi
 
-# Verify bootc actually staged what we pulled: both failure modes here have
-# been observed to be SILENT (exit 0), so do not trust the exit code alone.
-staged_now=$(bootc status --format json | jq -r '.status.staged.image.imageDigest // empty')
+# Verify bootc staged the image the strict policy accepted AND that it left the
+# deployment locked. Both failure modes here have been observed to be SILENT
+# (exit 0), so do not trust the exit code alone.
+locked_status=$(bootc status --format json)
+staged_now=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$locked_status")
+locked_now=$(jq -r '.status.staged.downloadOnly // false' <<<"$locked_status")
 if [[ "$staged_now" != "$pulled" ]]; then
-    echo "ERROR: staging silently failed: staged deployment is '${staged_now:-none}', expected $pulled" >&2
+    echo "ERROR: staged image is not the verified image; left locked, it will not apply: staged deployment is '${staged_now:-none}', expected $pulled" >&2
+    exit 1
+fi
+if [[ "$locked_now" != true ]]; then
+    echo "ERROR: bootc did not lock the staged deployment ('${staged_now:-none}' is not download-only); refusing to report success" >&2
+    exit 1
+fi
+if ! unlock_staged "$pulled"; then
     exit 1
 fi
 

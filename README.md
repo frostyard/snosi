@@ -51,8 +51,9 @@ persistent. Sysexts overlay `/usr` only; packages that install into `/opt`
 must be relocated under `/usr` and factory `/etc` captures must be limited
 to tmpfiles-referenced paths. See [sysext design](docs/design/sysexts.md).
 The base contains the bootc updater, staged-update status and notifier.
-`bootc-update-stage.timer` checks hourly, pulls with Podman under the image
-signature policy, verifies the staged digest, and waits for a natural reboot.
+`bootc-update-stage.timer` checks hourly, pulls with Podman under the strict
+update policy in `/usr/lib/snosi/containers/bootc-policy.json`, verifies the
+staged digest, and waits for a natural reboot.
 `snosi-update-status --pkg-diff` compares the running and locally staged
 package inventories. The secure bootc
 [`snosi-kargs` CLI](docs/snosi-kargs.md) writes a signed append-only

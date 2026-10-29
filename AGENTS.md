@@ -137,10 +137,14 @@ own kernel arguments; no native A/B cmdline mechanism is needed.
 ## Updates and publication
 
 On installed bootc systems, `bootc-update-stage.timer` pulls through Podman
-under the signature policy and stages without forcing a reboot. It checks the
+under the strict update policy in `/usr`
+(`/usr/lib/snosi/containers/bootc-policy.json`), which root dotfiles and `/etc`
+drift cannot weaken, and stages without forcing a reboot. It checks the
 staged digest and writes `/run/snosi/update-check` and
 `/run/snosi/update-staged`; the motd, desktop notifier and
-`snosi-update-status` read this state. `--pkg-diff` uses the identity-bound
+`snosi-update-status` read this state. The system
+`/etc/containers/policy.json` accepts workload images and keeps the five
+Frostyard scopes signed. `--pkg-diff` uses the identity-bound
 `mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh` sidecar.
 That shared library retains `version=` support as an API even though the
 only shipped stager publishes a bootc `digest=` identity; do not remove

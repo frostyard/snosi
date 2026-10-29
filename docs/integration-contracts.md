@@ -60,9 +60,10 @@ and releases. A future schema-owning update/sysext API is discussed in the
 The updater reads `spec.image` plus booted/staged/rollback digests and
 checks the staged `imageDigest` against the Podman-pulled manifest digest.
 `bootc switch` to an identical spec can silently no-op, so a successful
-command exit is not a stage proof. The signature policy accepts narrowly
-scoped GHCR repositories, then allows already-verified local
-`containers-storage:` for bootc consumption.
+command exit is not a stage proof. The stager's strict update policy in `/usr`
+(`/usr/lib/snosi/containers/bootc-policy.json`) accepts narrowly scoped GHCR
+repositories, then allows already-verified local `containers-storage:` for
+bootc consumption.
 
 The sole shipped stager writes two key/value files under `/run/snosi/`:
 

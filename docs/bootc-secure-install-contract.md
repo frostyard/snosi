@@ -105,15 +105,18 @@ non-interactive Dakota path has completed and emits the literal line
 This harness does not require a negative-fixture runner. It proves that a good
 image installs and boots; it does not prove that a bad one is refused.
 
-Refusal is enforced elsewhere and is not re-proven here: the shipped
-`/etc/containers/policy.json` rejects by default and accepts only the exact
-`sigstoreSigned` scopes (see `docs/bootc-secure-operations.md`), and
-`test/bootc-container-policy-test.sh RUN_LIVE=1` exercises unsigned, wrong-key,
-and wrong-repository rejection through Podman against real published images.
-Rootless users receive a permissive
-`$HOME/.config/containers/policy.json` on first login so ordinary workload
-pulls do not inherit the system-image trust policy. User tmpfiles creates it
-only when absent, preserving any policy the user already configured.
+Refusal of an update is enforced elsewhere and is not re-proven here. The
+stager `/usr/libexec/bootc-update-stage` pulls with Podman under the strict
+update policy `/usr/lib/snosi/containers/bootc-policy.json`, which rejects by
+default and accepts only the exact `sigstoreSigned` scopes (see
+`docs/bootc-secure-operations.md`). `test/bootc-container-policy-test.sh
+RUN_LIVE=1` exercises unsigned, wrong-key, and wrong-repository rejection
+through Podman against real published images. The system
+`/etc/containers/policy.json` accepts ordinary workload images and keeps the
+five Frostyard scopes signature-checked; automatic updates do not depend on
+it. Rootless users still receive a permissive
+`$HOME/.config/containers/policy.json` on first login. User tmpfiles creates
+it only when absent, preserving any policy the user already configured.
 What is NOT covered by that, and is currently unproven, is refusal at
 install time by this path: a deliberately-broken image reaching the installer.
 
@@ -194,8 +197,8 @@ The update harness requires no negative runner either, for the same reason and
 by the same decision as the install path above. It proves that a good N+1/N+2
 is taken, that rollback returns, and that secure invariants survive each hop;
 it does not prove that a bad update is refused. `bootc-update-stage`'s own
-policy rejection remains enforced at runtime and is covered by
-`test/bootc-container-policy-test.sh`, not by this harness.
+strict policy rejection at pull time remains enforced at runtime and is
+covered by `test/bootc-container-policy-test.sh`, not by this harness.
 
 ## Task 10 Rotation Runner Protocol
 
@@ -245,13 +248,16 @@ image and require
 `io.snosi.bootc.secureboot-capable=true`; missing or false is a refusal, not a
 fallback to an insecure install.
 
-The installer must use the image's
-`/etc/containers/policy.json`, whose policy is globally rejecting and accepts
-only the exact Snosi repository with `matchRepository` identity. It must not
-use `--skip-fetch-check`, broaden the policy, or replace the digest with a tag
-after verification. The policy permits the subsequent local
-`containers-storage` bootc handoff only after Podman accepted the registry
-image.
+An installer that fetches through a containers policy must use the one the
+image contract's `oci.policy` names: `/usr/lib/snosi/containers/bootc-policy.json`,
+not the system `/etc/containers/policy.json`, whose default accepts workload
+images (ADR-0025). That policy is globally rejecting and accepts only the exact
+Snosi repositories with `matchRepository` identity. Firn does not read the
+field: it verifies the digest with `cosign verify --key` itself. The installer
+must not use `--skip-fetch-check`, broaden the policy, or replace the digest
+with a tag after verification. The policy permits the
+subsequent local `containers-storage` bootc handoff only after Podman accepted
+the registry image.
 
 ## Disk And Bootc Installation
 

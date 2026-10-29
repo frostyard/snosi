@@ -24,6 +24,7 @@ make_fixture() {
         "$fixture/shared/native-ab/keys" \
         "$fixture/shared/bootc-secure/tree/etc/containers/registries.d" \
         "$fixture/shared/bootc-secure/tree/usr/lib/snosi" \
+        "$fixture/shared/bootc-secure/tree/usr/lib/snosi/containers" \
         "$fixture/shared/bootc-secure/ci" \
         "$fixture/.github/workflows"
 
@@ -36,6 +37,7 @@ make_fixture() {
     : >"$fixture/shared/native-ab/keys/mok-2026.crt"
     : >"$fixture/shared/native-ab/keys/pcr-signing-2026.pub"
     : >"$fixture/shared/bootc-secure/tree/etc/containers/policy.json"
+    : >"$fixture/shared/bootc-secure/tree/usr/lib/snosi/containers/bootc-policy.json"
     : >"$fixture/shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml"
     cp "$root/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json" \
         "$fixture/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
@@ -327,6 +329,7 @@ for required in \
     shared/native-ab/keys/mok-2026.crt \
     shared/native-ab/keys/pcr-signing-2026.pub \
     shared/bootc-secure/tree/etc/containers/policy.json \
+    shared/bootc-secure/tree/usr/lib/snosi/containers/bootc-policy.json \
     shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml \
     shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json; do
     assert_guard "missing $required fails" 1 remove_required_file "$required"

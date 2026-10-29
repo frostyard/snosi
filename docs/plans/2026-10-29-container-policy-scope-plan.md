@@ -1,15 +1,19 @@
 # Plan: Scope the strict container policy to bootc updates
 
-**Status:** Planned — Brian chose option A on 2026-10-29 (desk T478b); see [ADR-0025](../adr/0025-scope-strict-container-policy-to-bootc-updates.md)  
-**Last verified:** 2026-10-29
+**Status:** Phases 1-2 implemented — Brian chose option A on 2026-10-29 (desk
+T478b); see [ADR-0025](../adr/0025-scope-strict-container-policy-to-bootc-updates.md).
+Both phases landed in one change. One image ships both, and the previous
+image's stager stages the update under its own strict policy, so no window
+exists between them.  
+**Last verified:** 2026-10-29 (lab proof)
 
-The system `/etc/containers/policy.json` rejects every registry image except
-five signed Frostyard repositories. It protects bootc updates, but it also
-blocks ordinary root and service-account container work. This plan moves the
-strict check onto the one fetch that stages updates, relaxes the system
-default, and keeps Frostyard product repositories signature-checked for every
-caller. It also records the diagnosis of the 2026-10-29 Floe `qa-controlled`
-copy and a safe per-command workaround.
+Before this plan, the system `/etc/containers/policy.json` rejected every
+registry image except five signed Frostyard repositories. That protected bootc
+updates, but it also blocked ordinary root and service-account container work.
+This plan moves the strict check onto the one fetch that stages updates,
+relaxes the system default, and keeps Frostyard product repositories
+signature-checked for every caller. It also records the diagnosis of the
+2026-10-29 Floe `qa-controlled` copy and a safe per-command workaround.
 
 ## Diagnosis: the Floe `qa-controlled` copy (T476a)
 
@@ -90,8 +94,9 @@ digest before install, and never reads the target's policy.
 - Add `shared/bootc-secure/tree/usr/lib/snosi/containers/bootc-policy.json`,
   equal to today's `/etc/containers/policy.json`.
 - `mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage`: pull with
-  `podman pull --signature-policy /usr/lib/snosi/containers/bootc-policy.json`
-  (overridable for tests only through an env variable, as `SNOSI_RUN_DIR`).
+  `podman pull --signature-policy /usr/lib/snosi/containers/bootc-policy.json`,
+  from a literal `readonly BOOTC_POLICY=` with no environment override: the
+  path is in immutable `/usr`.
 - Schema-1 `oci.policy` → the new path;
   `test/bootc-secure-install-contract-test.sh` follows.
 - `test/bootc-container-policy-test.sh`:
@@ -105,7 +110,8 @@ digest before install, and never reads the target's policy.
   - keep the `podman pull --policy` ban (that flag is the pull policy);
   - `verify_vm_registry_policy` derives the VM policy from `bootc-policy.json`.
 - **Done when:** `validate.yml` is green and a lab update run stages a signed
-  Snow digest through the new flag.
+  Snow digest through the new flag. Status: implemented, and met before the
+  merge by the lab proof below (Brian chose "lab proof first", desk T481a).
 
 ## Phase 2 — Relax the system default (small; only after Phase 1 is on `latest`)
 
@@ -123,7 +129,60 @@ digest before install, and never reads the target's policy.
 - Docs: `bootc-secure-install-contract.md` (rootless paragraph and "OCI
   Acceptance"), `bootc-secure-operations.md` (Trust Boundaries), AGENTS.md.
 - **Done when:** on a fresh Floe, `sudo podman pull quay.io/libpod/alpine`
-  works and `bootc-update-stage` still rejects an unsigned image.
+  works and `bootc-update-stage` still rejects an unsigned image. Status:
+  implemented. The lab proof below ran the alpine pull and the stager on a
+  fresh Floe install of a signed image with the #1181 files in a transient
+  `/usr` overlay; a fresh Floe built from `main` after the merge remains to
+  be seen.
+
+## Lab proof before the merge (2026-10-29, desk T481a)
+
+A signed image can only come from `build-images.yml` on `main`, so the proof
+has two parts. Both ran as dev Workflows on minideb under lease `lab-dev`.
+
+**Secure path, the #1181 stager on signed images (PASS).** The Firn
+installer ISO `snosi-installer_20261029172115` (SHA256SUMS signature valid
+for `F37282A3…8216FD68`) installed a signed image N with Secure Boot on,
+following the immutable version tag of a signed N+1. The run then put the
+stager and both policy files of PR head `4f9d82c` (sha256 equal to the PR
+files) into a `bootc usr-overlay`, and judged every step:
+
+| Run | N → N+1 | Result |
+| --- | --- | --- |
+| `dev-pr1181-secure-snow-k2vcf` | Snow `20261029023049` → `20261029102309` (`sha256:52bde2f1…`) | PASS |
+| `dev-pr1181-secure-floe-5hhlw` | Floe `20261028230726` → `20261029102316` (`sha256:d8ab1ea6…`) | PASS |
+
+In both runs, on bootc 1.17.1 with Secure Boot enabled:
+- the strict policy rejects by default and the system policy accepts by
+  default; `podman pull quay.io/libpod/alpine` works as root under the system
+  policy and is rejected under `bootc-policy.json`;
+- with the run lock held, a stager run exits 0 and writes no check result;
+- stager run 1 staged N+1 locked (`--download-only`), verified the digest and
+  unlocked it: `outcome=staged`, staged digest = N+1, `downloadOnly=false`;
+  the bootc journal shows the download-only and from-downloaded operations;
+- stager run 2 reported the update as already staged;
+- after a reboot, N+1 booted under Secure Boot, the rollback slot held N, and
+  no unit failed.
+
+**Image path, mechanics images built from the #1181 head.** The throwaway
+branch `murbella/pr1181-lab-proof-build` (PR head plus 1 workflow commit,
+never merged) published unsigned QA images `snow:mechanics-pr1181-20261029173103`
+and `floe:mechanics-pr1181-20261029173015`; the `mechanics` alias did not
+move. Runs `dev-pr1181-update-snow-x7lg8` and `-7hv88` installed the Snow one
+with `bootc install to-disk --target-imgref` the signed N+1, and proved the
+image's own files: the strict policy in `/usr`, the permissive `/etc`
+default, the alpine accept and reject, the strict rejection of the unsigned
+image, the run lock, and the strict pull of the signed N+1. bootc then
+refused to stage a secure N+1 onto a mechanics install (`Conflicting boot
+types`; without `--allow-missing-verity`, a fs-verity mismatch). That is the
+mechanics-versus-secure tier limit, not a stager result, so those runs do
+not judge the stage.
+
+**Limits.** No signed image built from #1181 exists before the merge; the
+secure runs prove the PR's stager and policies on signed images with bootc
+1.17.1, not the PR's image build. A tag that moves during staging and two
+overlapping stagers are proven by the fixtures in
+`test/bootc-container-policy-test.sh`, not in the lab.
 
 ## Phase 3 — Retire rootless provisioning (optional)
 
@@ -145,11 +204,15 @@ digest before install, and never reads the target's policy.
 
 ## Open questions
 
-- **Registries.d override for the stager:** the stager runs as root. A
-  `/root/.config/containers/registries.d` would hide the sigstore attachments
-  and fail updates closed: safe, but noisy. Podman has no flag for the
-  registries.d path (`--registries-conf` is a different file). Decide by
-  Phase 1 whether the fail-closed result is enough.
+None open; the question below is decided.
+
+- **Registries.d override for the stager:** decided 2026-10-29. The stager runs
+  as root, so a `/root/.config/containers/registries.d` would hide the sigstore
+  attachments and fail updates closed. Podman has no flag for the registries.d
+  path (`--registries-conf` is a different file). Fail closed is enough: the
+  pull fails, `outcome=failed` is recorded on every run, and the motd and
+  `snosi-update-status` show it. A visible failure that stages nothing is the
+  safe result, so no further mechanism is added.
 
 ## References
 

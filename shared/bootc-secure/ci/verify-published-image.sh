@@ -4,7 +4,7 @@
 set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
-POLICY="$ROOT_DIR/shared/bootc-secure/tree/etc/containers/policy.json"
+POLICY="$ROOT_DIR/shared/bootc-secure/tree/usr/lib/snosi/containers/bootc-policy.json"
 REGISTRIES="$ROOT_DIR/shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml"
 # shellcheck source=test/lib/bootc-secure-assertions.sh
 source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
