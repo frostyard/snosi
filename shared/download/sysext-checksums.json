@@ -25,14 +25,14 @@
     "version": "156.0.4314.50-1"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.143.1/code-server_4.143.1_amd64.deb",
-    "sha256": "e4b771c98fafbe2af3990ecd71d93ba22515588db550007076768a014ae34c02",
-    "version": "4.143.1"
+    "url": "https://github.com/coder/code-server/releases/download/v4.144.0/code-server_4.144.0_amd64.deb",
+    "sha256": "45f5533b502edac68b7eb09c5cec44fd281f80264af9a87fde0bfb2c5e190615",
+    "version": "4.144.0"
   },
   "coder": {
-    "url": "https://github.com/coder/coder/releases/download/v2.37.7/coder_2.37.7_linux_amd64.deb",
-    "sha256": "f228cc949903a46f80be19a07e92a113d2054e1060f1b92b6b33373b3853657d",
-    "version": "2.37.7"
+    "url": "https://github.com/coder/coder/releases/download/v2.37.8/coder_2.37.8_linux_amd64.deb",
+    "sha256": "807a4a59e40a18a0fdbf57963bff70bafdd940b1378439692ce26704be88f3de",
+    "version": "2.37.8"
   },
   "github-copilot": {
     "url": "https://github.com/github/app/releases/download/v1.1.33/GitHub-Copilot-linux-x64.deb",
@@ -50,14 +50,14 @@
     "version": "1.36.5+k3s1"
   },
   "lemonade": {
-    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v2026.43.3/lemonade-server_2026.43.3-debian13_amd64.deb",
-    "sha256": "a9260c96f7a9d0d41ad1a599904e091b7abddb33d16d675abec5bab4faf57416",
-    "version": "2026.43.3"
+    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v2026.44.1/lemonade-server_2026.44.1-debian13_amd64.deb",
+    "sha256": "ddeb64d1673cf3d7a228c5353b1ade3f7cb2f2cf1156f414480f4e08a3ec5a6f",
+    "version": "2026.44.1"
   },
   "paseo": {
-    "url": "https://github.com/getpaseo/paseo/releases/download/v0.13.2/Paseo-0.13.2-amd64.deb",
-    "sha256": "577253c3027e841efcc142757cf4c1d6d41095acfd42bd4e7a678e6959841242",
-    "version": "0.13.2"
+    "url": "https://github.com/getpaseo/paseo/releases/download/v0.14.0/Paseo-0.14.0-amd64.deb",
+    "sha256": "13fca44a81b5c8a02f967b4790e9677898d9f734682d1b0337d42833cc0fbbbf",
+    "version": "0.14.0"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.9.0/frostyard-pilothouse_0.9.0_amd64.deb",
