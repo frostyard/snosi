@@ -326,6 +326,19 @@ else
     fail "updater unit sets no environment for the stager"
 fi
 
+# The run lock must come first: it has to be held before the EXIT trap and
+# before the first `bootc status`, or two runs can still interleave.
+lock_line=$(grep -n 'flock -n "\$lock_fd"' "$UPDATER" | head -1 | cut -d: -f1 || true)
+trap_line=$(grep -n '^trap ' "$UPDATER" | head -1 | cut -d: -f1 || true)
+first_status_line=$(grep -n 'bootc status --format json' "$UPDATER" | head -1 | cut -d: -f1 || true)
+if [[ -n $lock_line && -n $trap_line && -n $first_status_line ]] && \
+        (( lock_line < trap_line && lock_line < first_status_line )) && \
+        grep -Fq 'exec {lock_fd}>"$RUN_DIR/update-stage.lock"' "$UPDATER"; then
+    pass "updater takes its run lock before the trap and the first bootc status"
+else
+    fail "updater takes its run lock before the trap and the first bootc status (lock=${lock_line:-none} trap=${trap_line:-none} status=${first_status_line:-none})"
+fi
+
 run_updater_fixture() { # staged digest or empty
     local staged=$1 work status rc
     work=$(mktemp -d)
@@ -728,6 +741,36 @@ run_stager_tag_mismatch_fixture() {
     fi
 }
 run_stager_tag_mismatch_fixture
+
+# Two stager runs must never overlap: the staged deployment is shared, and
+# `--from-downloaded` unlocks whatever is staged when it runs. A run that finds
+# the lock held exits 0, does nothing, and writes no check result.
+run_stager_lock_fixture() {
+    local work before locked unlocked rc held
+    work=$(mktemp -d)
+    trap 'rm -rf "$work"' RETURN
+    make_stager_fixture "$work"
+    before=$(staged_status "$old" '' containers-storage false)
+    locked=$(staged_status "$old" "$manifest" containers-storage true)
+    unlocked=$(staged_status "$old" "$manifest" containers-storage false)
+
+    # Hold the same lock the stager takes, from this test process.
+    exec {held}>"$work/run/update-stage.lock"
+    flock -n "$held"
+    run_stager "$work" "$before" "$locked" "$unlocked"
+    rc=$CASE_RC
+    exec {held}>&-
+
+    if [[ $rc -eq 0 ]] && [[ ! -e $work/run/update-check ]] && \
+            [[ ! -e $work/state/bootc-calls ]] && \
+            ! grep -Fq 'pull ' "$work/state/podman-calls" 2>/dev/null && \
+            grep -Fq 'not running concurrently' "$work/output"; then
+        pass "a second stager run does not run while one holds the lock"
+    else
+        fail "a second stager run does not run while one holds the lock (rc=$rc check=$( [[ -e $work/run/update-check ]] && echo written || echo absent ); bootc calls: $(tr '\n' '|' <"$work/state/bootc-calls" 2>/dev/null); podman calls: $(tr '\n' '|' <"$work/state/podman-calls" 2>/dev/null); output: $(<"$work/output"))"
+    fi
+}
+run_stager_lock_fixture
 
 run_live_policy_proof() {
     local live_home host_policy update_policy wrong_key_policy wrong_identity_policy unsigned_policy wrong_key log

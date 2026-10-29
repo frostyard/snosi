@@ -68,6 +68,11 @@ A locked deployment whose digest equals the verified update is unlocked on
 the next run, even when an operator staged it with `--download-only`. To hold
 updates, mask `bootc-update-stage.timer`.
 
+Stager runs are serialized by a lock in `/run/snosi`, so two runs cannot
+interleave their stage and unlock. An operator who runs `bootc switch` or
+`bootc upgrade` by hand at that moment is a trusted root action and is not
+covered by the lock.
+
 The system policy `/etc/containers/policy.json` accepts ordinary workload
 images by default. It keeps the five Frostyard scopes `sigstoreSigned`. A
 caller that pulls a Frostyard product repository by name still verifies its

@@ -27,6 +27,21 @@ readonly BOOTC_POLICY=/usr/lib/snosi/containers/bootc-policy.json
 RUN_DIR=${SNOSI_RUN_DIR:-/run/snosi}
 CHECK="$RUN_DIR/update-check"
 
+# Serialize stager runs. The staged deployment is shared state: this run checks
+# a locked digest and then unlocks it with `bootc upgrade --from-downloaded`,
+# which unlocks WHATEVER is staged at that moment. A second run could stage a
+# different locked deployment in between, so two runs must never overlap. The
+# lock is held by this process on the fd below and released when it exits.
+# It serializes stager runs only: an operator who runs `bootc switch` or
+# `bootc upgrade` by hand at the same moment is a trusted root action.
+mkdir -p "$RUN_DIR"
+exec {lock_fd}>"$RUN_DIR/update-stage.lock"
+if ! flock -n "$lock_fd"; then
+    echo "Another bootc-update-stage run holds $RUN_DIR/update-stage.lock; not running concurrently."
+    # Write no check result: the run that holds the lock writes it.
+    exit 0
+fi
+
 # Shared staged-package sidecar publisher (ADR-0014). Sourced here (publish
 # side) and by snosi-update-status (resolve side). SNOSI_RUN_DIR, honored
 # above, is also honored by the library for the sidecar location.
