@@ -43,6 +43,7 @@ states intent; the categories below hold the record.
 - [adr/0022-installer-graphical-and-console-boot-entries.md](adr/0022-installer-graphical-and-console-boot-entries.md) — **Proposed:** the installer ISO boots firn-gui in cage or the TUI from a GRUB menu (console default, serial TUI always); costs about +290 MiB RAM rootfs and a 4.5 GiB minimum
 - [adr/0023-skip-bootloader-reconcile-without-secure-boot-support.md](adr/0023-skip-bootloader-reconcile-without-secure-boot-support.md) — **Proposed:** the bootc bootloader reconciler also skips when no shim second stage is installed and readable efivarfs has no `SecureBoot` variable (firmware without Secure Boot support)
 - [adr/0024-verify-attestations-of-first-party-sysext-debs.md](adr/0024-verify-attestations-of-first-party-sysext-debs.md) — **Accepted:** pinned first-party sysext debs (notesd, maild) must pass `gh attestation verify` at pin time in `check-dependencies.yml` and in every `build.yml` run, before mkosi downloads them
+- [adr/0025-scope-strict-container-policy-to-bootc-updates.md](adr/0025-scope-strict-container-policy-to-bootc-updates.md) — **Proposed:** bootc updates pull with an immutable `/usr/lib/snosi/containers/bootc-policy.json`; the system policy default accepts workload images and keeps Frostyard product repositories `sigstoreSigned`
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design
@@ -82,6 +83,7 @@ for shared keys and installer ISO publication references.
 - [plans/2026-10-05-sundog-desktop-completeness-plan.md](plans/2026-10-05-sundog-desktop-completeness-plan.md) — **In progress:** native desktop payload composed and VM package validation recorded; manual laptop/hardware validation deferred
 - [plans/2026-10-05-sundog-flatpak-defaults-plan.md](plans/2026-10-05-sundog-flatpak-defaults-plan.md) — **In progress:** all phases implemented (Firn v0.7.0); post-merge evidence (published images, an out-of-band ISO install) remains
 - [plans/2026-10-05-sundog-printer-support-plan.md](plans/2026-10-05-sundog-printer-support-plan.md) — **Planned:** immediate, independent addition of KDE's recommended printer helpers with package-availability and static checks
+- [plans/2026-10-29-container-policy-scope-plan.md](plans/2026-10-29-container-policy-scope-plan.md) — **Proposed:** diagnosis of the Floe `qa-controlled` copy, a per-command workaround, and phases to scope the strict container policy to bootc updates (ADR-0025)
 - [plans/ab-deploy-checklist.md](plans/ab-deploy-checklist.md) — native A/B production-deploy checklist
 
 ### Contracts and runbooks (indexed in place)
