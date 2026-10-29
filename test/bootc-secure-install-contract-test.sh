@@ -31,7 +31,7 @@ assert contract["installer"] == {
     "oci": {
         "capability_label": "io.snosi.bootc.secureboot-capable",
         "capability_value": "true",
-        "policy": "/etc/containers/policy.json",
+        "policy": "/usr/lib/snosi/containers/bootc-policy.json",
         "signed_identity": "matchRepository",
     },
     "storage": {

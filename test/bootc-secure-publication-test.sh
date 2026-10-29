@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 HELPER="$ROOT_DIR/shared/bootc-secure/ci/verify-published-image.sh"
 CONTRACT="$ROOT_DIR/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
-POLICY="$ROOT_DIR/shared/bootc-secure/tree/etc/containers/policy.json"
+POLICY="$ROOT_DIR/shared/bootc-secure/tree/usr/lib/snosi/containers/bootc-policy.json"
 ASSEMBLY_COMPATIBILITY=$(jq -er '.assembly.compatibility' "$CONTRACT")
 DIGEST="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 IMAGE="ghcr.io/frostyard/floe"

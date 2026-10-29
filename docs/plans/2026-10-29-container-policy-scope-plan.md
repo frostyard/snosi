@@ -1,15 +1,19 @@
 # Plan: Scope the strict container policy to bootc updates
 
-**Status:** Planned — Brian chose option A on 2026-10-29 (desk T478b); see [ADR-0025](../adr/0025-scope-strict-container-policy-to-bootc-updates.md)  
+**Status:** Phases 1-2 implemented — Brian chose option A on 2026-10-29 (desk
+T478b); see [ADR-0025](../adr/0025-scope-strict-container-policy-to-bootc-updates.md).
+Both phases landed in one change. One image ships both, and the previous
+image's stager stages the update under its own strict policy, so no window
+exists between them.  
 **Last verified:** 2026-10-29
 
-The system `/etc/containers/policy.json` rejects every registry image except
-five signed Frostyard repositories. It protects bootc updates, but it also
-blocks ordinary root and service-account container work. This plan moves the
-strict check onto the one fetch that stages updates, relaxes the system
-default, and keeps Frostyard product repositories signature-checked for every
-caller. It also records the diagnosis of the 2026-10-29 Floe `qa-controlled`
-copy and a safe per-command workaround.
+Before this plan, the system `/etc/containers/policy.json` rejected every
+registry image except five signed Frostyard repositories. That protected bootc
+updates, but it also blocked ordinary root and service-account container work.
+This plan moves the strict check onto the one fetch that stages updates,
+relaxes the system default, and keeps Frostyard product repositories
+signature-checked for every caller. It also records the diagnosis of the
+2026-10-29 Floe `qa-controlled` copy and a safe per-command workaround.
 
 ## Diagnosis: the Floe `qa-controlled` copy (T476a)
 
@@ -90,8 +94,9 @@ digest before install, and never reads the target's policy.
 - Add `shared/bootc-secure/tree/usr/lib/snosi/containers/bootc-policy.json`,
   equal to today's `/etc/containers/policy.json`.
 - `mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage`: pull with
-  `podman pull --signature-policy /usr/lib/snosi/containers/bootc-policy.json`
-  (overridable for tests only through an env variable, as `SNOSI_RUN_DIR`).
+  `podman pull --signature-policy /usr/lib/snosi/containers/bootc-policy.json`,
+  from a literal `readonly BOOTC_POLICY=` with no environment override: the
+  path is in immutable `/usr`.
 - Schema-1 `oci.policy` → the new path;
   `test/bootc-secure-install-contract-test.sh` follows.
 - `test/bootc-container-policy-test.sh`:
@@ -105,7 +110,8 @@ digest before install, and never reads the target's policy.
   - keep the `podman pull --policy` ban (that flag is the pull policy);
   - `verify_vm_registry_policy` derives the VM policy from `bootc-policy.json`.
 - **Done when:** `validate.yml` is green and a lab update run stages a signed
-  Snow digest through the new flag.
+  Snow digest through the new flag. Status: implemented; the lab update run
+  remains open.
 
 ## Phase 2 — Relax the system default (small; only after Phase 1 is on `latest`)
 
@@ -123,7 +129,8 @@ digest before install, and never reads the target's policy.
 - Docs: `bootc-secure-install-contract.md` (rootless paragraph and "OCI
   Acceptance"), `bootc-secure-operations.md` (Trust Boundaries), AGENTS.md.
 - **Done when:** on a fresh Floe, `sudo podman pull quay.io/libpod/alpine`
-  works and `bootc-update-stage` still rejects an unsigned image.
+  works and `bootc-update-stage` still rejects an unsigned image. Status:
+  implemented; the fresh-Floe check remains open.
 
 ## Phase 3 — Retire rootless provisioning (optional)
 
@@ -145,11 +152,15 @@ digest before install, and never reads the target's policy.
 
 ## Open questions
 
-- **Registries.d override for the stager:** the stager runs as root. A
-  `/root/.config/containers/registries.d` would hide the sigstore attachments
-  and fail updates closed: safe, but noisy. Podman has no flag for the
-  registries.d path (`--registries-conf` is a different file). Decide by
-  Phase 1 whether the fail-closed result is enough.
+None open; the question below is decided.
+
+- **Registries.d override for the stager:** decided 2026-10-29. The stager runs
+  as root, so a `/root/.config/containers/registries.d` would hide the sigstore
+  attachments and fail updates closed. Podman has no flag for the registries.d
+  path (`--registries-conf` is a different file). Fail closed is enough: the
+  pull fails, `outcome=failed` is recorded on every run, and the motd and
+  `snosi-update-status` show it. A visible failure that stages nothing is the
+  safe result, so no further mechanism is added.
 
 ## References
 

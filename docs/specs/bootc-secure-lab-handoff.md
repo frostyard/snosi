@@ -65,8 +65,9 @@ that any ref is signed, reachable, or actually booted. Synthetic examples in
    manifest digest and require exact equality with `image_n_plus_1` **before
    and after** the stage. If the tracking tag drifts or cannot be verified,
    fail closed; the lab MUST NOT rewrite or move the tag. The shipped updater
-   pulls `.spec.image.image` with Podman under the shipped repository-scoped
-   signature policy; it first switches to `containers-storage` and compares
+   pulls `.spec.image.image` with Podman under the shipped strict update policy
+   in `/usr` (`/usr/lib/snosi/containers/bootc-policy.json`); it first switches
+   to `containers-storage` and compares
    the staged registry manifest digest to its pulled digest. The lab MUST
    independently record the signed-image check and `bootc status --format json`
    at each boundary rather than treating a stager exit code as boot proof.

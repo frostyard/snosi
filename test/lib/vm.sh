@@ -29,7 +29,7 @@ create_registry_policy() {
     mkdir -p "$IMAGE_POLICY_HOME/.config/containers/registries.d"
     jq --arg key "$PROJECT_ROOT/cosign.pub" '
         .transports.docker |= with_entries(.value |= map(.keyPath = $key))
-    ' "$PROJECT_ROOT/shared/bootc-secure/tree/etc/containers/policy.json" \
+    ' "$PROJECT_ROOT/shared/bootc-secure/tree/usr/lib/snosi/containers/bootc-policy.json" \
         >"$IMAGE_POLICY"
     cp "$PROJECT_ROOT/shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml" \
         "$IMAGE_POLICY_HOME/.config/containers/registries.d/frostyard.yaml"

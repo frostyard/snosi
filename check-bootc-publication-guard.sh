@@ -60,6 +60,7 @@ required_files=(
     shared/native-ab/keys/mok-2026.crt
     shared/native-ab/keys/pcr-signing-2026.pub
     shared/bootc-secure/tree/etc/containers/policy.json
+    shared/bootc-secure/tree/usr/lib/snosi/containers/bootc-policy.json
     shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml
     shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json
     shared/bootc-secure/compatibility.sh

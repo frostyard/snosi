@@ -7,9 +7,17 @@
 #
 # podman does the transfer because bootc's registry-transport composefs pull
 # currently fails on snosi images (known upstream bug; see the findings log
-# in docs/plans/2026-07-03-bootc-update-validation-plan.md). podman also
-# enforces containers-policy.json at pull time.
+# in docs/plans/2026-07-03-bootc-update-validation-plan.md). podman enforces
+# the strict update policy below at pull time: that policy lives in immutable
+# /usr, so it is not the system policy (/etc/containers/policy.json) and root
+# dotfiles or /etc drift cannot weaken it (ADR-0025).
 set -euo pipefail
+
+# The strict signature policy this stager enforces on its own pull. A literal
+# path with no environment override: the file is in immutable /usr, so a root
+# ~/.config/containers/policy.json or a 3-way-merged /etc edit cannot replace
+# it (ADR-0025).
+readonly BOOTC_POLICY=/usr/lib/snosi/containers/bootc-policy.json
 
 # Check-result state: written on EVERY run (not only when staging) so that
 # "current", "update staged", and "checker broken" are distinguishable
@@ -37,7 +45,9 @@ STAGED_PACKAGES_LIB="${SNOSI_STAGED_PACKAGES_LIB:-/usr/lib/snosi/staged-packages
 capture_pulled_packages() { # image
     local image=$1 cid extract tmp
     extract="$(mktemp -d)" || return 1
-    if ! cid="$(podman create --quiet "$image")"; then
+    # --pull=never: the image is already in local storage from the verified
+    # pull; never let this step pull again under the relaxed system policy.
+    if ! cid="$(podman create --quiet --pull=never "$image")"; then
         rm -rf "$extract"
         return 1
     fi
@@ -122,7 +132,7 @@ podman image prune -f >/dev/null || true
 
 # A failed pull does not invalidate a real deployment staged earlier. Reassert
 # it when bootc reports one; otherwise remove a stale runtime semaphore.
-if ! podman pull --quiet "$image" >/dev/null; then
+if ! pulled_id=$(podman pull --quiet --signature-policy "$BOOTC_POLICY" "$image"); then
     if [[ -n "$staged" ]]; then
         write_staged_semaphore "$staged"
     else
@@ -130,7 +140,13 @@ if ! podman pull --quiet "$image" >/dev/null; then
     fi
     exit 1
 fi
-pulled=$(podman image inspect --format '{{.Digest}}' "$image")
+# The pull prints the image ID that policy actually accepted. Every later
+# inspection and the packages capture address that ID, never the mutable tag.
+if [[ ! $pulled_id =~ ^[[:xdigit:]]{64}$ ]]; then
+    echo "ERROR: podman pull printed no valid image ID: '${pulled_id:-none}'" >&2
+    exit 1
+fi
+pulled=$(podman image inspect --format '{{.Digest}}' "$pulled_id")
 if [[ ! $pulled =~ ^sha256:[[:xdigit:]]{64}$ ]]; then
     echo "ERROR: pulled image has no valid registry manifest digest: '${pulled:-none}'" >&2
     exit 1
@@ -141,7 +157,7 @@ fi
 # between registry, ISO, and podman-loaded copies of the same build).
 remote_version=$(podman image inspect \
     --format '{{index .Config.Labels "org.opencontainers.image.version"}}' \
-    "$image" 2>/dev/null) || remote_version=""
+    "$pulled_id" 2>/dev/null) || remote_version=""
 
 # A registry pull retains both a local storage/config ID (`podman .Id`) and
 # the registry manifest digest (`podman .Digest`). bootc records the latter
@@ -172,7 +188,7 @@ fi
 # staging: once a deployment is staged, a copy failure can no longer unstage
 # it, and the next timer run would only re-assert the semaphore. This applies
 # to both the already-staged and the new-stage paths below.
-if ! pkg_temp="$(capture_pulled_packages "$image")"; then
+if ! pkg_temp="$(capture_pulled_packages "$pulled_id")"; then
     echo "ERROR: could not extract packages.txt from the pulled image before staging; aborting." >&2
     exit 1
 fi
@@ -186,6 +202,15 @@ if [[ "$pulled" == "$staged" ]]; then
     write_staged_semaphore "$pulled"
     write_check staged
     exit 0
+fi
+
+# Never stage what the tag now points at unless it is still the image the
+# strict policy accepted above: a tag that moved between the pull and here
+# would otherwise reach `bootc switch`/`upgrade` unverified.
+tag_id=$(podman image inspect --format '{{.Id}}' "$image" 2>/dev/null) || tag_id=""
+if [[ "$tag_id" != "$pulled_id" ]]; then
+    echo "ERROR: local tag no longer points at the verified image: local tag is '${tag_id:-none}', verified image is $pulled_id" >&2
+    exit 1
 fi
 
 echo "Staging update: $image ($pulled)"

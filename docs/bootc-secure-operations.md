@@ -50,6 +50,32 @@ authenticates LUKS. The committed Cosign public key and repository-scoped
 containers policy authenticate OCI pulls. The UKI `composefs=` value binds the
 booted code to the authenticated deployment content.
 
+Two containers policies ship, and they differ in scope (ADR-0025).
+
+The strict update policy `/usr/lib/snosi/containers/bootc-policy.json` lives in
+immutable `/usr`. It rejects every unlisted image and accepts only the five
+`sigstoreSigned` Frostyard scopes. `bootc-update-stage` passes it to Podman with
+`--signature-policy`. Root dotfiles and `/etc` drift cannot weaken it. That
+pull is the gate: bootc then stages from local storage only.
+
+The system policy `/etc/containers/policy.json` accepts ordinary workload
+images by default. It keeps the five Frostyard scopes `sigstoreSigned`. A
+caller that pulls a Frostyard product repository by name still verifies its
+signature. Any process with a `$HOME/.config/containers/policy.json` reads that
+file instead, as on stock Debian.
+
+The system policy does not protect manual operations. A manual `bootc switch` to
+a foreign registry image is no longer refused by policy. Protection there is
+weaker: the stager refuses to auto-update from that image and records
+`outcome=failed` on every run, which the motd and `snosi-update-status` show.
+The Secure Boot result for such an image is unproven (ADR-0025 Phase 4). Do not
+claim it as a safeguard. Manual pulls of lookalike repositories
+(`ghcr.io/frostyard/snow-x`) are unverified; the stager still refuses them.
+
+A root `~/.config/containers/registries.d` hides the sigstore attachments. The
+stager then fails closed: its pull fails and every run records `outcome=failed`.
+Fail closed is the decided behaviour for that case.
+
 Private MOK and PCR keys never enter OCI images or installed systems.
 The recovery credential is separate from signing authority and never belongs in
 an OCI image, recipe, log, provenance record, firmware variable, or retained

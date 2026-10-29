@@ -144,7 +144,8 @@ behavior or of the original FD failure's precise cause.
 ## Updates and sysexts
 
 The base's `bootc-update-stage.timer` pulls the followed OCI image using
-Podman under the system signature policy, stages a checked digest without
+Podman under the strict update policy in
+`/usr/lib/snosi/containers/bootc-policy.json`, stages a checked digest without
 rebooting, and records `/run/snosi/update-check` and
 `/run/snosi/update-staged`. The motd, desktop notifier, and
 `snosi-update-status` consume that state. `--pkg-diff` reads an
