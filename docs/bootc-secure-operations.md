@@ -58,6 +58,16 @@ immutable `/usr`. It rejects every unlisted image and accepts only the five
 `--signature-policy`. Root dotfiles and `/etc` drift cannot weaken it. That
 pull is the gate: bootc then stages from local storage only.
 
+The stage is two-phase, because bootc resolves the mutable local tag again and
+another root process can retag between the check and the stage. The stager
+stages locked (`--download-only`), then checks the staged digest. A locked
+deployment is never finalized at shutdown. Only a matching deployment is
+unlocked with `bootc upgrade --from-downloaded`, which performs no new fetch. A
+mismatch stays locked, so it never applies, and the next run replaces it.
+A locked deployment whose digest equals the verified update is unlocked on
+the next run, even when an operator staged it with `--download-only`. To hold
+updates, mask `bootc-update-stage.timer`.
+
 The system policy `/etc/containers/policy.json` accepts ordinary workload
 images by default. It keeps the five Frostyard scopes `sigstoreSigned`. A
 caller that pulls a Frostyard product repository by name still verifies its

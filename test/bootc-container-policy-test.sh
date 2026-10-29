@@ -365,28 +365,43 @@ EOF
 run_updater_fixture sha256:already-staged
 run_updater_fixture ''
 
-# make_stager_fixture DIR -- stub binaries for one stager run. The podman stub
-# records the full argument list of every call in DIR/state/podman-calls (the
-# policy assertions read it), answers `pull` with $PULLED_CONFIG_ID, and tells
-# an inspect by image ID from an inspect by tag name: an inspect of
-# $PULLED_CONFIG_ID prints the pulled ID; an inspect of any other reference
-# prints DIR/state/tag-id when a test wrote one, else the pulled ID.
+# make_stager_fixture DIR -- stub binaries for one stager run.
+#
+# The podman stub records the full argument list of every call in
+# DIR/state/podman-calls (the policy assertions read it), answers `pull` with
+# $PULLED_CONFIG_ID, and tells an inspect by image ID from an inspect by tag
+# name: an inspect of $PULLED_CONFIG_ID prints the pulled ID; an inspect of any
+# other reference prints DIR/state/tag-id when a test wrote one, else the
+# pulled ID.
+#
+# The bootc stub records every call in DIR/state/bootc-calls and models the
+# two-phase stage of bootc 1.17.1:
+#   * a `status` read before any staging prints $BOOTC_STATUS_BEFORE;
+#   * after a `--download-only` call it prints $BOOTC_STATUS_LOCKED;
+#   * after a `--from-downloaded` call it prints $BOOTC_STATUS_UNLOCKED.
+# The staging subcommand (upgrade or switch) goes to DIR/state/operation, and
+# only a call that carries `--download-only` sets it, so the unlock call is
+# never mistaken for a stage.
 make_stager_fixture() { # dir
     local dir=$1
     mkdir -p "$dir/bin" "$dir/run" "$dir/state"
     cat >"$dir/bin/bootc" <<'EOF'
 #!/bin/bash
+printf '%s\n' "$*" >>"$FIXTURE_STATE/bootc-calls"
 case $1 in
 status)
-    if [[ -e $FIXTURE_STATE/status-read ]]; then
-        printf '%s\n' "$BOOTC_STATUS_AFTER"
+    if grep -qF -- '--from-downloaded' "$FIXTURE_STATE/bootc-calls"; then
+        printf '%s\n' "$BOOTC_STATUS_UNLOCKED"
+    elif grep -qF -- '--download-only' "$FIXTURE_STATE/bootc-calls"; then
+        printf '%s\n' "$BOOTC_STATUS_LOCKED"
     else
-        : >"$FIXTURE_STATE/status-read"
         printf '%s\n' "$BOOTC_STATUS_BEFORE"
     fi
     ;;
 upgrade|switch)
-    printf '%s\n' "$1" >"$FIXTURE_STATE/operation"
+    case " $* " in
+    *' --download-only '*) printf '%s\n' "$1" >"$FIXTURE_STATE/operation" ;;
+    esac
     ;;
 *) exit 1 ;;
 esac
@@ -439,6 +454,40 @@ EOF
     chmod +x "$dir/bin/bootc" "$dir/bin/podman"
 }
 
+# staged_status BOOTED STAGED TRANSPORT LOCKED -- one `bootc status --format
+# json` document. STAGED empty means "no staged deployment"; LOCKED is true or
+# false and appears as .status.staged.downloadOnly only when a deployment is
+# staged.
+staged_status() { # booted staged transport locked
+    jq -nc --arg booted "$1" --arg staged "$2" --arg transport "$3" \
+        --argjson locked "$4" '
+        {spec: {image: {image: "ghcr.io/frostyard/snow:latest", transport: $transport}},
+         status: {
+            booted: {image: {imageDigest: $booted}},
+            staged: (if $staged == ""
+                     then {}
+                     else {image: {imageDigest: $staged}, downloadOnly: $locked}
+                     end),
+            rollback: {image: {}}
+         }}'
+}
+
+# run_stager WORK BEFORE LOCKED UNLOCKED [env...] -- run the stager in the
+# fixture and set CASE_RC to its exit status.
+run_stager() { # work before locked unlocked [env...]
+    local work=$1 before=$2 locked=$3 unlocked=$4
+    shift 4
+    set +e
+    PATH="$work/bin:$PATH" env "$@" \
+        BOOTC_STATUS_BEFORE="$before" BOOTC_STATUS_LOCKED="$locked" \
+        BOOTC_STATUS_UNLOCKED="$unlocked" FIXTURE_STATE="$work/state" \
+        PULLED_MANIFEST="$manifest" PULLED_CONFIG_ID="$config_id" \
+        SNOSI_STAGED_PACKAGES_LIB="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh" \
+        SNOSI_RUN_DIR="$work/run" "$UPDATER" >"$work/output" 2>&1
+    CASE_RC=$?
+    set -e
+}
+
 # assert_strict_pull FILE -- every recorded pull used the strict /usr policy
 # and nothing else, and the packages capture never pulled.
 assert_strict_pull() { # calls-file description
@@ -461,34 +510,42 @@ assert_strict_pull() { # calls-file description
     fi
 }
 
+# assert_two_phase_stage CALLS DESCRIPTION -- one locked stage, then one
+# unlock with `bootc upgrade --quiet --from-downloaded`, in that order. The
+# reverse order, or a stage that is not locked, reopens the retag race.
+assert_two_phase_stage() { # bootc-calls-file description
+    local calls=$1 description=$2 stage_calls line first="" last=""
+    local lock_count=0 unlock_count=0
+    stage_calls=$(grep -E '^(upgrade|switch) ' "$calls" || true)
+    while IFS= read -r line; do
+        [[ -z $line ]] && continue
+        [[ $line == *'--download-only'* ]] && lock_count=$((lock_count + 1))
+        [[ $line == *'--from-downloaded'* ]] && unlock_count=$((unlock_count + 1))
+        [[ -z $first ]] && first=$line
+        last=$line
+    done <<<"$stage_calls"
+    if (( lock_count == 1 && unlock_count == 1 )) &&
+            [[ $first == *'--download-only'* ]] &&
+            [[ $last == 'upgrade --quiet --from-downloaded' ]]; then
+        pass "$description stages locked, then unlocks without a new fetch"
+    else
+        fail "$description stages locked, then unlocks without a new fetch (calls: ${stage_calls//$'\n'/ | })"
+    fi
+}
+
 run_updater_digest_fixture() { # description booted staged-before staged-after expected-outcome expected-operation
     local description=$1 booted=$2 staged_before=$3 staged_after=$4
-    local expected_outcome=$5 expected_operation=$6 work before after rc operation
-    local manifest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    local expected_outcome=$5 expected_operation=$6 work before locked unlocked rc operation
+    local staged_by_bootc=${staged_after:-$staged_before}
     work=$(mktemp -d)
     trap 'rm -rf "$work"' RETURN
     make_stager_fixture "$work"
+    before=$(staged_status "$booted" "$staged_before" containers-storage false)
+    locked=$(staged_status "$booted" "$staged_by_bootc" containers-storage true)
+    unlocked=$(staged_status "$booted" "$staged_by_bootc" containers-storage false)
 
-    if [[ -n "$staged_before" ]]; then
-        before=$(jq -nc --arg booted "$booted" --arg staged "$staged_before" '{spec:{image:{image:"ghcr.io/frostyard/snow:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:$booted}},staged:{image:{imageDigest:$staged}},rollback:{image:{}}}}')
-    else
-        before=$(jq -nc --arg booted "$booted" '{spec:{image:{image:"ghcr.io/frostyard/snow:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:$booted}},staged:{},rollback:{image:{}}}}')
-    fi
-    if [[ -n "$staged_after" ]]; then
-        after=$(jq -nc --arg booted "$booted" --arg staged "$staged_after" '{spec:{image:{image:"ghcr.io/frostyard/snow:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:$booted}},staged:{image:{imageDigest:$staged}},rollback:{image:{}}}}')
-    else
-        after=$before
-    fi
-
-    set +e
-    PATH="$work/bin:$PATH" \
-        BOOTC_STATUS_BEFORE="$before" BOOTC_STATUS_AFTER="$after" \
-        FIXTURE_STATE="$work/state" PULLED_MANIFEST="$manifest" \
-        PULLED_CONFIG_ID=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
-        SNOSI_STAGED_PACKAGES_LIB="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh" \
-        SNOSI_RUN_DIR="$work/run" "$UPDATER" >"$work/output" 2>&1
-    rc=$?
-    set -e
+    run_stager "$work" "$before" "$locked" "$unlocked"
+    rc=$CASE_RC
 
     operation=$(cat "$work/state/operation" 2>/dev/null || true)
     if [[ $rc -eq 0 ]] && grep -Fqx "outcome=$expected_outcome" "$work/run/update-check" && \
@@ -508,15 +565,17 @@ run_updater_digest_fixture() { # description booted staged-before staged-after e
         fail "$description (rc=$rc outcome=$(sed -n 's/^outcome=//p' "$work/run/update-check" 2>/dev/null) operation=${operation:-none}; output: $(<"$work/output"))"
     fi
 
-    # Only the run that really stages proves the pull flag: a failing stub
-    # never reaches it.
+    # Only the run that really stages proves the pull flag and the two-phase
+    # order: a failing stub never reaches them.
     if [[ $rc -eq 0 && "$operation" == upgrade ]]; then
         assert_strict_pull "$work/state/podman-calls" "stager"
+        assert_two_phase_stage "$work/state/bootc-calls" "stager"
     fi
 }
 
 manifest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 old=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+replacement=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
 config_id=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 run_updater_digest_fixture "updater recognizes the pulled manifest as current" \
     "$manifest" '' '' current ''
@@ -525,32 +584,110 @@ run_updater_digest_fixture "updater recognizes the pulled manifest as already st
 run_updater_digest_fixture "updater verifies a newly staged manifest and reports success" \
     "$old" '' "$manifest" staged upgrade
 
+# A tag that another root process replaces while bootc stages: the locked
+# deployment is the replacement, not the verified image. It must stay locked,
+# so bootc-finalize-staged never finalizes it and it never boots.
+run_stager_retag_race_fixture() { # transport expected-operation description
+    local transport=$1 expected_operation=$2 description=$3
+    local work before locked unlocked rc operation
+    work=$(mktemp -d)
+    trap 'rm -rf "$work"' RETURN
+    make_stager_fixture "$work"
+    before=$(staged_status "$old" '' "$transport" false)
+    locked=$(staged_status "$old" "$replacement" "$transport" true)
+    unlocked=$(staged_status "$old" "$replacement" "$transport" false)
+
+    run_stager "$work" "$before" "$locked" "$unlocked"
+    rc=$CASE_RC
+
+    operation=$(cat "$work/state/operation" 2>/dev/null || true)
+    if [[ $rc -ne 0 ]] && grep -Fqx 'outcome=failed' "$work/run/update-check" && \
+            [[ "$operation" == "$expected_operation" ]] && \
+            [[ ! -e $work/run/update-staged ]] && \
+            ! grep -Fq -- '--from-downloaded' "$work/state/bootc-calls" && \
+            grep -Fq 'left locked, it will not apply' "$work/output"; then
+        pass "a tag replaced while bootc stages is never unlocked ($description)"
+    else
+        fail "a tag replaced while bootc stages is never unlocked ($description) (rc=$rc outcome=$(sed -n 's/^outcome=//p' "$work/run/update-check" 2>/dev/null) operation=${operation:-none}; calls: $(tr '\n' '|' <"$work/state/bootc-calls" 2>/dev/null); output: $(<"$work/output"))"
+    fi
+}
+run_stager_retag_race_fixture containers-storage upgrade "upgrade path"
+run_stager_retag_race_fixture registry switch "switch path"
+
+# A bootc that ignores `--download-only` leaves the deployment unlocked, so
+# the guard the stage relies on does not exist. Do not report success.
+run_stager_ignored_lock_fixture() {
+    local work before locked unlocked rc operation
+    work=$(mktemp -d)
+    trap 'rm -rf "$work"' RETURN
+    make_stager_fixture "$work"
+    before=$(staged_status "$old" '' containers-storage false)
+    locked=$(staged_status "$old" "$manifest" containers-storage false)
+    unlocked=$(staged_status "$old" "$manifest" containers-storage false)
+
+    run_stager "$work" "$before" "$locked" "$unlocked"
+    rc=$CASE_RC
+
+    operation=$(cat "$work/state/operation" 2>/dev/null || true)
+    if [[ $rc -ne 0 ]] && grep -Fqx 'outcome=failed' "$work/run/update-check" && \
+            [[ "$operation" == upgrade ]] && \
+            [[ ! -e $work/run/update-staged ]] && \
+            ! grep -Fq -- '--from-downloaded' "$work/state/bootc-calls" && \
+            grep -Fq 'did not lock the staged deployment' "$work/output"; then
+        pass "stager refuses to report success when bootc ignores --download-only"
+    else
+        fail "stager refuses to report success when bootc ignores --download-only (rc=$rc outcome=$(sed -n 's/^outcome=//p' "$work/run/update-check" 2>/dev/null) operation=${operation:-none}; output: $(<"$work/output"))"
+    fi
+}
+run_stager_ignored_lock_fixture
+
+# A previous run can stage locked and then fail before the unlock. The next
+# run must unlock that deployment, or it never applies.
+run_stager_locked_already_staged_fixture() {
+    local work before locked unlocked rc operation
+    work=$(mktemp -d)
+    trap 'rm -rf "$work"' RETURN
+    make_stager_fixture "$work"
+    before=$(staged_status "$old" "$manifest" containers-storage true)
+    locked=$(staged_status "$old" "$manifest" containers-storage true)
+    unlocked=$(staged_status "$old" "$manifest" containers-storage false)
+
+    run_stager "$work" "$before" "$locked" "$unlocked"
+    rc=$CASE_RC
+
+    operation=$(cat "$work/state/operation" 2>/dev/null || true)
+    if [[ $rc -eq 0 ]] && grep -Fqx 'outcome=staged' "$work/run/update-check" && \
+            [[ -z "$operation" ]] && \
+            grep -Fqx "digest=$manifest" "$work/run/update-staged" && \
+            grep -Fqx 'upgrade --quiet --from-downloaded' "$work/state/bootc-calls"; then
+        pass "stager unlocks a download-only deployment left staged by an earlier run"
+    else
+        fail "stager unlocks a download-only deployment left staged by an earlier run (rc=$rc outcome=$(sed -n 's/^outcome=//p' "$work/run/update-check" 2>/dev/null) operation=${operation:-none}; calls: $(tr '\n' '|' <"$work/state/bootc-calls" 2>/dev/null); output: $(<"$work/output"))"
+    fi
+}
+run_stager_locked_already_staged_fixture
+
 # The stager runs as root and root can carry dotfiles and environment that
 # point at a permissive policy. None of them may change its own pull: the
 # strict policy path is a literal in immutable /usr (ADR-0025).
 run_stager_hostile_env_fixture() {
-    local work before after rc pull_line permissive
+    local work before locked unlocked rc pull_line permissive
     work=$(mktemp -d)
     trap 'rm -rf "$work"' RETURN
     make_stager_fixture "$work"
-    before=$(jq -nc --arg booted "$old" '{spec:{image:{image:"ghcr.io/frostyard/snow:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:$booted}},staged:{},rollback:{image:{}}}}')
-    after=$(jq -nc --arg booted "$old" --arg staged "$manifest" '{spec:{image:{image:"ghcr.io/frostyard/snow:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:$booted}},staged:{image:{imageDigest:$staged}},rollback:{image:{}}}}')
+    before=$(staged_status "$old" '' containers-storage false)
+    locked=$(staged_status "$old" "$manifest" containers-storage true)
+    unlocked=$(staged_status "$old" "$manifest" containers-storage false)
     permissive="$work/permissive-policy.json"
     printf '{"default": [{"type": "insecureAcceptAnything"}]}\n' >"$permissive"
     mkdir -p "$work/home/.config/containers"
     cp "$permissive" "$work/home/.config/containers/policy.json"
 
-    set +e
-    PATH="$work/bin:$PATH" HOME="$work/home" \
-        CONTAINERS_POLICY="$permissive" SIGNATURE_POLICY="$permissive" \
-        BOOTC_POLICY="$permissive" CONTAINERS_CONF="$permissive" \
-        BOOTC_STATUS_BEFORE="$before" BOOTC_STATUS_AFTER="$after" \
-        FIXTURE_STATE="$work/state" PULLED_MANIFEST="$manifest" \
-        PULLED_CONFIG_ID="$config_id" \
-        SNOSI_STAGED_PACKAGES_LIB="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh" \
-        SNOSI_RUN_DIR="$work/run" "$UPDATER" >"$work/output" 2>&1
-    rc=$?
-    set -e
+    run_stager "$work" "$before" "$locked" "$unlocked" \
+        HOME="$work/home" CONTAINERS_POLICY="$permissive" \
+        SIGNATURE_POLICY="$permissive" BOOTC_POLICY="$permissive" \
+        CONTAINERS_CONF="$permissive"
+    rc=$CASE_RC
 
     if [[ $rc -eq 0 ]] && grep -Fqx 'outcome=staged' "$work/run/update-check"; then
         pass "stager cannot bypass its strict policy under a hostile environment"
@@ -566,26 +703,20 @@ run_stager_hostile_env_fixture() {
 }
 run_stager_hostile_env_fixture
 
-# A tag that moves between the verified pull and the staging command must not
-# reach bootc: only the image the strict policy accepted may be staged.
+# A local tag that moves between the verified pull and the staging command
+# must not reach bootc at all: the cheap check refuses before any stage.
 run_stager_tag_mismatch_fixture() {
-    local work before after rc operation
+    local work before locked unlocked rc operation
     work=$(mktemp -d)
     trap 'rm -rf "$work"' RETURN
     make_stager_fixture "$work"
-    before=$(jq -nc --arg booted "$old" '{spec:{image:{image:"ghcr.io/frostyard/snow:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:$booted}},staged:{},rollback:{image:{}}}}')
-    after=$(jq -nc --arg booted "$old" --arg staged "$manifest" '{spec:{image:{image:"ghcr.io/frostyard/snow:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:$booted}},staged:{image:{imageDigest:$staged}},rollback:{image:{}}}}')
-    printf '%s\n' dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd >"$work/state/tag-id"
+    before=$(staged_status "$old" '' containers-storage false)
+    locked=$(staged_status "$old" "$manifest" containers-storage true)
+    unlocked=$(staged_status "$old" "$manifest" containers-storage false)
+    printf '%s\n' "$replacement" >"$work/state/tag-id"
 
-    set +e
-    PATH="$work/bin:$PATH" \
-        BOOTC_STATUS_BEFORE="$before" BOOTC_STATUS_AFTER="$after" \
-        FIXTURE_STATE="$work/state" PULLED_MANIFEST="$manifest" \
-        PULLED_CONFIG_ID="$config_id" \
-        SNOSI_STAGED_PACKAGES_LIB="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh" \
-        SNOSI_RUN_DIR="$work/run" "$UPDATER" >"$work/output" 2>&1
-    rc=$?
-    set -e
+    run_stager "$work" "$before" "$locked" "$unlocked"
+    rc=$CASE_RC
 
     operation=$(cat "$work/state/operation" 2>/dev/null || true)
     if [[ $rc -ne 0 ]] && grep -Fqx 'outcome=failed' "$work/run/update-check" && \

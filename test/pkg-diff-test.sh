@@ -165,9 +165,11 @@ bootc_stage="$root/mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage"
 status_cli="$root/mkosi.images/base/mkosi.extra/usr/bin/snosi-update-status"
 
 # The bootc stager captures packages.txt BEFORE staging: the capture_pulled_packages
-# call site must precede the first `bootc switch`/`bootc upgrade`.
+# call site must precede the first `bootc switch`/`bootc upgrade` that stages.
+# `bootc upgrade --from-downloaded` only unlocks a deployment that is already
+# staged and locked, and fetches and stages nothing, so it does not count.
 cap_line="$(grep -nE '! pkg_temp="\$\(capture_pulled_packages' "$bootc_stage" | head -1 | cut -d: -f1)"
-stage_line="$(grep -nE '^[[:space:]]*bootc (switch|upgrade)' "$bootc_stage" | head -1 | cut -d: -f1)"
+stage_line="$(grep -nE '^[[:space:]]*bootc (switch|upgrade)' "$bootc_stage" | grep -vF -- '--from-downloaded' | head -1 | cut -d: -f1)"
 if [[ -n $cap_line && -n $stage_line && $cap_line -lt $stage_line ]]; then
     ok 'bootc: packages.txt is captured before bootc switch/upgrade'
 else

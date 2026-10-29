@@ -115,12 +115,36 @@ transport=$(jq -r '.spec.image.transport // empty' <<<"$status")
 
 booted=$(jq -r '.status.booted.image.imageDigest // empty' <<<"$status")
 staged=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$status")
+# A download-only deployment is staged but locked: bootc-finalize-staged never
+# finalizes it at shutdown, so it never boots until it is unlocked.
+staged_locked=$(jq -r '.status.staged.downloadOnly // false' <<<"$status")
 rollback=$(jq -r '.status.rollback.image.imageDigest // empty' <<<"$status")
 
 write_staged_semaphore() {
     mkdir -p "$RUN_DIR"
     printf 'image=%s\ndigest=%s\nstaged_at=%s\n' \
         "$image" "$1" "$(date --iso-8601=seconds)" >"$RUN_DIR/update-staged"
+}
+
+# unlock_staged DIGEST -- unlock the locked deployment that was just staged and
+# prove the result: `bootc upgrade --from-downloaded` performs no new fetch and
+# reads no image reference, so it cannot pick up a tag that moved after the
+# digest check. Afterwards the staged deployment must still be DIGEST and must
+# no longer be download-only, or it would never apply.
+unlock_staged() { # digest
+    local digest=$1 after staged_now locked_now
+    bootc upgrade --quiet --from-downloaded
+    after=$(bootc status --format json)
+    staged_now=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$after")
+    locked_now=$(jq -r '.status.staged.downloadOnly // false' <<<"$after")
+    if [[ "$staged_now" != "$digest" ]]; then
+        echo "ERROR: staged deployment changed during unlock: staged is '${staged_now:-none}', expected $digest" >&2
+        return 1
+    fi
+    if [[ "$locked_now" != false ]]; then
+        echo "ERROR: staged deployment is still download-only after unlock, so it will not apply" >&2
+        return 1
+    fi
 }
 
 # Prune BEFORE pulling, not only after a successful switch: a previous run's
@@ -194,6 +218,15 @@ if ! pkg_temp="$(capture_pulled_packages "$pulled_id")"; then
 fi
 
 if [[ "$pulled" == "$staged" ]]; then
+    # A previous run can stage the deployment locked and then fail or be
+    # interrupted before the unlock. Leave it locked and it never applies, so
+    # unlock it here before reporting anything.
+    if [[ "$staged_locked" == true ]]; then
+        echo "Unlocking the download-only deployment already staged for $image."
+        if ! unlock_staged "$pulled"; then
+            exit 1
+        fi
+    fi
     echo "$image ($pulled) is already staged; will apply at next reboot."
     # Publish the sidecar FIRST: this branch is what repairs a prior run that
     # staged but failed to publish it (ADR-0014). Then re-assert the semaphore
@@ -204,16 +237,22 @@ if [[ "$pulled" == "$staged" ]]; then
     exit 0
 fi
 
-# Never stage what the tag now points at unless it is still the image the
-# strict policy accepted above: a tag that moved between the pull and here
-# would otherwise reach `bootc switch`/`upgrade` unverified.
+# Refuse early when the local tag no longer points at the image the strict
+# policy accepted above. This check is cheap but NOT atomic: bootc resolves the
+# mutable local tag again itself, so another root process can retag between
+# this check and the staging command.
 tag_id=$(podman image inspect --format '{{.Id}}' "$image" 2>/dev/null) || tag_id=""
 if [[ "$tag_id" != "$pulled_id" ]]; then
     echo "ERROR: local tag no longer points at the verified image: local tag is '${tag_id:-none}', verified image is $pulled_id" >&2
     exit 1
 fi
 
-echo "Staging update: $image ($pulled)"
+# Stage LOCKED (download-only), check the staged digest, and unlock only then.
+# That closes the race: a deployment staged from a tag that moved stays locked,
+# bootc-finalize-staged never finalizes it, and it never boots. A wrong
+# deployment can therefore be staged but not applied, and the next run
+# replaces it.
+echo "Staging update: $image ($pulled), locked until verified"
 if [[ "$transport" == "containers-storage" ]]; then
     # The spec already follows containers-storage:<image> — the steady state
     # after the FIRST staged update flips the transport. `bootc switch` to an
@@ -222,16 +261,26 @@ if [[ "$transport" == "containers-storage" ]]; then
     # install unable to take a second update while this script reported
     # success (root-caused 2026-07-06 on minisnow). `bootc upgrade` pulls the
     # spec's image and stages it properly.
-    bootc upgrade --quiet
+    bootc upgrade --quiet --download-only
 else
-    bootc switch --quiet --transport containers-storage "$image"
+    bootc switch --quiet --download-only --transport containers-storage "$image"
 fi
 
-# Verify bootc actually staged what we pulled: both failure modes here have
-# been observed to be SILENT (exit 0), so do not trust the exit code alone.
-staged_now=$(bootc status --format json | jq -r '.status.staged.image.imageDigest // empty')
+# Verify bootc staged the image the strict policy accepted AND that it left the
+# deployment locked. Both failure modes here have been observed to be SILENT
+# (exit 0), so do not trust the exit code alone.
+locked_status=$(bootc status --format json)
+staged_now=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$locked_status")
+locked_now=$(jq -r '.status.staged.downloadOnly // false' <<<"$locked_status")
 if [[ "$staged_now" != "$pulled" ]]; then
-    echo "ERROR: staging silently failed: staged deployment is '${staged_now:-none}', expected $pulled" >&2
+    echo "ERROR: staged image is not the verified image; left locked, it will not apply: staged deployment is '${staged_now:-none}', expected $pulled" >&2
+    exit 1
+fi
+if [[ "$locked_now" != true ]]; then
+    echo "ERROR: bootc did not lock the staged deployment ('${staged_now:-none}' is not download-only); refusing to report success" >&2
+    exit 1
+fi
+if ! unlock_staged "$pulled"; then
     exit 1
 fi
 
