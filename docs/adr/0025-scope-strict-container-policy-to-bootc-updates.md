@@ -2,6 +2,8 @@
 
 - **Status:** Proposed
 - **Date:** 2026-10-29
+- **Direction chosen:** Brian chose this option (A) on 2026-10-29 (desk T478b).
+  The status stays Proposed until the Phase 4 lab proof of the T3 claim.
 
 ## Context
 
@@ -107,7 +109,7 @@ and `/etc`.
   and the wrapper must track bootc's CLI. Rejected.
 - **Add a `ghcr.io/frostyard` namespace `reject` scope:** blocks lookalikes
   inside the namespace, but also blocks root pulls of other Frostyard
-  containers. Left open in the plan.
+  containers. Rejected: Brian chose option A without it (T478b).
 - **Install the rootless policy for root too:** root's dotfile would also
   replace the update policy for bootc and the stager. Rejected.
 

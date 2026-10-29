@@ -1,6 +1,6 @@
 # Plan: Scope the strict container policy to bootc updates
 
-**Status:** Proposed — awaits Brian's choice of option; see [ADR-0025](../adr/0025-scope-strict-container-policy-to-bootc-updates.md)  
+**Status:** Planned — Brian chose option A on 2026-10-29 (desk T478b); see [ADR-0025](../adr/0025-scope-strict-container-policy-to-bootc-updates.md)  
 **Last verified:** 2026-10-29
 
 The system `/etc/containers/policy.json` rejects every registry image except
@@ -73,7 +73,7 @@ skopeo --policy /usr/share/snosi/containers/user-policy.json copy …
 
 ## Threats and options
 
-| Threat | Kept out today | A: recommended (ADR-0025) | B: keep reject, document flags | C: A + `ghcr.io/frostyard` namespace reject |
+| Threat | Kept out today | A: chosen (ADR-0025) | B: keep reject, document flags | C: A + `ghcr.io/frostyard` namespace reject |
 | --- | --- | --- | --- | --- |
 | T1 Forged image pushed to a Frostyard repo (GHCR or token compromise) reaches an automatic update | yes | yes (stager uses `/usr` policy) | yes | yes |
 | T2 Same, by a manual `bootc switch`/`upgrade` to a Frostyard repo | yes | yes (scopes stay signed) | yes | yes |
@@ -145,8 +145,6 @@ digest before install, and never reads the target's policy.
 
 ## Open questions
 
-- **Namespace scope (option C):** do any root workloads pull other
-  `ghcr.io/frostyard/*` images? Decide by Phase 2.
 - **Registries.d override for the stager:** the stager runs as root. A
   `/root/.config/containers/registries.d` would hide the sigstore attachments
   and fail updates closed: safe, but noisy. Podman has no flag for the
