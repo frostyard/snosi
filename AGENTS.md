@@ -44,6 +44,9 @@ erases disks; `test/firn-gui-scope-test.sh` rejects it in every other
 package list and build script. No image may enable GDM automatic or timed
 login, because no image creates the user it would name;
 `test/gdm-autologin-scope-test.sh` enforces this.
+No image may give the gnome-remote-desktop daemons TPM access (no `tss` group):
+48.1 seals credentials in saved TPM contexts that a reboot invalidates;
+`test/grd-no-tpm-access-test.sh` enforces this.
 The image script phases are BuildScripts, PostInstallationScripts,
 FinalizeScripts and PostOutputScripts. Consult
 [build pipeline](docs/design/build-pipeline.md) for the detailed composition.

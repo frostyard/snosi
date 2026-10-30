@@ -129,6 +129,13 @@ jobs:
         # network, or image build.
         run: ./test/gdm-autologin-scope-test.sh
 
+      - name: Validate remote desktop has no TPM access
+        # Static guard: gnome-remote-desktop 48.1 seals RDP credentials in TPM
+        # contexts that a reboot's TPM Reset invalidates (snosi#1131, PR #1191),
+        # so no gnome-remote-desktop unit or sysusers.d file may give the
+        # daemons the tss group. No root, network, or image build.
+        run: ./test/grd-no-tpm-access-test.sh
+
       - name: Validate installer ISO publication pipeline
         # Ephemeral OpenPGP key, local Range-capable HTTP origin, no R2 writes.
         run: ./test/iso-publication-pipeline-test.sh
