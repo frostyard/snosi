@@ -1,6 +1,6 @@
 code=1.144.0-1793133881
 docker-ce=5:29.9.2-1~debian.13~trixie
 1password-cli=2.41.1-1
-claude-desktop=4.29.0
-chatgpt=26.1023.51421
-himmelblau=4.0.7-debian13
+claude-desktop=4.4212.0
+chatgpt=26.1027.30824
+himmelblau=4.0.8-debian13
