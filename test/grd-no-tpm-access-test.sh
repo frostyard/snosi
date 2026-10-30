@@ -21,11 +21,14 @@
 #   a. in any tracked file whose path has a directory component named
 #      gnome-remote-desktop*.service.d, or whose base name is
 #      gnome-remote-desktop*.service (any tree, system or user, /usr or /etc):
-#      a non-comment line whose key is SupplementaryGroups and whose value
-#      names tss as a whitespace-separated word;
+#      a non-comment line whose key is SupplementaryGroups and whose value has
+#      a word that decodes to tss. The value is parsed with shlex, so quoting
+#      does not hide it, and a line that ends with a backslash is joined to the
+#      lines after it, as systemd does;
 #   b. in any tracked sysusers.d/*.conf file: a non-comment line
 #      "m gnome-remote-desktop tss", because that group membership gives the
-#      same access.
+#      same access. Its fields are parsed with shlex, so quoting does not hide
+#      it either.
 # It reads the same scan function for the real tree and its fixtures.
 #
 # No root, no network, no image build.
@@ -42,6 +45,7 @@ scan() { # root -> "ok - "/"not ok - " lines; status 1 on any not ok
     python3 - "$1" <<'PY'
 import os
 import re
+import shlex
 import subprocess
 import sys
 
@@ -57,11 +61,7 @@ UNIT_FILE = re.compile(r"^gnome-remote-desktop.*\.service$")
 SYSUSERS_DIR = "sysusers.d"
 # The key is case-sensitive in systemd, and spaces around the '=' are allowed.
 GROUPS = re.compile(r"^\s*SupplementaryGroups\s*=\s*(.*)$")
-# A whitespace-separated word, so an unrelated group such as 'tsslike' (or
-# 'foo-tss') does not match.
-TSS = re.compile(r"(?:^|\s)tss(?=\s|$)")
-# sysusers.d(5): "m <user> <group>"; any whitespace separates the fields.
-MEMBER = re.compile(r"^\s*m\s+gnome-remote-desktop\s+tss(?=\s|$)")
+TSS = "tss"
 CAUSE = (
     "gnome-remote-desktop must not get TPM access (group tss): 48.1 seals RDP "
     "credentials with Esys_ContextSave and Esys_ContextLoad, a TPM Reset at "
@@ -73,6 +73,47 @@ CAUSE = (
 def is_comment(line):
     stripped = line.lstrip()
     return stripped.startswith("#") or stripped.startswith(";")
+
+
+def words(value):
+    """Split a systemd or sysusers value into words, without their quoting.
+
+    systemd unquotes each word, so SupplementaryGroups="tss" and
+    SupplementaryGroups=video 'tss' both grant the tss group. A line with an
+    unbalanced quote still gets a best-effort split, with the quote characters
+    dropped, so a malformed line is not a blind spot.
+    """
+    try:
+        return shlex.split(value, posix=True)
+    except ValueError:
+        return [part.strip("\"'") for part in value.split()]
+
+
+def logical_lines(lines):
+    """Yield (first physical line number, joined text) for systemd units.
+
+    systemd drops a trailing backslash and joins the next line to it, and a
+    comment line inside the continuation is ignored.
+    """
+    pending = None
+    start = 0
+    for number, line in enumerate(lines, start=1):
+        if is_comment(line):
+            continue
+        text = line.rstrip("\n")
+        if pending is None:
+            start = number
+        else:
+            text = pending + text
+        # Trailing whitespace is no part of a continuation marker.
+        stripped = text.rstrip()
+        if stripped.endswith("\\"):
+            pending = stripped[:-1] + " "
+            continue
+        pending = None
+        yield start, text
+    if pending is not None:
+        yield start, pending
 
 
 def is_grd_unit(rel):
@@ -108,15 +149,18 @@ for rel in tracked:
     if not (unit or sysusers):
         continue
     with open(os.path.join(root, rel), encoding="utf-8", errors="replace") as f:
-        for number, line in enumerate(f, start=1):
+        lines = f.readlines()
+    if unit:
+        for start, text in logical_lines(lines):
+            match = GROUPS.match(text)
+            if match and TSS in words(match.group(1)):
+                hits.append(f"{rel}:{start}: {CAUSE}")
+    if sysusers:
+        for number, line in enumerate(lines, start=1):
             if is_comment(line):
                 continue
-            if unit:
-                match = GROUPS.match(line)
-                if match and TSS.search(match.group(1)):
-                    hits.append(f"{rel}:{number}: {CAUSE}")
-                    continue
-            if sysusers and MEMBER.match(line):
+            # sysusers.d(5): "m <user> <group>".
+            if words(line)[:3] == ["m", "gnome-remote-desktop", TSS]:
                 hits.append(f"{rel}:{number}: {CAUSE}")
 
 failed = False
@@ -240,6 +284,59 @@ mkdir -p "$dir/shared/snow/tree/usr/lib/systemd/system/gnome-remote-desktop.serv
 printf '[Service]\nSupplementaryGroups=tsslike\n' \
     >"$dir/shared/snow/tree/usr/lib/systemd/system/gnome-remote-desktop.service.d/10-group.conf"
 expect "SupplementaryGroups=tsslike in a grd drop-in" pass "$dir"
+
+# systemd unquotes every SupplementaryGroups word, so quoting hides nothing.
+grd_system=shared/snow/tree/usr/lib/systemd/system/gnome-remote-desktop.service.d
+
+dir=$(fixture quoted-double)
+mkdir -p "$dir/$grd_system"
+printf '[Service]\nSupplementaryGroups="tss"\n' >"$dir/$grd_system/10-quoted.conf"
+expect "SupplementaryGroups=\"tss\" in a grd drop-in" reject "$dir" \
+    "$grd_system/10-quoted.conf:2:"
+
+dir=$(fixture quoted-single)
+mkdir -p "$dir/$grd_system"
+printf '[Service]\nSupplementaryGroups=video %s\n' "'tss'" \
+    >"$dir/$grd_system/10-quoted.conf"
+expect "SupplementaryGroups=video 'tss' in a grd drop-in" reject "$dir" \
+    "$grd_system/10-quoted.conf:2:"
+
+# systemd joins a line that ends with a backslash to the next line, and a
+# comment inside the continuation is ignored. The first line is named.
+dir=$(fixture continuation)
+mkdir -p "$dir/$grd_system"
+cat >"$dir/$grd_system/10-continued.conf" <<'EOF'
+[Service]
+SupplementaryGroups=video \
+# a comment inside the continuation is ignored
+  tss
+EOF
+expect "SupplementaryGroups=video \\ then a comment then tss" reject "$dir" \
+    "$grd_system/10-continued.conf:2:"
+
+# The same shape with a longer group name is a different group.
+dir=$(fixture continuation-other)
+mkdir -p "$dir/$grd_system"
+cat >"$dir/$grd_system/10-continued.conf" <<'EOF'
+[Service]
+SupplementaryGroups=video \
+  tsslike
+EOF
+expect "a continuation that ends in tsslike" pass "$dir"
+
+# sysusers.d unquotes its fields too, so quoting hides nothing there either.
+index=0
+for variant in '"gnome-remote-desktop" tss' \
+    'gnome-remote-desktop "tss"' \
+    '"gnome-remote-desktop" "tss"'; do
+    index=$((index + 1))
+    dir=$(fixture "sysusers-quoted-$index")
+    mkdir -p "$dir/shared/snow/tree/usr/lib/sysusers.d"
+    printf 'm %s\n' "$variant" \
+        >"$dir/shared/snow/tree/usr/lib/sysusers.d/gnome-remote-desktop.conf"
+    expect "a quoted m $variant in a sysusers.d file" reject "$dir" \
+        "shared/snow/tree/usr/lib/sysusers.d/gnome-remote-desktop.conf:1:"
+done
 
 out=$(scan "$root" 2>&1) || true
 while IFS= read -r line; do
