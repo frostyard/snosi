@@ -55,6 +55,7 @@ coder-sysext-test.sh	ci	validate.yml
 copilot-automation-secret-test.py	ci	validate.yml
 core-flatpaks-test.sh	ci	validate.yml
 dps-luks-cleanup-test.sh	unwired	-
+drop-published-test.sh	ci	validate.yml
 duplicate-packages-test.sh	ci	validate.yml
 firn-catalog-test.sh	ci	validate.yml
 firn-gui-scope-test.sh	ci	validate.yml

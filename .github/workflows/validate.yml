@@ -250,6 +250,12 @@ jobs:
         # built artifacts into $OUTPUTDIR subdirectories before upload.
         run: ./test/output-organizer-test.sh
 
+      - name: Validate sysext publish pre-filter
+        # Fixture suite for drop-published.sh, which removes built sysexts
+        # whose identity R2 already lists before repogen v0.7.0 publishes.
+        # A fake aws CLI serves the bucket. No network, root or build.
+        run: ./test/drop-published-test.sh
+
       - name: Validate Lemonade sysext integration
         # Lemonade 11.8 moved its environment template to /etc/default/lemond;
         # exercise the sysext's factory relocation and tmpfiles wiring.
