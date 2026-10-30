@@ -501,12 +501,12 @@ Facts that shape the wiring, each pinned by
   iterated `raw raw.gz raw.xz raw.zst ...` and keeps the suffix
   (`test/sysext-postoutput-test.sh` "discovers a compressed raw.zst output");
   every `<name>.transfer` already listed `.raw.zst` FIRST in both Source and
-  Target `MatchPattern`; repogen's `publish-to-r2` action at the pinned
-  `ea8cd1f` (v0.4.1) globs `*.raw.zst`, parses name/version/os/arch after
-  stripping the suffix, and `skip-duplicates` identifies a sysext by name, version, and
-  architecture regardless of suffix (`internal/utils/package_identity.go`),
-  so a version already published as `.raw` is never re-uploaded as
-  `.raw.zst`.
+  Target `MatchPattern`; repogen's `publish-to-r2` action globs
+  `*.raw.zst`, parses name/version/os/arch after stripping the suffix, and
+  identifies a sysext by name, version, OS version and architecture
+  regardless of suffix (`internal/utils/package_identity.go`), so a version
+  already published as `.raw` is never re-uploaded as `.raw.zst` (since the
+  v0.7.0 bump the pre-filter below drops it before repogen runs).
 - **The client decompresses in-process.** `frostyard-updex` (2.0.0 in the
   Frostyard stable suite; ≥ 1.2.3 required) detects the suffix
   (`download/download.go`), streams through `klauspost/compress/zstd`
@@ -526,11 +526,38 @@ arrives compressed with its next KEYPACKAGE or `SYSEXT_REVISION` bump.
 Existing `.raw` objects stay valid; the transfer patterns accept both, and a
 mixed `SHA256SUMS` is normal during the transition.
 
+### Publishing only unpublished identities
+
+`build.yml` publishes with repogen `publish-to-r2` v0.7.0. That release
+reconciles digests: it fails the whole run when a rebuilt sysext has an
+identity (`NAME_VERSION_OSVERSION_ARCH`, compression suffix ignored) that
+`ext/<name>/SHA256SUMS` already lists with other bytes or another filename.
+`skip-duplicates` skips only exact duplicates, and mkosi output is not
+byte-reproducible, while every main run rebuilds every sysext.
+
+So the step "Drop sysexts that are already published" runs
+`shared/sysext/publish/drop-published.sh` first. It reads every
+`ext/*/SHA256SUMS` from the R2 bucket itself (with the publish credentials,
+never from the CDN, which can serve stale metadata) and deletes each built
+file whose identity is listed. A read error fails the step, so nothing
+publishes on a guess. When no file remains, the publish step is skipped,
+because the action fails on an empty `packages-dir`.
+`test/drop-published-test.sh` covers the filter with a fake `aws`;
+`test/build-workflow-permissions-test.py` pins the step order, the gate and
+the action's `repogen-version`/`repogen-commit` pair.
+
+Main push runs of `build.yml` are never cancelled by a newer push (only PR
+runs are): a cancel during the upload can leave `SHA256SUMS` and
+`SHA256SUMS.gpg` out of step, and v0.7.0 then refuses every publish until a
+person repairs the bucket. A manual cancel of a main run during the publish
+step, or the job's 120-minute `timeout-minutes` expiring there, carries the
+same risk.
+
 ### SYSEXT_REVISION: republishing content fixes
 
-Publishing (`build.yml` → repogen publish-to-r2) uses `skip-duplicates: true`
-keyed on the versioned filename, so a sysext whose KEYPACKAGE version has not
-changed is never re-uploaded — tree fixes (presets, drop-ins, tmpfiles,
+Publishing (`build.yml` → the pre-filter above, then repogen publish-to-r2)
+publishes only identities absent from R2, keyed on the versioned filename,
+so a sysext whose KEYPACKAGE version has not changed is never re-uploaded — tree fixes (presets, drop-ins, tmpfiles,
 factory captures) silently do not reach users until the upstream package
 version bumps. Concrete case: the `multi-user.target.d` Upholds drop-ins
 (52b2bfb, 2026-07-01) landed after the last incus publish, and the nix sysext

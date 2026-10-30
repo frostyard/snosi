@@ -103,10 +103,16 @@ env:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  # Superseded runs of the same ref carry no information: cancel them for
-  # ordinary pushes AND for PR synchronize events (a new push to a PR branch
-  # otherwise leaves the previous full build matrix running to completion).
-  cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+  # Superseded PR runs carry no information: cancel them on PR synchronize
+  # events (a new push to a PR branch otherwise leaves the previous build
+  # running to completion). Never cancel a main push run: it publishes to R2,
+  # and a cancel during the upload can leave ext/<name>/SHA256SUMS and its
+  # .gpg out of step, which repogen v0.7.0 then refuses (fails closed) until
+  # a person repairs the bucket. A newer main push waits instead; GitHub keeps
+  # only the newest pending run, so a burst of merges costs one extra build.
+  # The publish step cannot be split into its own non-cancellable job without
+  # moving every built sysext through an artifact.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -253,27 +259,48 @@ jobs:
         run: |
           sudo ./sysextmv.sh
           sudo ./manifestmv.sh
-      - name: Publish sysexts to frostyard repo
+      - name: Drop sysexts that are already published
+        # repogen v0.7.0 fails the whole publish when a rebuilt sysext has an
+        # identity (NAME_VERSION_OSVERSION_ARCH, compression suffix ignored)
+        # that ext/<name>/SHA256SUMS already lists with other bytes or another
+        # filename; skip-duplicates skips only exact duplicates, and mkosi
+        # output is not byte-reproducible. Remove those files first, reading
+        # SHA256SUMS from R2 itself, not from the CDN, which can be stale.
+        # The files are root-owned (sysextmv.sh ran under sudo); the script
+        # itself runs unprivileged.
+        id: prefilter
         if: github.event_name != 'pull_request'
-        uses: frostyard/repogen/.github/actions/publish-to-r2@ea8cd1f0b2fe4d2370a83dff1feacfa7a4aef9ae # v0.4.1
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: frostyardrepo
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" output/sysexts
+          ./shared/sysext/publish/drop-published.sh ./output/sysexts
+      - name: Publish sysexts to frostyard repo
+        # Skipped when every built identity is already published: the action
+        # fails on an empty packages-dir.
+        if: github.event_name != 'pull_request' && steps.prefilter.outputs.publish == 'true'
+        uses: frostyard/repogen/.github/actions/publish-to-r2@c3c9f63c0f9b04106cfdb84318f5ec935566ab89 # v0.7.0
         with:
           r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
           r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
           r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           r2-bucket: frostyardrepo
-          # The action pin above is v0.4.1, but its repogen-version input
-          # defaults to "latest", which resolved to v0.5.0 on 2026-09-14 and
-          # failed every run: v0.5.0's sysext digest reconciliation runs
-          # before --skip-duplicates and hard-fails any already-published
-          # identity whose rebuilt bytes differ, and mkosi output is not
-          # byte-reproducible. Pin the binary to the action's own release
-          # until the publisher only hands repogen identities absent from the
-          # published index (test/build-workflow-permissions-test.py pins it).
-          repogen-version: v0.4.1
+          # The action requires the exact repogen release and the commit its
+          # binary embeds; never let the binary float ("latest" broke every
+          # publish on 2026-09-14). test/build-workflow-permissions-test.py
+          # pins repogen-version to the action pin's own release. The step
+          # above hands repogen only identities absent from the published
+          # index, which v0.7.0's digest reconciliation requires.
+          repogen-version: v0.7.0
+          repogen-commit: c3c9f63c0f9b04106cfdb84318f5ec935566ab89
           skip-duplicates: true
           gpg-private-key: ${{ secrets.REPOGEN_GPG_KEY }}
           packages-dir: ./output/sysexts
-          package-type: sysext # or sysext
+          package-type: sysext
           base-url: https://repository.frostyard.org # required for sysext
       - name: Upload manifests to R2
         if: github.event_name != 'pull_request'

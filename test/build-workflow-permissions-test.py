@@ -76,7 +76,7 @@ for forbidden in ("packages: write", "id-token: write", "attestations: write"):
 # in the action pin's trailing comment, so the binary can only move together
 # with a reviewed action bump.
 USES_PATTERN = re.compile(
-    r"^\s+uses: frostyard/repogen/\.github/actions/publish-to-r2@[0-9a-f]{40}"
+    r"^\s+uses: frostyard/repogen/\.github/actions/publish-to-r2@([0-9a-f]{40})"
     r"\s+# (v\d+\.\d+\.\d+)\s*$"
 )
 VERSION_PATTERN = re.compile(r"^\s+repogen-version:\s*(\S+)\s*$")
@@ -87,7 +87,8 @@ if len(uses_matches) != 1:
         "build job must use exactly one commit-pinned publish-to-r2 action "
         "with a trailing '# vX.Y.Z' release comment"
     )
-action_release = uses_matches[0].group(1)
+action_commit = uses_matches[0].group(1)
+action_release = uses_matches[0].group(2)
 version_values = [
     match.group(1) for match in (VERSION_PATTERN.match(line) for line in build) if match
 ]
@@ -95,6 +96,71 @@ if version_values != [action_release]:
     fail(
         "publish-to-r2 step must set repogen-version to the action pin's own "
         f"release {action_release!r} (never 'latest' or absent); found {version_values}"
+    )
+
+# Since v0.7.0 the action also requires the exact commit its release binary
+# embeds; it is the action pin's own commit.
+COMMIT_PATTERN = re.compile(r"^\s+repogen-commit:\s*(\S+)\s*$")
+commit_values = [
+    match.group(1) for match in (COMMIT_PATTERN.match(line) for line in build) if match
+]
+if commit_values != [action_commit]:
+    fail(
+        "publish-to-r2 step must set repogen-commit to the action pin's own "
+        f"commit {action_commit!r}; found {commit_values}"
+    )
+
+
+def step_block(name: str) -> list[str]:
+    start = next(
+        (i for i, line in enumerate(build) if line == f"      - name: {name}"),
+        None,
+    )
+    if start is None:
+        fail(f"build job has no {name!r} step")
+    end = next(
+        (i for i in range(start + 1, len(build)) if build[i].startswith("      - ")),
+        len(build),
+    )
+    return build[start:end]
+
+
+# repogen v0.7.0 fails the whole publish on a rebuilt, already-published
+# identity, so the publish must only ever see what drop-published.sh left,
+# and must not run when it left nothing (the action fails on 0 packages).
+PREFILTER = "Drop sysexts that are already published"
+PUBLISH = "Publish sysexts to frostyard repo"
+prefilter = step_block(PREFILTER)
+publish = step_block(PUBLISH)
+if build.index(f"      - name: {PREFILTER}") > build.index(f"      - name: {PUBLISH}"):
+    fail("the pre-filter step must run before the publish step")
+if "        id: prefilter" not in prefilter:
+    fail("the pre-filter step must set id: prefilter")
+if not any(
+    "./shared/sysext/publish/drop-published.sh ./output/sysexts" in line
+    for line in prefilter
+):
+    fail("the pre-filter step must run drop-published.sh on ./output/sysexts")
+if not any(line.strip() == "R2_BUCKET: frostyardrepo" for line in prefilter):
+    fail("the pre-filter must read the bucket the publish step writes")
+if not any(line.strip() == "packages-dir: ./output/sysexts" for line in publish):
+    fail("the publish step must publish ./output/sysexts")
+publish_if = [line.strip() for line in publish if line.strip().startswith("if:")]
+if publish_if != [
+    "if: github.event_name != 'pull_request' && "
+    "steps.prefilter.outputs.publish == 'true'"
+]:
+    fail(f"the publish step must be gated on the pre-filter result; found {publish_if}")
+
+# A cancel during the R2 upload can leave SHA256SUMS and its signature out of
+# step, which v0.7.0 refuses until a person repairs it: a run that publishes
+# (any non-PR event) must never be cancelled by a newer run.
+CANCEL_PATTERN = re.compile(r"^  cancel-in-progress:\s*(.+?)\s*$")
+cancel = [m.group(1) for m in (CANCEL_PATTERN.match(line) for line in lines) if m]
+if cancel != ["${{ github.event_name == 'pull_request' }}"]:
+    fail(
+        "workflow concurrency may cancel only pull_request runs, never a "
+        f"publishing push run; found {cancel}"
     )
 
 print("build-workflow-permissions-test: PASSED")
