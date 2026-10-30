@@ -13,7 +13,7 @@
     "types:check": "wrangler types --include-runtime false --check"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.4.6",
+    "@cloudflare/vitest-plugin": "^1.4.8",
     "@cloudflare/workers-types": "^5.20260921.1",
     "@vitest/coverage-istanbul": "^5.0.5",
     "typescript": "^7.0.2",
