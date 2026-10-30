@@ -550,7 +550,8 @@ Main push runs of `build.yml` are never cancelled by a newer push (only PR
 runs are): a cancel during the upload can leave `SHA256SUMS` and
 `SHA256SUMS.gpg` out of step, and v0.7.0 then refuses every publish until a
 person repairs the bucket. A manual cancel of a main run during the publish
-step carries the same risk.
+step, or the job's 120-minute `timeout-minutes` expiring there, carries the
+same risk.
 
 ### SYSEXT_REVISION: republishing content fixes
 

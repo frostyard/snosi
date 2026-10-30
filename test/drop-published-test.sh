@@ -72,7 +72,7 @@ publish() { # publish NAME FILENAME...: list FILENAMEs in ext/NAME/SHA256SUMS
     done
 }
 
-printf '1..18\n'
+printf '1..22\n'
 
 # Published state: docker 1.0 as .raw.zst, incus 6.0 as plain .raw, a
 # signature that must never be fetched, and an unrelated payload object.
@@ -130,7 +130,26 @@ GITHUB_OUTPUT="$work/gh-output" R2_BUCKET=empty "$script" "$out" >/dev/null 2>&1
 ok "keeps every payload when R2 has no ext/ prefix" \
     is_file "$out/docker_1.0_13_x86-64.raw.zst"
 
+# Every compression suffix maps to one identity, and the OS version is part
+# of it.
+rm -rf "$out" && mkdir -p "$out"
+publish k3s k3s_1.0_13_x86-64.raw.xz k3s_2.0_13_x86-64.raw.gz
+for f in k3s_1.0_13_x86-64.raw.gz k3s_2.0_13_x86-64.raw k3s_1.0_14_x86-64.raw.xz; do
+    printf 'payload' >"$out/$f"
+done
+"$script" "$out" >/dev/null 2>&1
+ok "drops a .raw.gz rebuild of an identity published as .raw.xz" \
+    not_exists "$out/k3s_1.0_13_x86-64.raw.gz"
+ok "drops a .raw rebuild of an identity published as .raw.gz" \
+    not_exists "$out/k3s_2.0_13_x86-64.raw"
+ok "keeps the same name, version and arch for another OS version" \
+    is_file "$out/k3s_1.0_14_x86-64.raw.xz"
+ok "an OS-version-only difference is still published" \
+    test "$(find "$out" -type f | wc -l)" -eq 1
+
 # Fail closed: a read error from R2 must stop the step and drop nothing.
+rm -rf "$out" && mkdir -p "$out"
+printf 'payload' >"$out/docker_1.0_13_x86-64.raw.zst"
 status=0
 FAKE_AWS_FAIL=1 "$script" "$out" >/dev/null 2>&1 || status=$?
 ok "fails when R2 cannot be read" test "$status" -ne 0
