@@ -225,7 +225,7 @@ EOF
             capture { print }
         ' <<<"$secure_job")
         require_text "$workflow secure registry login" "$login_step" \
-            '        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0'
+            '        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0'
         # shellcheck disable=SC2016 # GitHub expression is an exact literal marker.
         require_text "$workflow secure registry token" "$login_step" \
             '          password: ${{ secrets.GITHUB_TOKEN }}'
