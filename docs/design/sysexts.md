@@ -253,6 +253,7 @@ Some sysexts include extra files via their own `mkosi.images/<name>/mkosi.extra/
 - The `uhid` modules-load entry and virtual-input udev rules reach udev only via `snosi-sysext-udev-reload.service` (`ExtraTrees=%D/shared/sysext/tree` + the `Upholds=` drop-in). udev parses its rules before `systemd-sysext.service` merges the overlay, so without that reload they were applied on *no* boot, not merely a delayed one — see [udev Rules and Kernel Modules in Sysexts](#udev-rules-and-kernel-modules-in-sysexts)
 - The upstream `app-dev.lizardbyte.app.Sunshine.service` user unit is available for manual user startup only: no user preset and no `Upholds=` drop-in provide automatic activation
 - Ships a hicolor icon, so `sysext-strip-icon-cache.sh` is required
+- `usr/lib/extension-release.d/extension-release.sunshine` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable sunshine --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=1` republishes it at the same package version; remove it when the package version bumps
 
 ### chatgpt
 - No `mkosi.extra/` and no postinst — OpenAI's `chatgpt` deb (official apt repo at `persistent.oaistatic.com/codex-app-prod/linux/deb`, registered in `mkosi.sandbox` with the repo's own signing key from the deb's postinst) installs natively under `/usr` (`/usr/lib/chatgpt` + `/usr/bin/chatgpt -> ../lib/chatgpt/codex-launcher` symlink), so no relocation is needed
@@ -269,6 +270,7 @@ Some sysexts include extra files via their own `mkosi.images/<name>/mkosi.extra/
 
 ### code-server
 - `mkosi.postinst.chroot` — Downloads code-server .deb via `verified_download()`, installs with `dpkg -i`. Upstream package targets `/usr/lib/code-server` with `/usr/bin/code-server` symlink and systemd units under `/usr/lib/systemd/`, so no relocation is required.
+- `usr/lib/extension-release.d/extension-release.code-server` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable code-server --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=1` republishes it at the same package version; remove it when the package version bumps
 
 ### coder
 
@@ -292,7 +294,8 @@ shape under real systemd, with a negative control without the `-`.
 - `usr/lib/sysusers.d/coder.conf` — Recreates the `coder` system user at boot (the deb preinst's `useradd` lands in the buildroot `/etc/passwd`, stripped from the delta) with membership in `docker` (mirrors preinst) and `incus-admin` (Incus-template provisioning); `m` lines implicitly create those groups when the owning sysext isn't merged
 - `usr/lib/tmpfiles.d/coder.conf` — Factory config injection + `/home/coder` creation
 - `usr/lib/systemd/system-preset/40-coder.preset` — Enables `coder.service`, explicitly disables `coder-workspace-proxy.service` (separate opt-in role, needs its own env file)
-- `usr/lib/systemd/system/multi-user.target.d/10-coder.conf` — `Upholds=coder-sysext-setup.service` drop-in for reliable boot activation. The setup unit (`coder-sysext-setup.service`, preset-enabled) is a `Type=oneshot` + `RemainAfterExit=yes` unit with no Condition that `Wants=coder.service`. Upholding `coder.service` directly was wrong: systemd retries an upheld unit that does not stay active, forever (snosi#1100). That held while the gate was `ConditionFileNotEmpty=` and it still holds with the `ExecCondition=` gate in `coder.service.d/10-snosi-configured.conf`. `sysext-upholds-guard.sh` found it (#1113). `coder.service` keeps `Restart=on-failure` for crash recovery. `SYSEXT_REVISION=3` republishes the bind-address gate, factory template and start limit (r2 was the `CODER_ACCESS_URL` gate) at the same coder version; remove it when the coder version bumps
+- `usr/lib/systemd/system/multi-user.target.d/10-coder.conf` — `Upholds=coder-sysext-setup.service` drop-in for reliable boot activation. The setup unit (`coder-sysext-setup.service`, preset-enabled) is a `Type=oneshot` + `RemainAfterExit=yes` unit with no Condition that `Wants=coder.service`. Upholding `coder.service` directly was wrong: systemd retries an upheld unit that does not stay active, forever (snosi#1100). That held while the gate was `ConditionFileNotEmpty=` and it still holds with the `ExecCondition=` gate in `coder.service.d/10-snosi-configured.conf`. `sysext-upholds-guard.sh` found it (#1113). `coder.service` keeps `Restart=on-failure` for crash recovery. `SYSEXT_REVISION=3` republished the bind-address gate, factory template and start limit (r2 was the `CODER_ACCESS_URL` gate) at the same coder version; `SYSEXT_REVISION=4` (snosi#1189) adds the extension-release file; remove it when the coder version bumps
+- `usr/lib/extension-release.d/extension-release.coder` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable coder --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=4` republishes it at the same package version; remove it when the package version bumps
 
 ### debdev / dev
 - `mkosi.postinst.chroot` — Repoints `/usr/bin`+`/usr/sbin` symlinks that route through `/etc/alternatives` to their resolved targets. Sysexts cannot ship `/etc`, so alternatives symlinks created while installing these sysexts' packages would dangle at runtime (observed live: `/usr/bin/automake -> /etc/alternatives/automake`, missing).
@@ -303,6 +306,7 @@ shape under real systemd, with a negative control without the `-`.
 - `mkosi.finalize` — Captures `/etc/default/docker`, `/etc/docker`, `/etc/containerd` to factory defaults
 - `usr/lib/sysusers.d/docker.conf` — Docker user/group definitions
 - `usr/lib/tmpfiles.d/docker.conf` — Factory config injection
+- `usr/lib/extension-release.d/extension-release.docker` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable docker --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=1` republishes it at the same package version; remove it when the package version bumps
 
 ### edge
 - No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/edge/`)
@@ -335,6 +339,7 @@ shape under real systemd, with a negative control without the `-`.
 - `apply_policy` (written `true` by default, as the upstream installer does) gates Intune enrollment and the compliance check in `src/daemon/src/daemon.rs` (`if !cfg.get_apply_policy() || cfg.get_oidc_issuer_url().is_some()` → "compliance check: unavailable for current configuration"; enrollment via `spawn_intune_policy_application_if_due` runs only inside a PAM auth). Without it a compliant-device conditional-access tenant returns `AADSTS530003` for every PRT exchange
 - Live-verified on a snow install 2026-09-09: NSS resolves an Entra UPN with a mapped UID, `pam-auth-update` and the sshd drop-in land, the HSM PIN is TPM-sealed, and `--hsm-type tpm` works — but only if chosen before the daemon's first start; switching later needs the cache db reset described in [docs/himmelblau.md](../himmelblau.md)
 - `test/himmelblau-sysext-setup-test.sh` (validate.yml) pins all of the above against a scratch root with PATH stubs, plus tmpfiles-`C` ↔ factory ↔ `required-paths.txt` ↔ `mkosi.finalize` parity
+- `usr/lib/extension-release.d/extension-release.himmelblau` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable himmelblau --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=1` republishes it at the same package version; remove it when the package version bumps
 
 ### incus
 - `mkosi.finalize` — Captures the tmpfiles-referenced `/etc` paths to factory defaults
@@ -345,6 +350,7 @@ shape under real systemd, with a negative control without the `-`.
 - `usr/lib/sysusers.d/rdma.conf` — User/group definition (base owns the dnsmasq user: base ships the same `dnsmasq.conf` path, so an incus copy never shipped)
 - `usr/lib/tmpfiles.d/incus.conf` — Factory config injection + runtime dirs + xz alternatives links
 - `required-paths.txt` pins `libepoxy.so.0`, `libopus.so.0`, `libgstreamer-1.0.so.0` and `libgtk-3.so.0` in addition to the incus payload: the deb bundles its own `/usr/incus/bin/qemu-system-x86_64` (incusd's wrapper puts `/usr/incus/bin` first on `PATH`, so it, not Debian's qemu, is what gets probed) and the delta must carry that binary's GTK3/media closure itself — see "A Sysext Delta Is Only Valid Against the Base It Was Built On"
+- `usr/lib/extension-release.d/extension-release.incus` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable incus --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=6` republishes it at the same package version; remove it when the package version bumps
 
 ### k3s
 - `mkosi.postinst.chroot` — Downloads the pinned k3s static binary (bare binary on k3s-io/k3s GitHub releases, no deb/apt repo) via `verified_download()`, then builds a minimal stub deb around it (`dpkg-deb -Znone`, version read from the same `sysext-checksums.json` entry) and installs with `dpkg -i` so the shared postoutput script can resolve `KEYPACKAGE=k3s` from the merged dpkg database like every other sysext. The pinned sha256 is upstream's own published `sha256sum-amd64.txt` value, and the URL percent-encodes the `+` in the release tag (`v1.36.2%2Bk3s1`)
@@ -353,6 +359,7 @@ shape under real systemd, with a negative control without the `-`.
 - Activation: `multi-user.target.d/10-k3s.conf` upholds ONLY `k3s-sysext-setup.service` (a `RemainAfterExit` oneshot with no Condition, churn-free), which `Wants=` both role units. Upholding the two role units directly was wrong: one of them always has an unmet condition and systemd retries an upheld unit with a failed condition forever (snosi#1100: 93,566 journal lines on one host). Same pattern as himmelblau. The role units are no longer upheld, so a role switch on a running node needs: write `/etc/default/k3s-agent`, then `systemctl stop k3s` and `systemctl start k3s-agent` (or reboot). `SYSEXT_REVISION=1` republishes the fix at the same k3s version; remove it when the k3s version bumps
 - No `/etc` factory capture or tmpfiles needed: k3s reads `/etc/rancher/k3s/config.yaml` and `/etc/default/k3s{,-agent}` (admin-written, persistent `/etc` overlay) and keeps all state under persistent `/var/lib/rancher`
 - Dependency check tracks the upstream *stable* channel (`update.k3s.io/v1-release/channels/stable`), not GitHub "latest" (new minors reach latest before stable)
+- `usr/lib/extension-release.d/extension-release.k3s` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable k3s --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=2` republishes it at the same package version; remove it when the package version bumps
 
 ### lemonade
 - `mkosi.postinst.chroot` — Downloads the lemonade-server .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Everything ships natively under `/usr`; no relocation
@@ -363,6 +370,7 @@ shape under real systemd, with a negative control without the `-`.
 - `usr/lib/systemd/system-preset/40-lemonade.preset` — Enables `lemond.service` (web UI on port 13305)
 - `usr/lib/systemd/user-preset/40-lemonade.preset` — Disables the legacy per-user `lemond.service` the deb still ships (superseded by the system service)
 - `usr/lib/systemd/system/multi-user.target.d/10-lemonade.conf` — `Upholds=lemond.service` drop-in for reliable boot activation
+- `usr/lib/extension-release.d/extension-release.lemonade` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable lemonade --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=1` republishes it at the same package version; remove it when the package version bumps
 
 ### nix
 
@@ -379,6 +387,7 @@ access for a group member, denial for a nonmember, and existing-GID preservation
 - `usr/lib/systemd/system/nix-sysext-setup.service` — The upheld activation oneshot described above
 - `usr/lib/sysusers.d/nix.conf` — Nix user/group
 - `usr/lib/tmpfiles.d/nix-sysext.conf` — Root:nixbld 1775 store (`/var/lib/nix/store`), the `daemon-socket` (0770 root:nix-users, cleaned at boot) and 1777 `gcroots/per-user` and `profiles/per-user` directories under `/var/lib/nix/var/nix`, and the factory `/etc/nix` copy; base's `nix.conf` keeps the `/var/lib/nix` backing directory
+- `usr/lib/extension-release.d/extension-release.nix` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable nix --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=6` republishes it at the same package version; remove it when the package version bumps
 
 The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount source `/var/lib/nix`, never `/nix` (snosi#1164). Debian's user-session rules (`/usr/share/user-tmpfiles.d/nix-daemon.conf`) still create per-user paths under `/nix` and need `nix.mount` to be active. `systemd-tmpfiles-setup.service` and `reload-sysext.service` run before `nix.mount`: the sysext supplies the unit, so PID 1 loads it only at the last `daemon-reload` of `reload-sysext.service`. Before the mount, `/nix` is an empty directory on the read-only root, so Debian's `nix-daemon.conf` rules failed with exit 73, `reload-sysext.service` stopped before its `daemon-reload`, and no sysext unit loaded. Since snosi#1167 a failing tmpfiles rule no longer stops the `daemon-reload`: the tmpfiles line has a `-` prefix. On `/var` the rules always work, and the bind mount shows the result at `/nix/var/nix/...`, which `nix-daemon.socket` needs (`ConditionPathIsReadWrite=`). The lab dev run `dev-nix-sysext-boot-hlqfm` (2026-10-27) showed the bug with the published r4 and the fix on two boots. `mkosi.finalize` deletes Debian's `nix-daemon.conf` after it checks that its four rules are unchanged, and fails the build if Debian changes them or if any tmpfiles rule targets `/nix`.
 
@@ -392,6 +401,11 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 - `usr/lib/systemd/system-preset/40-pilothouse.preset` — Enables `pilothoused.service` (root broker on `/run/pilothouse/broker.sock`) and `pilothouse.service` (web UI on 127.0.0.1:8888)
 - `usr/lib/systemd/system/multi-user.target.d/10-pilothouse.conf` — `Upholds=pilothoused.service pilothouse.service` drop-in for reliable boot activation
 - `usr/lib/systemd/system/pilothoused.service.d/10-snosi-backends.conf` — Resets only `pilothoused.service`'s broker command while retaining the package's socket, socket-group, and sudo admin-group arguments. It explicitly opts in to `--updex /usr/bin/updex`, `--podman-socket /run/podman/podman.sock`, `--docker unix:///var/run/docker.sock`, `--incus`, and `--k3s /usr/bin/k3s`. These flags permit Pilothouse probes but do not force registration or make startup fail when an executable or socket endpoint is unavailable
+- `usr/lib/extension-release.d/extension-release.pilothouse` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable pilothouse --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=1` republishes it at the same package version; remove it when the package version bumps
+
+### podman
+- No `mkosi.extra/` unit files: the Debian packages ship the units (`podman.socket`, `podman.service` and others) in `/usr/lib/systemd/system`, and the build guard checks the delta for them
+- `usr/lib/extension-release.d/extension-release.podman` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable podman --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=1` republishes it at the same package version; remove it when the package version bumps
 
 ### notesd
 - `mkosi.postinst.chroot` — Downloads the frostyard-notesd .deb (frostyard/frostnotes GitHub release, no apt repo) via `verified_download()`, checks its `Depends: systemd` against the merged buildroot with `shared/download/deb-dependencies.sh`, then `dpkg -i`. The pin carries attestation metadata, checked at pin time and at every build (see [Attested downloads](#attested-downloads-lodge-notesd-maild-porterd-readd)). No maintainer scripts, no `/etc` file and no tmpfiles (the units use `StateDirectory=`/`RuntimeDirectory=`), so there is no `mkosi.finalize`
@@ -441,6 +455,7 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 - `usr/lib/systemd/system-preset/40-tailscale.preset` — Enable tailscaled
 - `usr/lib/systemd/system/multi-user.target.d/10-tailscale.conf` — `Upholds=tailscaled.service` drop-in for reliable boot activation
 - `usr/lib/tmpfiles.d/tailscale.conf` — Factory config injection
+- `usr/lib/extension-release.d/extension-release.tailscale` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable tailscale --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=1` republishes it at the same package version; remove it when the package version bumps
 
 ### voxtype
 - No postinst — `voxtype` comes from the Frostyard APT repository (built by frostyard/omarchy-apps) and apt resolves its runtime dependencies; the text-output chain (`wtype`, `ydotool`, `wl-clipboard`) is bundled so the sysext is self-contained on every desktop product
@@ -450,6 +465,7 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 - `usr/lib/systemd/system/multi-user.target.d/10-voxtype.conf` — `Upholds=snosi-sysext-udev-reload.service`
 - `usr/lib/systemd/user/ydotool.service.d/10-voxtype.conf` — `RestartSec=5s`. The deb's unit is `Restart=always` at the default 100ms, so its five permitted starts burn out in ~0.5s and land permanently in `start-limit-hit`; spreading them over ~20s means a slow boot cannot resurrect that failure mode
 - Desktop dictation tool with no *system* service of its own: no system preset, and the user unit is started by the user (or their compositor keybinding), not by a preset
+- `usr/lib/extension-release.d/extension-release.voxtype` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable voxtype --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=2` republishes it at the same package version; remove it when the package version bumps
 
 ### vscode
 - No `mkosi.extra/` — the Microsoft `code` deb installs natively under `/usr` (`/usr/share/code` + `/usr/bin/code` symlink), so no relocation is needed
@@ -678,10 +694,24 @@ updex first links a new revision. The revision takes effect when
   refresh that reloads PID 1 (`EXTENSION_RELOAD_MANAGER=1`). A unit that the
   reload starts, for example through `Upholds=`, finds its accounts and paths,
   as at boot. `updex features enable <name> --now`, `disable --now` and
-  `rollback --now` use the same refresh, so a first enable needs no reboot.
+  `rollback --now` use the same refresh. updex never runs `daemon-reload`
+  itself: `systemd-sysext` reloads PID 1 only when a merged extension sets
+  `EXTENSION_RELOAD_MANAGER=1`. Every sysext that ships a system unit sets it
+  (`sysext-reload-manager-guard.sh` enforces this, snosi#1189), so a first
+  enable needs no reboot. Before the rule, only the suite sysexts set it, and
+  `enable --now` of incus, coder or nix merged the sysext but started its
+  units only after a reboot. After a merge, `systemd-sysext` reads the key
+  of the extensions that are merged then. The removed sysext is gone by
+  updex's second refresh (its first refresh, `--no-reload`, already removed
+  it), so `disable --now` reloads PID 1 only when a sysext that stays merged
+  sets the key. When it disables the last merged sysext, or every remaining
+  one lacks the key, PID 1 keeps the removed units loaded until the next
+  `systemctl daemon-reload` or reboot. (A single `systemd-sysext refresh` by
+  hand that removes the last extension reads the key before it unmerges, and
+  reloads.)
   Older updex reloaded PID 1 before any `systemd-sysusers` run.
 - **Running daemons.** The reload loads the new unit files but restarts no
-  running unit: no suite sysext sets `EXTENSION_RESTART_UNITS=`. A daemon that
+  running unit: no sysext sets `EXTENSION_RESTART_UNITS=`. A daemon that
   runs during the refresh keeps its old binary until it restarts. Run
   `systemctl restart <unit>`, or reboot, to run the new version. A unit that
   the reload starts runs the new binary.
@@ -774,6 +804,8 @@ Example path inside the sysext: `usr/lib/systemd/system/multi-user.target.d/10-t
 Escape hatch: put `# upholds-guard-allow: <reason>` on its own line immediately above the `Condition*=` line, only when the condition can never fail on an installed system. A trailing inline comment does not work: systemd has no inline comments and it would corrupt the value.
 
 The preset (`40-<name>.preset`) is still required to set the enabled state; the drop-in handles the activation timing.
+
+**Reload the manager (snosi#1189, ADR-0026).** A sysext whose delta ships any entry under `usr/lib/systemd/system` (a unit, a drop-in directory or a drop-in) must also ship `usr/lib/extension-release.d/extension-release.<ImageId>` with the exact line `EXTENSION_RELOAD_MANAGER=1`. Without it, `systemd-sysext refresh` does not reload PID 1, and PID 1 does not know the new units and drop-ins (including the `Upholds=` drop-in above) until a reboot. updex never runs `daemon-reload` itself (updex ADR-0019). User units (`usr/lib/systemd/user`) do not count. `shared/sysext/finalize/sysext-reload-manager-guard.sh`, wired into every sysext's `FinalizeScripts=`, fails the build when the delta ships a system unit entry and the file or the line is missing (a value of `0` or a commented line fails). Fixture suite and repository check: `test/sysext-reload-manager-guard-test.sh`. Add the file to `required-paths.txt`. Adding the file to an existing sysext needs a `SYSEXT_REVISION` bump, so that the fix republishes.
 
 ## udev Rules and Kernel Modules in Sysexts
 
@@ -1219,11 +1251,11 @@ finalizer for any new sysext.
 
 1. Create `mkosi.images/<name>/mkosi.conf` following the pattern above
 2. Set `KEYPACKAGE` to the primary package name
-3. Wire `sysext-usr-only.sh`, `sysext-required-paths.sh`, `sysext-strip-icon-cache.sh`, `sysext-no-base-owned.sh`, and `sysext-upholds-guard.sh` through `FinalizeScripts=`, then create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in); the shared checks fail the build on `/opt` payload or a missing manifest path
+3. Wire `sysext-usr-only.sh`, `sysext-required-paths.sh`, `sysext-strip-icon-cache.sh`, `sysext-no-base-owned.sh`, `sysext-upholds-guard.sh`, and `sysext-reload-manager-guard.sh` through `FinalizeScripts=`, then create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in, and `usr/lib/extension-release.d/extension-release.<name>` when the sysext ships a system unit); the shared checks fail the build on `/opt` payload or a missing manifest path
 4. Add any extra files in `mkosi.images/<name>/mkosi.extra/`
 5. If configs needed in `/etc`: create `mkosi.finalize` to capture ONLY the needed paths to `/usr/share/factory/etc/` (never all of `/etc` — see Constraints), add tmpfiles.d rules
 6. Create `<name>.transfer` and `<name>.feature` in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.<name>.d/` (its own component directory — do not add to the shared `sysupdate.d/`)
-7. **If the sysext ships a systemd service:** add `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` with `Upholds=<name>.service` (see [Service Activation Pattern](#service-activation-pattern-upholds) above)
+7. **If the sysext ships a systemd service:** add `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf` with `Upholds=<name>.service` (see [Service Activation Pattern](#service-activation-pattern-upholds) above), and ship `mkosi.extra/usr/lib/extension-release.d/extension-release.<name>` with `EXTENSION_RELOAD_MANAGER=1` (any sysext with an entry under `usr/lib/systemd/system` needs it; `sysext-reload-manager-guard.sh` fails the build without it)
 8. **If the sysext ships a desktop application:** include `sysext-strip-icon-cache.sh` in `FinalizeScripts=` (all sysexts do, per the template) and list the `.desktop` file and icon in `required-paths.txt` (see [Desktop Applications in Sysexts](#desktop-applications-in-sysexts) above)
 9. Add the sysext name to root `mkosi.conf` Dependencies list
 10. Add a corresponding update check to `.github/workflows/check-dependencies.yml` if it has external downloads

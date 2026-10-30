@@ -2,3 +2,5 @@
 /usr/bin/podman
 /usr/bin/buildah
 /usr/bin/distrobox
+# Reload PID 1 after a merge so the units start in the same boot (snosi#1189)
+/usr/lib/extension-release.d/extension-release.podman

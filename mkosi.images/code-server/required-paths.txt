@@ -1,3 +1,5 @@
 # code-server sysext: installed via verified_download + dpkg -i in postinst
 /usr/bin/code-server
 /usr/lib/code-server
+# Reload PID 1 after a merge so the units start in the same boot (snosi#1189)
+/usr/lib/extension-release.d/extension-release.code-server

@@ -13,3 +13,5 @@
 /usr/lib/snosi/sysext-udev-reload
 /usr/lib/systemd/system/snosi-sysext-udev-reload.service
 /usr/lib/systemd/system/multi-user.target.d/10-sunshine.conf
+# Reload PID 1 after a merge so the units start in the same boot (snosi#1189)
+/usr/lib/extension-release.d/extension-release.sunshine

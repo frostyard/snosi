@@ -7,3 +7,5 @@
 /usr/lib/systemd/system/nix-sysext-setup.service
 /usr/lib/tmpfiles.d/nix-sysext.conf
 /usr/share/factory/etc/nix/nix.conf
+# Reload PID 1 after a merge so the units start in the same boot (snosi#1189)
+/usr/lib/extension-release.d/extension-release.nix

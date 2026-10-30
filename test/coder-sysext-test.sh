@@ -18,7 +18,7 @@
 #    ExecCondition= (an exit code 1..254 skips the unit without a failure)
 #    and sets a start limit that RestartSec=5 can reach; that drop-in and the
 #    check itself are pinned in required-paths.txt.
-#  - mkosi.conf republishes the fix as SYSEXT_REVISION=3 at the same coder
+#  - mkosi.conf republishes the fix as SYSEXT_REVISION=4 at the same coder
 #    version.
 # Everything runs through CODER_ENV_FILE and BUILDROOT against scratch files.
 # No root, network, or image build.
@@ -253,8 +253,8 @@ interval=$(sed -n 's/^StartLimitIntervalSec=//p' "$dropin")
 burst=$(sed -n 's/^StartLimitBurst=//p' "$dropin")
 check "the start limit can trip at RestartSec=5 ((burst - 1) * 5 < interval)" \
     test $(((burst - 1) * 5)) -lt "$interval"
-check "mkosi.conf republishes at SYSEXT_REVISION=3" \
-    grep -qx 'Environment=SYSEXT_REVISION=3' "$config"
+check "mkosi.conf republishes at SYSEXT_REVISION=4" \
+    grep -qx 'Environment=SYSEXT_REVISION=4' "$config"
 
 echo "1..$test_number"
 if ((failures)); then

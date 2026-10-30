@@ -56,6 +56,9 @@ must not delete `/etc` paths or self-disable: use a `/var` run-once marker;
 `.requires/` enablement (`check-required-by-guard.sh`). Do not uphold a
 condition-gated unit (`check-upholds-guard.sh`; for sysext deltas
 `shared/sysext/finalize/sysext-upholds-guard.sh`).
+A sysext that ships a system unit must ship `extension-release.<name>` with
+`EXTENSION_RELOAD_MANAGER=1`, or `updex features enable --now` starts nothing
+until a reboot (`shared/sysext/finalize/sysext-reload-manager-guard.sh`, ADR-0026).
 `test/sysext-authoring-contract-test.sh` also rejects a sysext `mkosi.extra/`
 file at a path base ships: mkosi drops it from the delta (#1111).
 Base owns the host VM runtime (`qemu-system-x86`, `qemu-utils`, `ovmf`);

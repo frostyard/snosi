@@ -26,6 +26,12 @@ Work to do:
 5. For services, ship a `usr/lib/systemd/system/multi-user.target.d/10-<name>.conf`
    drop-in with `Upholds=<name>.service` in addition to the preset — a plain
    `.wants` symlink is dropped at boot because the sysext is not merged yet.
+   Also ship `mkosi.extra/usr/lib/extension-release.d/extension-release.<name>`
+   with the line `EXTENSION_RELOAD_MANAGER=1` (model it on
+   `mkosi.images/incus/`), list it in `required-paths.txt`, and wire
+   `shared/sysext/finalize/sysext-reload-manager-guard.sh` in `FinalizeScripts=`:
+   a sysext with any system unit entry fails the build without the key, and
+   without it PID 1 loads the units only after a reboot (snosi#1189).
 6. For desktop applications, include `shared/sysext/finalize/sysext-strip-icon-cache.sh`
    in `FinalizeScripts=` so no hicolor icon cache leaks into the delta.
 7. Any direct download must go through `verified_download()` with a pinned

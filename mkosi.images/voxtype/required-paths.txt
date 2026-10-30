@@ -16,3 +16,5 @@
 /usr/lib/modules-load.d/60-voxtype.conf
 /usr/lib/systemd/system/multi-user.target.d/10-voxtype.conf
 /usr/lib/systemd/user/ydotool.service.d/10-voxtype.conf
+# Reload PID 1 after a merge so the units start in the same boot (snosi#1189)
+/usr/lib/extension-release.d/extension-release.voxtype

@@ -44,6 +44,7 @@ states intent; the categories below hold the record.
 - [adr/0023-skip-bootloader-reconcile-without-secure-boot-support.md](adr/0023-skip-bootloader-reconcile-without-secure-boot-support.md) — **Proposed:** the bootc bootloader reconciler also skips when no shim second stage is installed and readable efivarfs has no `SecureBoot` variable (firmware without Secure Boot support)
 - [adr/0024-verify-attestations-of-first-party-sysext-debs.md](adr/0024-verify-attestations-of-first-party-sysext-debs.md) — **Accepted:** pinned first-party sysext debs (notesd, maild) must pass `gh attestation verify` at pin time in `check-dependencies.yml` and in every `build.yml` run, before mkosi downloads them
 - [adr/0025-scope-strict-container-policy-to-bootc-updates.md](adr/0025-scope-strict-container-policy-to-bootc-updates.md) — **Proposed:** bootc updates pull with an immutable `/usr/lib/snosi/containers/bootc-policy.json`; the system policy default accepts workload images and keeps Frostyard product repositories `sigstoreSigned`
+- [adr/0026-sysexts-with-system-units-reload-the-manager.md](adr/0026-sysexts-with-system-units-reload-the-manager.md) — **Proposed:** every sysext that ships a system unit sets `EXTENSION_RELOAD_MANAGER=1`, so PID 1 loads its units in the same boot; a build-time guard enforces it
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design

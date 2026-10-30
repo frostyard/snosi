@@ -55,3 +55,5 @@
 /usr/share/factory/etc/chromium/policies/managed/himmelblau.json
 /usr/share/factory/etc/opt/chrome/native-messaging-hosts/linux_entra_sso.json
 /usr/share/factory/etc/opt/chrome/policies/managed/himmelblau.json
+# Reload PID 1 after a merge so the units start in the same boot (snosi#1189)
+/usr/lib/extension-release.d/extension-release.himmelblau
