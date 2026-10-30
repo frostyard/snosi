@@ -67,9 +67,10 @@ installer creates the only user an installed system has.
 TPM: in any tracked `gnome-remote-desktop*.service.d/` drop-in or
 `gnome-remote-desktop*.service` unit, and in any tracked `sysusers.d/*.conf`,
 no non-comment line may name `SupplementaryGroups` with a word that decodes
-to `tss` (its value is parsed with shlex, so quotes do not hide it, and a
-line that ends with a `\` is joined to the lines after it as systemd joins
-them), or be `m gnome-remote-desktop tss` in any quoting. PR #1141 added that
+to `tss` (the value uses systemd's own rules, so quotes do not hide it, C
+escapes such as `\x74ss` decode, and a line that ends with a `\` is joined
+to the lines after it as systemd joins them), or be
+`m gnome-remote-desktop tss` in any quoting or escaping. PR #1141 added that
 access, and 48.1 seals the RDP credentials with `Esys_ContextSave` and
 restores them with `Esys_ContextLoad`, which a reboot's TPM Reset invalidates
 ([#1131](https://github.com/frostyard/snosi/issues/1131));

@@ -22,13 +22,13 @@
 #      gnome-remote-desktop*.service.d, or whose base name is
 #      gnome-remote-desktop*.service (any tree, system or user, /usr or /etc):
 #      a non-comment line whose key is SupplementaryGroups and whose value has
-#      a word that decodes to tss. The value is parsed with shlex, so quoting
-#      does not hide it, and a line that ends with a backslash is joined to the
-#      lines after it, as systemd does;
+#      a word that decodes to tss. The value is split with systemd's own rules:
+#      quotes group text, C escapes decode, and a line that ends with a
+#      backslash is joined to the lines after it;
 #   b. in any tracked sysusers.d/*.conf file: a non-comment line
 #      "m gnome-remote-desktop tss", because that group membership gives the
-#      same access. Its fields are parsed with shlex, so quoting does not hide
-#      it either.
+#      same access. Its fields use the same splitter, so quoting and escapes
+#      hide nothing either.
 # It reads the same scan function for the real tree and its fixtures.
 #
 # No root, no network, no image build.
@@ -45,7 +45,6 @@ scan() { # root -> "ok - "/"not ok - " lines; status 1 on any not ok
     python3 - "$1" <<'PY'
 import os
 import re
-import shlex
 import subprocess
 import sys
 
@@ -61,6 +60,27 @@ UNIT_FILE = re.compile(r"^gnome-remote-desktop.*\.service$")
 SYSUSERS_DIR = "sysusers.d"
 # The key is case-sensitive in systemd, and spaces around the '=' are allowed.
 GROUPS = re.compile(r"^\s*SupplementaryGroups\s*=\s*(.*)$")
+# systemd decodes C escapes in a unit or sysusers value (extract_first_word()
+# with EXTRACT_UNQUOTE | EXTRACT_CUNESCAPE), so SupplementaryGroups="\x74ss"
+# and m gnome-remote-desktop "\164ss" both name the tss group.
+ESCAPES = {
+    "a": "\a",
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    "v": "\v",
+    "\\": "\\",
+    '"': '"',
+    "'": "'",
+    "s": " ",
+}
+# Number of digits after the letter, and their base.
+NUMERIC_ESCAPES = {"x": (2, 16), "u": (4, 16), "U": (8, 16)}
+OCTAL_ESCAPE = (3, 8)
+HEX_DIGITS = "0123456789abcdefABCDEF"
+DIGITS = "01234567"
 TSS = "tss"
 CAUSE = (
     "gnome-remote-desktop must not get TPM access (group tss): 48.1 seals RDP "
@@ -75,18 +95,81 @@ def is_comment(line):
     return stripped.startswith("#") or stripped.startswith(";")
 
 
-def words(value):
-    """Split a systemd or sysusers value into words, without their quoting.
+def escape(text, index):
+    """Decode the escape whose backslash is at text[index].
 
-    systemd unquotes each word, so SupplementaryGroups="tss" and
-    SupplementaryGroups=video 'tss' both grant the tss group. A line with an
-    unbalanced quote still gets a best-effort split, with the quote characters
-    dropped, so a malformed line is not a blind spot.
+    Returns (value, index after the escape). An unknown or incomplete escape
+    keeps the character after the backslash, and a trailing lone backslash is
+    dropped: a relaxed reading, so a malformed line is not a blind spot.
     """
-    try:
-        return shlex.split(value, posix=True)
-    except ValueError:
-        return [part.strip("\"'") for part in value.split()]
+    following = text[index + 1:]
+    if not following:
+        return "", len(text)
+    kind = following[0]
+    if kind in ESCAPES:
+        return ESCAPES[kind], index + 2
+    if kind in NUMERIC_ESCAPES:
+        width, base = NUMERIC_ESCAPES[kind]
+        body = following[1:1 + width]
+        allowed = HEX_DIGITS
+        # The letter and its digits, after the backslash itself.
+        length = 1 + width
+    elif kind in DIGITS:
+        width, base = OCTAL_ESCAPE
+        body = following[:width]
+        allowed = DIGITS
+        length = width
+    else:
+        return kind, index + 2
+    if len(body) == width and all(ch in allowed for ch in body):
+        value = int(body, base)
+        if value <= 0x10FFFF:
+            return chr(value), index + 1 + length
+    return kind, index + 2
+
+
+def words(value):
+    """Split a systemd or sysusers value the way systemd does.
+
+    systemd unquotes and cunescapes each word, so SupplementaryGroups="tss",
+    SupplementaryGroups=video 'tss' and SupplementaryGroups=\\x74ss all grant
+    the tss group. Escapes decode inside quotes as well as outside them, and an
+    unterminated quote ends its word at the end of the line (best effort).
+    """
+    result = []
+    current = []
+    open_word = False
+    quote = None
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if quote is None and char.isspace():
+            if open_word:
+                result.append("".join(current))
+                current = []
+                open_word = False
+            index += 1
+            continue
+        if quote is None and char in "'\"":
+            quote = char
+            open_word = True
+            index += 1
+            continue
+        if quote is not None and char == quote:
+            quote = None
+            index += 1
+            continue
+        if char == "\\":
+            text, index = escape(value, index)
+            current.append(text)
+            open_word = True
+            continue
+        current.append(char)
+        open_word = True
+        index += 1
+    if open_word:
+        result.append("".join(current))
+    return result
 
 
 def logical_lines(lines):
@@ -337,6 +420,63 @@ for variant in '"gnome-remote-desktop" tss' \
     expect "a quoted m $variant in a sysusers.d file" reject "$dir" \
         "shared/snow/tree/usr/lib/sysusers.d/gnome-remote-desktop.conf:1:"
 done
+
+# systemd decodes C escapes (\xHH, \NNN, \uHHHH, \UHHHHHHHH), so an escaped
+# name is the same group. The heredocs are quoted, so the backslashes reach the
+# fixture unchanged.
+sysusers_path=shared/snow/tree/usr/lib/sysusers.d/gnome-remote-desktop.conf
+
+dir=$(fixture sysusers-hex-group)
+mkdir -p "$dir/shared/snow/tree/usr/lib/sysusers.d"
+cat >"$dir/$sysusers_path" <<'EOF'
+m gnome-remote-desktop "\x74ss"
+EOF
+expect 'm gnome-remote-desktop "\x74ss" in a sysusers.d file' reject "$dir" \
+    "$sysusers_path:1:"
+
+dir=$(fixture sysusers-hex-user)
+mkdir -p "$dir/shared/snow/tree/usr/lib/sysusers.d"
+cat >"$dir/$sysusers_path" <<'EOF'
+m "\x67nome-remote-desktop" tss
+EOF
+expect 'm "\x67nome-remote-desktop" tss in a sysusers.d file' reject "$dir" \
+    "$sysusers_path:1:"
+
+dir=$(fixture unit-hex-bare)
+mkdir -p "$dir/$grd_system"
+cat >"$dir/$grd_system/10-hex.conf" <<'EOF'
+[Service]
+SupplementaryGroups=\x74ss
+EOF
+expect 'SupplementaryGroups=\x74ss in a grd drop-in' reject "$dir" \
+    "$grd_system/10-hex.conf:2:"
+
+dir=$(fixture unit-octal-quoted)
+mkdir -p "$dir/$grd_system"
+cat >"$dir/$grd_system/10-octal.conf" <<'EOF'
+[Service]
+SupplementaryGroups=video "\164ss"
+EOF
+expect 'SupplementaryGroups=video "\164ss" in a grd drop-in' reject "$dir" \
+    "$grd_system/10-octal.conf:2:"
+
+# An escaped longer name is still a different group.
+dir=$(fixture unit-hex-longer)
+mkdir -p "$dir/$grd_system"
+cat >"$dir/$grd_system/10-hex.conf" <<'EOF'
+[Service]
+SupplementaryGroups="\x74sslike"
+EOF
+expect 'SupplementaryGroups="\x74sslike" in a grd drop-in' pass "$dir"
+
+# An escaped backslash decodes to one word, video\tss, not to tss.
+dir=$(fixture unit-backslash)
+mkdir -p "$dir/$grd_system"
+cat >"$dir/$grd_system/10-backslash.conf" <<'EOF'
+[Service]
+SupplementaryGroups=video\\tss
+EOF
+expect 'SupplementaryGroups=video\\tss in a grd drop-in' pass "$dir"
 
 out=$(scan "$root" 2>&1) || true
 while IFS= read -r line; do
