@@ -37,7 +37,25 @@ requires the finalizer in every sysext `mkosi.conf`, and
 check. The 13 sysexts above ship the file, list it in `required-paths.txt`, and
 bump `SYSEXT_REVISION` so that the fix republishes at the same package version.
 
-Lab evidence: see the PR.
+Lab evidence (frostyard/lab branch `murbella/1189-probe-loadstate`, Snow
+`20261029193641`, published sysexts `incus` r5, `coder` r3, `nix` r5,
+2026-10-30):
+
+- `dev-snow-bootc-lifecycle-mm4s5` enabled only `incus`, `coder` and `nix`
+  with `--now` (each rc 0, all merged). In that boot `multi-user.target` had
+  `NeedDaemonReload=yes` and an empty `Upholds=`, and the 9 probed units were
+  `inactive (dead)` with no journal entry. After a reboot, `NeedDaemonReload=no`,
+  `Upholds=` named the 7 upheld units, and all 9 were active. PID 1 was not
+  reloaded: that is the cause.
+- `dev-snow-bootc-lifecycle-4hr54` enabled `lodge` first (it ships
+  `EXTENSION_RELOAD_MANAGER=1`), then the same 3. In the enable boot the target
+  had `NeedDaemonReload=no` and `Upholds=` with the 7 units, and all 9 units
+  and `lodge.service` were active and settled (`PASS: verified_sysext_probe`).
+  A merged key makes `systemd-sysext` reload PID 1 at the next refresh, and the
+  units start in the same boot.
+
+The run used the published sysexts, which do not yet have the key. A rerun of
+the first run with the republished revisions is the check after merge.
 
 ## Consequences
 
