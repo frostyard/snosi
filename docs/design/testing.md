@@ -63,6 +63,18 @@ login key (`AutomaticLogin`, `TimedLogin`) on a line that is not a comment,
 with or without an `=`. The retired live-ISO
 `shared/snow/tree/etc/gdm3/daemon.conf` set `AutomaticLogin=snow`; the Firn
 installer creates the only user an installed system has.
+`test/grd-no-tpm-access-test.sh` keeps the gnome-remote-desktop daemons off the
+TPM: in any tracked `gnome-remote-desktop*.service.d/` drop-in or
+`gnome-remote-desktop*.service` unit, and in any tracked `sysusers.d/*.conf`,
+no non-comment line may name `SupplementaryGroups` with a word that decodes
+to `tss` (the value uses systemd's own rules, so quotes do not hide it, C
+escapes such as `\x74ss` decode, and a line that ends with a `\` is joined
+to the lines after it as systemd joins them), or be
+`m gnome-remote-desktop tss` in any quoting or escaping. PR #1141 added that
+access, and 48.1 seals the RDP credentials with `Esys_ContextSave` and
+restores them with `Esys_ContextLoad`, which a reboot's TPM Reset invalidates
+([#1131](https://github.com/frostyard/snosi/issues/1131));
+PR #1191 removed it, and the daemons use the GKeyFile backend without a TPM.
 `test/frostyard-apt-image-component-test.sh` keeps the Frostyard `image` APT
 component (core ADR-0059) in the build sandbox only: `frostyard.sources` must
 list exactly `main image`, and no other tracked APT source may name
