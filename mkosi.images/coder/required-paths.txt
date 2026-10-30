@@ -15,3 +15,5 @@
 # inert (snosi#1117, snosi#1120)
 /usr/lib/coder-sysext/coder-configured
 /usr/lib/systemd/system/coder.service.d/10-snosi-configured.conf
+# Reload PID 1 after a merge so the units start in the same boot (snosi#1189)
+/usr/lib/extension-release.d/extension-release.coder

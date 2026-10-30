@@ -72,7 +72,8 @@ validate_inventory() {
             '%D/shared/sysext/finalize/sysext-required-paths.sh' \
             '%D/shared/sysext/finalize/sysext-strip-icon-cache.sh' \
             '%D/shared/sysext/finalize/sysext-no-base-owned.sh' \
-            '%D/shared/sysext/finalize/sysext-upholds-guard.sh'; do
+            '%D/shared/sysext/finalize/sysext-upholds-guard.sh' \
+            '%D/shared/sysext/finalize/sysext-reload-manager-guard.sh'; do
             grep -E '^[[:space:]]*FinalizeScripts=' "$config_path" |
                 grep -Fq "$file" ||
                 validation_error "$name: mkosi.conf is missing finalizer $file"
@@ -152,7 +153,7 @@ Overlay=yes
 CompressOutput=zstd
 
 [Content]
-FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh,%D/shared/sysext/finalize/sysext-no-base-owned.sh,%D/shared/sysext/finalize/sysext-upholds-guard.sh
+FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh,%D/shared/sysext/finalize/sysext-no-base-owned.sh,%D/shared/sysext/finalize/sysext-upholds-guard.sh,%D/shared/sysext/finalize/sysext-reload-manager-guard.sh
 
 [Build]
 Environment=KEYPACKAGE=fixture-package
@@ -230,6 +231,11 @@ run_negative_fixture() {
                 "$root/mkosi.images/fixture/mkosi.conf"
             git -C "$root" add mkosi.images/fixture/mkosi.conf
             ;;
+        missing-reload-manager-finalizer)
+            sed -i 's#,%D/shared/sysext/finalize/sysext-reload-manager-guard.sh##' \
+                "$root/mkosi.images/fixture/mkosi.conf"
+            git -C "$root" add mkosi.images/fixture/mkosi.conf
+            ;;
         mismatched-feature)
             sed -i 's/Features=fixture/Features=other/' \
                 "$metadata_dir/sysupdate.fixture.d/fixture.transfer"
@@ -303,6 +309,7 @@ run_negative_fixture missing-finalizer "sysext-strip-icon-cache.sh"
 run_negative_fixture missing-usr-only-finalizer "sysext-usr-only.sh"
 run_negative_fixture missing-base-owned-finalizer "sysext-no-base-owned.sh"
 run_negative_fixture missing-upholds-finalizer "sysext-upholds-guard.sh"
+run_negative_fixture missing-reload-manager-finalizer "sysext-reload-manager-guard.sh"
 run_negative_fixture mismatched-feature "transfer must select Features=fixture"
 run_negative_fixture unsigned-transfer "transfer must set Verify=true"
 run_negative_fixture orphan-metadata "orphan component-scoped sysext metadata"

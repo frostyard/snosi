@@ -373,6 +373,9 @@ jobs:
       - name: Test sysext Upholds guard
         run: ./test/sysext-upholds-guard-test.sh
 
+      - name: Test sysext reload-manager guard
+        run: ./test/sysext-reload-manager-guard-test.sh
+
       - name: Test geoclue account provisioning
         run: sudo python3 ./test/geoclue-state-scope-test.py
 

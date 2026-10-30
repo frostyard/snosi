@@ -12,3 +12,5 @@
 /usr/lib/tmpfiles.d/lemonade.conf
 /usr/lib/systemd/system-preset/40-lemonade.preset
 /usr/lib/systemd/system/multi-user.target.d/10-lemonade.conf
+# Reload PID 1 after a merge so the units start in the same boot (snosi#1189)
+/usr/lib/extension-release.d/extension-release.lemonade

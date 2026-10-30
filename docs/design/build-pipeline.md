@@ -91,6 +91,11 @@ Image builds have four phases, in order:
    `shared/sysext/finalize/sysext-upholds-guard.sh`, which fails an
    `Upholds=` of a condition-gated unit (delta, then the base tree from
    `$MKOSI_CONFIG`; snosi#1113).
+   Every sysext also runs `shared/sysext/finalize/sysext-reload-manager-guard.sh`,
+   which fails a delta that ships an entry under `usr/lib/systemd/system`
+   without `extension-release.<ImageId>` carrying `EXTENSION_RELOAD_MANAGER=1`,
+   so PID 1 loads the units in the same boot (snosi#1189;
+   [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)).
    `shared/composition/var-audit.finalize` audits per-product `/var` outcome
    maps and rejects unclassified or stale entries.
    `shared/composition/core-flatpaks.finalize` ships the product's

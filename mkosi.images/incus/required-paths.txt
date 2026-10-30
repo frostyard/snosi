@@ -31,3 +31,5 @@
 # that the cache names this exact module.
 /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader_svg.so
 /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache
+# Reload PID 1 after a merge so the units start in the same boot (snosi#1189)
+/usr/lib/extension-release.d/extension-release.incus

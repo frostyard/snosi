@@ -7,3 +7,5 @@
 /usr/lib/systemd/system/k3s-sysext-setup.service
 /usr/lib/systemd/system-preset/40-k3s.preset
 /usr/lib/systemd/system/multi-user.target.d/10-k3s.conf
+# Reload PID 1 after a merge so the units start in the same boot (snosi#1189)
+/usr/lib/extension-release.d/extension-release.k3s

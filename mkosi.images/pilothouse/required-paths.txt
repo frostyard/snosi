@@ -12,3 +12,5 @@
 /usr/lib/systemd/system-preset/40-pilothouse.preset
 /usr/lib/systemd/system/multi-user.target.d/10-pilothouse.conf
 /usr/lib/systemd/system/pilothoused.service.d/10-snosi-backends.conf
+# Reload PID 1 after a merge so the units start in the same boot (snosi#1189)
+/usr/lib/extension-release.d/extension-release.pilothouse
