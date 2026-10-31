@@ -63,6 +63,12 @@ the first run with the republished revisions is the check after merge.
   sysext with system units, as for the suite sysexts.
 - A refresh now reloads PID 1 for these sysexts. A reload restarts no running
   unit, so a running daemon keeps its old binary until it restarts.
+- `updex features disable <name> --now` reloads PID 1 for these sysexts at
+  its first step, `systemd-sysext unmerge`: the unmerge reads the key of the
+  extensions that are merged before it unmounts them, and the sysext to
+  remove is one of them. The reload stops no unit, so a running unit of the
+  removed sysext keeps running until it stops or the host reboots (see
+  [When a sysext update takes effect](../design/sysexts.md#when-a-sysext-update-takes-effect)).
 - A new sysext with a system unit fails its build until the author adds the
   file. The cost is one 11-line file per sysext.
 - The 13 sysexts republish once (a `SYSEXT_REVISION` bump each). Remove each
