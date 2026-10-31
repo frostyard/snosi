@@ -700,16 +700,29 @@ updex first links a new revision. The revision takes effect when
   (`sysext-reload-manager-guard.sh` enforces this, snosi#1189), so a first
   enable needs no reboot. Before the rule, only the suite sysexts set it, and
   `enable --now` of incus, coder or nix merged the sysext but started its
-  units only after a reboot. After a merge, `systemd-sysext` reads the key
-  of the extensions that are merged then. The removed sysext is gone by
-  updex's second refresh (its first refresh, `--no-reload`, already removed
-  it), so `disable --now` reloads PID 1 only when a sysext that stays merged
-  sets the key. When it disables the last merged sysext, or every remaining
-  one lacks the key, PID 1 keeps the removed units loaded until the next
-  `systemctl daemon-reload` or reboot. (A single `systemd-sysext refresh` by
-  hand that removes the last extension reads the key before it unmerges, and
-  reloads.)
-  Older updex reloaded PID 1 before any `systemd-sysusers` run.
+  units only after a reboot. Older updex reloaded PID 1 before any
+  `systemd-sysusers` run.
+- **Disable with `--now`.** `systemd-sysext` reads the key of the
+  extensions that are merged when it decides to reload: a merge or a
+  refresh reads it after it mounts the new set, and an unmerge reads it
+  before it unmounts the old set (systemd v262
+  [`src/sysext/sysext.c`](https://github.com/systemd/systemd/blob/v262/src/sysext/sysext.c#L1915-L1950)
+  `unmerge()`). `updex features disable <name> --now` runs
+  `systemd-sysext unmerge` first, before it removes any file
+  ([updex v2.1.3 `updex/features.go` L600-609](https://github.com/frostyard/updex/blob/v2.1.3/updex/features.go#L600-L609),
+  [`sysext/runner.go` L156-158](https://github.com/frostyard/updex/blob/v2.1.3/sysext/runner.go#L156-L158)).
+  The sysext to remove is still merged then. When it ships a system unit,
+  its own key makes the unmerge reload PID 1; a key on any other merged
+  sysext does the same. The unmerge unmounts every sysext, also the ones
+  that stay. updex then removes the files and runs the refresh above, which
+  merges the ones that stay again; its last step reloads PID 1 again only when a sysext that stays
+  merged sets the key. After the unmerge reload, PID 1 has no unit file of
+  the removed sysext, but the reload stops no unit: a unit of the removed
+  sysext that runs stays loaded and keeps running until it stops or the
+  host reboots. To end it in the same boot, run `systemctl stop <unit>`
+  after the disable (before it, an `Upholds=` drop-in starts the unit
+  again), or reboot. A plain `systemd-sysext refresh` by hand that removes
+  the last extension also reads the key before it unmerges, and reloads.
 - **Running daemons.** The reload loads the new unit files but restarts no
   running unit: no sysext sets `EXTENSION_RESTART_UNITS=`. A daemon that
   runs during the refresh keeps its old binary until it restarts. Run
