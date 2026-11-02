@@ -261,6 +261,7 @@ Some sysexts include extra files via their own `mkosi.images/<name>/mkosi.extra/
 - The deb's postinst also embeds/installs its apt-repo signing key at `/usr/share/keyrings/chatgpt-archive-keyring.gpg` — that lone keyring ships in the delta but is inert (the `/etc/apt` sources file it pairs with is stripped; updates come via sysupdate, not apt)
 - Icon lives in `/usr/share/pixmaps` (unthemed fallback dir, never cache-masked); `sysext-strip-icon-cache.sh` is still included per the mandatory sysext pattern
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
+- `SYSEXT_REVISION=2` republishes 26.1027.51404 because the `+r1` payload never reached R2 (run 41384581449); remove it when the package version bumps
 
 ### claude-desktop
 - No `mkosi.extra/` and no postinst — the Anthropic `claude-desktop` deb (apt repo at `downloads.claude.ai/claude-desktop/apt/stable`, registered in `mkosi.sandbox`) installs natively under `/usr` (`/usr/lib/claude-desktop` + `/usr/bin/claude-desktop` symlink), so no relocation is needed
@@ -561,6 +562,13 @@ because the action fails on an empty `packages-dir`.
 `test/drop-published-test.sh` covers the filter with a fake `aws`;
 `test/build-workflow-permissions-test.py` pins the step order, the gate and
 the action's `repogen-version`/`repogen-commit` pair.
+
+That filter also checks that every listed identity has its payload object in
+`ext/<name>/`. One `s3api list-objects-v2` call covers all matches. A missing
+object fails the step and deletes nothing, because a rebuild cannot republish
+that identity. Run 41384581449 uploaded `ext/chatgpt/SHA256SUMS` after the
+payload upload failed, so a rerun without this check would drop the rebuild
+and leave the bucket's `SHA256SUMS` pointing at a 404.
 
 Main push runs of `build.yml` are never cancelled by a newer push (only PR
 runs are): a cancel during the upload can leave `SHA256SUMS` and

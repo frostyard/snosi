@@ -20,6 +20,11 @@
 # metadata. Any read error fails this script, so the publish does not run on
 # a guess. A name with no SHA256SUMS in R2 is a new sysext and stays.
 #
+# A listed identity must also have its payload object in ext/<name>/. One
+# listing call checks every match, and a missing payload fails the step and
+# drops nothing: run 41384581449 uploaded SHA256SUMS after the payload upload
+# had failed, so a rerun would delete the rebuild and leave the bucket broken.
+#
 # Known gap (same as with v0.4.1 skip-duplicates): a sysext whose content
 # changed without a KEYPACKAGE version or SYSEXT_REVISION bump keeps its
 # identity, so it is dropped here and does not republish.
@@ -70,6 +75,10 @@ aws s3 sync "s3://${R2_BUCKET}/ext" "$published" \
 
 remaining=0
 dropped=0
+match_file=()
+match_name=()
+match_identity=()
+match_listed=()
 for file in "${built[@]}"; do
     base=${file##*/}
     identity=$(strip_identity "$base")
@@ -93,14 +102,53 @@ for file in "${built[@]}"; do
         done <"$sums"
     fi
     if [[ -n $match ]]; then
-        rm -f -- "$file"
-        dropped=$((dropped + 1))
-        echo "drop $base (identity $identity already published as $match)"
+        # Collect now, delete after the payload check below.
+        match_file+=("$file")
+        match_name+=("$name")
+        match_identity+=("$identity")
+        match_listed+=("$match")
     else
         remaining=$((remaining + 1))
         echo "keep $base (identity $identity not published)"
     fi
 done
+
+# A listed identity without its payload cannot be republished: repogen v0.7.0
+# rejects it for other bytes. One listing call checks every match.
+if [[ ${#match_file[@]} -gt 0 ]]; then
+    if ! listing=$(aws s3api list-objects-v2 --bucket "$R2_BUCKET" --prefix ext/ \
+        --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+        --query 'Contents[].[Key]' --output text); then
+        die "could not list ext/ objects in R2 bucket ${R2_BUCKET}; cannot check that published identities have their payloads"
+    fi
+    # Compare with every '+' read as a space. The CLI asks for url-encoded
+    # keys and decodes them with unquote_plus; a server that leaves a literal
+    # '+' unencoded (chatgpt_26.1027.51404+r1_...) would come back with a
+    # space. Payload filenames never contain a space, so this cannot alias.
+    declare -A present=()
+    if [[ $listing != None ]]; then
+        while IFS= read -r key; do
+            [[ -n $key ]] || continue
+            present["${key//+/ }"]=1
+        done <<<"$listing"
+    fi
+    missing=0
+    for i in "${!match_file[@]}"; do
+        key="ext/${match_name[i]}/${match_listed[i]}"
+        [[ -z ${present[${key//+/ }]:-} ]] || continue
+        missing=$((missing + 1))
+        echo "::error::drop-published: $key is listed in ext/${match_name[i]}/SHA256SUMS but its payload object is missing, so a rebuild cannot republish that identity (repogen v0.7.0 rejects an identity it already lists with other bytes); bump SYSEXT_REVISION for ${match_name[i]} or repair the bucket" >&2
+    done
+    if [[ $missing -gt 0 ]]; then
+        echo "::error::drop-published: $missing listed identities have no payload; nothing was dropped" >&2
+        exit 1
+    fi
+    for i in "${!match_file[@]}"; do
+        rm -f -- "${match_file[i]}"
+        dropped=$((dropped + 1))
+        echo "drop ${match_file[i]##*/} (identity ${match_identity[i]} already published as ${match_listed[i]})"
+    done
+fi
 
 echo "drop-published: ${#built[@]} built, $dropped already published, $remaining to publish"
 publish=false
