@@ -65,9 +65,9 @@
     "version": "0.9.1"
   },
   "notesd": {
-    "url": "https://github.com/frostyard/frostnotes/releases/download/v0.3.1/frostyard-notesd_0.3.1_amd64.deb",
-    "sha256": "44dead4f19f0b4dfe78e522f4c265150c52b9677c57b5f85a78e273f9a2603d4",
-    "version": "0.3.1",
+    "url": "https://github.com/frostyard/frostnotes/releases/download/v0.3.2/frostyard-notesd_0.3.2_amd64.deb",
+    "sha256": "60797325e8be342b208d46f8c3738e2009fb8058275ca5a262b9ed53365bf247",
+    "version": "0.3.2",
     "attestation": {
       "repository": "frostyard/frostnotes",
       "signer_workflow": ".github/workflows/release.yml"
