@@ -8,6 +8,13 @@ updates:
       interval: weekly
     commit-message:
       prefix: "chore"
+    ignore:
+      # The publish-to-r2 pin must move together with its repogen-version and
+      # repogen-commit inputs (test/build-workflow-permissions-test.py), and
+      # Dependabot moves only the pin, which that test rejects (#1187; #977
+      # and #994 were also closed). Bump repogen by hand: all 3 values to one
+      # release tag's peeled commit.
+      - dependency-name: "frostyard/repogen*"
   - package-ecosystem: npm
     directory: /workers/native-installer-redirect
     schedule:

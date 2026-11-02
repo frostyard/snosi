@@ -545,8 +545,8 @@ mixed `SHA256SUMS` is normal during the transition.
 
 ### Publishing only unpublished identities
 
-`build.yml` publishes with repogen `publish-to-r2` v0.7.0. That release
-reconciles digests: it fails the whole run when a rebuilt sysext has an
+`build.yml` publishes with repogen `publish-to-r2` v0.7.1. Since v0.7.0
+repogen reconciles digests: it fails the whole run when a rebuilt sysext has an
 identity (`NAME_VERSION_OSVERSION_ARCH`, compression suffix ignored) that
 `ext/<name>/SHA256SUMS` already lists with other bytes or another filename.
 `skip-duplicates` skips only exact duplicates, and mkosi output is not
@@ -561,7 +561,9 @@ publishes on a guess. When no file remains, the publish step is skipped,
 because the action fails on an empty `packages-dir`.
 `test/drop-published-test.sh` covers the filter with a fake `aws`;
 `test/build-workflow-permissions-test.py` pins the step order, the gate and
-the action's `repogen-version`/`repogen-commit` pair.
+the action's `repogen-version`/`repogen-commit` pair. Dependabot would move
+only the action pin, so `.github/dependabot.yml` ignores `frostyard/repogen`:
+bump all 3 values by hand, to one release tag's peeled commit.
 
 That filter also checks that every listed identity has its payload object in
 `ext/<name>/`. One `s3api list-objects-v2` call covers all matches. A missing
@@ -569,10 +571,15 @@ object fails the step and deletes nothing, because a rebuild cannot republish
 that identity. Run 41384581449 uploaded `ext/chatgpt/SHA256SUMS` after the
 payload upload failed, so a rerun without this check would drop the rebuild
 and leave the bucket's `SHA256SUMS` pointing at a 404.
+Since v0.7.1 the action also uploads in order (repogen ADR-0017): payloads
+first, then a check that every payload arrived, then metadata such as
+`SHA256SUMS`, then directory indexes, each upload phase retried. A failed payload
+upload therefore stops the run before any metadata names it. The pre-filter
+check stays, for objects that an older run left behind.
 
 Main push runs of `build.yml` are never cancelled by a newer push (only PR
 runs are): a cancel during the upload can leave `SHA256SUMS` and
-`SHA256SUMS.gpg` out of step, and v0.7.0 then refuses every publish until a
+`SHA256SUMS.gpg` out of step, and repogen (since v0.7.0) then refuses every publish until a
 person repairs the bucket. A manual cancel of a main run during the publish
 step, or the job's 120-minute `timeout-minutes` expiring there, carries the
 same risk.

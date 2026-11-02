@@ -283,7 +283,7 @@ jobs:
         # Skipped when every built identity is already published: the action
         # fails on an empty packages-dir.
         if: github.event_name != 'pull_request' && steps.prefilter.outputs.publish == 'true'
-        uses: frostyard/repogen/.github/actions/publish-to-r2@c3c9f63c0f9b04106cfdb84318f5ec935566ab89 # v0.7.0
+        uses: frostyard/repogen/.github/actions/publish-to-r2@fc6740ac67bdbe449612cc5d5ffa6fb7e08adf76 # v0.7.1
         with:
           r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
           r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -295,8 +295,8 @@ jobs:
           # pins repogen-version to the action pin's own release. The step
           # above hands repogen only identities absent from the published
           # index, which v0.7.0's digest reconciliation requires.
-          repogen-version: v0.7.0
-          repogen-commit: c3c9f63c0f9b04106cfdb84318f5ec935566ab89
+          repogen-version: v0.7.1
+          repogen-commit: fc6740ac67bdbe449612cc5d5ffa6fb7e08adf76
           skip-duplicates: true
           gpg-private-key: ${{ secrets.REPOGEN_GPG_KEY }}
           packages-dir: ./output/sysexts
