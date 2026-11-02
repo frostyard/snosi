@@ -573,7 +573,7 @@ payload upload failed, so a rerun without this check would drop the rebuild
 and leave the bucket's `SHA256SUMS` pointing at a 404.
 Since v0.7.1 the action also uploads in order (repogen ADR-0017): payloads
 first, then a check that every payload arrived, then metadata such as
-`SHA256SUMS`, then directory indexes, each phase retried. A failed payload
+`SHA256SUMS`, then directory indexes, each upload phase retried. A failed payload
 upload therefore stops the run before any metadata names it. The pre-filter
 check stays, for objects that an older run left behind.
 
