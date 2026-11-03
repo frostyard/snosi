@@ -74,6 +74,10 @@ the display and, through firmware console redirection, on serial:
 | Install snosi (graphical) | `g` | `systemd.unit=firn-graphical.target` |
 | Install snosi (console), the default | `t` | `systemd.unit=firn-console.target` |
 
+Both entries print a loading message before GRUB reads the kernel and the
+large initramfs, which can take several minutes from a USB stick or DVD. The
+signed GRUB has no progress module, so there is no progress bar (snosi#1097).
+
 `firn-gui-session` waits up to 10 s for a DRM device. Without one (a
 serial-only server, a VM without a display, a GPU no kernel driver
 supports) it exits 77 and `firn-gui.service` hands tty1 to the TUI at once.

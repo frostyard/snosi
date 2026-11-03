@@ -172,6 +172,16 @@ echo "  initrd: $(du -h "$initrd" | cut -f1)"
 #    nobody touches behaves as before; the 5-second visible menu lets a user
 #    pick graphical. The hotkeys (g, t) boot an entry in one keypress, which
 #    test/firn-installer-ui-boot-test.sh uses through the QEMU monitor.
+#
+#    LOADING MESSAGE (snosi#1097): each entry prints a loading message with
+#    GRUB `echo` before `linux` and `initrd` read the large initramfs, so the
+#    user sees that the boot is alive. The text reaches tty0 and, through
+#    firmware console redirection, serial. Debian's signed monolithic
+#    grubx64.efi (grub-efi-amd64-signed 1+2.12+9+deb13u2) has `echo` built in
+#    but not `progress`, and Secure Boot cannot load a module, so grub.cfg
+#    uses no `insmod` and no progress bar. The blank time that follows GRUB is
+#    the kernel unpacking the initramfs under `quiet`.
+#
 #    Still no serial terminal dependency on GRUB itself: the menu reaches a
 #    serial console through the firmware's console redirection (OVMF, BMCs),
 #    not GRUB's `serial`/`terminal_output` modules, whose presence in the
@@ -206,12 +216,18 @@ set default=console
 
 menuentry "Install snosi (graphical)" --id=graphical --hotkey=g {
     search --no-floppy --set=root --file /firn-installer/vmlinuz
+    echo 'Loading the snosi installer into memory.'
+    echo 'This can take several minutes from a USB stick or DVD. Please wait.'
+    echo 'The screen can then stay blank for a short time while the installer starts.'
     linux /firn-installer/vmlinuz console=tty0 console=ttyS0,115200n8 ro quiet loglevel=3 audit=0 systemd.show_status=false vt.global_cursor_default=0 systemd.unit=firn-graphical.target
     initrd /firn-installer/initrd.img
 }
 
 menuentry "Install snosi (console)" --id=console --hotkey=t {
     search --no-floppy --set=root --file /firn-installer/vmlinuz
+    echo 'Loading the snosi installer into memory.'
+    echo 'This can take several minutes from a USB stick or DVD. Please wait.'
+    echo 'The screen can then stay blank for a short time while the installer starts.'
     linux /firn-installer/vmlinuz console=tty0 console=ttyS0,115200n8 ro quiet loglevel=3 audit=0 systemd.show_status=false vt.global_cursor_default=0 systemd.unit=firn-console.target
     initrd /firn-installer/initrd.img
 }

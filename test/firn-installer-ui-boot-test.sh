@@ -208,6 +208,16 @@ boot_leg() {
     pass "GRUB menu shows both entries on the serial console"
     [[ -z "$hotkey" ]] || monitor "sendkey $hotkey"
 
+    # GRUB then prints the loading message and reads the whole rootfs as an
+    # initramfs, which takes minutes from slow media (snosi#1097).
+    deadline=$((SECONDS + UI_BOOT_TIMEOUT))
+    until grep -aqF 'Loading the snosi installer' "$CONSOLE_LOG" 2>/dev/null; do
+        kill -0 "$QEMU_PID" 2>/dev/null || die "QEMU exited before the loading message"
+        (( SECONDS < deadline )) || die "no loading message on the serial console within ${UI_BOOT_TIMEOUT}s"
+        sleep 0.5
+    done
+    pass "GRUB shows the loading message on the serial console"
+
     wait_for_ssh >/dev/null || die "SSH did not come up within ${UI_BOOT_TIMEOUT}s"
 }
 

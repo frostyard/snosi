@@ -91,7 +91,8 @@ the guest over SSH with an SMBIOS `ssh.authorized_keys.root` credential, so
 the ISO is not modified. The legs are the console entry, the graphical entry
 on virtio-vga followed by a Quit that must hand tty1 to the TUI, the graphical
 entry from the USB-stick (ESP) layout on std VGA, and the graphical entry
-with no display, which must fall back to the TUI at once. It saves
+with no display, which must fall back to the TUI at once. Each leg also
+waits for GRUB's loading message on serial (snosi#1097). It saves
 screenshots and prints guest memory use. Both tests boot with 6 GiB, because
 the all-in-RAM rootfs is a tmpfs capped at half of RAM and the ISO needs about
 4.5 GiB to unpack.
