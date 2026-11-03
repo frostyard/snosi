@@ -125,32 +125,27 @@ def step_block(name: str) -> list[str]:
     return build[start:end]
 
 
-# repogen v0.7.0 fails the whole publish on a rebuilt, already-published
-# identity, so the publish must only ever see what drop-published.sh left,
-# and must not run when it left nothing (the action fails on 0 packages).
-PREFILTER = "Drop sysexts that are already published"
+# Every main run rebuilds every sysext and mkosi output is not
+# byte-reproducible, so repogen (since v0.7.0) would fail the whole publish on
+# a rebuilt, already-published identity. The publish step must skip those
+# identities itself (skip-published-identities, repogen v0.7.2, ADR-0018),
+# which reads them from the signature-verified SHA256SUMS. It must run on every
+# non-PR event: the action uploads nothing when nothing is new.
 PUBLISH = "Publish sysexts to frostyard repo"
-prefilter = step_block(PREFILTER)
 publish = step_block(PUBLISH)
-if build.index(f"      - name: {PREFILTER}") > build.index(f"      - name: {PUBLISH}"):
-    fail("the pre-filter step must run before the publish step")
-if "        id: prefilter" not in prefilter:
-    fail("the pre-filter step must set id: prefilter")
-if not any(
-    "./shared/sysext/publish/drop-published.sh ./output/sysexts" in line
-    for line in prefilter
-):
-    fail("the pre-filter step must run drop-published.sh on ./output/sysexts")
-if not any(line.strip() == "R2_BUCKET: frostyardrepo" for line in prefilter):
-    fail("the pre-filter must read the bucket the publish step writes")
 if not any(line.strip() == "packages-dir: ./output/sysexts" for line in publish):
     fail("the publish step must publish ./output/sysexts")
+if not any(line.strip() == "skip-published-identities: true" for line in publish):
+    fail("the publish step must set skip-published-identities: true")
+if not any(
+    line.strip().startswith("gpg-private-key: ${{ secrets.") for line in publish
+):
+    fail("skip-published-identities needs the publish step's gpg-private-key")
 publish_if = [line.strip() for line in publish if line.strip().startswith("if:")]
-if publish_if != [
-    "if: github.event_name != 'pull_request' && "
-    "steps.prefilter.outputs.publish == 'true'"
-]:
-    fail(f"the publish step must be gated on the pre-filter result; found {publish_if}")
+if publish_if != ["if: github.event_name != 'pull_request'"]:
+    fail(f"the publish step must run on every non-PR event; found {publish_if}")
+if any("drop-published" in line for line in build):
+    fail("drop-published.sh is retired; repogen skips published identities")
 
 # A cancel during the R2 upload can leave SHA256SUMS and its signature out of
 # step, which v0.7.0 refuses until a person repairs it: a run that publishes
