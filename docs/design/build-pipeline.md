@@ -136,8 +136,11 @@ publish sensitive base state. See [sysext design](sysexts.md).
 `shared/bootc-secure/mkosi.conf` selects a coherent Forky systemd family
 from an isolated low-priority APT source. Its schema-1 image contract is
 `shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json`; Firn consumes
-the secure installation subset. The fragment supplies lockdown bootc kargs,
-MOK/PCR public identities and the required initramfs tooling. Private keys
+the secure installation subset. The fragment supplies MOK/PCR public
+identities and the required initramfs tooling. The sealed UKI command line
+carries `lockdown=integrity`
+([ADR-0027](../adr/0027-seal-lockdown-into-the-secure-uki-command-line.md)).
+The fragment's bootc kargs.d file stays, but it does not reach a Type #2 UKI. Private keys
 remain caller-owned. `build-images.yml` checks supplied credentials against
 `shared/native-ab/keys/mok-2026.crt` and
 `shared/native-ab/keys/pcr-signing-2026.pub`; external lab bootc consumers

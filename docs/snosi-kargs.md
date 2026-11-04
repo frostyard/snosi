@@ -72,6 +72,10 @@ kernel uses its last occurrence; a flag with no negation, such as `quiet`,
 cannot be removed. `show` reports the effective command line and the arguments
 managed by the addon, but other global or per-UKI addons may also contribute.
 
+The embedded command line carries `lockdown=integrity`
+([ADR-0027](adr/0027-seal-lockdown-into-the-secure-uki-command-line.md)). An
+addon cannot lower it: the kernel only raises the lockdown level.
+
 The CLI refuses arguments that can replace the verified root, redirect early
 userspace, or create a persistent root-shell path:
 

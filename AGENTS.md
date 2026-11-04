@@ -92,6 +92,11 @@ removes SSH host keys and ssl-cert's snakeoil pair, and the ISO postinst
 removes its SSH host keys, which sshd-keygen regenerates on every boot.
 `docs/bootc-secure-operations.md` governs support claims and lifecycle gates;
 fixture success does not establish production Secure Boot support.
+The sealed UKI command line is `rw composefs=?<digest> lockdown=integrity`
+for all four products (ADR-0027); `validate_uki` and
+`test/bootc-secure-artifact-test.sh` enforce it. Never drop
+`lockdown=integrity`: linux-surface does not raise lockdown under Secure Boot,
+and kargs.d does not reach a Type #2 UKI.
 
 Forky is a compatibility risk with Frostyard bootc/libostree debs, not a
 package-manager guarantee. Repeat that build/root check when either the

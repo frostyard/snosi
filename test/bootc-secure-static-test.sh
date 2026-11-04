@@ -169,6 +169,15 @@ kargs="$tree/usr/lib/bootc/kargs.d/10-lockdown.toml"
 [[ -f "$kargs" ]]
 grep -Fqx 'kargs = ["lockdown=integrity"]' "$kargs"
 
+# kargs.d never reaches a Type #2 UKI, and the linux-surface kernel does not
+# raise lockdown under Secure Boot. The sealed UKI command line carries
+# lockdown=integrity (ADR-0027); its one definition is sealed_cmdline().
+assembler="$root/shared/bootc-secure/assemble-uki.sh"
+grep -Fqx "sealed_cmdline() { printf 'rw composefs=?%s lockdown=integrity' \"\$1\"; }" "$assembler" || {
+    echo "assemble-uki.sh must define the sealed shape rw composefs=?<digest> lockdown=integrity" >&2
+    exit 1
+}
+
 [[ -s "$root/shared/native-ab/keys/mok-2026.crt" ]]
 [[ -s "$root/shared/native-ab/keys/pcr-signing-2026.pub" ]]
 grep -q '^ExtraTrees=%D/shared/native-ab/keys/mok-2026.crt:/usr/lib/snosi/mok.crt$' "$secure"
