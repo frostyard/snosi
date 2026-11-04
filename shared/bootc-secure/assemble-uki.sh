@@ -15,6 +15,10 @@ readonly CANDIDATE_UKIFY_INITRD="$CANDIDATE_UKIFY_WORK/initrd"
 
 die() { echo "Error: $*" >&2; exit 1; }
 valid_digest() { [[ ${1:-} =~ ^[[:xdigit:]]{128}$ ]]; }
+# The one definition of the sealed UKI command line (ADR-0027). The
+# linux-surface kernel does not raise lockdown under Secure Boot, and kargs.d
+# never reaches a Type #2 UKI, so lockdown=integrity must be sealed here.
+sealed_cmdline() { printf 'rw composefs=?%s lockdown=integrity' "$1"; }
 
 # shellcheck source=shared/bootc-secure/storage-digest-probe.sh
 source "$(dirname "${BASH_SOURCE[0]}")/storage-digest-probe.sh"
@@ -215,7 +219,8 @@ validate_uki() ( # uki kernel initrd MOK-cert primary-pub digest [previous-pub]
     cmp -s "$initrd" "$work/initrd" || die "UKI initrd section mismatch"
     cmp -s "$primary" "$work/pcrpkey" || die "UKI PCR public-key section mismatch"
     cmdline=$(tr '\0' ' ' <"$work/cmdline")
-    [[ "$cmdline" == "rw composefs=?$digest" ]] || die "UKI command line is not the pinned composefs-only shape"
+    [[ "$cmdline" == "$(sealed_cmdline "$digest")" ]] ||
+        die "UKI command line is not the pinned sealed shape (rw composefs=?<digest> lockdown=integrity)"
     validate_pcrsig "$work/pcrsig" "$work/pcrpkey" "$previous"
     sbverify --cert "$mok" "$uki" >/dev/null || die "UKI MOK Authenticode signature failed"
 )
@@ -377,7 +382,7 @@ candidate_ukify_args() { # rootfs kernel initrd digest version previous-key outp
     rootfs_image_path "$root" "$kernel" >/dev/null
     rootfs_image_path "$root" "$initrd" >/dev/null
     output=(build --linux "$CANDIDATE_UKIFY_LINUX" --initrd "$CANDIDATE_UKIFY_INITRD"
-        --os-release @/usr/lib/os-release --cmdline "rw composefs=?$digest"
+        --os-release @/usr/lib/os-release --cmdline "$(sealed_cmdline "$digest")"
         --uname "$version" --pcr-private-key "$CANDIDATE_UKIFY_PCR_KEY"
         --secureboot-private-key "$CANDIDATE_UKIFY_MOK_KEY"
         --secureboot-certificate "$CANDIDATE_UKIFY_MOK_CERT" --measure
@@ -483,7 +488,7 @@ EOF
     candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
         fixture one "" fixture_args
     expected_args=(build --linux /run/snosi-ukify-work/linux --initrd /run/snosi-ukify-work/initrd
-        --os-release @/usr/lib/os-release --cmdline 'rw composefs=?fixture' --uname one
+        --os-release @/usr/lib/os-release --cmdline 'rw composefs=?fixture lockdown=integrity' --uname one
         --pcr-private-key "$CANDIDATE_UKIFY_PCR_KEY" --secureboot-private-key "$CANDIDATE_UKIFY_MOK_KEY"
         --secureboot-certificate "$CANDIDATE_UKIFY_MOK_CERT" --measure --output "$CANDIDATE_UKIFY_WORK/uki.efi"
         --pcrpkey "$CANDIDATE_UKIFY_WORK/pcr.pub")
@@ -863,7 +868,7 @@ negative_self_test() {
     openssl pkey -in "$work/key" -pubout -out "$work/pub" >/dev/null
     fp=$(pcr_fingerprint "$work/pub")
     printf 'kernel' >"$work/kernel"; printf 'initrd' >"$work/initrd"; touch "$work/uki"
-    printf 'rw composefs=?%0128d' 0 >"$work/uki.cmdline"
+    printf 'rw composefs=?%0128d lockdown=integrity' 0 >"$work/uki.cmdline"
     cp "$work/kernel" "$work/uki.linux"; cp "$work/initrd" "$work/uki.initrd"; cp "$work/pub" "$work/uki.pcrpkey"
     jq -n --arg fp "$fp" '{sha256: [range(0; 4) | {pol: ("phase-" + tostring), pkfp: $fp}]}' >"$work/uki.pcrsig"
     mkdir "$work/bin"
@@ -915,6 +920,26 @@ EOF
     if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
         die "mutation fixture accepted UKI Authenticode mutation"
     fi
+    rm "$work/uki.bad-signature"
+    cp "$work/uki.cmdline" "$work/uki.cmdline.saved"
+    printf 'rw composefs=?%0128d' 0 >"$work/uki.cmdline"
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+        die "mutation fixture accepted the old command line shape without lockdown=integrity"
+    fi
+    printf 'rw composefs=?%0128d lockdown=none' 0 >"$work/uki.cmdline"
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+        die "mutation fixture accepted lockdown=none on the sealed command line"
+    fi
+    printf 'rw composefs=?%0128d lockdown=integrity lockdown=none' 0 >"$work/uki.cmdline"
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+        die "mutation fixture accepted a second lockdown token after lockdown=integrity"
+    fi
+    printf 'rw composefs=?%0128d lockdown=confidentiality' 0 >"$work/uki.cmdline"
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+        die "mutation fixture accepted lockdown=confidentiality instead of the exact sealed shape"
+    fi
+    mv "$work/uki.cmdline.saved" "$work/uki.cmdline"
+    PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)"
 }
 
 validate() { # rootfs image mok-cert pcr-cert [previous-pcr-cert]

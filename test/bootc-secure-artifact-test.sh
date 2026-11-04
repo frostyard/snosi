@@ -194,10 +194,91 @@ EOF
     }
 )
 
+# Independent check of the sealed UKI command line (ADR-0027, issue 1213).
+# The linux-surface kernel does not raise lockdown under Secure Boot, so the
+# signed UKI must carry exactly one lockdown token: lockdown=integrity.
+validate_sealed_lockdown() ( # rootfs
+    local root=$1 uki scratch cmdline token
+    local -a tokens lockdown_tokens=()
+    uki=$(find "$root/boot/EFI/Linux" -maxdepth 1 -type f -name '*.efi' -print -quit)
+    [[ -n $uki ]] || { echo "Error: assembled UKI is missing" >&2; return 1; }
+    scratch=$(mktemp -d)
+    trap 'rm -rf "$scratch"' EXIT
+    # Always write a disposable output; never modify the signed UKI.
+    objcopy --dump-section ".cmdline=$scratch/cmdline" "$uki" "$scratch/uki.copy" || {
+        echo "Error: failed to dump the UKI .cmdline section" >&2
+        return 1
+    }
+    cmdline=$(tr '\0' ' ' <"$scratch/cmdline")
+    read -r -a tokens <<<"$cmdline"
+    for token in "${tokens[@]}"; do
+        [[ $token != lockdown=* ]] || lockdown_tokens+=("$token")
+    done
+    [[ ${#lockdown_tokens[@]} -eq 1 && ${lockdown_tokens[0]} == lockdown=integrity ]] || {
+        echo "Error: sealed UKI command line must carry exactly one lockdown=integrity token (found: ${lockdown_tokens[*]:-none})" >&2
+        return 1
+    }
+    echo "bootc secure sealed command line carries lockdown=integrity"
+)
+
+sealed_lockdown_fixture() (
+    local fixture before after output status digest cmdline
+    local -a rejected
+    fixture=$(mktemp -d)
+    trap 'rm -rf "$fixture"' EXIT
+    mkdir -p "$fixture/bin" "$fixture/root/boot/EFI/Linux"
+    printf 'signed UKI fixture\n' >"$fixture/root/boot/EFI/Linux/test.efi"
+    before=$(sha256sum "$fixture/root/boot/EFI/Linux/test.efi")
+    digest=$(printf '%0128d' 0)
+
+    cat >"$fixture/bin/objcopy" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+[[ $# -eq 4 && $1 == --dump-section && $2 == .cmdline=* ]] || {
+    echo "stub objcopy: expected dump section, input, and explicit output arguments" >&2
+    exit 1
+}
+printf '%s\0' "$FIXTURE_CMDLINE" >"${2#.cmdline=}"
+cp -- "$3" "$4"
+STUB
+    chmod +x "$fixture/bin/objcopy"
+
+    PATH="$fixture/bin:$PATH" FIXTURE_CMDLINE="rw composefs=?$digest lockdown=integrity" \
+        validate_sealed_lockdown "$fixture/root"
+    after=$(sha256sum "$fixture/root/boot/EFI/Linux/test.efi")
+    [[ $after == "$before" ]] || {
+        echo "Error: sealed lockdown validation modified the signed UKI" >&2
+        return 1
+    }
+
+    rejected=(
+        "rw composefs=?$digest"
+        "rw composefs=?$digest lockdown=none"
+        "rw composefs=?$digest lockdown=integrity lockdown=none"
+    )
+    for cmdline in "${rejected[@]}"; do
+        set +e
+        output=$(PATH="$fixture/bin:$PATH" FIXTURE_CMDLINE="$cmdline" \
+            validate_sealed_lockdown "$fixture/root" 2>&1)
+        status=$?
+        set -e
+        [[ $status -eq 1 && $output == *"must carry exactly one lockdown=integrity token"* ]] || {
+            echo "Error: sealed lockdown validation accepted: $cmdline" >&2
+            return 1
+        }
+    done
+    after=$(sha256sum "$fixture/root/boot/EFI/Linux/test.efi")
+    [[ $after == "$before" ]] || {
+        echo "Error: sealed lockdown validation modified the signed UKI" >&2
+        return 1
+    }
+)
+
 if [[ ${1:-} == --fixtures ]]; then
     "$ASSEMBLER" --self-test
     "$ASSEMBLER" --credential-self-test
     gpt_auto_fixture
+    sealed_lockdown_fixture
     echo "bootc secure artifact fixtures passed"
     exit 0
 fi
@@ -214,5 +295,6 @@ for command in buildah jq objcopy objdump openssl podman sbverify; do
 done
 
 "$ASSEMBLER" --validate "$ROOTFS" "$IMAGE" "$MOK_CERT" "$PCR_CERT" "$PREVIOUS_PCR_CERT"
+validate_sealed_lockdown "$ROOTFS"
 validate_gpt_auto_cryptsetup
 echo "bootc secure artifact validation passed"

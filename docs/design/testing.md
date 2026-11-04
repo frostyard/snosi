@@ -104,7 +104,8 @@ ranges, rejects ignored Range and tampered candidates, checks the served
 signed index and tests second-promotion history. It does not write R2.
 `test/bootc-secure-docs-test.sh` guards the normative secure operations
 runbook; `test/bootc-secure-artifact-test.sh --fixtures` covers the
-Issue 517 GPT-auto udev-rule check. `test/check-forky-systemd-test.sh`
+Issue 517 GPT-auto udev-rule check and the sealed `lockdown=integrity`
+command-line check (ADR-0027). `test/check-forky-systemd-test.sh`
 exercises the Forky sentinel and its three recheck obligations.
 
 ## Bootc installation and update tests
