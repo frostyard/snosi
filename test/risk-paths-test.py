@@ -210,4 +210,4 @@ command = "python3 ./test/risk-paths-test.py"
 if validate.count(command) != 1:
     fail("validate.yml must run risk-paths-test.py exactly once")
 
-print("risk-paths-test: PASSED")
+print(f"risk-paths-test: PASSED ({len(entries)} entries, {len(repository_files)} repository files scanned)")
