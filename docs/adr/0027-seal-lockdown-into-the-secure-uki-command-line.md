@@ -40,7 +40,14 @@ point.
 ## Consequences
 
 - Snowfield boots at lockdown `integrity` under Secure Boot. For Debian
-  kernels the change is a no-op at runtime.
+  kernels under Secure Boot the change is a no-op at runtime.
+- With Secure Boot off, or on firmware without Secure Boot support (ADR-0023),
+  all four products now boot at lockdown `integrity` too, where they booted at
+  `none` before: the bootc Type #2 entry passes no loader command line, so the
+  embedded one applies. Integrity lockdown refuses unsigned kernel modules,
+  hibernation, `/dev/mem` and raw I/O port or MSR writes, and unsigned kexec.
+  No shipped image or sysext loads an out-of-tree module. This is intended:
+  the products are secure products whatever the firmware state.
 - The PCR 11 values change. TPM2 unlock does not depend on fixed PCR 11
   values: the LUKS token is a signed policy (`--tpm2-pcrs=` empty,
   `--tpm2-public-key-pcrs=11`, pcrlock off; see
@@ -60,7 +67,8 @@ point.
 - **Rely on kargs.d:** it does not reach a Type #2 UKI, so Snowfield keeps
   lockdown `none`.
 - **Seal lockdown for Snowfield only:** a per-product shape adds a branch to
-  the assembler and to its validation, for no runtime gain on Debian kernels.
+  the assembler and to its validation, for no runtime gain on Debian kernels under Secure Boot, and it leaves
+  Secure-Boot-off installs at different lockdown levels per product.
 - **Remove the kargs.d file:** bootc reads it; removing it changes bootc's
   declared kargs and gains nothing.
 
