@@ -32,6 +32,7 @@ The ones that bind snosi:
 - [ADR-0056 — The APT publisher triggers image rebuilds after packages are live](https://github.com/frostyard/core/blob/main/docs/adr/0056-rebuild-images-after-apt-publication.md) — snosi receives `build` dispatches from frostyard/apt-publisher once a producer's packages are installable (supersedes ADR-0013)
 - [ADR-0059 — Publish image-only packages in a separate APT component](https://github.com/frostyard/core/blob/main/docs/adr/0059-publish-image-only-packages-in-a-separate-apt-component.md) — `frostyard.sources` lists `Components: main image`; `image` holds the builds that replace Debian packages (`bootc`, `libostree-1-1`, `incus*`) once step 5 moves them; only image and sysext builds enable it, and installed images ship no Frostyard APT source
 - [ADR-0061 — Add the image APT component on the first publication run](https://github.com/frostyard/core/blob/main/docs/adr/0061-add-the-image-apt-component-on-the-first-publication-run.md) — apt-publisher adds the empty `image` to `trixie` and `forky` by itself; snosi's step 4 starts when both `Release` files list it (amends ADR-0059 step 3)
+- [ADR-0068 — Label pull requests that touch high-risk paths](https://github.com/frostyard/core/blob/main/docs/adr/0068-label-pull-requests-that-touch-high-risk-paths.md) — .github/risk-paths.json and the risk-paths.yml caller; each why names a protectedBoundaries entry
 
 When changing behavior covered by one of these, update or supersede the ADR
 in frostyard/core first, then change this repo in the same effort.

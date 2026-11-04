@@ -123,6 +123,21 @@ for name in build-images.yml build.yml test-bootc-secure.yml; do
     done
 done
 
+# The risk-paths list and its caller run only through pull_request_target,
+# so an edit of either must start no image or sysext build.
+risk_path_files=(
+    '.github/risk-paths.json'
+    '.github/workflows/risk-paths.yml'
+)
+for name in build-images.yml build.yml; do
+    workflow="$WORKFLOWS/$name"
+    for event in push pull_request; do
+        for path in "${risk_path_files[@]}"; do
+            assert_ignored "$name $event ignores risk-path file $path" "$workflow" "$event" "$path"
+        done
+    done
+done
+
 
 installer_iso_inputs=(
     '.github/workflows/build-installer-iso.yml'

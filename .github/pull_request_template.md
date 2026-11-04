@@ -31,3 +31,4 @@ Commands run:
 - [ ] No secrets, keys, or credentials are committed
 - [ ] New external downloads are pinned and go through `verified_download()`
 - [ ] Documentation updated (`CLAUDE.md`, `README.md`, `docs/`) where relevant
+- [ ] If the change touches a path in `.github/risk-paths.json` (label `risk:high`), the summary names each matched path and why the change is safe
