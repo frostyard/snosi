@@ -41,8 +41,11 @@ failure: Connection reset by peer`. Curl's plain `--retry` skips error 56 and
 Each call keeps `--connect-timeout 10` and a `--max-time`. Full GETs add
 stall detection (`PUBLISH_HTTP_GET_SPEED_LIMIT`, default 1048576 bytes/s,
 and `PUBLISH_HTTP_GET_SPEED_TIME`, default 60 s) because issue #1218 showed
-that a 600 s stalled attempt can exhaust the retry budget before curl retries.
-The stalled origin fixture proves that a low-speed GET aborts and retries.
+that a sustained slow transfer can run too long before curl starts a retry.
+A transfer below 1048576 bytes/s for 60 s aborts early. It can then retry
+while the retry window is still open. Before this fix, a slow attempt ran to
+`--max-time 600` and was never retried. The stalled origin fixture proves
+that a low-speed GET aborts and retries.
 Without `--retry-delay`, curl backs off 1, 2, 4, 8, 16 s, so a full budget
 costs 31 s of delay; `--retry-max-time` bounds the window. A missing object (4xx) is
 retried too, then fails. After the last attempt the helper returns non-zero

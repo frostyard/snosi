@@ -252,9 +252,9 @@ dest_object_exists() { # relpath
 # The check still fails closed: after the last attempt the helper returns
 # curl's non-zero status and the caller reports the failure as before.
 # PUBLISH_HTTP_GET_RETRIES is curl's retry count, so 0 means one attempt.
-# #1218: a full GET can spend all 600 s in one stalled attempt. Curl does not
-# start a retry when --retry-max-time is already past, so full GETs also
-# abort below this env-overridable byte-rate floor and return to the retry budget.
+# #1218: a slow full GET could run to --max-time 600 and never start a retry.
+# Full GETs abort below this env-overridable byte-rate floor after the set time,
+# so curl can start a retry while --retry-max-time still leaves room.
 PUBLISH_HTTP_GET_RETRIES="${PUBLISH_HTTP_GET_RETRIES:-5}"
 PUBLISH_HTTP_GET_RETRY_MAX_TIME="${PUBLISH_HTTP_GET_RETRY_MAX_TIME:-300}"
 PUBLISH_HTTP_GET_SPEED_LIMIT="${PUBLISH_HTTP_GET_SPEED_LIMIT:-1048576}"

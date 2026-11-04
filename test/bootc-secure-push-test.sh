@@ -23,6 +23,7 @@ WORK=$(mktemp -d)
 mkdir -p "$WORK/bin"
 : >"$WORK/commands"
 : >"$WORK/push-count"
+: >"$WORK/raw-count"
 
 cat >"$WORK/bin/buildah" <<'EOF'
 #!/bin/bash
@@ -51,14 +52,16 @@ cat >"$WORK/bin/skopeo" <<'EOF'
 #!/bin/bash
 set -euo pipefail
 printf 'skopeo %s\n' "$*" >>"$COMMAND_LOG"
-if [[ ${SKOPEO_CHECK_ERROR:-0} == 1 ]];
-then
-    printf 'unexpected registry error\n' >&2
-    exit 1
-fi
 case " $* " in
     *" --raw "*)
-        if [[ ${SKOPEO_TAG_EXISTS:-0} == 1 ]]; then
+        raw_count=$(cat "$RAW_COUNT")
+        raw_count=$((raw_count + 1))
+        printf '%s\n' "$raw_count" >"$RAW_COUNT"
+        if [[ ${SKOPEO_CHECK_ERROR_FROM:-0} -ne 0 && $raw_count -ge ${SKOPEO_CHECK_ERROR_FROM:-0} ]]; then
+            printf 'unexpected registry error\n' >&2
+            exit 1
+        fi
+        if [[ ${SKOPEO_TAG_EXISTS_FROM:-0} -ne 0 && $raw_count -ge ${SKOPEO_TAG_EXISTS_FROM:-0} ]]; then
             printf '{"digest":"%s"}\n' "$EXPECTED_DIGEST"
             exit 0
         fi
@@ -76,19 +79,20 @@ chmod +x "$WORK/bin/skopeo"
 reset_state() {
     : >"$WORK/commands"
     printf '0\n' >"$WORK/push-count"
+    printf '0\n' >"$WORK/raw-count"
 }
 
 run_helper() {
     local stdout="$WORK/stdout" stderr="$WORK/stderr" status
     set +e
-    PATH="$WORK/bin:$PATH" COMMAND_LOG="$WORK/commands" PUSH_COUNT="$WORK/push-count" \
+    PATH="$WORK/bin:$PATH" COMMAND_LOG="$WORK/commands" PUSH_COUNT="$WORK/push-count" RAW_COUNT="$WORK/raw-count" \
         EXPECTED_DIGEST="$DIGEST" EXPECTED_IMAGE="$IMAGE" EXPECTED_TAG="$TAG" \
         SNOSI_PUSH_ATTEMPTS="${SNOSI_PUSH_ATTEMPTS_VALUE:-3}" \
         SNOSI_PUSH_RETRY_DELAY="${SNOSI_PUSH_RETRY_DELAY_VALUE:-0}" \
         PUSH_FAIL_ALWAYS="${PUSH_FAIL_ALWAYS:-0}" \
         PUSH_FAIL_ONCE="${PUSH_FAIL_ONCE:-0}" \
-        SKOPEO_TAG_EXISTS="${SKOPEO_TAG_EXISTS:-0}" \
-        SKOPEO_CHECK_ERROR="${SKOPEO_CHECK_ERROR:-0}" \
+        SKOPEO_TAG_EXISTS_FROM="${SKOPEO_TAG_EXISTS_FROM:-0}" \
+        SKOPEO_CHECK_ERROR_FROM="${SKOPEO_CHECK_ERROR_FROM:-0}" \
         MALFORMED_DIGEST="${MALFORMED_DIGEST:-}" \
         REGISTRY_DIGEST="${REGISTRY_DIGEST:-}" \
         "$HELPER" "$IMAGE" "$TAG" >"$stdout" 2>"$stderr"
@@ -96,6 +100,16 @@ run_helper() {
     set -e
     printf '%s\n' "$status"
 }
+
+reset_state
+SKOPEO_TAG_EXISTS_FROM=1
+result=$(run_helper)
+SKOPEO_TAG_EXISTS_FROM=0
+if [[ $result -ne 0 ]] && [[ $(cat "$WORK/push-count") -eq 0 ]]; then
+    pass "existing tag at entry is rejected without pushing"
+else
+    fail "existing tag at entry is rejected without pushing"
+fi
 
 reset_state
 PUSH_FAIL_ONCE=1
@@ -114,6 +128,7 @@ fi
 
 sed -E 's#--digestfile=[^ ]+#--digestfile=<DIGEST>#' "$WORK/commands" >"$WORK/operations"
 cat >"$WORK/expected-operations" <<EOF
+skopeo inspect --raw docker://$IMAGE:$TAG
 buildah push --compression-format=zstd:chunked --digestfile=<DIGEST> $IMAGE:$TAG docker://$IMAGE:$TAG
 skopeo inspect --raw docker://$IMAGE:$TAG
 buildah push --compression-format=zstd:chunked --digestfile=<DIGEST> $IMAGE:$TAG docker://$IMAGE:$TAG
@@ -138,12 +153,12 @@ fi
 
 reset_state
 PUSH_FAIL_ONCE=1
-SKOPEO_TAG_EXISTS=1
+SKOPEO_TAG_EXISTS_FROM=2
 result=$(run_helper)
 PUSH_FAIL_ONCE=0
-SKOPEO_TAG_EXISTS=0
+SKOPEO_TAG_EXISTS_FROM=0
 if [[ $result -ne 0 ]] && [[ $(cat "$WORK/push-count") -eq 1 ]] &&
-        grep -Fq 'tag exists after a failed push; an immutable tag must not move' "$WORK/stderr"; then
+        grep -Fq 'immutable tag must not move' "$WORK/stderr"; then
     pass "a tag that exists after failure stops the retry"
 else
     fail "a tag that exists after failure stops the retry"
@@ -151,10 +166,10 @@ fi
 
 reset_state
 PUSH_FAIL_ONCE=1
-SKOPEO_CHECK_ERROR=1
+SKOPEO_CHECK_ERROR_FROM=2
 result=$(run_helper)
 PUSH_FAIL_ONCE=0
-SKOPEO_CHECK_ERROR=0
+SKOPEO_CHECK_ERROR_FROM=0
 if [[ $result -ne 0 ]] && [[ $(cat "$WORK/push-count") -eq 1 ]]; then
     pass "an unknown tag-check error stops the retry"
 else

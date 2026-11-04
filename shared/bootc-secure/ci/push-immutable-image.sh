@@ -49,9 +49,28 @@ cleanup() { rm -rf "$TEMP_DIR"; }
 trap cleanup EXIT
 DIGEST_FILE="$TEMP_DIR/image-digest"
 
+check_tag_before_push() { # fail closed if the immutable tag already exists
+    local skopeo_output
+    if ! skopeo_output=$(skopeo inspect --raw "docker://$IMAGE:$TAG" 2>&1); then
+        if grep -qi 'manifest unknown' <<<"$skopeo_output"; then
+            return 0
+        fi
+        printf 'tag existence check failed closed: %s\n' "$skopeo_output" >&2
+        return 1
+    fi
+    printf 'tag exists before push; an immutable tag must not move; see runbooks/image-publication-failure.md\n' >&2
+    return 1
+}
+
+# The 14-digit tag is unique per job.  This helper assumes no concurrent writer
+# of the same tag: a check-then-push cannot exclude a concurrent writer.
 attempt=1
 while (( attempt <= SNOSI_PUSH_ATTEMPTS)); do
     rm -f "$DIGEST_FILE"
+
+    if ! check_tag_before_push; then
+        exit 1
+    fi
 
     if buildah push --compression-format=zstd:chunked \
             --digestfile="$DIGEST_FILE" \
@@ -96,18 +115,6 @@ while (( attempt <= SNOSI_PUSH_ATTEMPTS)); do
     fi
 
     sleep "$((SNOSI_PUSH_RETRY_DELAY * attempt))"
-
-    if ! SKOPEO_OUTPUT=$(skopeo inspect --raw "docker://$IMAGE:$TAG" 2>&1); then
-        if grep -qi 'manifest unknown' <<<"$SKOPEO_OUTPUT"; then
-            :
-        else
-            printf 'tag existence check failed closed: %s\n' "$SKOPEO_OUTPUT" >&2
-            exit 1
-        fi
-    else
-        printf 'tag exists after a failed push; an immutable tag must not move; see runbooks/image-publication-failure.md\n' >&2
-        exit 1
-    fi
 
     attempt=$((attempt + 1))
 done

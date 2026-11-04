@@ -206,6 +206,23 @@ assert_guard() {
     fi
 }
 
+assert_guard_message() {
+    local description=$1 expected=$2 message=$3 fixture="$work/$pass"
+    shift 3
+    make_fixture "$fixture"
+    "$@" "$fixture"
+    if SNOSI_BOOTC_GUARD_ROOT="$fixture" "$guard" >"$work/guard.out" 2>&1; then
+        status=0
+    else
+        status=1
+    fi
+    if [[ $status == "$expected" ]] && grep -Fq "$message" "$work/guard.out"; then
+        ok "$description"
+    else
+        not_ok "$description"
+    fi
+}
+
 unchanged() { :; }
 remove_secure_include() { rm "$1/mkosi.profiles/floe/mkosi.conf"; }
 remove_required_file() { rm "$2/$1"; }
@@ -292,7 +309,7 @@ move_promotion_early() {
 }
 remove_login() { perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n//' "$1/.github/workflows/build-images.yml"; }
 remove_push_helper() { perl -0pi -e 's/^          DIGEST=.*push-immutable-image\.sh.*\n//m' "$1/.github/workflows/build-images.yml"; }
-replace_push_helper_bare() { perl -0pi -e 's{^          DIGEST=.*push-immutable-image\.sh.*$}{          sudo TMPDIR="$TMPDIR" buildah push --compression-format=zstd:chunked --digestfile=/tmp/image-digest "$IMAGE:$TAG" "docker://$IMAGE:$TAG"}m' "$1/.github/workflows/build-images.yml"; }
+replace_push_helper_bare() { perl -0pi -e 's/(^          DIGEST=.*push-immutable-image\.sh.*\n)/$1          sudo TMPDIR="\$TMPDIR" buildah push --compression-format=zstd:chunked --digestfile=\/tmp\/image-digest "\$IMAGE:\$TAG" "docker:\/\/\$IMAGE:\$TAG"\n/m' "$1/.github/workflows/build-images.yml"; }
 move_login_after_verification() {
     perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n//; s/(      - name: Validate policy-copied secure artifact\n)/$1      - name: Log in to ghcr.io\n        uses: docker\/login-action\@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0\n/' "$1/.github/workflows/build-images.yml"
 }
@@ -354,7 +371,7 @@ assert_guard 'missing release ORAS GITHUB_TOKEN fails' 1 remove_release_oras_tok
 assert_guard 'direct actor interpolation in registry logins fails' 1 interpolate_actor_directly
 assert_guard 'Buildah login without password stdin fails' 1 remove_buildah_password_stdin
 assert_guard 'missing immutable push helper fails' 1 remove_push_helper
-assert_guard 'bare buildah push in workflow fails' 1 replace_push_helper_bare
+assert_guard_message 'bare buildah push in workflow fails' 1 'push step must not call bare buildah push' replace_push_helper_bare
 for variable in SNOSI_BOOTC_SECURE SNOSI_BOOTC_MOK_KEY SNOSI_BOOTC_MOK_CERT SNOSI_BOOTC_PCR_KEY SNOSI_BOOTC_PCR_CERT; do
     assert_guard "missing $variable fails" 1 remove_package_variable "$variable"
 done
