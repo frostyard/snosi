@@ -522,8 +522,8 @@ Facts that shape the wiring, each pinned by
   `*.raw.zst`, parses name/version/os/arch after stripping the suffix, and
   identifies a sysext by name, version, OS version and architecture
   regardless of suffix (`internal/utils/package_identity.go`), so a version
-  already published as `.raw` is never re-uploaded as `.raw.zst` (since the
-  v0.7.0 bump the pre-filter below drops it before repogen runs).
+  already published as `.raw` is never re-uploaded as `.raw.zst` (since
+  v0.7.2 repogen skips it by identity; see below).
 - **The client decompresses in-process.** `frostyard-updex` (2.0.0 in the
   Frostyard stable suite; ≥ 1.2.3 required) detects the suffix
   (`download/download.go`), streams through `klauspost/compress/zstd`
@@ -545,37 +545,41 @@ mixed `SHA256SUMS` is normal during the transition.
 
 ### Publishing only unpublished identities
 
-`build.yml` publishes with repogen `publish-to-r2` v0.7.1. Since v0.7.0
+`build.yml` publishes with repogen `publish-to-r2` v0.7.2. Since v0.7.0
 repogen reconciles digests: it fails the whole run when a rebuilt sysext has an
 identity (`NAME_VERSION_OSVERSION_ARCH`, compression suffix ignored) that
 `ext/<name>/SHA256SUMS` already lists with other bytes or another filename.
 `skip-duplicates` skips only exact duplicates, and mkosi output is not
 byte-reproducible, while every main run rebuilds every sysext.
 
-So the step "Drop sysexts that are already published" runs
-`shared/sysext/publish/drop-published.sh` first. It reads every
-`ext/*/SHA256SUMS` from the R2 bucket itself (with the publish credentials,
-never from the CDN, which can serve stale metadata) and deletes each built
-file whose identity is listed. A read error fails the step, so nothing
-publishes on a guess. When no file remains, the publish step is skipped,
-because the action fails on an empty `packages-dir`.
-`test/drop-published-test.sh` covers the filter with a fake `aws`;
-`test/build-workflow-permissions-test.py` pins the step order, the gate and
-the action's `repogen-version`/`repogen-commit` pair. Dependabot would move
+So the publish step sets `skip-published-identities: true` (repogen v0.7.2,
+repogen ADR-0018). repogen syncs the metadata from the R2 bucket itself (never
+from the CDN, which can serve stale metadata), reads the published identities
+only from `SHA256SUMS` files whose `SHA256SUMS.gpg` signature verifies, and
+skips each built sysext whose identity is listed, whatever its bytes. The read
+fails closed: a missing or bad signature, or any unreadable manifest, stops the
+run, so nothing publishes on a guess. Every built `*.raw*` file must parse as a
+sysext, so a broken artifact cannot pass as "already published". When every
+identity is skipped, the action uploads and purges nothing and reports
+`published=false`; an empty `packages-dir` (no sysext built at all) is still an
+error. The step therefore runs on every non-PR event, without a gate.
+`test/build-workflow-permissions-test.py` pins the input, the gate and the
+action's `repogen-version`/`repogen-commit` pair, and rejects a return of the
+retired snosi pre-filter `drop-published.sh` (v0.7.0 to v0.7.1), which read
+`SHA256SUMS` without verifying its signature. Dependabot would move
 only the action pin, so `.github/dependabot.yml` ignores `frostyard/repogen`:
 bump all 3 values by hand, to one release tag's peeled commit.
 
-That filter also checks that every listed identity has its payload object in
-`ext/<name>/`. One `s3api list-objects-v2` call covers all matches. A missing
-object fails the step and deletes nothing, because a rebuild cannot republish
-that identity. Run 41384581449 uploaded `ext/chatgpt/SHA256SUMS` after the
-payload upload failed, so a rerun without this check would drop the rebuild
-and leave the bucket's `SHA256SUMS` pointing at a 404.
+Before any upload the action also checks, with one `head-object` request per
+skipped identity, that the payload object the signed manifest names is still
+in `ext/<name>/`. A missing or unreadable object fails the run, because a
+rebuild cannot republish that identity: bump the version or `SYSEXT_REVISION`,
+or repair the bucket. Run 41384581449 uploaded `ext/chatgpt/SHA256SUMS` after
+the payload upload failed; this check keeps such a state loud.
 Since v0.7.1 the action also uploads in order (repogen ADR-0017): payloads
 first, then a check that every payload arrived, then metadata such as
 `SHA256SUMS`, then directory indexes, each upload phase retried. A failed payload
-upload therefore stops the run before any metadata names it. The pre-filter
-check stays, for objects that an older run left behind.
+upload therefore stops the run before any metadata names it.
 
 Main push runs of `build.yml` are never cancelled by a newer push (only PR
 runs are): a cancel during the upload can leave `SHA256SUMS` and
@@ -586,7 +590,7 @@ same risk.
 
 ### SYSEXT_REVISION: republishing content fixes
 
-Publishing (`build.yml` → the pre-filter above, then repogen publish-to-r2)
+Publishing (`build.yml` → repogen publish-to-r2 with the identity skip above)
 publishes only identities absent from R2, keyed on the versioned filename,
 so a sysext whose KEYPACKAGE version has not changed is never re-uploaded — tree fixes (presets, drop-ins, tmpfiles,
 factory captures) silently do not reach users until the upstream package

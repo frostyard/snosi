@@ -27,6 +27,23 @@ jobs:
         run: |
           CHECKSUMS="shared/download/sysext-checksums.json"
           UPDATES=""
+          CHECK_FAILED=""
+          CHECKED=0
+          FAILED=0
+
+          # Record a dependency whose latest value could not be read (empty,
+          # "null", or not matching the optional format pattern $3), so a
+          # failed fetch never reads as "no update" (T776a).
+          mark_failed() {
+            local key="$1" latest="$2" pattern="${3:-}"
+            CHECKED=$((CHECKED + 1))
+            if [[ -z "$latest" || "$latest" == "null" ]] ||
+               [[ -n "$pattern" && ! "$latest" =~ $pattern ]]; then
+              echo "::warning::Could not read latest value for ${key}"
+              CHECK_FAILED="${CHECK_FAILED}${key} "
+              FAILED=$((FAILED + 1))
+            fi
+          }
 
           # Authenticated, retried GitHub API fetch. On persistent failure it
           # yields an empty string (|| true — explicit, so the graceful-skip
@@ -54,6 +71,7 @@ jobs:
           # Check Bitwarden (skip drafts/prereleases)
           CURRENT_BW=$(jq -r '.bitwarden.version' "$CHECKSUMS")
           LATEST_BW=$(gh_api https://api.github.com/repos/bitwarden/clients/releases | jq -r '[.[] | select(.draft == false and .prerelease == false) | select(.tag_name | startswith("desktop-v"))][0].tag_name' | sed 's/desktop-v//')
+          mark_failed "bitwarden" "${LATEST_BW}"
           if [[ -n "$LATEST_BW" && "$LATEST_BW" != "null" ]] && ver_gt "$LATEST_BW" "$CURRENT_BW"; then
             UPDATES="${UPDATES}bitwarden: $CURRENT_BW -> $LATEST_BW\n"
             echo "bitwarden_update=true" >> $GITHUB_OUTPUT
@@ -64,6 +82,7 @@ jobs:
           # pick the newest release actually carrying an amd64.deb asset)
           CURRENT_OBS=$(jq -r '.obsidian.version' "$CHECKSUMS")
           LATEST_OBS=$(gh_api 'https://api.github.com/repos/obsidianmd/obsidian-releases/releases?per_page=15' | jq -r '[.[] | select(.draft == false and .prerelease == false) | select([.assets[].name | test("_amd64\\.deb$")] | any)][0].tag_name' | sed 's/^v//')
+          mark_failed "obsidian" "${LATEST_OBS}"
           if [[ -n "$LATEST_OBS" && "$LATEST_OBS" != "null" ]] && ver_gt "$LATEST_OBS" "$CURRENT_OBS"; then
             UPDATES="${UPDATES}obsidian: $CURRENT_OBS -> $LATEST_OBS\n"
             echo "obsidian_update=true" >> $GITHUB_OUTPUT
@@ -73,6 +92,7 @@ jobs:
           # Check LocalSend
           CURRENT_LSEND=$(jq -r '.localsend.version' "$CHECKSUMS")
           LATEST_LSEND=$(gh_api https://api.github.com/repos/localsend/localsend/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "localsend" "${LATEST_LSEND}"
           if [[ -n "$LATEST_LSEND" && "$LATEST_LSEND" != "null" ]] && ver_gt "$LATEST_LSEND" "$CURRENT_LSEND"; then
             UPDATES="${UPDATES}localsend: $CURRENT_LSEND -> $LATEST_LSEND\n"
             echo "localsend_update=true" >> $GITHUB_OUTPUT
@@ -82,6 +102,7 @@ jobs:
           # Check GitHub Copilot desktop app
           CURRENT_GITHUB_COPILOT=$(jq -r '."github-copilot".version' "$CHECKSUMS")
           LATEST_GITHUB_COPILOT=$(gh_api https://api.github.com/repos/github/app/releases | jq -r '[.[] | select(.draft == false and .prerelease == false)][0].tag_name' | sed 's/^v//')
+          mark_failed "github-copilot" "${LATEST_GITHUB_COPILOT}"
           if [[ -n "$LATEST_GITHUB_COPILOT" && "$LATEST_GITHUB_COPILOT" != "null" ]] && ver_gt "$LATEST_GITHUB_COPILOT" "$CURRENT_GITHUB_COPILOT"; then
             UPDATES="${UPDATES}github-copilot: $CURRENT_GITHUB_COPILOT -> $LATEST_GITHUB_COPILOT\n"
             echo "github_copilot_update=true" >> "$GITHUB_OUTPUT"
@@ -91,6 +112,7 @@ jobs:
           # Check GitDesktop
           CURRENT_GITDESKTOP=$(jq -r '.gitdesktop.version' "$CHECKSUMS")
           LATEST_GITDESKTOP=$(gh_api https://api.github.com/repos/theBGuy/GitDesktop/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "gitdesktop" "${LATEST_GITDESKTOP}"
           if [[ -n "$LATEST_GITDESKTOP" && "$LATEST_GITDESKTOP" != "null" ]] && ver_gt "$LATEST_GITDESKTOP" "$CURRENT_GITDESKTOP"; then
             UPDATES="${UPDATES}gitdesktop: $CURRENT_GITDESKTOP -> $LATEST_GITDESKTOP\n"
             echo "gitdesktop_update=true" >> "$GITHUB_OUTPUT"
@@ -100,6 +122,7 @@ jobs:
           # Check Sunshine
           CURRENT_SUNSHINE=$(jq -r '.sunshine.version' "$CHECKSUMS")
           LATEST_SUNSHINE=$(gh_api https://api.github.com/repos/LizardByte/Sunshine/releases | jq -r '[.[] | select(.draft == false and .prerelease == false)][0].tag_name' | sed 's/^v//')
+          mark_failed "sunshine" "${LATEST_SUNSHINE}"
           if [[ -n "$LATEST_SUNSHINE" && "$LATEST_SUNSHINE" != "null" ]] && ver_gt "$LATEST_SUNSHINE" "$CURRENT_SUNSHINE"; then
             UPDATES="${UPDATES}sunshine: $CURRENT_SUNSHINE -> $LATEST_SUNSHINE\n"
             echo "sunshine_update=true" >> "$GITHUB_OUTPUT"
@@ -109,6 +132,7 @@ jobs:
           # Check code-server
           CURRENT_CS=$(jq -r '.["code-server"].version' "$CHECKSUMS")
           LATEST_CS=$(gh_api https://api.github.com/repos/coder/code-server/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "code-server" "${LATEST_CS}"
           if [[ -n "$LATEST_CS" && "$LATEST_CS" != "null" ]] && ver_gt "$LATEST_CS" "$CURRENT_CS"; then
             UPDATES="${UPDATES}code-server: $CURRENT_CS -> $LATEST_CS\n"
             echo "codeserver_update=true" >> $GITHUB_OUTPUT
@@ -120,6 +144,7 @@ jobs:
           # version numbers) are published alongside but not followed here.
           CURRENT_CODER=$(jq -r '.coder.version' "$CHECKSUMS")
           LATEST_CODER=$(gh_api https://api.github.com/repos/coder/coder/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "coder" "${LATEST_CODER}"
           if [[ -n "$LATEST_CODER" && "$LATEST_CODER" != "null" ]] && ver_gt "$LATEST_CODER" "$CURRENT_CODER"; then
             UPDATES="${UPDATES}coder: $CURRENT_CODER -> $LATEST_CODER\n"
             echo "coder_update=true" >> $GITHUB_OUTPUT
@@ -133,7 +158,11 @@ jobs:
           # arriving percent-encoded) to the pinned version form.
           CURRENT_K3S=$(jq -r '.k3s.version' "$CHECKSUMS")
           LATEST_K3S=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 -o /dev/null -w '%{url_effective}' https://update.k3s.io/v1-release/channels/stable | sed -e 's|.*/tag/||' -e 's/%2B/+/' -e 's/^v//' || true)
-          if [[ -n "$LATEST_K3S" ]] && ver_gt "$LATEST_K3S" "$CURRENT_K3S"; then
+          # curl prints the -w URL even when the request fails: require the
+          # version shape, never a URL.
+          K3S_PATTERN='^[0-9]+\.[0-9]+\.[0-9]+\+k3s[0-9]+$'
+          mark_failed "k3s" "${LATEST_K3S}" "$K3S_PATTERN"
+          if [[ "$LATEST_K3S" =~ $K3S_PATTERN ]] && ver_gt "$LATEST_K3S" "$CURRENT_K3S"; then
             UPDATES="${UPDATES}k3s: $CURRENT_K3S -> $LATEST_K3S\n"
             echo "k3s_update=true" >> "$GITHUB_OUTPUT"
             echo "k3s_version=$LATEST_K3S" >> "$GITHUB_OUTPUT"
@@ -142,6 +171,7 @@ jobs:
           # Check Lemonade Server
           CURRENT_LEM=$(jq -r '.lemonade.version' "$CHECKSUMS")
           LATEST_LEM=$(gh_api https://api.github.com/repos/lemonade-sdk/lemonade/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "lemonade" "${LATEST_LEM}"
           if [[ -n "$LATEST_LEM" && "$LATEST_LEM" != "null" ]] && ver_gt "$LATEST_LEM" "$CURRENT_LEM"; then
             UPDATES="${UPDATES}lemonade: $CURRENT_LEM -> $LATEST_LEM\n"
             echo "lemonade_update=true" >> $GITHUB_OUTPUT
@@ -151,6 +181,7 @@ jobs:
           # Check Paseo desktop app
           CURRENT_PASEO=$(jq -r '.paseo.version' "$CHECKSUMS")
           LATEST_PASEO=$(gh_api https://api.github.com/repos/getpaseo/paseo/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "paseo" "${LATEST_PASEO}"
           if [[ -n "$LATEST_PASEO" && "$LATEST_PASEO" != "null" ]] && ver_gt "$LATEST_PASEO" "$CURRENT_PASEO"; then
             UPDATES="${UPDATES}paseo: $CURRENT_PASEO -> $LATEST_PASEO\n"
             echo "paseo_update=true" >> $GITHUB_OUTPUT
@@ -160,6 +191,7 @@ jobs:
           # Check Pilothouse (Snosi web administration console)
           CURRENT_PH=$(jq -r '.pilothouse.version' "$CHECKSUMS")
           LATEST_PH=$(gh_api https://api.github.com/repos/frostyard/pilothouse/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "pilothouse" "${LATEST_PH}"
           if [[ -n "$LATEST_PH" && "$LATEST_PH" != "null" ]] && ver_gt "$LATEST_PH" "$CURRENT_PH"; then
             UPDATES="${UPDATES}pilothouse: $CURRENT_PH -> $LATEST_PH\n"
             echo "pilothouse_update=true" >> $GITHUB_OUTPUT
@@ -169,6 +201,7 @@ jobs:
           # Check notesd (Frostnotes notes daemon; first-party release, GitHub-attested)
           CURRENT_NOTESD=$(jq -r '.notesd.version' "$CHECKSUMS")
           LATEST_NOTESD=$(gh_api https://api.github.com/repos/frostyard/frostnotes/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "notesd" "${LATEST_NOTESD}"
           if [[ -n "$LATEST_NOTESD" && "$LATEST_NOTESD" != "null" ]] && ver_gt "$LATEST_NOTESD" "$CURRENT_NOTESD"; then
             UPDATES="${UPDATES}notesd: $CURRENT_NOTESD -> $LATEST_NOTESD\n"
             echo "notesd_update=true" >> "$GITHUB_OUTPUT"
@@ -178,6 +211,7 @@ jobs:
           # Check maild (Frostmail mail engine; first-party release, GitHub-attested)
           CURRENT_MAILD=$(jq -r '.maild.version' "$CHECKSUMS")
           LATEST_MAILD=$(gh_api https://api.github.com/repos/frostyard/frostmail/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "maild" "${LATEST_MAILD}"
           if [[ -n "$LATEST_MAILD" && "$LATEST_MAILD" != "null" ]] && ver_gt "$LATEST_MAILD" "$CURRENT_MAILD"; then
             UPDATES="${UPDATES}maild: $CURRENT_MAILD -> $LATEST_MAILD\n"
             echo "maild_update=true" >> "$GITHUB_OUTPUT"
@@ -187,6 +221,7 @@ jobs:
           # Check lodge (Lodge tailnet web shell; first-party release, GitHub-attested)
           CURRENT_LODGE=$(jq -r '.lodge.version' "$CHECKSUMS")
           LATEST_LODGE=$(gh_api https://api.github.com/repos/frostyard/lodge/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "lodge" "${LATEST_LODGE}"
           if [[ -n "$LATEST_LODGE" && "$LATEST_LODGE" != "null" ]] && ver_gt "$LATEST_LODGE" "$CURRENT_LODGE"; then
             UPDATES="${UPDATES}lodge: $CURRENT_LODGE -> $LATEST_LODGE\n"
             echo "lodge_update=true" >> "$GITHUB_OUTPUT"
@@ -196,6 +231,7 @@ jobs:
           # Check porterd (Porter assistant daemon; first-party release, GitHub-attested)
           CURRENT_PORTERD=$(jq -r '.porterd.version' "$CHECKSUMS")
           LATEST_PORTERD=$(gh_api https://api.github.com/repos/frostyard/porter/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "porterd" "${LATEST_PORTERD}"
           if [[ -n "$LATEST_PORTERD" && "$LATEST_PORTERD" != "null" ]] && ver_gt "$LATEST_PORTERD" "$CURRENT_PORTERD"; then
             UPDATES="${UPDATES}porterd: $CURRENT_PORTERD -> $LATEST_PORTERD\n"
             echo "porterd_update=true" >> "$GITHUB_OUTPUT"
@@ -205,6 +241,7 @@ jobs:
           # Check readd (frostread feed reader daemon; first-party release, GitHub-attested)
           CURRENT_READD=$(jq -r '.readd.version' "$CHECKSUMS")
           LATEST_READD=$(gh_api https://api.github.com/repos/frostyard/frostread/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          mark_failed "readd" "${LATEST_READD}"
           if [[ -n "$LATEST_READD" && "$LATEST_READD" != "null" ]] && ver_gt "$LATEST_READD" "$CURRENT_READD"; then
             UPDATES="${UPDATES}readd: $CURRENT_READD -> $LATEST_READD\n"
             echo "readd_update=true" >> "$GITHUB_OUTPUT"
@@ -214,6 +251,7 @@ jobs:
           # Check Microsoft Edge Stable
           CURRENT_EDGE=$(jq -r '.["microsoft-edge-stable"].version' "$CHECKSUMS")
           LATEST_EDGE=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
+          mark_failed "microsoft-edge-stable" "${LATEST_EDGE}"
           if [[ -n "$LATEST_EDGE" ]] && ver_gt "$LATEST_EDGE" "$CURRENT_EDGE"; then
             UPDATES="${UPDATES}microsoft-edge-stable: $CURRENT_EDGE -> $LATEST_EDGE\n"
             echo "edge_update=true" >> $GITHUB_OUTPUT
@@ -224,6 +262,7 @@ jobs:
           # .deb because the deb postinst needs network the buildroot lacks)
           CURRENT_OP=$(jq -r '.["1password"].version' "$CHECKSUMS")
           LATEST_OP=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 https://downloads.1password.com/linux/debian/amd64/dists/stable/main/binary-amd64/Packages.gz | head -c 52428800 | zcat | head -c 52428800 | awk '/^Package: 1password$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
+          mark_failed "1password" "${LATEST_OP}"
           if [[ -n "$LATEST_OP" ]] && ver_gt "$LATEST_OP" "$CURRENT_OP"; then
             UPDATES="${UPDATES}1password: $CURRENT_OP -> $LATEST_OP\n"
             echo "onepassword_update=true" >> $GITHUB_OUTPUT
@@ -235,8 +274,12 @@ jobs:
             echo -e "Updates available:\n$UPDATES"
           else
             echo "has_updates=false" >> $GITHUB_OUTPUT
-            echo "All sysext dependencies up to date"
+            if [[ $FAILED == 0 ]]; then
+              echo "All sysext dependencies up to date"
+            fi
           fi
+          echo "checked ${CHECKED} dependencies, ${FAILED} could not be read"
+          echo "check_failed=${CHECK_FAILED% }" >> "$GITHUB_OUTPUT"
 
       - name: Update sysext checksums
         id: update
@@ -557,6 +600,14 @@ jobs:
           echo "::error::No pin for: ${ATTESTATION_FAILED}. Check their GitHub build-provenance attestations."
           exit 1
 
+      - name: Fail when dependency latest values could not be read
+        if: ${{ !cancelled() && steps.check.outputs.check_failed != '' }}
+        env:
+          CHECK_FAILED: ${{ steps.check.outputs.check_failed }}
+        run: |
+          echo "::error::Could not read latest value for: ${CHECK_FAILED}"
+          exit 1
+
   check-image-updates:
     name: Check image dependency updates
     runs-on: ubuntu-latest
@@ -576,6 +627,23 @@ jobs:
         run: |
           CHECKSUMS="shared/download/image-checksums.json"
           UPDATES=""
+          CHECK_FAILED=""
+          CHECKED=0
+          FAILED=0
+
+          # Record a dependency whose latest value could not be read (empty,
+          # "null", or not matching the optional format pattern $3), so a
+          # failed fetch never reads as "no update" (T776a).
+          mark_failed() {
+            local key="$1" latest="$2" pattern="${3:-}"
+            CHECKED=$((CHECKED + 1))
+            if [[ -z "$latest" || "$latest" == "null" ]] ||
+               [[ -n "$pattern" && ! "$latest" =~ $pattern ]]; then
+              echo "::warning::Could not read latest value for ${key}"
+              CHECK_FAILED="${CHECK_FAILED}${key} "
+              FAILED=$((FAILED + 1))
+            fi
+          }
 
           gh_api() {
             curl -fsSL --max-time 120 --retry 3 --retry-delay 2 \
@@ -596,6 +664,7 @@ jobs:
           # Check Homebrew install script
           CURRENT_BREW=$(jq -r '.["brew-install"].version' "$CHECKSUMS")
           LATEST_BREW=$(gh_api https://api.github.com/repos/Homebrew/install/commits/HEAD | jq -r '.sha' | head -c 12)
+          mark_failed "brew-install" "${LATEST_BREW}"
           CURRENT_BREW_SHORT=$(echo "$CURRENT_BREW" | head -c 12)
           if [[ -n "$LATEST_BREW" && "$LATEST_BREW" != "null" && "$LATEST_BREW" != "$CURRENT_BREW_SHORT" ]]; then
             UPDATES="${UPDATES}brew-install: $CURRENT_BREW_SHORT -> $LATEST_BREW\n"
@@ -606,6 +675,7 @@ jobs:
           # Check hotedge
           CURRENT_HE=$(jq -r '.hotedge.version' "$CHECKSUMS")
           LATEST_HE=$(gh_api https://api.github.com/repos/frostyard/hotedge/commits/HEAD | jq -r '.sha')
+          mark_failed "hotedge" "${LATEST_HE}"
           if [[ -n "$LATEST_HE" && "$LATEST_HE" != "null" && "$LATEST_HE" != "$CURRENT_HE" ]]; then
             UPDATES="${UPDATES}hotedge: ${CURRENT_HE:0:12} -> ${LATEST_HE:0:12}\n"
             echo "hotedge_update=true" >> $GITHUB_OUTPUT
@@ -615,6 +685,7 @@ jobs:
           # Check logomenu
           CURRENT_LM=$(jq -r '.logomenu.version' "$CHECKSUMS")
           LATEST_LM=$(gh_api https://api.github.com/repos/frostyard/logomenu/commits/HEAD | jq -r '.sha')
+          mark_failed "logomenu" "${LATEST_LM}"
           if [[ -n "$LATEST_LM" && "$LATEST_LM" != "null" && "$LATEST_LM" != "$CURRENT_LM" ]]; then
             UPDATES="${UPDATES}logomenu: ${CURRENT_LM:0:12} -> ${LATEST_LM:0:12}\n"
             echo "logomenu_update=true" >> $GITHUB_OUTPUT
@@ -624,6 +695,7 @@ jobs:
           # Check bazaar (Bazaar Companion GNOME extension)
           CURRENT_BZ=$(jq -r '.bazaar.version' "$CHECKSUMS")
           LATEST_BZ=$(gh_api https://api.github.com/repos/AlexanderVanhee/bazaar-companion/commits/HEAD | jq -r '.sha')
+          mark_failed "bazaar" "${LATEST_BZ}"
           if [[ -n "$LATEST_BZ" && "$LATEST_BZ" != "null" && "$LATEST_BZ" != "$CURRENT_BZ" ]]; then
             UPDATES="${UPDATES}bazaar: ${CURRENT_BZ:0:12} -> ${LATEST_BZ:0:12}\n"
             echo "bazaar_update=true" >> $GITHUB_OUTPUT
@@ -633,6 +705,7 @@ jobs:
           # Check Syft CLI used for SBOM generation
           CURRENT_SYFT=$(awk '$1 == "syft-version:" { print $2; exit }' .github/workflows/build-images.yml)
           LATEST_SYFT=$(gh_api https://api.github.com/repos/anchore/syft/releases/latest | jq -r '.tag_name')
+          mark_failed "syft" "${LATEST_SYFT}" "^v[0-9]+\.[0-9]+\.[0-9]+$"
           if [[ "$LATEST_SYFT" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] &&
              ver_gt "${LATEST_SYFT#v}" "${CURRENT_SYFT#v}"; then
             UPDATES="${UPDATES}syft: $CURRENT_SYFT -> $LATEST_SYFT\n"
@@ -652,6 +725,7 @@ jobs:
           LATEST_COSIGN=$(gh_api 'https://api.github.com/repos/sigstore/cosign/releases?per_page=100' |
             jq -r '.[] | select(.draft == false and .prerelease == false) | .tag_name | select(test("^v2\\.[0-9]+\\.[0-9]+$")) | select(IN("v2.6.3", "v2.6.4", "v2.6.5") | not)' |
             sort -V | tail -n1)
+          mark_failed "cosign" "${LATEST_COSIGN}" "^v2\.[0-9]+\.[0-9]+$"
           if [[ "$LATEST_COSIGN" =~ ^v2\.[0-9]+\.[0-9]+$ ]] &&
              ver_gt "${LATEST_COSIGN#v}" "${CURRENT_COSIGN#v}"; then
             UPDATES="${UPDATES}cosign: $CURRENT_COSIGN -> $LATEST_COSIGN\n"
@@ -664,6 +738,7 @@ jobs:
           LATEST_CHUNKAH=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 \
             'https://quay.io/api/v1/repository/coreos/chunkah/tag/?onlyActiveTags=true' |
             jq -r '[.tags[] | select(.name == "latest") | .manifest_digest][0] // empty' || true)
+          mark_failed "chunkah" "${LATEST_CHUNKAH}" "^sha256:[a-f0-9]{64}$"
           if [[ "$LATEST_CHUNKAH" =~ ^sha256:[a-f0-9]{64}$ &&
                 "$LATEST_CHUNKAH" != "$CURRENT_CHUNKAH" ]]; then
             UPDATES="${UPDATES}chunkah: $CURRENT_CHUNKAH -> $LATEST_CHUNKAH\n"
@@ -676,8 +751,12 @@ jobs:
             echo -e "Updates available:\n$UPDATES"
           else
             echo "has_updates=false" >> $GITHUB_OUTPUT
-            echo "All image dependencies up to date"
+            if [[ $FAILED == 0 ]]; then
+              echo "All image dependencies up to date"
+            fi
           fi
+          echo "checked ${CHECKED} dependencies, ${FAILED} could not be read"
+          echo "check_failed=${CHECK_FAILED% }" >> "$GITHUB_OUTPUT"
 
       - name: Check workflow update authorization
         id: workflow_auth
@@ -853,3 +932,11 @@ jobs:
             **Please verify the image builds work before merging.**
           branch: auto-update-image-checksums
           delete-branch: true
+
+      - name: Fail when dependency latest values could not be read
+        if: ${{ !cancelled() && steps.check.outputs.check_failed != '' }}
+        env:
+          CHECK_FAILED: ${{ steps.check.outputs.check_failed }}
+        run: |
+          echo "::error::Could not read latest value for: ${CHECK_FAILED}"
+          exit 1

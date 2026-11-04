@@ -100,6 +100,26 @@ if ! grep -qx 'set default=console' <<<"$grub" ||
     exit 1
 fi
 
+# Both entries print the same loading message before GRUB reads the large
+# initramfs, so a user sees progress on the display and on serial (snosi#1097).
+entry_echo() { # entry title -> its echo lines, before its linux line
+    awk -v t="menuentry \"$1\"" 'index($0, t) == 1 {e = 1; next}
+        e && /^}/ {exit} e && $1 == "linux" {exit} e && $1 == "echo" {print}' <<<"$grub"
+}
+graphical_echo=$(entry_echo 'Install snosi (graphical)')
+console_echo=$(entry_echo 'Install snosi (console)')
+if [[ -z "$graphical_echo" || "$graphical_echo" != "$console_echo" ||
+    $graphical_echo != *'Loading the snosi installer'* ]]; then
+    echo 'Firn ISO grub.cfg entries must print the same loading message before linux (snosi#1097)' >&2
+    exit 1
+fi
+# The signed monolithic GRUB carries no progress module and Secure Boot loads
+# no module, so grub.cfg must insmod nothing and use no progress bar.
+if grep -qwE 'insmod|progress' <<<"$grub"; then
+    echo 'Firn ISO grub.cfg must not load modules: the signed GRUB has no progress module and Secure Boot loads none (snosi#1097)' >&2
+    exit 1
+fi
+
 # Only firn-console.target starts the TUI on tty1 and only firn-graphical.target
 # starts firn-gui; the serial TUI runs under both.
 units="$root/shared/firn-installer/tree/usr/lib/systemd/system"

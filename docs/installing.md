@@ -143,6 +143,10 @@ Under both entries the terminal wizard also runs on the serial console
 only one installation at a time. Both frontends apply the bootc storage and
 trust pipeline.
 
+After you choose an entry, the installer prints "Loading the snosi installer
+into memory." Loading can take several minutes from a USB stick or DVD, and
+the screen can then stay blank for a short time. Wait; the boot did not fail.
+
 1. Select the bootc product.
 2. Ensure networking is available if the selected payload or optional
    applications must be downloaded. The medium provides NetworkManager and

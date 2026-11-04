@@ -47,6 +47,12 @@ console redirection, on serial. Console is the default. The ISO is
 UEFI-only, and the same `grub.cfg` serves the optical (ISO9660) and
 USB-stick (GPT ESP) paths.
 
+Each entry first prints a three-line loading message with GRUB `echo`
+(snosi#1097). Reading the initramfs takes minutes from slow media, and
+`quiet` shows nothing while it happens. Debian's signed monolithic GRUB has
+`echo` built in but no `progress` module, and Secure Boot loads no modules,
+so there is no progress bar.
+
 Each entry selects a boot target with systemd's `systemd.unit=` flag. The
 command lines are otherwise identical:
 
@@ -105,7 +111,8 @@ The higher minimum RAM is accepted. Test VMs run with 6 GiB.
 - **CI exercises both entries.** `test/firn-installer-ui-boot-test.sh` boots
   the candidate ISO bytes four times in CI before promotion: console;
   graphical on virtio-vga, then Quit; graphical from the ESP on std VGA;
-  graphical with no display. It reaches the guest over SSH with an SMBIOS
+  graphical with no display. Each leg also waits for the loading message on
+  the serial console. It reaches the guest over SSH with an SMBIOS
   `ssh.authorized_keys.root` credential, so the published bytes stay
   unmodified.
 - **Publication gate.** The ISO cannot build until a firn release publishes
@@ -129,6 +136,11 @@ The higher minimum RAM is accepted. Test VMs run with 6 GiB.
   the RAM cost, but it is a separate change to every boot's firmware loading.
 - **A separate graphical ISO:** a second artifact to publish and verify,
   where the request was a boot-time choice on one medium.
+- **GRUB's `progress` module:** it is not built into the Debian-signed
+  monolithic image, and Secure Boot cannot load a module.
+- **A Plymouth splash:** it starts only after the kernel unpacks the
+  initramfs, which is after the long read, and it adds packages to the RAM
+  every boot needs.
 
 ## References
 
