@@ -252,8 +252,13 @@ dest_object_exists() { # relpath
 # The check still fails closed: after the last attempt the helper returns
 # curl's non-zero status and the caller reports the failure as before.
 # PUBLISH_HTTP_GET_RETRIES is curl's retry count, so 0 means one attempt.
+# #1218: a full GET can spend all 600 s in one stalled attempt. Curl does not
+# start a retry when --retry-max-time is already past, so full GETs also
+# abort below this env-overridable byte-rate floor and return to the retry budget.
 PUBLISH_HTTP_GET_RETRIES="${PUBLISH_HTTP_GET_RETRIES:-5}"
 PUBLISH_HTTP_GET_RETRY_MAX_TIME="${PUBLISH_HTTP_GET_RETRY_MAX_TIME:-300}"
+PUBLISH_HTTP_GET_SPEED_LIMIT="${PUBLISH_HTTP_GET_SPEED_LIMIT:-1048576}"
+PUBLISH_HTTP_GET_SPEED_TIME="${PUBLISH_HTTP_GET_SPEED_TIME:-60}"
 
 # http_size url -- prints Content-Length via a HEAD request. A retried HEAD
 # can print its headers more than once, so only the LAST content-length
@@ -276,6 +281,7 @@ http_get_sha256() { # url
     tmp="$(mktemp /var/tmp/publish-lib-http.XXXXXX)"
     register_cleanup "rm -f '$tmp'"
     curl -fsSL --connect-timeout 10 --max-time 600 \
+        --speed-limit "$PUBLISH_HTTP_GET_SPEED_LIMIT" --speed-time "$PUBLISH_HTTP_GET_SPEED_TIME" \
         --retry "$PUBLISH_HTTP_GET_RETRIES" --retry-all-errors \
         --retry-max-time "$PUBLISH_HTTP_GET_RETRY_MAX_TIME" "$1" -o "$tmp" || return 1
     sha256sum "$tmp" | cut -d' ' -f1
@@ -284,6 +290,7 @@ http_get_sha256() { # url
 # http_get_to_file url outfile -- full GET, saved to outfile.
 http_get_to_file() { # url outfile
     curl -fsSL --connect-timeout 10 --max-time 600 \
+        --speed-limit "$PUBLISH_HTTP_GET_SPEED_LIMIT" --speed-time "$PUBLISH_HTTP_GET_SPEED_TIME" \
         --retry "$PUBLISH_HTTP_GET_RETRIES" --retry-all-errors \
         --retry-max-time "$PUBLISH_HTTP_GET_RETRY_MAX_TIME" "$1" -o "$2"
 }

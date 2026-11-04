@@ -69,7 +69,10 @@ a transient edge fault rather than a verdict about the object. Plain curl
 `PUBLISH_HTTP_GET_RETRIES` (default 5) and
 `PUBLISH_HTTP_GET_RETRY_MAX_TIME` (default 300 s). Every call keeps a
 `--connect-timeout` and a `--max-time`. No `--retry-delay` is set, so curl
-backs off exponentially (1, 2, 4, 8, 16 s: 31 s of delay for a full budget);
+backs off exponentially (1, 2, 4, 8, 16 s: 31 s of delay for a full budget).
+Full GETs also use stall detection: `PUBLISH_HTTP_GET_SPEED_LIMIT` defaults to
+1048576 bytes/s for `PUBLISH_HTTP_GET_SPEED_TIME` 60 s, which prevents a slow
+single attempt from consuming the 300 s retry window.
 `--retry-max-time` caps the whole window. The boot smoke test's ISO download
 uses the same options, and `verify-installer-redirect.sh` uses them on its
 three curls. The checks still fail closed: after the last attempt the

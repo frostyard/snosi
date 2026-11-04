@@ -38,9 +38,13 @@ last 60 `build-installer-iso.yml` runs failed that way with `curl: (56) Recv
 failure: Connection reset by peer`. Curl's plain `--retry` skips error 56 and
 18, so the helpers add `--retry-all-errors`, `PUBLISH_HTTP_GET_RETRIES`
 (default 5 retries) and `PUBLISH_HTTP_GET_RETRY_MAX_TIME` (default 300 s).
-Each call keeps `--connect-timeout 10` and a `--max-time`. Without
-`--retry-delay`, curl backs off 1, 2, 4, 8, 16 s, so a full budget costs 31 s
-of delay; `--retry-max-time` bounds the window. A missing object (4xx) is
+Each call keeps `--connect-timeout 10` and a `--max-time`. Full GETs add
+stall detection (`PUBLISH_HTTP_GET_SPEED_LIMIT`, default 1048576 bytes/s,
+and `PUBLISH_HTTP_GET_SPEED_TIME`, default 60 s) because issue #1218 showed
+that a 600 s stalled attempt can exhaust the retry budget before curl retries.
+The stalled origin fixture proves that a low-speed GET aborts and retries.
+Without `--retry-delay`, curl backs off 1, 2, 4, 8, 16 s, so a full budget
+costs 31 s of delay; `--retry-max-time` bounds the window. A missing object (4xx) is
 retried too, then fails. After the last attempt the helper returns non-zero
 and the caller exits with its existing failure message, so the pipeline still
 fails closed. `http_size` reports only the last `content-length` header, and

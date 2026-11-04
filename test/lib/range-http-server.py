@@ -22,6 +22,7 @@
 # Usage: range-http-server.py <port> <directory> [--ignore-ranges]
 #                                                [--ignore-first-ranges N]
 #                                                [--reset-first-gets N]
+#                                                [--stall-first-gets N]
 #
 # --ignore-ranges        every Range request is answered with a full 200 body
 #                        (a permanently Range-incapable origin).
@@ -46,6 +47,11 @@
 #                        such abort also writes one "reset GET <path> after
 #                        <half> of <size> bytes" line to stderr, so a test can
 #                        prove that the abort really happened.
+# --stall-first-gets N   the first N plain GETs send full 200 headers and half
+#                        the body, write one "stall GET <path> after <half> of
+#                        <size> bytes" line to stderr, then sleep for 30 seconds
+#                        without more data before aborting with a TCP RST. HEAD
+#                        and Range requests are not counted.
 # Binds 127.0.0.1 only.
 import http.server
 import os
@@ -55,6 +61,7 @@ import socketserver
 import struct
 import sys
 import threading
+import time
 
 RANGE_RE = re.compile(r"^bytes=(\d*)-(\d*)$")
 
@@ -64,8 +71,10 @@ class RangeRequestHandler(http.server.SimpleHTTPRequestHandler):
     ignore_ranges = False
     ignore_first_ranges = 0
     reset_first_gets = 0
+    stall_first_gets = 0
     _ignore_lock = threading.Lock()
     _reset_lock = threading.Lock()
+    _stall_lock = threading.Lock()
 
     @classmethod
     def _should_ignore_range(cls):
@@ -82,6 +91,14 @@ class RangeRequestHandler(http.server.SimpleHTTPRequestHandler):
         with cls._reset_lock:
             if cls.reset_first_gets > 0:
                 cls.reset_first_gets -= 1
+                return True
+        return False
+
+    @classmethod
+    def _should_stall_get(cls):
+        with cls._stall_lock:
+            if cls.stall_first_gets > 0:
+                cls.stall_first_gets -= 1
                 return True
         return False
 
@@ -106,6 +123,28 @@ class RangeRequestHandler(http.server.SimpleHTTPRequestHandler):
         except OSError:
             pass
         self.close_connection = True
+
+    def _stall_full_get(self, path, file_size):
+        """Send full-length 200 headers, half the body, then stall."""
+        half = max(1, file_size // 2) if file_size else 0
+        sys.stderr.write(
+            f"stall GET {self.path} after {half} of {file_size} bytes\n"
+        )
+        sys.stderr.flush()
+        with open(path, "rb") as f:
+            self.send_response(200)
+            self.send_header("Content-Type", self.guess_type(path))
+            self.send_header("Content-Length", str(file_size))
+            self.send_header("Accept-Ranges", "bytes")
+            self.end_headers()
+            if half:
+                try:
+                    self.wfile.write(f.read(half))
+                    self.wfile.flush()
+                except OSError:
+                    pass
+        time.sleep(30)
+        self._abort_connection()
 
     def _reset_full_get(self, path, file_size):
         """Send full-length 200 headers, half the body, then abort."""
@@ -135,6 +174,13 @@ class RangeRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         file_size = os.path.getsize(path)
         range_header = self.headers.get("Range")
+        if (
+            not range_header
+            and self.command == "GET"
+            and self._should_stall_get()
+        ):
+            self._stall_full_get(path, file_size)
+            return None
         if (
             not range_header
             and self.command == "GET"
@@ -207,7 +253,8 @@ def main():
     if len(args) < 2:
         print(
             f"Usage: {sys.argv[0]} <port> <directory> "
-            "[--ignore-ranges] [--ignore-first-ranges N] [--reset-first-gets N]",
+            "[--ignore-ranges] [--ignore-first-ranges N] "
+            "[--reset-first-gets N] [--stall-first-gets N]",
             file=sys.stderr,
         )
         return 2
@@ -228,6 +275,11 @@ def main():
                 print("--reset-first-gets requires a count", file=sys.stderr)
                 return 2
             RangeRequestHandler.reset_first_gets = int(rest.pop(0))
+        elif option == "--stall-first-gets":
+            if not rest:
+                print("--stall-first-gets requires a count", file=sys.stderr)
+                return 2
+            RangeRequestHandler.stall_first_gets = int(rest.pop(0))
         else:
             print(f"Unknown option: {option}", file=sys.stderr)
             return 2
@@ -242,6 +294,8 @@ def main():
             mode = "Range-capable"
         if RangeRequestHandler.reset_first_gets:
             mode += f", resetting first {RangeRequestHandler.reset_first_gets} plain GET(s)"
+        if RangeRequestHandler.stall_first_gets:
+            mode += f", stalling first {RangeRequestHandler.stall_first_gets} plain GET(s)"
         print(f"Serving {directory} on http://127.0.0.1:{port}/ ({mode})")
         httpd.serve_forever()
     return 0
