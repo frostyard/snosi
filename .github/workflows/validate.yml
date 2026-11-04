@@ -68,10 +68,28 @@ jobs:
         # *.sh/*.chroot missed entirely. saved-unused/ is dead code excluded
         # from builds.
         run: |
+          set -euo pipefail
+
+          file_list=$(mktemp)
+          trap 'rm -f "$file_list"' EXIT
+
           {
             git ls-files '*.sh' '*.chroot'
-            git ls-files | xargs awk 'FNR==1 && /^#!\/(usr\/)?bin\/(env )?(ba)?sh/ {print FILENAME} {nextfile}' 2>/dev/null
-          } | grep -v '^saved-unused/' | sort -u | xargs -r shellcheck -S warning -x
+            git ls-files -z | while IFS= read -r -d '' file; do
+              if [[ -f "$file" ]]; then
+                awk 'FNR==1 && /^#!\/(usr\/)?bin\/(env )?(ba)?sh/ {print FILENAME} {nextfile}' "$file" 2>/dev/null
+              fi
+            done
+          } | awk '!/^saved-unused\//' | sort -u > "$file_list"
+
+          mapfile -t files < "$file_list"
+          echo "shellcheck: ${#files[@]} files"
+          if (( ${#files[@]} == 0 )); then
+            echo "::error::shellcheck: no shell scripts found"
+            exit 1
+          fi
+
+          shellcheck -S warning -x "${files[@]}"
 
       - name: Validate policy as code
         # Fail closed if agent autonomy, human review, risk classification,
@@ -203,6 +221,11 @@ jobs:
         # Workflow-file pin updates require WORKFLOW_PAT; checksum and chunkah
         # updates must remain publishable through the ordinary job token.
         run: ./test/check-dependencies-workflow-token-test.sh
+
+      - name: Validate workflow failure masking guards
+        # Exercise the shell lint, Flatpak label, and dependency read-failure
+        # paths with PATH stubs; no network or real image inspection is used.
+        run: ./test/workflow-failure-masking-test.sh
 
       - name: Validate sysext signature verification
         # Static guard: every component requires signed metadata and both
