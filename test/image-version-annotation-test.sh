@@ -260,7 +260,7 @@ for workflow in sorted(workflows.glob("*.yml")):
                 local_checks += 1
             if "docker://" in step:
                 remote_checks.append(index)
-        if "buildah push" in step:
+        if "buildah push" in step or "push-immutable-image.sh" in step:
             pushes.append(index)
     if local_checks < package_steps:
         problems.append(

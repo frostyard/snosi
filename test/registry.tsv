@@ -37,6 +37,7 @@ bootc-secure-lab-manifest-test.py	ci	validate.yml
 bootc-secure-lab-manifest.py	helper	-
 bootc-secure-package-cleanup-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
 bootc-secure-promotion-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
+bootc-secure-push-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
 bootc-secure-publication-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
 bootc-secure-rotation-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
 bootc-secure-spike-test.sh	ci	test-bootc-secure.yml,validate.yml
