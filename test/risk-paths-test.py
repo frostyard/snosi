@@ -65,16 +65,21 @@ def validate_glob(glob):
     if errors:
         return sorted(set(errors))
 
+    expansion_count = 1
     for group in re.findall(r"\{([^{}]*)\}", glob):
         alternatives = group.split(",")
         if len(alternatives) < 2:
             errors.append("brace group has fewer than 2 alternatives")
         if any(alternative == "" for alternative in alternatives):
             errors.append("brace group has an empty alternative")
+        expansion_count *= len(alternatives)
+    # Count before expanding: 30 {a,b} groups would expand to 2**30 globs.
+    if expansion_count > 256:
+        errors.append("brace expansion exceeds 256 alternatives")
+    if errors:
+        return sorted(set(errors))
 
     expansions = expand_braces(glob)
-    if len(expansions) > 256:
-        errors.append("brace expansion exceeds 256 alternatives")
 
     for expansion in expansions:
         if expansion.startswith("/"):
@@ -137,6 +142,9 @@ validation_cases = {
     "a[b]": True,
     "a}b{c": True,
     "a{b,c": True,
+    "{a,b}" * 8: False,
+    "{a,b}" * 9: True,
+    "{a,b}" * 30: True,
     "shared/**/**": False,
     ".github/workflows/{build,build-images}.yml": False,
 }
@@ -222,6 +230,48 @@ required_globs = {".github/risk-paths.json", ".github/workflows/risk-paths.yml"}
 if not required_globs.issubset(set(globs)):
     fail("risk list must include the list and caller globs")
 
+# Representative tracked paths that must stay covered, with the protected
+# boundary their entry names. Removing or narrowing an entry fails here, not
+# only in a later review (cross-review of #1215).
+required_coverage = {
+    ".github/risk-paths.json": "workflow-permissions",
+    ".github/workflows/risk-paths.yml": "workflow-permissions",
+    "policies/agent-governance.json": "workflow-permissions",
+    "shared/bootc-secure/mkosi.conf": "secure-boot",
+    "shared/packages/bootc/mkosi.conf": "secure-boot",
+    "shared/download/forky-versions.json": "secure-boot",
+    "mkosi.profiles/snow/mkosi.conf": "secure-boot",
+    "mkosi.profiles/sundog/mkosi.conf": "secure-boot",
+    "shared/kernel/scripts/postinst/mkosi.postinst.chroot": "secure-boot",
+    "mkosi.images/base/mkosi.extra/usr/bin/snosi-kargs": "tpm",
+    "mkosi.images/base/mkosi.extra/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf": "tpm",
+    "mkosi.images/base/mkosi.extra/usr/lib/dracut/modules.d/95tss-user/module-setup.sh": "tpm",
+    "shared/native-ab/keys/mok-2026.crt": "signing",
+    "shared/sysext/keys/import-pubring.gpg": "signing",
+    "mkosi.sandbox/etc/apt/keyrings/frostyard.gpg": "signing",
+    "cosign.pub": "signing",
+    "shared/security/no-private-keys.finalize": "credentials",
+    "mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage": "update-verification",
+    "mkosi.images/base/mkosi.extra/usr/lib/sysupdate.1password.d/1password.transfer": "update-verification",
+    "shared/download/verify-attestations.sh": "update-verification",
+    "shared/download/verified-download.sh": "update-verification",
+    ".github/workflows/build.yml": "publication",
+    ".github/workflows/build-images.yml": "publication",
+    ".github/workflows/build-installer-iso.yml": "publication",
+    "shared/native-ab/publish/promote.sh": "publication",
+    "shared/outformat/image/buildah-package.sh": "publication",
+    "mkosi.profiles/firn-installer/mkosi.conf": "destructive-disk-operations",
+    "shared/firn-installer/catalog.json": "installer",
+}
+for path, boundary in required_coverage.items():
+    covering = [
+        why.split(":", 1)[0]
+        for glob, why in entries
+        if any(glob_matches(expansion, path) for expansion in expand_braces(glob))
+    ]
+    if boundary not in covering:
+        fail(f"{path} must be covered by an entry whose why names {boundary} (got {covering or 'none'})")
+
 git_result = subprocess.run(
     ["git", "-C", str(ROOT), "ls-files", "-z"],
     capture_output=True,
@@ -248,6 +298,10 @@ for glob in globs:
                 break
         if not matched:
             fail(f"stale risk-path glob: {glob}")
+
+for path in required_coverage:
+    if path not in tracked_files:
+        fail(f"coverage path {path} is not a tracked file; update required_coverage")
 
 try:
     caller = CALLER_PATH.read_text()
@@ -302,4 +356,4 @@ command = "python3 ./test/risk-paths-test.py"
 if validate.count(command) != 1:
     fail("validate.yml must run risk-paths-test.py exactly once")
 
-print(f"risk-paths-test: PASSED ({len(entries)} entries, {len(tracked_files)} tracked files, {self_test_cases} self-test cases)")
+print(f"risk-paths-test: PASSED ({len(entries)} entries, {len(tracked_files)} tracked files, {self_test_cases} self-test cases, {len(required_coverage)} coverage paths)")
