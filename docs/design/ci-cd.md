@@ -33,7 +33,11 @@ layers and runner-local keys are removed before registry writes. The
 candidate's pinned bootc calculates the storage composefs digest; the
 assembled image is checked again to ensure digest continuity. Registry
 authentication uses the run-scoped `GITHUB_TOKEN`; PR jobs have no registry
-write permission. Cosign signs/validates the immutable digest, and
+write permission. `shared/bootc-secure/ci/push-immutable-image.sh` pushes the
+immutable version tag: at most 3 attempts for a transient GHCR blob-upload
+fault (#1216, #1217); it stops before a retry if the tag already exists, so
+the tag never moves, and requires the registry digest of the tag to equal
+buildah's digest file. Cosign signs/validates the immutable digest, and
 `latest` is promoted only after remote signature, label, policy-copy and
 artifact checks succeed. Every published image carries
 `org.opencontainers.image.version` as both a config label and a manifest
