@@ -1,0 +1,47 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Build guard for the pinned bootc/libostree pair
+# (shared/packages/bootc/mkosi.conf). mkosi runs it inside every OCI bootc
+# image, so the PR mechanics builds and the main secure builds both check the
+# pair that the image really ships:
+#
+#   1. `bootc --version` names `.assembly.bootc_version` of the secure
+#      assembly contract (/usr/lib/snosi/bootc-secure.json).
+#   2. The hidden command that secure assembly calls,
+#      `bootc container compute-composefs-digest-from-storage`, still exists.
+#      This shows the command only; the secure build's two digest probes show
+#      that it works.
+#   3. libostree-1-1 is at least $OSTREE_FLOOR. ostree 2026.6 fixes
+#      ostree#3681: with libostree 2026.5, a system Flatpak update that
+#      applies a static delta fails. This proves the fixed library is in the
+#      image; it does not run a static-delta update.
+#
+# SNOSI_BOOTC_PAIR_CONTRACT names another contract file for
+# test/bootc-secure-static-test.sh only.
+set -euo pipefail
+
+readonly OSTREE_FLOOR=2026.6
+contract=${SNOSI_BOOTC_PAIR_CONTRACT:-/usr/lib/snosi/bootc-secure.json}
+
+fail() {
+    printf 'bootc-pair: %s\n' "$*" >&2
+    exit 1
+}
+
+expected=$(jq -er '.assembly.bootc_version' "$contract") ||
+    fail "cannot read .assembly.bootc_version from $contract"
+observed=$(bootc --version 2>&1) || fail "bootc --version failed: $observed"
+[[ $observed == "bootc $expected" ]] ||
+    fail "expected bootc $expected, observed $observed"
+
+help=$(bootc container compute-composefs-digest-from-storage --help 2>&1) ||
+    fail "the hidden storage-digest command is missing: $help"
+
+ostree=$(dpkg-query -W -f='${Version}' libostree-1-1 2>/dev/null) ||
+    fail "libostree-1-1 is not installed"
+dpkg --compare-versions "$ostree" ge "$OSTREE_FLOOR" ||
+    fail "libostree-1-1 $ostree is older than $OSTREE_FLOOR (ostree#3681: static-delta Flatpak updates fail)"
+
+printf 'bootc-pair: bootc %s, libostree-1-1 %s, storage-digest command present\n' \
+    "$expected" "$ostree"

@@ -110,14 +110,18 @@ upstream part of the bootc package version matches
 and that all four profiles consume the fragment. It cannot show that
 revalidation happened: do that work when either package or the systemd family
 changes. See `docs/bootc-secure-assembly-compatibility.md`.
-**Last repeated 2026-10-26:** bootc 1.17.1 / libostree 2026.5 with Forky
-systemd 262-1. In the signed Snow candidate `20261026133822` (run
-40370164077), `bootc --version`, `bootc container --help` and the hidden
-`compute-composefs-digest-from-storage --help` ran in a rootfs-only bwrap
-sandbox; that run's secure assembly and artifact validation passed, and lab
-run `run-snow-bootc-lifecycle-l6596` updated 1.16.8 to 1.17.1 and rolled
-back. Secure assembly on 1.17.1 is proven on Snow only until the first main
-build assembles the other three products.
+**Last repeated 2026-11-04:** bootc 1.17.3 / libostree 2026.6 (the
+ostree#3681 static-delta Flatpak fix). A clean Trixie rootfs with exactly that
+pair ran `bootc --version`, `bootc container --help` and the hidden
+`compute-composefs-digest-from-storage --help` (help unchanged from 1.17.1),
+and 1.17.1 and 1.17.3 gave the same composefs digest for one fixed tree.
+`shared/packages/bootc/finalize/bootc-pair.chroot` repeats the version,
+hidden-command and libostree-floor checks in every OCI build. Secure assembly
+on 1.17.3 is not proven until the first main build assembles all four
+products; the 1.17.1 evidence (run 40370164077, lab `l6596`) is history in
+`docs/bootc-secure-assembly-compatibility.md`. bootc 1.17.3 stages global UKI
+addons with an update and swaps them in at finalize, so `snosi-kargs` mirrors
+`apply` and `revert` into `<ESP>/loader/addons.staged`.
 
 **Issue 517:** Forky moved `gpt-auto-root-luks` udev rules to
 `90-image-dissect.rules`, which dracut 106 did not automatically include.

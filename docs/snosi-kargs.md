@@ -124,6 +124,19 @@ the argument, then requires the global addon to survive a real
 `systemd-sysupdate` hop. The fixture suite is the automatic validation run for
 this change; the extended QEMU leg remains available for manual execution.
 
+bootc 1.17.3 and later stage global UKI addons with an update: they copy
+`<ESP>/loader/addons` to `<ESP>/loader/addons.staged` when they stage, and swap
+the two directories when the staged deployment finalizes at shutdown. A change
+made only in `loader/addons` after the stage would be undone at the next boot.
+When `loader/addons.staged` exists, `apply` also writes the addon there and
+`revert` also removes it there; if that mirror fails, the command fails and
+tells the operator to apply again. `status` prints a `Staged:` line and
+reports `Pending: yes` when the staged copy differs from the active addon.
+bootc's garbage collection removes only `bootc_composefs-*` global addons, so
+it does not touch `50-snosi-cmdline-local.addon.efi`. The non-root fixtures
+cover the mirror, its failure and the status line; no live staged-update run
+has exercised it yet.
+
 **BLOCKED:** bootc live persistence across a deployment update requires the
 Firn-native Snosi lifecycle lane and authorized secure OCI artifacts. Until
 that evidence exists, do not promise that a bootc ESP writer preserves

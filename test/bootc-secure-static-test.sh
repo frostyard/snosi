@@ -251,18 +251,18 @@ grep -Fq '/usr/lib/snosi/esp.sh' "$reconciler"
 # Run 40245723511 built all four rootfs products and then failed with
 # `expected bootc 1.16.8, observed bootc 1.17.1`; run 40229646374 built the
 # 1.16.8/2026.3 pair in all four products. Those two runs are the history of
-# the previous pin. The current pair's evidence is run 40315411491 (all
-# four products, mechanics builds), run 40370164077 (Snow secure build,
-# signed tag 20261026133822, `latest` did not move) and lab run
-# `run-snow-bootc-lifecycle-l6596` (staged and booted N+1 on 1.17.1,
-# `bootc rollback`, N booted again, PASS). Revalidate the complete pair
+# the first pin; the 1.17.1/2026.5 pair (runs 40315411491 and 40370164077, lab
+# run-snow-bootc-lifecycle-l6596) is history too. The current 1.17.3/2026.6
+# pair carries ostree 2026.6's ostree#3681 static-delta Flatpak fix; its
+# evidence is in docs/bootc-secure-assembly-compatibility.md, and the first
+# main build is its secure revalidation. Revalidate the complete pair
 # whenever either package changes.
 #
 # These checks enforce selector values and agreement with
 # assembly.bootc_version only; they cannot show that revalidation happened.
 bootc_packages="$root/shared/packages/bootc/mkosi.conf"
-bootc_pin=1.17.1-frostyard202610252315~deb13
-libostree_pin=2026.5-frostyard202610252315~deb13
+bootc_pin=1.17.3-frostyard202611042030~deb13
+libostree_pin=2026.6-frostyard202611042030~deb13
 
 bootc_package_entries() { # mkosi-conf
     # Entries of the fragment's Packages= list, one per line. Indented comments
@@ -323,6 +323,69 @@ sed 's/^Packages=bootc=.*$/Packages=bootc=1.18.0-frostyard202610252315~deb13/' \
 if check_bootc_contract_version "$pin_fixture" \
     "$root/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json" 2>/dev/null; then
     echo "a bootc pin that disagrees with the assembly contract was accepted" >&2
+    exit 1
+fi
+
+# The pair guard runs inside every OCI bootc image (PR mechanics and main
+# secure builds). It shows that the shipped bootc matches the contract, that
+# the hidden storage-digest command exists, and that libostree-1-1 is at least
+# the ostree#3681 floor: with libostree 2026.5 a system Flatpak update that
+# applies a static delta fails. The pinned libostree must meet that floor.
+pair_guard="$root/shared/packages/bootc/finalize/bootc-pair.chroot"
+[[ -x $pair_guard ]] || {
+    echo "the bootc fragment must ship an executable bootc-pair finalize script" >&2
+    exit 1
+}
+grep -Fqx 'FinalizeScripts=%D/shared/packages/bootc/finalize/bootc-pair.chroot' \
+    "$bootc_packages" || {
+    echo "shared/packages/bootc/mkosi.conf must run the bootc-pair finalize script" >&2
+    exit 1
+}
+ostree_floor=$(sed -n 's/^readonly OSTREE_FLOOR=\([0-9.]*\)$/\1/p' "$pair_guard")
+[[ -n $ostree_floor ]] || { echo "bootc-pair must name OSTREE_FLOOR" >&2; exit 1; }
+dpkg --compare-versions "$libostree_pin" ge "$ostree_floor" || {
+    echo "libostree pin $libostree_pin is older than the ostree#3681 floor $ostree_floor" >&2
+    exit 1
+}
+
+pair_stub=$(mktemp -d)
+trap 'rm -rf "${compatibility_fixture:-}" "${pin_fixture:-}" "${pair_stub:-}"' EXIT
+cat >"$pair_stub/bootc" <<'STUB'
+#!/bin/bash
+case "$*" in
+    --version) echo "bootc ${STUB_BOOTC_VERSION:?}" ;;
+    "container compute-composefs-digest-from-storage --help")
+        [[ ${STUB_HIDDEN:-1} == 1 ]] || { echo "unrecognized subcommand" >&2; exit 2; }
+        echo "Usage: bootc container compute-composefs-digest-from-storage" ;;
+    *) exit 2 ;;
+esac
+STUB
+cat >"$pair_stub/dpkg-query" <<'STUB'
+#!/bin/bash
+[[ $* == "-W -f=\${Version} libostree-1-1" ]] || exit 1
+printf '%s' "${STUB_OSTREE:?}"
+STUB
+chmod +x "$pair_stub/bootc" "$pair_stub/dpkg-query"
+contract_bootc=$(jq -er '.assembly.bootc_version' "$contract")
+run_pair_guard() { # bootc-version libostree-version hidden(0|1)
+    PATH="$pair_stub:$PATH" SNOSI_BOOTC_PAIR_CONTRACT="$contract" \
+        STUB_BOOTC_VERSION=$1 STUB_OSTREE=$2 STUB_HIDDEN=$3 "$pair_guard"
+}
+run_pair_guard "$contract_bootc" "$libostree_pin" 1 >/dev/null || {
+    echo "bootc-pair rejected the pinned pair" >&2
+    exit 1
+}
+if run_pair_guard 1.17.1 "$libostree_pin" 1 >/dev/null 2>&1 &&
+        [[ $contract_bootc != 1.17.1 ]]; then
+    echo "bootc-pair accepted a bootc that disagrees with the contract" >&2
+    exit 1
+fi
+if run_pair_guard "$contract_bootc" "$libostree_pin" 0 >/dev/null 2>&1; then
+    echo "bootc-pair accepted a bootc without the hidden storage-digest command" >&2
+    exit 1
+fi
+if run_pair_guard "$contract_bootc" 2026.5-frostyard202610252315~deb13 1 >/dev/null 2>&1; then
+    echo "bootc-pair accepted libostree 2026.5 (ostree#3681)" >&2
     exit 1
 fi
 

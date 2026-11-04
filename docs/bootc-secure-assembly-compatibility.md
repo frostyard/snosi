@@ -92,8 +92,15 @@ is never a capability signal.
 `shared/packages/bootc/mkosi.conf` selects one exact Frostyard build pair for
 every OCI bootc profile:
 
-- `bootc=1.17.1-frostyard202610252315~deb13`
-- `libostree-1-1=2026.5-frostyard202610252315~deb13`
+- `bootc=1.17.3-frostyard202611042030~deb13`
+- `libostree-1-1=2026.6-frostyard202611042030~deb13`
+
+They come from the frostyard/bootc-debian release
+`bootc-1.17.3-ostree-2026.6-202611042030` (Build run 41907166706), read from the
+`image` component of the trixie index at repository.frostyard.org on
+2026-11-04. ostree 2026.6 fixes
+[ostree#3681](https://github.com/ostreedev/ostree/issues/3681): with libostree
+2026.5, a system Flatpak update that applies a static delta fails.
 
 The pin scope is that fragment only. It adds no global APT preference and
 changes no sysext or base package selection; every other entry in the fragment
@@ -106,49 +113,90 @@ version does not equal that field), requires all four product profiles
 removed, floating or disagreeing entry. The guard proves selector values and
 version agreement only; it cannot show that revalidation occurred.
 
-Evidence for this pair, from source SHA
-`7927290da94822f05a0b2ae9cb15c67187db7e4a` (draft PR #1151, never merged):
+The fragment also runs `shared/packages/bootc/finalize/bootc-pair.chroot` in
+every OCI bootc build, so the PR mechanics builds and the main secure builds
+check the pair that the image ships: `bootc --version` names
+`assembly.bootc_version`, the hidden storage-digest command exists, and
+`libostree-1-1` is at least 2026.6 (the ostree#3681 floor). The static test
+runs it against stubs, and rejects a pinned libostree below that floor. The
+guard shows that the fixed library is in the image. It does not run a
+static-delta Flatpak update; that needs a booted image and a remote that
+serves static deltas, which is lab work.
 
-- [Run 40315411491](https://github.com/frostyard/snosi/actions/runs/40315411491)
-  built all four products (floe, snow, snowfield, sundog) as mechanics builds
-  with exactly these two versions.
-- [Run 40370164077](https://github.com/frostyard/snosi/actions/runs/40370164077)
-  built Snow secure. Both storage-digest probes agreed, the locally assembled
-  and the policy-copied secure artifact validation passed, and it published
-  the signed tag `20261026133822`. `latest` did not move.
-- Lab run `run-snow-bootc-lifecycle-l6596` (2026-10-26, frostyard/lab#160): N
-  `20261025113924` (bootc 1.16.8) staged and booted N+1 `20261026133822`
-  (bootc 1.17.1), `bootc rollback` ran on 1.17.1, and N booted again. Result
-  `PASS: verified_five_fresh_boots;fsverity_known_defect=7.2.11+deb14-amd64`.
-- Rootfs check (2026-10-26): in the signed tag `20261026133822`, with Forky
-  systemd 262-1, `bootc --version`, `bootc container --help` and
-  `bootc container compute-composefs-digest-from-storage --help` ran in a
-  rootfs-only bwrap sandbox.
+Evidence for this pair (2026-11-04):
 
-The secure assembly on 1.17.1 is proven on Snow only. Floe, Snowfield and
-Sundog get their first 1.17.1 secure assembly in the first main build after
-this change. That build is the remaining check.
+- Rootfs probe: a clean `debian:trixie` container installed exactly this pair
+  from the Frostyard repository. `bootc --version` printed `bootc 1.17.3`,
+  `bootc container --help` and
+  `bootc container compute-composefs-digest-from-storage --help` ran, and
+  `bootc-pair.chroot` passed. The hidden command's help text is byte-identical
+  to 1.17.1 (same `--erofs-version` option, default `v1`). `bootc container
+  --help` adds only the new `aboot` subcommand.
+- Digest stability: on one fixed tree (all mtimes 0), 1.17.1 and 1.17.3 print
+  the same `compute-composefs-digest` value for `--erofs-version v1` and for
+  `v2`, deterministically across runs. The digest algorithm did not change.
+- Upstream v1.17.1..v1.17.3 (71 commits, read by subject): none changes the
+  hidden command or the composefs digest computation. Install and ESP changes
+  add aboot and explicit repart directories, select the booted ESP by
+  `LoaderDevicePartUUID`, and strip the efivarfs attribute header when bootc
+  reads EFI variables; the Type #2 install is re-proven only by the main secure
+  build and a lab install. `container: Replace composefs digest kargs
+  instead of append` changes only `bootc container ukify`, which snosi does
+  not use (direct ukify). `fix: distinguish OCI manifest annotations from
+  config labels` keeps the manifest annotation first; snosi sets both
+  (#1125). New: bootc now stages global UKI addons with an update (it copies
+  `loader/addons` to `loader/addons.staged` and swaps the two at finalize)
+  and garbage-collects unreferenced `bootc_composefs-*` global addons. GC
+  does not touch `50-snosi-cmdline-local.addon.efi`; `snosi-kargs` mirrors
+  `apply` and `revert` into the staged copy so the swap does not undo them
+  (see `docs/snosi-kargs.md`).
+- PR mechanics builds of all four products with this pair, with
+  `bootc-pair.chroot` in each build.
 
-Previous pin (history): `bootc=1.16.8-frostyard202610040153~deb13` with
-`libostree-1-1=2026.3-frostyard202610040153~deb13`. Its evidence was
-[run 40229646374](https://github.com/frostyard/snosi/actions/runs/40229646374),
-which built all four products with exactly those two versions, and
-[run 40245723511](https://github.com/frostyard/snosi/actions/runs/40245723511),
-which built all four rootfs products and then failed before publication with
-`expected bootc 1.16.8, observed bootc 1.17.1`. The floating entries had
-resolved to the then-current APT candidates: bootc 1.17.1, and libostree
-2026.5. That failure is why the pin exists.
+Remaining check: secure-build runs only on `main` (the `native-build`
+environment allows only `main`), so no pre-merge build assembles a 1.17.3
+secure UKI. The first main build after this change is the secure revalidation
+of all four products: both storage-digest probes must agree and the artifact
+validation must pass, or that leg fails before it pushes, signs or promotes.
+An N (1.17.1) to N+1 (1.17.3) lab lifecycle run is not done yet.
+
+Previous pins (history):
+
+- `bootc=1.17.1-frostyard202610252315~deb13` with
+  `libostree-1-1=2026.5-frostyard202610252315~deb13`, from source SHA
+  `7927290da94822f05a0b2ae9cb15c67187db7e4a` (draft PR #1151, never merged).
+  [Run 40315411491](https://github.com/frostyard/snosi/actions/runs/40315411491)
+  built all four products as mechanics builds;
+  [run 40370164077](https://github.com/frostyard/snosi/actions/runs/40370164077)
+  built Snow secure (both probes agreed, artifact validation passed, signed tag
+  `20261026133822`, `latest` did not move); lab run
+  `run-snow-bootc-lifecycle-l6596` (2026-10-26, frostyard/lab#160) staged and
+  booted N+1 `20261026133822` (1.17.1) from N `20261025113924` (1.16.8), ran
+  `bootc rollback`, and N booted again
+  (`PASS: verified_five_fresh_boots;fsverity_known_defect=7.2.11+deb14-amd64`).
+  The rootfs check ran `bootc --version`, `bootc container --help` and the
+  hidden command's `--help` in a rootfs-only bwrap sandbox of that tag, with
+  Forky systemd 262-1.
+- `bootc=1.16.8-frostyard202610040153~deb13` with
+  `libostree-1-1=2026.3-frostyard202610040153~deb13`. Its evidence was
+  [run 40229646374](https://github.com/frostyard/snosi/actions/runs/40229646374),
+  which built all four products with exactly those two versions, and
+  [run 40245723511](https://github.com/frostyard/snosi/actions/runs/40245723511),
+  which built all four rootfs products and then failed before publication with
+  `expected bootc 1.16.8, observed bootc 1.17.1`. The floating entries had
+  resolved to the then-current APT candidates: bootc 1.17.1, and libostree
+  2026.5. That failure is why the pin exists.
 
 The pin is not a compatibility claim for any other version. A later bootc
 needs its own evidence before it can replace the pin.
 
 Follow-up to #1130: upstream bootc commit `9aad3dd87` (first in v1.16.12,
-contained in v1.17.1) passes the config verity and skips the full composefs
-re-hash of every layer at stage time. That re-read was the stage-time trigger
-of the spurious Btrfs fs-verity `FILE CORRUPTED!` reports in
+contained in v1.17.1 and later) passes the config verity and skips the full
+composefs re-hash of every layer at stage time. That re-read was the
+stage-time trigger of the spurious Btrfs fs-verity `FILE CORRUPTED!` reports in
 [#1130](https://github.com/frostyard/snosi/issues/1130). In l6596 the stager
-was still 1.16.8, so the effect is first observable when a 1.17.1 host stages
-a later update. The kernel defect stays.
+was still 1.16.8, so the effect is first observable when a 1.17.1 or later host
+stages a later update. The kernel defect stays.
 
 ## Credentials and rotation
 

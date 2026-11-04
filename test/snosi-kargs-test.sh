@@ -117,7 +117,8 @@ count=0
 [[ ! -f $SNOSI_TEST_SYNC_COUNT ]] || count=$(<"$SNOSI_TEST_SYNC_COUNT")
 count=$((count + 1))
 printf '%s' "$count" >"$SNOSI_TEST_SYNC_COUNT"
-[[ ${SNOSI_TEST_SYNC_FAIL_ON:-0} != "$count" ]]
+[[ ${SNOSI_TEST_SYNC_FAIL_ON:-0} != "$count" ]] || exit 1
+[[ -z ${SNOSI_TEST_SYNC_FAIL_PATH:-} || $* != *"$SNOSI_TEST_SYNC_FAIL_PATH"* ]]
 EOF
 
     chmod +x "$WORK/bin/"*
@@ -267,6 +268,52 @@ status_out=$(run_cli status)
 assert_contains "status detects an externally modified addon" \
     "$status_out" "present, differs from last applied artifact"
 assert_contains "modified addon is reported pending" "$status_out" "Pending:     yes"
+
+echo "# staged bootc update (bootc 1.17.3 global addon staging)"
+# bootc 1.17.3 copies loader/addons to loader/addons.staged when it stages an
+# update and swaps the two at finalize. Without the mirror, an apply or revert
+# made after the stage is undone at the next boot.
+setup_fixture
+staged_dir="$WORK/esp/loader/addons.staged"
+staged_addon="$staged_dir/50-snosi-cmdline-local.addon.efi"
+run_cli set --no-apply debug
+run_cli apply >/dev/null
+[[ ! -e $staged_dir ]] &&
+    pass "apply creates no staged directory without a staged update" ||
+    fail "apply creates no staged directory without a staged update"
+status_out=$(run_cli status)
+assert_contains "status reports no staged update" "$status_out" "Staged:      none"
+mkdir -p "$staged_dir"
+printf 'old-addon\n' >"$staged_addon"
+status_out=$(run_cli status)
+assert_contains "status detects a staged copy that differs" "$status_out" \
+    "Staged:      differs; the staged bootc update replaces the active addon"
+assert_contains "a differing staged copy is reported pending" "$status_out" "Pending:     yes"
+run_cli apply >/dev/null
+assert_eq "apply mirrors the addon into a staged bootc update" \
+    "$(cat "$staged_addon")" "signed-addon"
+status_out=$(run_cli status)
+assert_contains "status reports a matching staged copy" "$status_out" \
+    "Staged:      matches the active addon"
+assert_contains "a matching staged copy is not pending" "$status_out" "Pending:     no"
+printf 'old-addon\n' >"$staged_addon"
+if SNOSI_TEST_SYNC_FAIL_PATH=addons.staged run_cli apply >/dev/null 2>"$WORK/err"; then
+    fail "staged mirror sync failure is surfaced"
+else
+    pass "staged mirror sync failure is surfaced"
+fi
+assert_contains "staged mirror failure tells the operator to apply again" \
+    "$(cat "$WORK/err")" "run 'snosi-kargs apply' again"
+[[ -z $(find "$staged_dir" -name '.50-snosi-cmdline-local.addon.efi.*') ]] &&
+    pass "staged mirror failure leaves no temporary file" ||
+    fail "staged mirror failure leaves no temporary file"
+run_cli revert >/dev/null
+[[ ! -e $staged_addon ]] &&
+    pass "revert removes the addon from a staged bootc update" ||
+    fail "revert removes the addon from a staged bootc update"
+status_out=$(run_cli status)
+assert_contains "status after revert reports a matching staged copy" "$status_out" \
+    "Staged:      matches the active addon"
 
 echo "# Secure Boot decision matrix"
 setup_fixture
