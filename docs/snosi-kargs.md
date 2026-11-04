@@ -129,3 +129,4 @@ Firn-native Snosi lifecycle lane and authorized secure OCI artifacts. Until
 that evidence exists, do not promise that a bootc ESP writer preserves
 `/loader/addons`; `snosi-kargs status` reports a
 missing artifact as pending so an operator can re-apply it.
+
