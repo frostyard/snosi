@@ -341,25 +341,43 @@ else
     fail 'image check reports every unreadable dependency and stays successful'
 fi
 
-sysext_pr_line=$(awk '/- name: Create sysext dependency PR/{print NR; exit}' "$CHECK_DEPS")
-sysext_final_line=$(awk -v pr="$sysext_pr_line" '/- name: Fail when dependency latest values could not be read/{if(NR > pr){print NR; exit}}' "$CHECK_DEPS")
-if [[ -n "$sysext_pr_line" && -n "$sysext_final_line" ]] &&
-   (( sysext_final_line > sysext_pr_line )) &&
-   grep -Fq "if: \${{ !cancelled() && steps.check.outputs.check_failed != '' }}" "$CHECK_DEPS"; then
-    pass 'sysext job has final check_failed fail step after PR step'
-else
-    fail 'sysext job has final check_failed fail step after PR step'
-fi
+# Check the final fail step inside one job: it comes after that job's PR step,
+# carries the !cancelled() check_failed condition, and its body exits non-zero.
+check_final_fail_step() {
+    local job=$1 pr_step=$2 label=$3 job_text step_text body
+    job_text="$work/$job.job"
+    awk -v job="  $job:" '
+        $0 == job { in_job = 1; print; next }
+        in_job && /^  [A-Za-z0-9_-]+:$/ { exit }
+        in_job { print }
+    ' "$CHECK_DEPS" >"$job_text"
+    step_text="$work/$job.final-step"
+    awk -v pr="      - name: $pr_step" '
+        $0 == pr { after_pr = 1; next }
+        after_pr && $0 == "      - name: Fail when dependency latest values could not be read" { in_step = 1; print; next }
+        in_step && /^      - name: / { exit }
+        in_step { print }
+    ' "$job_text" >"$step_text"
+    body="$work/$job.final-body.sh"
+    awk '
+        $0 == "        run: |" { in_run = 1; next }
+        in_run && substr($0, 1, 10) == "          " { print substr($0, 11); next }
+        in_run { exit }
+    ' "$step_text" >"$body"
+    case_done
+    if [[ -s "$step_text" ]] &&
+       grep -Fq "if: \${{ !cancelled() && steps.check.outputs.check_failed != '' }}" "$step_text" &&
+       grep -Fq 'CHECK_FAILED: ${{ steps.check.outputs.check_failed }}' "$step_text" &&
+       [[ -s "$body" ]] &&
+       ! CHECK_FAILED=fixture bash -e "$body" >/dev/null 2>&1; then
+        pass "$label job has a final check_failed fail step after its PR step"
+    else
+        fail "$label job has a final check_failed fail step after its PR step"
+    fi
+}
 
-image_pr_line=$(awk '/- name: Create image dependency PR/{print NR; exit}' "$CHECK_DEPS")
-image_final_line=$(awk -v pr="$image_pr_line" '/- name: Fail when dependency latest values could not be read/{if(NR > pr){print NR; exit}}' "$CHECK_DEPS")
-if [[ -n "$image_pr_line" && -n "$image_final_line" ]] &&
-   (( image_final_line > image_pr_line )) &&
-   grep -Fq "if: \${{ !cancelled() && steps.check.outputs.check_failed != '' }}" "$CHECK_DEPS"; then
-    pass 'image job has final check_failed fail step after PR step'
-else
-    fail 'image job has final check_failed fail step after PR step'
-fi
+check_final_fail_step check-sysext-updates 'Create sysext dependency PR' sysext
+check_final_fail_step check-image-updates 'Create image dependency PR' image
 
 printf '# Summary: %d cases, %d passed, %d failed, %d total assertions\n' "$CASES" "$PASS" "$FAIL" "$((PASS + FAIL))"
 [[ $FAIL -eq 0 ]]
