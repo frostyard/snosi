@@ -86,6 +86,7 @@ policy-as-code-test.py	ci	validate.yml
 publication-guards.bats	ci	validate.yml
 required-by-guard-test.sh	ci	validate.yml
 retirement-plan-test.py	ci	validate.yml
+risk-paths-test.py	ci	validate.yml
 run-qemu.sh	helper	-
 runtime-etc-guard-test.sh	ci	validate.yml
 service-account-memberships-test.py	ci	validate.yml

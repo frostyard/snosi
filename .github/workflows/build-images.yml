@@ -46,6 +46,8 @@ on:
       - ".github/auto-qa-tuning.json"
       - ".github/dependabot.yml"
       - ".github/renovate.json5"
+      - ".github/risk-paths.json"
+      - ".github/workflows/risk-paths.yml"
       # Sibling push/PR workflows validate their own files; nothing in this
       # workflow reads them. build.yml is deliberately NOT ignored anywhere:
       # it is the canonical mkosi pin source.
@@ -91,6 +93,8 @@ on:
       - ".github/auto-qa-tuning.json"
       - ".github/dependabot.yml"
       - ".github/renovate.json5"
+      - ".github/risk-paths.json"
+      - ".github/workflows/risk-paths.yml"
       # Sibling push/PR workflows validate their own files; nothing in this
       # workflow reads them. build.yml is deliberately NOT ignored anywhere:
       # it is the canonical mkosi pin source.

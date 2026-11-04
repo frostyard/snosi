@@ -123,6 +123,8 @@ the four-profile bootc image matrix, not the sysext publisher.
 issue automation, fleet marker, labels and supply-chain reporting; they do
 not publish OS artifacts.
 
+`risk-paths.yml` calls frostyard/core's reusable risk-paths workflow (core ADR-0068) on `pull_request_target`, pinned to a core commit. It reads `.github/risk-paths.json` at the base SHA and adds `risk:high` when a PR changes a listed path; it never removes the label and is not a required check. Each `why` names a `protectedBoundaries` entry of `policies/agent-governance.json`; `test/risk-paths-test.py` enforces that and rejects stale entries. `build.yml` and `build-images.yml` ignore both files.
+
 ## Publishing targets
 
 | Artifact | Destination | Mechanism |

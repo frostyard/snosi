@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "paths": [
+    { "glob": ".github/risk-paths.json", "why": "workflow-permissions: this list decides which pull requests get the risk:high label" },
+    { "glob": ".github/workflows/risk-paths.yml", "why": "workflow-permissions: the caller that runs core's risk-paths workflow with pull-requests: write" },
+    { "glob": "policies/**", "why": "workflow-permissions: the agent-governance policy that sets agent actions and protected boundaries" },
+    { "glob": "shared/bootc-secure/**", "why": "secure-boot: secure bootc composition, UKI assembly, the signed PCR-11 policy and published-image verification" },
+    { "glob": "shared/packages/bootc/**", "why": "secure-boot: the exact bootc and libostree pin that the secure UKI assembly is validated against" },
+    { "glob": "shared/download/forky-versions.json", "why": "secure-boot: the Forky systemd family sentinel; a change needs the bwrap, udev-rule and NvPCR rechecks" },
+    { "glob": "**/snosi-kargs*", "why": "tpm: the signed kernel cmdline addon, measured into PCR 12" },
+    { "glob": "mkosi.profiles/{snow,snowfield,floe,sundog}/mkosi.conf", "why": "secure-boot: product profile composition; it includes the bootc packages, the secure fragment and the kernel" },
+    { "glob": "shared/kernel/**", "why": "secure-boot: kernel selection and the postinst that builds the initramfs" },
+    { "glob": "**/dracut.conf.d/**", "why": "tpm: shipped dracut configuration, including the TPM and LUKS modules of the initramfs" },
+    { "glob": "**/dracut/modules.d/**", "why": "tpm: custom dracut modules in the initramfs" },
+    { "glob": "shared/native-ab/keys/**", "why": "signing: the MOK certificate, PCR public key and ISO keyring that publication and Firn check against" },
+    { "glob": "shared/sysext/keys/**", "why": "signing: the public keyring that verifies signed sysexts" },
+    { "glob": "**/import-pubring.{gpg,pgp}", "why": "signing: a systemd import keyring that verifies downloaded images and sysexts" },
+    { "glob": "mkosi.sandbox/etc/apt/keyrings/frostyard.gpg", "why": "signing: the Frostyard repository key, shipped as /usr/lib/systemd/import-pubring.pgp" },
+    { "glob": "cosign.pub", "why": "signing: the Cosign public key that verifies published images" },
+    { "glob": "shared/security/**", "why": "credentials: the guard that fails a build that ships a private key" },
+    { "glob": "**/containers/bootc-policy.json", "why": "update-verification: the strict signed-image policy for bootc updates" },
+    { "glob": "**/etc/containers/policy.json", "why": "update-verification: the system container policy that keeps the Frostyard scopes signed" },
+    { "glob": "**/libexec/bootc-update-stage", "why": "update-verification: pulls and stages updates under the strict policy" },
+    { "glob": "shared/download/verif*.sh", "why": "update-verification: checksum and build-provenance attestation checks of downloads" },
+    { "glob": "**/*.transfer", "why": "update-verification: sysupdate transfer files that set the sysext source and Verify=true" },
+    { "glob": ".github/workflows/{build,build-images,build-installer-iso,deploy-native-installer-redirect}.yml", "why": "publication: the workflows that sign and publish sysexts, OCI images, the installer ISO and the redirect Worker" },
+    { "glob": "shared/native-ab/publish/**", "why": "publication: installer ISO publication, promotion and verification scripts" },
+    { "glob": "shared/outformat/image/buildah-package.sh", "why": "publication: packages the OCI image that is signed and published" },
+    { "glob": "workers/native-installer-redirect/**", "why": "publication: the stable installer ISO URL redirect Worker" },
+    { "glob": "mkosi.profiles/firn-installer/**", "why": "destructive-disk-operations: the Firn installer ISO profile; the installer erases disks" },
+    { "glob": "shared/firn-installer/**", "why": "installer: the Firn installer catalog, scripts and tree" }
+  ]
+}

@@ -1,0 +1,24 @@
+# Risk paths caller (frostyard/core ADR-0068, docs/specs/risk-paths.md): runs
+# core's reusable workflow on every pull request. It adds the label risk:high
+# when the pull request changes a path in .github/risk-paths.json.
+#
+# pull_request_target runs this file and reads the list from the base branch,
+# so a pull request cannot remove its own label. The job checks out nothing
+# and runs no pull request code. The reusable workflow is pinned to a
+# frostyard/core commit (ADR-0021). No merge_group trigger; not a required
+# check. build.yml and build-images.yml ignore this file and the list, and
+# test/risk-paths-test.py guards both.
+name: Risk paths
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+
+permissions: {}
+
+jobs:
+  risk-paths:
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: frostyard/core/.github/workflows/risk-paths.yml@1b02a129026329cef2b46d1fbd0465a863c1cd81 # core#194
