@@ -22,6 +22,14 @@ readonly ADDON_RELATIVE="loader/addons/$ADDON_NAME"
 # two directories. A change made only in loader/addons after that copy is undone
 # at the next boot, so apply and revert mirror the addon into the staged copy.
 readonly STAGED_ADDONS_RELATIVE="loader/addons.staged"
+# bootc-update-stage holds this lock while it stages; apply and revert take it
+# too, so the automatic stager cannot copy loader/addons in the middle of a
+# change. bootc's finalize runs at shutdown and takes no lock: the final state
+# check after each change catches it.
+readonly STAGE_LOCK="${SNOSI_KARGS_STAGE_LOCK:-/run/snosi/update-stage.lock}"
+readonly STAGE_LOCK_TIMEOUT="${SNOSI_KARGS_STAGE_LOCK_TIMEOUT:-900}"
+readonly APPLY_RETRY="run 'snosi-kargs apply' again with the same options"
+readonly REVERT_RETRY="run 'snosi-kargs revert' again"
 readonly FORCE_CONFIRMATION="I understand this may make the system unbootable"
 
 WORK_DIR=""
@@ -252,10 +260,18 @@ install_addon() { # candidate certificate-or-empty unsigned
     ESP_BACKUP=""
 }
 
+# Serialize an ESP addon change with the automatic bootc stager.
+lock_stager() {
+    mkdir -p "$(dirname "$STAGE_LOCK")"
+    exec 8>"$STAGE_LOCK"
+    flock -w "$STAGE_LOCK_TIMEOUT" 8 ||
+        die "bootc-update-stage holds $STAGE_LOCK; no addon was changed, try again later"
+}
+
 # Mirror the active addon state into a staged bootc update, when one exists.
-mirror_staged_addon() {
+mirror_staged_addon() { # retry-instruction
     local staged_dir="$SNOSI_ESP_MOUNTPOINT/$STAGED_ADDONS_RELATIVE"
-    local again="a staged bootc update still holds the previous addon and restores it at the next boot; run 'snosi-kargs apply' again"
+    local again="a staged bootc update still holds the previous addon and restores it at the next boot; $1"
     [[ -d $staged_dir ]] || return 0
     if [[ -e $ADDON_PATH ]]; then
         STAGED_TEMP=$(mktemp "$staged_dir/.$ADDON_NAME.XXXXXX") || die "$again"
@@ -269,9 +285,24 @@ mirror_staged_addon() {
     sync -f "$staged_dir" || die "$again"
 }
 
+# Prove the final ESP state: the active addon, and the staged copy when a
+# staged bootc update exists, are the expected addon (or both absent).
+verify_addon_state() { # expected-addon-or-empty retry-instruction
+    local expected=$1 staged_dir="$SNOSI_ESP_MOUNTPOINT/$STAGED_ADDONS_RELATIVE"
+    local changed="the ESP addons changed during this command (a bootc stage or finalize?); $2"
+    if [[ -n $expected ]]; then
+        cmp -s -- "$expected" "$ADDON_PATH" || die "$changed"
+        [[ ! -d $staged_dir ]] || cmp -s -- "$expected" "$staged_dir/$ADDON_NAME" ||
+            die "$changed"
+    else
+        [[ ! -e $ADDON_PATH && ! -e $staged_dir/$ADDON_NAME ]] || die "$changed"
+    fi
+}
+
 revert_addon() {
     local destination_dir hidden
     resolve_addon
+    lock_stager
     destination_dir=$(dirname "$ADDON_PATH")
     if [[ -e $ADDON_PATH ]]; then
         hidden=$(mktemp "$destination_dir/.50-snosi-cmdline-local.disabled.XXXXXX")
@@ -287,10 +318,11 @@ revert_addon() {
         sync -f "$destination_dir" ||
             die "addon was disabled but removal durability could not be confirmed"
     fi
+    mirror_staged_addon "$REVERT_RETRY"
+    verify_addon_state "" "$REVERT_RETRY"
     rm -f -- "$APPLIED_ARGS_FILE" "$APPLIED_CERT_FILE" \
         "$APPLIED_UNSIGNED_FILE" "$APPLIED_HASH_FILE"
     sync -f "$STATE_DIR"
-    mirror_staged_addon
     printf 'Removed %s\n' "$ADDON_RELATIVE"
 }
 
@@ -363,9 +395,11 @@ apply_addon() { # remaining apply options
         sbverify --cert "$cert" "$candidate" >/dev/null ||
             die "generated addon is not signed by the selected certificate"
     fi
+    lock_stager
     install_addon "$candidate" "$cert" "$unsigned"
+    mirror_staged_addon "$APPLY_RETRY"
+    verify_addon_state "$candidate" "$APPLY_RETRY"
     record_applied_state "$unsigned" "$cert"
-    mirror_staged_addon
     printf 'Installed %s\n' "$ADDON_PATH"
     printf 'The arguments take effect on the next boot and append to the embedded command line.\n'
 }

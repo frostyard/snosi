@@ -134,9 +134,10 @@ Evidence for this pair (2026-11-04):
   --help` adds only the new `aboot` subcommand.
 - Digest stability: on one fixed tree (all mtimes 0), 1.17.1 and 1.17.3 print
   the same `compute-composefs-digest` value for `--erofs-version v1` and for
-  `v2`, deterministically across runs. The digest algorithm did not change.
-- Upstream v1.17.1..v1.17.3 (71 commits, read by subject): none changes the
-  hidden command or the composefs digest computation. Install and ESP changes
+  `v2`, deterministically across runs. This shows agreement for that tree
+  only; it is not a source-level proof that the algorithm is unchanged.
+- Upstream v1.17.1..v1.17.3 (71 commits, read by subject only): no subject
+  names the hidden command or the composefs digest computation. Install and ESP changes
   add aboot and explicit repart directories, select the booted ESP by
   `LoaderDevicePartUUID`, and strip the efivarfs attribute header when bootc
   reads EFI variables; the Type #2 install is re-proven only by the main secure
@@ -153,12 +154,17 @@ Evidence for this pair (2026-11-04):
 - PR mechanics builds of all four products with this pair, with
   `bootc-pair.chroot` in each build.
 
-Remaining check: secure-build runs only on `main` (the `native-build`
-environment allows only `main`), so no pre-merge build assembles a 1.17.3
-secure UKI. The first main build after this change is the secure revalidation
-of all four products: both storage-digest probes must agree and the artifact
-validation must pass, or that leg fails before it pushes, signs or promotes.
-An N (1.17.1) to N+1 (1.17.3) lab lifecycle run is not done yet.
+**Exception to Mandatory revalidation (below), pending Brian's decision on
+#1223:** the evidence above is not the full Task 1-3 rootfs proof or the Task 5
+artifact and negative tests against a newly built secure rootfs, which that
+section requires before the pair changes. secure-build runs only on `main`
+(the `native-build` environment allows only `main`), so no pre-merge build can
+assemble a 1.17.3 secure UKI. If Brian accepts the exception, the first main
+build after this change is the secure revalidation of all four products: both
+storage-digest probes must agree and the artifact validation must pass, or
+that leg fails before it pushes, signs or promotes. This pin change does not
+comply with Mandatory revalidation until that build passes. An N (1.17.1) to
+N+1 (1.17.3) lab lifecycle run is not done yet.
 
 Previous pins (history):
 

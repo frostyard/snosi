@@ -128,9 +128,16 @@ bootc 1.17.3 and later stage global UKI addons with an update: they copy
 `<ESP>/loader/addons` to `<ESP>/loader/addons.staged` when they stage, and swap
 the two directories when the staged deployment finalizes at shutdown. A change
 made only in `loader/addons` after the stage would be undone at the next boot.
-When `loader/addons.staged` exists, `apply` also writes the addon there and
-`revert` also removes it there; if that mirror fails, the command fails and
-tells the operator to apply again. `status` prints a `Staged:` line and
+`apply` and `revert` take the automatic stager's lock
+(`/run/snosi/update-stage.lock`, up to 15 minutes), so `bootc-update-stage`
+cannot stage in the middle of a change; a manual `bootc upgrade` by root is
+not serialized. When `loader/addons.staged` exists, `apply` also writes the
+addon there and `revert` also removes it there. Each command then checks that
+the active addon and the staged copy are the expected result, before it
+records the applied state; this catches a bootc finalize that swaps the
+directories during the change. On a failure the command says what to repeat:
+`apply` with the same options, or `revert` (an `apply` would reinstall the
+persisted arguments that `revert` keeps). `status` prints a `Staged:` line and
 reports `Pending: yes` when the staged copy differs from the active addon.
 bootc's garbage collection removes only `bootc_composefs-*` global addons, so
 it does not touch `50-snosi-cmdline-local.addon.efi`. The non-root fixtures
