@@ -23,8 +23,11 @@ protects, and it is not the failure mode to remediate around.
 
 Open the failing `secure-build` run and find the last completed step among:
 
-1. `Push immutable version tag` — the 14-digit version tag was pushed;
-   `latest` is untouched. **This is a safe, visible half-state.**
+1. `Push immutable version tag` — the helper checks for the 14-digit tag before
+   every push and retries at most 3 times for transient blob-upload failures.
+   It stops with no additional push if the tag exists, because an immutable
+   tag must not move; then inspect the tag and the runbook evidence. If a successful
+   push exists, `latest` is untouched. **This is a safe, visible half-state.**
 2. `Sign immutable image digest` — `cosign sign` failed against the pushed
    digest (never a tag). Check Cosign auth: it receives registry auth only
    through command-scoped `DOCKER_CONFIG`, not `--registry-config`.

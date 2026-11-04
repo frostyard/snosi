@@ -11,9 +11,9 @@ for cmd in jq python3 sha256sum git gpg gpgv curl; do
 done
 
 work=$(mktemp -d /var/tmp/iso-publication-pipeline.XXXXXX)
-server_pid=""; cold_pid=""; ignore_pid=""; reset_pid=""; dead_pid=""
+server_pid=""; cold_pid=""; ignore_pid=""; reset_pid=""; dead_pid=""; stall_pid=""
 cleanup() {
-    for pid in "$server_pid" "$cold_pid" "$ignore_pid" "$reset_pid" "$dead_pid"; do
+    for pid in "$server_pid" "$cold_pid" "$ignore_pid" "$reset_pid" "$dead_pid" "$stall_pid"; do
         [[ -z $pid ]] || kill "$pid" 2>/dev/null || true
     done
     rm -rf "$work"
@@ -86,7 +86,7 @@ mkdir -p "$dest"
 # Bind only localhost; choose distinct OS-allocated ports for each origin.
 ports=$(python3 - <<'PY'
 import socket
-sockets = [socket.socket() for _ in range(5)]
+sockets = [socket.socket() for _ in range(6)]
 try:
     for sock in sockets:
         sock.bind(('127.0.0.1', 0))
@@ -96,7 +96,7 @@ finally:
         sock.close()
 PY
 )
-read -r port ignore_port cold_port reset_port dead_port <<< "$ports"
+read -r port ignore_port cold_port reset_port dead_port stall_port <<< "$ports"
 python3 "$root/test/lib/range-http-server.py" "$port" "$dest" >"$work/server.log" 2>&1 &
 server_pid=$!
 base="http://127.0.0.1:$port/isos/native/v1"
@@ -178,6 +178,19 @@ check 'persistent-reset origin aborted exactly 2 full GETs' \
     test "$(grep -c '^reset GET ' "$work/dead.log")" -eq 2
 check 'persistent reset failure reports the failed full GET' \
     grep -q 'full GET failed' "$work/rejected.log"
+
+python3 "$root/test/lib/range-http-server.py" "$stall_port" "$dest" --stall-first-gets 1 \
+    >"$work/stall.log" 2>&1 & stall_pid=$!
+for _ in {1..30}; do
+    curl -fsS --max-time 2 "http://127.0.0.1:$stall_port/" -o /dev/null 2>/dev/null && break
+    sleep 0.1
+done
+check 'stall origin started' kill -0 "$stall_pid"
+check 'stalled full GET is aborted and retried' \
+    timeout 25 env PUBLISH_HTTP_GET_SPEED_TIME=2 PUBLISH_HTTP_GET_SPEED_LIMIT=1000 PUBLISH_HTTP_GET_RETRIES=3 \
+    "$publish/verify-remote.sh" "$work/one" "http://127.0.0.1:$stall_port/isos/native/v1"
+check 'stall origin stalled exactly 1 full GET' \
+    test "$(grep -c '^stall GET ' "$work/stall.log")" -eq 1
 
 timeout 120 "$publish/promote.sh" "${signing[@]}" "$work/one" "$base" "$dest" \
     >"$work/promoted.log"

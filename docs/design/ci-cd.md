@@ -33,7 +33,11 @@ layers and runner-local keys are removed before registry writes. The
 candidate's pinned bootc calculates the storage composefs digest; the
 assembled image is checked again to ensure digest continuity. Registry
 authentication uses the run-scoped `GITHUB_TOKEN`; PR jobs have no registry
-write permission. Cosign signs/validates the immutable digest, and
+write permission. `shared/bootc-secure/ci/push-immutable-image.sh` pushes the
+immutable version tag: at most 3 attempts for a transient GHCR blob-upload
+fault (#1216, #1217); it checks for the tag before every push and stops if
+the tag exists, so the tag never moves, and requires the registry digest of
+the tag to equal buildah's digest file. Cosign signs/validates the immutable digest, and
 `latest` is promoted only after remote signature, label, policy-copy and
 artifact checks succeed. Every published image carries
 `org.opencontainers.image.version` as both a config label and a manifest
@@ -69,9 +73,14 @@ a transient edge fault rather than a verdict about the object. Plain curl
 `PUBLISH_HTTP_GET_RETRIES` (default 5) and
 `PUBLISH_HTTP_GET_RETRY_MAX_TIME` (default 300 s). Every call keeps a
 `--connect-timeout` and a `--max-time`. No `--retry-delay` is set, so curl
-backs off exponentially (1, 2, 4, 8, 16 s: 31 s of delay for a full budget);
+backs off exponentially (1, 2, 4, 8, 16 s: 31 s of delay for a full budget).
+Full GETs also use stall detection: a sustained transfer below
+`PUBLISH_HTTP_GET_SPEED_LIMIT` (default 1048576 bytes/s) for
+`PUBLISH_HTTP_GET_SPEED_TIME` (default 60 s) aborts early, so curl can retry
+while the retry window is still open. Before this fix, a slow attempt could run
+to `--max-time 600` and never start a retry.
 `--retry-max-time` caps the whole window. The boot smoke test's ISO download
-uses the same options, and `verify-installer-redirect.sh` uses them on its
+uses the same retry options (without the stall floor), and `verify-installer-redirect.sh` uses them on its
 three curls. The checks still fail closed: after the last attempt the
 helper returns non-zero and the caller exits with its existing diagnostic
 (`http_get_sha256` also no longer hashes a partial file as if it were the

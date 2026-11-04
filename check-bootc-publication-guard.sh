@@ -64,6 +64,7 @@ required_files=(
     shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml
     shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json
     shared/bootc-secure/compatibility.sh
+    shared/bootc-secure/ci/push-immutable-image.sh
     shared/bootc-secure/ci/resolve-snow-release-predecessor.sh
 )
 for required in "${required_files[@]}"; do
@@ -218,6 +219,12 @@ else
 EOF
 )
         require_text "$workflow secure Buildah login" "$push_step" "$push_login_line"
+        if ! grep -Fq './shared/bootc-secure/ci/push-immutable-image.sh' <<<"$push_step"; then
+            fail_check "$workflow secure-build: missing immutable push helper call"
+        fi
+        if grep -Eq '(^|[[:space:]])(sudo[[:space:]]+)?buildah[[:space:]]+push([[:space:]]|$)' <<<"$push_step"; then
+            fail_check "$workflow secure-build: push step must not call bare buildah push"
+        fi
 
         login_step=$(awk '
             /^      - name: Log in to ghcr.io$/ { capture=1 }

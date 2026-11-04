@@ -387,13 +387,7 @@ jobs:
           # Pass it via stdin so it never appears in process arguments.
           printf '%s' "$GH_TOKEN" | sudo buildah login -u "$GHCR_USER" --password-stdin ghcr.io
 
-          sudo TMPDIR="$TMPDIR" buildah push \
-            --compression-format=zstd:chunked \
-            --digestfile=/tmp/image-digest \
-            "$IMAGE:${{ steps.version.outputs.tag }}" \
-            "docker://$IMAGE:${{ steps.version.outputs.tag }}"
-
-          DIGEST=$(sudo cat /tmp/image-digest)
+          DIGEST=$(sudo TMPDIR="$TMPDIR" ./shared/bootc-secure/ci/push-immutable-image.sh "$IMAGE" "${{ steps.version.outputs.tag }}")
           if [[ ! "$DIGEST" =~ ^sha256: ]]; then
             echo "::error::Failed to extract valid digest: $DIGEST"
             exit 1
