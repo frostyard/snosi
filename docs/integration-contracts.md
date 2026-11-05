@@ -170,13 +170,14 @@ subject to [ADR-0018's exact-object gate](adr/0018-remove-native-ab-and-nbc-lane
 the system collector of frostyard/core's problem reports (schema
 `frostyard.problem/1`,
 [core spec](https://github.com/frostyard/core/blob/main/docs/specs/problem-report.md)).
-It writes, by temp file and rename:
+It publishes these files together as 1 recoverable transaction (staged in
+`.pending/`, a `COMMIT` marker, then renames; ADR-0029):
 
 | File | Mode | Content |
 | --- | --- | --- |
 | `/var/lib/snosi-health/problems.json` | 0644 root | Format 1: `format`, `schema`, `generated`, `image` (`id`, `version`), `secure`, `client`, and `problems[]` with `id`, `kind`, `detail`, `week`, `first_seen`, `last_seen`, `occurrences`, `reportable`. `detail` holds only v1 report fields whose value passes its v1 property schema; `reportable` is true only when the envelope validates. No journal text, command line, path, username, unit instance, hostname, machine ID or boot ID. At most 200 records, none older than 90 days |
 | `/var/lib/snosi-health/details.json` | 0640 root:sudo | Format 1: for each `id`, `kind`, `local` (the detail before sanitizing), `extra` (full unit names, a crash's executable path) and up to 5 journal texts of at most 1024 characters |
-| `/var/lib/snosi-health/state.json`, `journal.cursor` | 0600 root | Private collector state: boot slots, the hashes of the last counted inputs, and the system-journal cursor |
+| `/var/lib/snosi-health/state.json`, `journal.cursor` | 0600 root | Private collector state: boot slots, the hashes of the last counted inputs, the updex feature keys, and the system-journal cursor |
 
 Consumers: chairlift's Problems page (both files; `details.json` only for
 `sudo` members), `snosi-health --list`, and the later Floe sender (T857 t20),

@@ -68,18 +68,25 @@ command has a `timeout`; a `flock` keeps 2 runs apart.
 Every `journalctl` call reads only the system journal (`--system`): root can
 also read user journals, where a user can write any field.
 
-`crash` and `app_problem` read new entries only, after 1 journal cursor in
-the state directory (`--after-cursor`; 90 days on the first run, because
-journalctl refuses `--since` together with a cursor). `update_stage_failed`,
-`sysext_update_failed`, `crash` and `app_problem` are event observations:
-each counts only when its time is later than the `last_seen` of its record in
-the previous `problems.json`. So a replayed journal entry, an unchanged
-`update-check`, or an updex record that carries an older feature entry with
-its own `at` counts nothing twice; the hashes of `update-check` and
-`last-run.json` in `state.json` are only a fast path. `unit_failed`,
-`booted_older_image`, `tpm_unlock` and `integrity_error` count at most once
-for each boot, through the boot slots in `state.json`; a different value in
-the same boot (a bigger bucket) replaces that boot's record.
+Each source has its own key of what was already counted, kept in
+`state.json` or beside it and committed with `problems.json` (see the
+transaction below):
+
+- `crash` and `app_problem` count every journal entry after 1 journal cursor
+  (`--after-cursor`; 90 days on the first run, because journalctl refuses
+  `--since` together with a cursor). Two crashes in the same second, or an
+  entry older than the record's `last_seen`, both count.
+- `update_stage_failed` counts when the sha256 of `update-check` differs from
+  the hash in `state.json`.
+- `sysext_update_failed` keeps, for each feature, the key of its last counted
+  entry (`at`, `outcome`, `error_class`, `version`). An entry counts only when
+  its key differs. updex carries the previous entry of a feature, with its own
+  `at`, into a run that names other features; that entry has the same key and
+  does not count again. The hash of `last-run.json` is a fast path.
+- `unit_failed`, `booted_older_image`, `tpm_unlock` and `integrity_error`
+  count at most once for each boot, through the boot slots in `state.json`; a
+  different value in the same boot (a bigger bucket) replaces that boot's
+  record.
 
 A fallback to a passphrase or a recovery key is recorded as `outcome`
 `other`: systemd v262 logs no line that tells which secret was typed. Users
@@ -116,23 +123,36 @@ reads those from the user's own journal (one sender for each record).
 **`/var/lib/snosi-health/details.json`** (mode 0640, `root:sudo`, format 1):
 for each `id`, the kind, the local detail, extra local names (full unit names,
 the core's executable path) and up to 5 journal texts of at most 1024
-characters. `state.json` (0600) holds the boot ID, the boot-scoped slots and
-the hashes of the last counted `update-check` and `last-run.json`. Every file
-is first written to a temp file in the same directory, with `chmod` and
-`chown`; then `mv -f` renames `problems.json`, `details.json`, `state.json`
-and, last, the journal cursor. A stop after any rename loses no problem: the
-next run reads the old cursor and inputs again, and the `last_seen` rule
-above keeps event counts exact. The known limit: a stop between the
-`problems.json` and `state.json` renames leaves old boot slots, so the next
-run can count a boot record 1 time too many. `snosi-health --list` prints
+characters. `state.json` (0600) holds the boot ID, the boot-scoped slots,
+the hashes of the last counted `update-check` and `last-run.json`, and the
+updex feature keys; `journal.cursor` (0600) holds the journal cursor.
+
+**Commit transaction.** A run publishes all 4 files as 1 recoverable
+transaction, under the `flock`:
+
+1. It stages `problems.json`, `details.json`, `state.json` and
+   `journal.cursor`, with their final modes and owners, in
+   `/var/lib/snosi-health/.pending/`.
+2. It writes `.pending/COMMIT` by atomic rename (a temp file, then `mv`).
+3. It renames each staged file into place: `problems.json`, `details.json`,
+   `state.json`, then `journal.cursor`, and removes `.pending`.
+
+At the start of each run, after the lock: when `.pending/COMMIT` exists, the
+run finishes the renames (a staged file that is gone was already moved) and
+removes `.pending`; when `.pending` has no `COMMIT`, nothing was published,
+so the run deletes it and replays from the old state and cursor. The
+problems, the counted-input keys, the boot slots and the cursor therefore
+always move together: a stop at any point loses no problem and counts no
+problem twice, boot records included. `snosi-health --list` prints
 `problems.json` for any user.
 
 **Test hooks** ([ADR-0009](0009-snosi-env-var-classes.md), class 3, paired):
 `SNOSI_HEALTH_TEST_ROOT` prefixes every path and the root check relaxes only
 with `SNOSI_HEALTH_TEST_HOOKS=1`; the root alone is inert, and hooks=1 without
 a root or any value other than 0 or 1 is refused. Only under these hooks,
-`SNOSI_HEALTH_TEST_FAULT=problems|details|state` stops the run after that
-rename, so a test can prove the replay rule. The hooks are not in `--help`.
+`SNOSI_HEALTH_TEST_FAULT` stops the run before `COMMIT`, after it, or after
+the rename of 1 published file, so a test can prove the transaction. The
+hooks are not in `--help`.
 
 **update-check `error_class`.** On `outcome=failed`, `bootc-update-stage`
 adds 1 line `error_class=network|registry|signature|disk_space|lock|other`.
@@ -145,12 +165,14 @@ in `shared/bootc-secure/mkosi.conf`, so all 4 products ship it, with
 `libdw1t64` and `libelf1t64` from Trixie (mkosi installs no Recommends or
 Suggests; systemd-coredump dlopens them for the stack text).
 `shared/bootc-secure/tree/usr/lib/systemd/coredump.conf.d/50-snosi.conf`
-sets `Storage=none` (no core file is kept; the journal entry and its stack
-text remain) and `ProcessSizeMax=1G`. The package's `fs.suid_dumpable=2`
+sets `Storage=none` and `ProcessSizeMax=1G`. `Storage=none` keeps no core
+file after processing; the journal entry and its stack text remain. While
+systemd-coredump makes the stack text, it can still use temporary disk space
+of up to `ProcessSizeMax` (1G) for the core. The package's `fs.suid_dumpable=2`
 (suidsafe) stays: with `%d` (the dumpable flag) and `%F` (the pidfd) in the
 core pattern, systemd 262 identifies the crashed process by its pidfd and does
 not give the core of a process that was not dumpable to the user; that is the
-CVE-2025-4598 fix. With `Storage=none` no core file exists in any case.
+CVE-2025-4598 fix. With `Storage=none` no core file stays after processing.
 `shared/bootc-secure/finalize/coredump.finalize` fails the build unless the
 binary exists, `Storage` resolves to `none` and `ProcessSizeMax` to at most
 1G, the resolved `kernel.core_pattern` pipes to systemd-coredump with `%d`

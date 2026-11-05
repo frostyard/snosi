@@ -137,12 +137,10 @@ check "no preset enables the service directly" \
 check "no var-outcomes map names /var/lib/snosi-health (StateDirectory= creates it)" \
     bash -c "! grep -q 'snosi-health' '$ROOT_DIR'/shared/composition/*/var-outcomes.txt"
 check "collector is executable" test -x "$COLLECTOR"
-check "collector writes by temp file and rename" grep -qF 'mv -f "$tmp_problems" "$PROBLEMS"' "$COLLECTOR"
-rename_order=$(grep -E '^[[:space:]]*mv -f "\$(tmp_problems|tmp_details|tmp_state|NEW_CURSOR)"' "$COLLECTOR" | sed 's/^[[:space:]]*mv -f "\$\([a-z_A-Z]*\)".*/\1/' | tr '\n' ' ')
-check "renames run problems, details, state, then the cursor (got: $rename_order)" \
-    test "$rename_order" = 'tmp_problems tmp_details tmp_state NEW_CURSOR '
-check "every temp file is written before the first rename" \
-    test "$(grep -n 'fill_temp "\$tmp_state"' "$COLLECTOR" | cut -d: -f1)" -lt "$(grep -n '^mv -f "\$tmp_problems"' "$COLLECTOR" | cut -d: -f1)"
+check "a commit publishes problems, details, state, then the cursor" \
+    grep -qxF 'readonly PUBLISHED=(problems.json details.json state.json journal.cursor)' "$COLLECTOR"
+check "COMMIT is written by atomic rename" grep -qxF 'mv -f "$commit_tmp" "$PENDING/COMMIT"' "$COLLECTOR"
+check "a staged file moves into place by rename" grep -qF 'mv -f "$PENDING/$name" "$STATE_DIR/$name"' "$COLLECTOR"
 check "collector takes a lock" grep -qF 'flock -n "$lock_fd"' "$COLLECTOR"
 check "collector puts a timeout on external commands" grep -qF 'timeout --kill-after=5 "$CMD_TIMEOUT" "$@"' "$COLLECTOR"
 help=$("$COLLECTOR" --help)
@@ -370,8 +368,8 @@ check "state.json is mode 0600" test "$(mode_of "$STATE/state.json")" = 600
 check "the journal cursor is mode 0600" test "$(mode_of "$STATE/journal.cursor")" = 600
 check "chown to root:sudo is skipped only under the test hooks" \
     grep -qF 'if [[ $TEST_HOOKS -ne 1 ]]; then' "$COLLECTOR"
-check "details.json is chowned to root:sudo" grep -qF 'fill_temp "$tmp_details" 0640 sudo .details' "$COLLECTOR"
-check "no temp file is left" test -z "$(find "$STATE" -name '.*.json.*' -o -name '.journal.cursor.*')"
+check "details.json is chowned to root:sudo" grep -qF 'stage .details details.json 0640 sudo' "$COLLECTOR"
+check "no staged file is left" test ! -e "$STATE/.pending"
 if validate_problems; then
     pass "records validate against the v1 schema copy (reportable exactly when the envelope is valid)"
 else
@@ -464,15 +462,24 @@ check "a second run with no new input changes no occurrence count" test "$before
 check "the second run reads after the saved cursor, not 90 days" \
     bash -c "grep -qF -- '--after-cursor=e13' '$FIX/journalctl-calls' && ! grep -qF -- '--since=-90d' '$FIX/journalctl-calls'"
 
-# A new crash entry of the same program: only that record grows.
+# A new crash entry of the same program in the same second as the first one
+# (a distinct journal entry, read in a later run): only that record grows.
 crash_id=$(jq -r '.problems[] | select(.kind == "crash" and .reportable) | .id' "$PROBLEMS")
-jq -c '.__CURSOR = "e14" | .__REALTIME_TIMESTAMP = ((.__REALTIME_TIMESTAMP | tonumber) + 60000000 | tostring)' \
-    <(head -n1 "$FIX/events.json") >>"$FIX/events.json"
+first_crash=$(head -n1 "$FIX/events.json")
+jq -c '.__CURSOR = "e14"' <<<"$first_crash" >>"$FIX/events.json"
 collect
-check "a new crash entry adds 1 occurrence to its record" test "$(occurrences "$crash_id")" -eq 2
+check "a distinct crash entry in the same second, in a later run, counts" test "$(occurrences "$crash_id")" -eq 2
 check "other records do not change" \
     test "$(jq -c --arg id "$crash_id" '[.problems[] | select(.id != $id) | [.id, .occurrences]] | sort' "$PROBLEMS")" = \
     "$(jq -c --arg id "$crash_id" '[.[] | select(.[0] != $id)]' <<<"$before")"
+# A new journal entry whose time is older than the record's last_seen.
+jq -c '.__CURSOR = "e15" | .__REALTIME_TIMESTAMP = ((.__REALTIME_TIMESTAMP | tonumber) - 3600000000 | tostring)' \
+    <<<"$first_crash" >>"$FIX/events.json"
+collect
+check "a new entry older than last_seen counts" test "$(occurrences "$crash_id")" -eq 3
+check "an older entry keeps the newer last_seen" \
+    test "$(jq -r --arg id "$crash_id" '.problems[] | select(.id == $id) | .last_seen' "$PROBLEMS")" = \
+    "$(jq -r '.__REALTIME_TIMESTAMP | tonumber / 1000000 | floor | todate' <<<"$first_crash")"
 
 # A new stager result (a new checked_at) is a new S2 occurrence; the same
 # file is not.
@@ -585,44 +592,38 @@ check "every journalctl call reads only the system journal" \
     bash -c "! grep -v -- '--system' '$FIX/journalctl-calls' | grep -q ."
 check "S5 asks journalctl for UID 0 only" grep -qE 'SYSLOG_IDENTIFIER=systemd-cryptsetup _UID=0' "$FIX/journalctl-calls"
 
-# --- 3e. a stop between the renames loses nothing ------------------------
-# Reference: one clean run.
+# --- 3e. a stopped commit loses nothing and counts nothing twice ----------
+# canon -- the parts of problems.json that a second run must not change
+# (generated and the times of now-based observations differ by seconds).
+canon() {
+    jq -cS '[.problems[] | {id, kind, detail, occurrences, reportable}] | sort_by(.id)' "$PROBLEMS"
+}
+# Reference: 2 clean runs (the second one reads nothing new).
 setup_fixture
 collect
-ref=$(jq -c '[.problems[] | {key: .id, value: [.kind, .occurrences]}] | from_entries' "$PROBLEMS")
-# A run that stops after the problems.json, details.json or state.json rename
-# (the later files and the cursor stay old), then a normal run.
-for fault in problems details state; do
+collect
+ref=$(canon)
+# A run that stops before COMMIT, after it, or after any rename of the
+# commit, then a normal run.
+for fault in before-commit commit problems.json details.json state.json journal.cursor; do
     setup_fixture
     if PATH="$STUBS:$PATH" FIX="$FIX" SNOSI_HEALTH_TEST_HOOKS=1 SNOSI_HEALTH_TEST_ROOT="$HROOT" \
         SNOSI_HEALTH_TEST_FAULT=$fault "$COLLECTOR" >/dev/null 2>&1; then
-        fail "the fault hook stops the run after the $fault rename"
+        fail "the fault hook stops the run at $fault"
         continue
     fi
-    # A stop must leave the problems of this run already on disk.
-    stopped_ids=$(jq -c '[.problems[].id] | sort' "$PROBLEMS" 2>/dev/null) || stopped_ids=null
     collect
-    got=$(jq -c '[.problems[] | {key: .id, value: [.kind, .occurrences]}] | from_entries' "$PROBLEMS")
-    check "after a stop at the $fault rename the next run loses no problem" \
-        test "$(jq -n --argjson r "$ref" --argjson g "$got" --argjson s "$stopped_ids" \
-            '($r | keys) == ($g | keys) and ($s == ($r | keys))')" = true
-    check "after a stop at the $fault rename no event record counts twice" \
-        test "$(jq -n --argjson r "$ref" --argjson g "$got" '
-            [$r | to_entries[] | select(.value[0] | IN("update_stage_failed", "sysext_update_failed", "crash", "app_problem"))
-             | .value[1] == $g[.key][1]] | all')" = true
-    check "after a stop at the $fault rename a boot record over-counts by at most 1" \
-        test "$(jq -n --argjson r "$ref" --argjson g "$got" '
-            [$r | to_entries[] | select(.value[0] | IN("unit_failed", "booted_older_image", "tpm_unlock", "integrity_error"))
-             | $g[.key][1] - .value[1] | . >= 0 and . <= 1] | all')" = true
-    check "no temp file is left after a stop at the $fault rename and a new run" \
-        test -z "$(find "$STATE" -name '.*.json.*' -o -name '.journal.cursor.*')"
+    check "after a stop at $fault the next run gives the problems of a run with no stop" \
+        test "$(canon)" = "$ref"
+    check "after a stop at $fault the next run leaves no staged file" test ! -e "$STATE/.pending"
+    check "after a stop at $fault the cursor is the newest entry" test "$(cat "$STATE/journal.cursor")" = e13
 done
 
 # --- 3f. inputs that give no record --------------------------------------
 setup_fixture
 rm -f "$FIX/events.json" "$FIX/kernel.json" "$FIX/cryptsetup.json" "$FIX/units.json" "$FIX/bootc-status.json"
 jq '.format = 2' "$FIX/last-run.json" >"$HROOT/var/lib/updex/last-run.json"
-printf 'outcome=held-rollback\nchecked_at=2026-11-05T09:00:00+00:00\nimage=x\nrunning_version=1\nremote_version=2\n' \
+printf 'outcome=held-rollback\nchecked_at=%s\nimage=x\nrunning_version=1\nremote_version=2\n' "$(date -u -d '-50 minutes' --iso-8601=seconds)" \
     >"$HROOT/run/snosi/update-check"
 collect
 check "an unknown last-run format, held-rollback alone and empty journals give no record" \
@@ -636,13 +637,13 @@ check "S3: held-rollback with a newer rollback deployment is manual_rollback" \
     detail_is '.kind == "booted_older_image"' '{"newer_version":"20261104000000","how":"manual_rollback"}'
 
 # An update-check without error_class (an older stager): recorded, not reportable.
-printf 'outcome=failed\nchecked_at=2026-11-05T09:00:00+00:00\nimage=x\nrunning_version=1\nremote_version=20261104000000\n' \
+printf 'outcome=failed\nchecked_at=%s\nimage=x\nrunning_version=1\nremote_version=20261104000000\n' "$(date -u -d '-40 minutes' --iso-8601=seconds)" \
     >"$HROOT/run/snosi/update-check"
 collect
 check "S2: no error_class key gives a record that is not reportable" \
     test "$(jq -c '[.problems[] | select(.kind == "update_stage_failed") | [.detail, .reportable]]' "$PROBLEMS")" = \
     '[[{"target_version":"20261104000000","bootc_version":"1.17.3"},false]]'
-printf 'outcome=failed\nchecked_at=2026-11-05T10:00:00+00:00\nimage=x\nrunning_version=1\nremote_version=20261104000000\nerror_class=gremlins\n' \
+printf 'outcome=failed\nchecked_at=%s\nimage=x\nrunning_version=1\nremote_version=20261104000000\nerror_class=gremlins\n' "$(date -u -d '-30 minutes' --iso-8601=seconds)" \
     >"$HROOT/run/snosi/update-check"
 collect
 check "S2: an unknown error_class becomes other" \

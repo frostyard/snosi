@@ -73,6 +73,9 @@ readonly DETAILS="$STATE_DIR/details.json"
 readonly STATE="$STATE_DIR/state.json"
 readonly CURSOR="$STATE_DIR/journal.cursor"
 readonly LOCK="$STATE_DIR/.lock"
+readonly PENDING="$STATE_DIR/.pending"
+# Published files, in the order a commit renames them into place.
+readonly PUBLISHED=(problems.json details.json state.json journal.cursor)
 readonly OS_RELEASE="$ROOT/usr/lib/os-release"
 readonly CMDLINE="$ROOT/proc/cmdline"
 readonly BOOT_ID_FILE="$ROOT/proc/sys/kernel/random/boot_id"
@@ -282,17 +285,45 @@ if ! flock -n "$lock_fd"; then
     exit 0
 fi
 
+# fault_point NAME -- a test-only stop (ADR-0009 class 3, under the paired
+# hooks only): exit as a crash would at that point of a commit.
+fault_point() {
+    if [[ $TEST_HOOKS -eq 1 && ${SNOSI_HEALTH_TEST_FAULT-} == "$1" ]]; then
+        echo "snosi-health: test fault at $1" >&2
+        exit 70
+    fi
+}
+
+# publish_pending -- rename each staged file of a committed transaction into
+# place, in PUBLISHED order. A staged file that is gone was already moved by a
+# run that stopped part way, or was not staged (no new journal cursor).
+publish_pending() {
+    local name
+    for name in "${PUBLISHED[@]}"; do
+        if [[ -e $PENDING/$name ]]; then
+            mv -f "$PENDING/$name" "$STATE_DIR/$name"
+        fi
+        fault_point "$name"
+    done
+    rm -rf "$PENDING"
+}
+
+# A run that stopped during a commit left $PENDING. With COMMIT, the whole
+# transaction (problems, details, state and cursor) is published now; without
+# it nothing was published, so the staged files go and this run replays from
+# the old state and cursor.
+if [[ -e $PENDING ]]; then
+    if [[ -f $PENDING/COMMIT ]]; then
+        echo "snosi-health: finishing a committed transaction of a stopped run"
+        publish_pending
+    else
+        rm -rf "$PENDING"
+    fi
+fi
+
 WORK=$(mktemp -d)
 NEW_CURSOR=""
-TEMPS=()
-cleanup() {
-    rm -rf "$WORK"
-    local t
-    for t in "${TEMPS[@]}"; do
-        rm -f "$t"
-    done
-}
-trap cleanup EXIT
+trap 'rm -rf "$WORK"' EXIT
 
 now_epoch=$(date -u +%s)
 now=$(date -u -d "@$now_epoch" +%Y-%m-%dT%H:%M:%SZ)
@@ -321,6 +352,8 @@ if [[ -r $STATE ]] && jq -e 'type == "object"' "$STATE" >/dev/null 2>&1; then
 fi
 prev_uc=$(jq -r '.update_check // ""' <<<"$prev_state")
 prev_lr=$(jq -r '.last_run // ""' <<<"$prev_state")
+prev_updex_keys=$(jq -c '.updex_keys // {} | if type == "object" then . else {} end' <<<"$prev_state")
+updex_keys=$prev_updex_keys
 
 OBS="$WORK/obs.jsonl"
 : >"$OBS"
@@ -429,11 +462,26 @@ collect_sysext() {
     # Absent, unreadable or another format: no record (updex last-run spec).
     jq -e 'type == "object" and .format == 1' "$LAST_RUN" >/dev/null 2>&1 || return 0
     lr_hash=$(sha256sum <"$LAST_RUN" | cut -c1-64)
+    # Fast path: the same file counts nothing.
     [[ $lr_hash != "$prev_lr" ]] || return 0
-    jq -c --arg now "$now" "$JQ_LIB"'
+    # updex carries the previous entry of a feature, with its own at, into a
+    # run that names other features. So each feature keeps the key of its last
+    # counted entry (at, outcome, error_class, version) in state.json, and only
+    # an entry with another key counts.
+    local keys
+    if ! keys=$(jq -c --argjson prev "$prev_updex_keys" '
+        $prev + ([(.features // []) | if type == "array" then .[] else empty end
+                  | select(type == "object" and (.feature | type) == "string")
+                  | {key: .feature, value: ([.at, .outcome, .error_class, .version] | tojson)}]
+                 | from_entries)' "$LAST_RUN" 2>/dev/null); then
+        warn "cannot read $LAST_RUN"
+        return 0
+    fi
+    jq -c --arg now "$now" --argjson prev "$prev_updex_keys" "$JQ_LIB"'
         (.features // []) | if type == "array" then .[] else empty end
         | select(type == "object" and (.origin == "image" or .origin == "catalog"))
         | select(.outcome != "updated" and .outcome != "current")
+        | select((.feature | type) != "string" or $prev[.feature] != ([.at, .outcome, .error_class, .version] | tojson))
         | . as $f
         | {feature: .feature,
            version: (.version | str),
@@ -443,7 +491,8 @@ collect_sysext() {
                          else "other" end)} | drop_nulls as $d
         | {kind: "sysext_update_failed", mode: "event", local: $d, detail: $d,
            at: (if ($f.at | ts_ok) then $f.at else $now end), messages: [], extra: {}}
-    ' "$LAST_RUN" >>"$OBS" 2>/dev/null || warn "cannot read $LAST_RUN"
+    ' "$LAST_RUN" >>"$OBS" 2>/dev/null || { warn "cannot read $LAST_RUN"; return 0; }
+    updex_keys=$keys
 }
 
 # S5 tpm_unlock -------------------------------------------------------------
@@ -525,8 +574,8 @@ collect_integrity() {
 # S7 crash and S8 app_problem: new system-journal entries since the cursor ---
 # journalctl refuses --since together with a cursor option, so the cursor is
 # kept here: --after-cursor=<saved cursor>, or --since=-90d without one. The
-# new cursor is the __CURSOR of the last entry read; it moves into place only
-# after the records are written.
+# new cursor is the __CURSOR of the last entry read; it is committed together
+# with the records, so every entry after the cursor counts exactly once.
 collect_events() {
     local out raw cursor
     command -v journalctl >/dev/null || return 0
@@ -591,11 +640,7 @@ collect_events() {
         warn "cannot parse the event journal; the cursor does not move"
         return 0
     fi
-    if [[ -n $cursor ]]; then
-        NEW_CURSOR=$(mktemp "$STATE_DIR/.journal.cursor.XXXXXX")
-        TEMPS+=("$NEW_CURSOR")
-        printf '%s\n' "$cursor" >"$NEW_CURSOR"
-    fi
+    NEW_CURSOR=$cursor
 }
 
 collect_units || warn "unit collection failed"
@@ -642,6 +687,7 @@ jq -n \
     --arg client "$client" \
     --arg uc "$uc_hash" \
     --arg lr "${lr_hash:-$prev_lr}" \
+    --argjson updex_keys "$updex_keys" \
     "$JQ_LIB"'
     def tsmax($a; $b): if $a == null then $b elif $b == null then $a elif $a > $b then $a else $b end;
     def tsmin($a; $b): if $a == null then $b elif $b == null then $a elif $a < $b then $a else $b end;
@@ -657,21 +703,13 @@ jq -n \
     | (($prev // {}).problems // [] | map(select(type == "object" and (.id | re("^[0-9a-f]{16}$"))))
        | map({key: .id, value: .}) | from_entries) as $recs0
     | (if ($st.boot_id // "") == $boot and $boot != "" then ($st.boot_slots // {}) else {} end) as $slots0
-    # Replay safety: an event observation (a journal entry, an update-check
-    # or updex result) counts only when it is newer than the last_seen of its
-    # record in the previous problems.json. A run that stopped after the
-    # problems.json rename, or an updex record that carries an older feature
-    # entry, then counts nothing twice. Boot observations rely on the boot
-    # slots of state.json, which is renamed after problems.json: a stop
-    # between those 2 renames can over-count a boot record by 1 (ADR-0029).
+    # Each observation here is new: the journal cursor, the update-check hash,
+    # the updex keys and the boot slots of state.json are committed in 1
+    # transaction with problems.json (see the commit below).
     | reduce ($o_all | sort_by(.at))[] as $o ({recs: $recs0, slots: $slots0, det: (($pdet // {}).problems // {})};
         ($o.slot // $o.id) as $slot
         | (if $o.mode == "boot" and .slots[$slot] == $o.id and .recs[$o.id] != null then
              .recs[$o.id].last_seen = tsmax(.recs[$o.id].last_seen; $o.at)
-           elif $o.mode != "boot" and .recs[$o.id] != null and $recs0[$o.id] != null
-                and (($recs0[$o.id].last_seen // "") | type) == "string"
-                and $o.at <= $recs0[$o.id].last_seen then
-             .
            else
              (if $o.mode == "boot" then .slots[$slot] else null end) as $old
              | (if $old != null and .recs[$old] != null then
@@ -709,63 +747,43 @@ jq -n \
                  problems: ($acc.det | with_entries(select(.key as $k | any($keep[]; . == $k))))},
        state: {format: 1, boot_id: $boot,
                boot_slots: ($acc.slots | with_entries(select(.value as $v | any($keep[]; . == $v)))),
-               update_check: $uc, last_run: $lr}}
+               update_check: $uc, last_run: $lr, updex_keys: $updex_keys}}
     ' >"$RESULT"
 
-# new_temp NAME -- an empty temp file for NAME in the state directory, so the
-# rename onto NAME stays on 1 file system. The EXIT trap removes leftovers.
-new_temp() {
-    mktemp "$STATE_DIR/.$1.XXXXXX"
-}
-
-# fill_temp TMP MODE GROUP FILTER -- write a part of the result to TMP, then
-# set its mode and owner.
-fill_temp() {
-    local tmp=$1 mode=$2 group=$3 filter=$4
-    jq "$filter" "$RESULT" >"$tmp"
-    chmod "$mode" "$tmp"
+# stage FILTER NAME MODE GROUP -- write a part of the result to $PENDING/NAME
+# with its final mode and owner.
+stage() {
+    local filter=$1 name=$2 mode=$3 group=$4
+    jq "$filter" "$RESULT" >"$PENDING/$name"
+    chmod "$mode" "$PENDING/$name"
     # Test hooks keep the modes but cannot chown as a normal user.
     if [[ $TEST_HOOKS -ne 1 ]]; then
-        chown "root:$group" "$tmp"
+        chown "root:$group" "$PENDING/$name"
     fi
 }
 
-# fault_point NAME -- a test-only stop (ADR-0009 class 3, under the paired
-# hooks only): exit as a crash would at that point of the renames.
-fault_point() {
-    if [[ $TEST_HOOKS -eq 1 && ${SNOSI_HEALTH_TEST_FAULT-} == "$1" ]]; then
-        echo "snosi-health: test fault after $1" >&2
-        exit 70
-    fi
-}
-
-# Write every temp file first, then rename problems.json, details.json,
-# state.json and the cursor, in that order. problems.json goes first: its
-# last_seen values make a replay of event observations count nothing twice
-# (see the merge above), so a stop at any later point loses no problem.
-tmp_problems=$(new_temp problems.json)
-TEMPS+=("$tmp_problems")
-tmp_details=$(new_temp details.json)
-TEMPS+=("$tmp_details")
-tmp_state=$(new_temp state.json)
-TEMPS+=("$tmp_state")
-fill_temp "$tmp_problems" 0644 root .problems
-fill_temp "$tmp_details" 0640 sudo .details
-fill_temp "$tmp_state" 0600 root .state
-if [[ -n $NEW_CURSOR && -s $NEW_CURSOR ]]; then
-    chmod 0600 "$NEW_CURSOR"
+# The commit is 1 recoverable transaction (ADR-0029): stage every output in
+# $PENDING, write $PENDING/COMMIT by atomic rename, then rename the staged
+# files into place (problems, details, state, cursor) and remove $PENDING. A
+# stop before COMMIT publishes nothing; a stop after it is finished by the
+# next run (see the recovery after the lock). So problems.json, the boot
+# slots, the input keys and the journal cursor always move together: nothing
+# is lost and nothing counts twice.
+rm -rf "$PENDING"
+install -d -m 0700 "$PENDING"
+stage .problems problems.json 0644 root
+stage .details details.json 0640 sudo
+stage .state state.json 0600 root
+if [[ -n $NEW_CURSOR ]]; then
+    printf '%s\n' "$NEW_CURSOR" >"$PENDING/journal.cursor"
+    chmod 0600 "$PENDING/journal.cursor"
 fi
-
-mv -f "$tmp_problems" "$PROBLEMS"
-fault_point problems
-mv -f "$tmp_details" "$DETAILS"
-fault_point details
-mv -f "$tmp_state" "$STATE"
-fault_point state
-# The event cursor moves last, after the records are safe on disk.
-if [[ -n $NEW_CURSOR && -s $NEW_CURSOR ]]; then
-    mv -f "$NEW_CURSOR" "$CURSOR"
-fi
+fault_point before-commit
+commit_tmp=$(mktemp "$PENDING/.COMMIT.XXXXXX")
+printf 'committed=%s\n' "$now" >"$commit_tmp"
+mv -f "$commit_tmp" "$PENDING/COMMIT"
+fault_point commit
+publish_pending
 
 count=$(jq '.problems.problems | length' "$RESULT")
 echo "snosi-health: $count problem record(s) in $PROBLEMS"
