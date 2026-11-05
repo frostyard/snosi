@@ -117,8 +117,8 @@ pair ran `bootc --version`, `bootc container --help` and the hidden
 and 1.17.1 and 1.17.3 gave the same composefs digest for one fixed tree.
 `shared/packages/bootc/finalize/bootc-pair.chroot` repeats the version,
 hidden-command and libostree-floor checks in every OCI build. Secure assembly
-on 1.17.3 is not proven until the first main build assembles all four
-products; the 1.17.1 evidence (run 40370164077, lab `l6596`) is history in
+on 1.17.3 passed on all four products in main run 41939252558 (2026-11-05;
+Brian accepted the post-merge revalidation, T846a); the 1.17.1 evidence (run 40370164077, lab `l6596`) is history in
 `docs/bootc-secure-assembly-compatibility.md`. bootc 1.17.3 stages global UKI
 addons with an update and swaps them in at finalize, so `snosi-kargs` mirrors
 `apply` and `revert` into `<ESP>/loader/addons.staged`.
