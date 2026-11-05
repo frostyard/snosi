@@ -117,7 +117,15 @@ count=0
 [[ ! -f $SNOSI_TEST_SYNC_COUNT ]] || count=$(<"$SNOSI_TEST_SYNC_COUNT")
 count=$((count + 1))
 printf '%s' "$count" >"$SNOSI_TEST_SYNC_COUNT"
-[[ ${SNOSI_TEST_SYNC_FAIL_ON:-0} != "$count" ]]
+[[ ${SNOSI_TEST_SYNC_FAIL_ON:-0} != "$count" ]] || exit 1
+if [[ -n ${SNOSI_TEST_EXCHANGE_ON_SYNC:-} && ${!#} == "$SNOSI_TEST_EXCHANGE_ON_SYNC" &&
+    -d $SNOSI_TEST_EXCHANGE_ON_SYNC.staged ]]; then
+    # bootc finalize: RENAME_EXCHANGE addons.staged <-> addons, then drop the old set.
+    mv -- "$SNOSI_TEST_EXCHANGE_ON_SYNC" "$SNOSI_TEST_EXCHANGE_ON_SYNC.old"
+    mv -- "$SNOSI_TEST_EXCHANGE_ON_SYNC.staged" "$SNOSI_TEST_EXCHANGE_ON_SYNC"
+    rm -rf -- "$SNOSI_TEST_EXCHANGE_ON_SYNC.old"
+fi
+[[ -z ${SNOSI_TEST_SYNC_FAIL_PATH:-} || $* != *"$SNOSI_TEST_SYNC_FAIL_PATH"* ]]
 EOF
 
     chmod +x "$WORK/bin/"*
@@ -128,6 +136,8 @@ run_cli() {
     SNOSI_KARGS_TEST_NON_ROOT=1 \
     SNOSI_KARGS_STATE_DIR="$WORK/state" \
     SNOSI_KARGS_RUN_DIR="$WORK/run" \
+    SNOSI_KARGS_STAGE_LOCK="$WORK/run/update-stage.lock" \
+    SNOSI_KARGS_STAGE_LOCK_TIMEOUT="${SNOSI_KARGS_STAGE_LOCK_TIMEOUT:-5}" \
     SNOSI_ESP_LIBRARY="$ESP_LIBRARY" \
     SNOSI_ESP_TEST_PATH="$WORK/esp" \
     SNOSI_TEST_TOOL_LOG="$WORK/tool.log" \
@@ -173,6 +183,7 @@ PATH="$WORK/bin:$PATH" \
 SNOSI_KARGS_TEST_NON_ROOT=1 \
 SNOSI_KARGS_STATE_DIR="$WORK/state" \
 SNOSI_KARGS_RUN_DIR="$WORK/run" \
+SNOSI_KARGS_STAGE_LOCK="$WORK/run/update-stage.lock" \
 SNOSI_ESP_LIBRARY="$ESP_LIBRARY" \
 SNOSI_ESP_TEST_PATH="$WORK/esp" \
 SNOSI_TEST_TOOL_LOG="$WORK/tool.log" \
@@ -268,6 +279,109 @@ assert_contains "status detects an externally modified addon" \
     "$status_out" "present, differs from last applied artifact"
 assert_contains "modified addon is reported pending" "$status_out" "Pending:     yes"
 
+echo "# staged bootc update (bootc 1.17.3 global addon staging)"
+# bootc 1.17.3 copies loader/addons to loader/addons.staged when it stages an
+# update and swaps the two at finalize. Without the mirror, an apply or revert
+# made after the stage is undone at the next boot.
+setup_fixture
+staged_dir="$WORK/esp/loader/addons.staged"
+staged_addon="$staged_dir/50-snosi-cmdline-local.addon.efi"
+addon_path_active="$WORK/esp/loader/addons/50-snosi-cmdline-local.addon.efi"
+run_cli set --no-apply debug
+run_cli apply >/dev/null
+[[ ! -e $staged_dir ]] &&
+    pass "apply creates no staged directory without a staged update" ||
+    fail "apply creates no staged directory without a staged update"
+status_out=$(run_cli status)
+assert_contains "status reports no staged update" "$status_out" "Staged:      none"
+mkdir -p "$staged_dir"
+printf 'old-addon\n' >"$staged_addon"
+status_out=$(run_cli status)
+assert_contains "status detects a staged copy that differs" "$status_out" \
+    "Staged:      differs; the staged bootc update replaces the active addon"
+assert_contains "a differing staged copy is reported pending" "$status_out" "Pending:     yes"
+run_cli apply >/dev/null
+assert_eq "apply mirrors the addon into a staged bootc update" \
+    "$(cat "$staged_addon")" "signed-addon"
+status_out=$(run_cli status)
+assert_contains "status reports a matching staged copy" "$status_out" \
+    "Staged:      matches the active addon"
+assert_contains "a matching staged copy is not pending" "$status_out" "Pending:     no"
+printf 'old-addon\n' >"$staged_addon"
+if SNOSI_TEST_SYNC_FAIL_PATH=addons.staged run_cli apply >/dev/null 2>"$WORK/err"; then
+    fail "staged mirror sync failure is surfaced"
+else
+    pass "staged mirror sync failure is surfaced"
+fi
+assert_contains "staged mirror failure tells the operator to apply again" \
+    "$(cat "$WORK/err")" "run 'snosi-kargs apply' again with the same options"
+[[ -z $(find "$staged_dir" -name '.50-snosi-cmdline-local.addon.efi.*') ]] &&
+    pass "staged mirror failure leaves no temporary file" ||
+    fail "staged mirror failure leaves no temporary file"
+run_cli revert >/dev/null
+[[ ! -e $staged_addon ]] &&
+    pass "revert removes the addon from a staged bootc update" ||
+    fail "revert removes the addon from a staged bootc update"
+status_out=$(run_cli status)
+assert_contains "status after revert reports a matching staged copy" "$status_out" \
+    "Staged:      matches the active addon"
+
+# A failed staged removal must say to repeat revert: apply would reinstall the
+# persisted arguments that revert keeps.
+run_cli apply >/dev/null
+assert_eq "apply reinstalls the addon in both places" \
+    "$(cat "$staged_addon")" "signed-addon"
+if SNOSI_TEST_SYNC_FAIL_PATH=addons.staged run_cli revert >/dev/null 2>"$WORK/err"; then
+    fail "staged removal failure is surfaced"
+else
+    pass "staged removal failure is surfaced"
+fi
+assert_contains "staged removal failure tells the operator to revert again" \
+    "$(cat "$WORK/err")" "run 'snosi-kargs revert' again"
+if grep -Fq "snosi-kargs apply" "$WORK/err"; then
+    fail "staged removal failure does not suggest apply"
+else
+    pass "staged removal failure does not suggest apply"
+fi
+run_cli revert >/dev/null
+[[ ! -e $staged_addon && ! -e $addon_path_active ]] &&
+    pass "repeated revert removes the addon from both places" ||
+    fail "repeated revert removes the addon from both places"
+
+# The automatic stager holds its lock: apply waits, then fails, and changes nothing.
+exec 7>"$WORK/run/update-stage.lock"
+flock 7
+if SNOSI_KARGS_STAGE_LOCK_TIMEOUT=1 run_cli apply >/dev/null 2>"$WORK/err"; then
+    fail "apply refuses while bootc-update-stage holds its lock"
+else
+    pass "apply refuses while bootc-update-stage holds its lock"
+fi
+assert_contains "the lock refusal names the stager" "$(cat "$WORK/err")" "bootc-update-stage holds"
+[[ ! -e $addon_path_active && ! -e $staged_addon ]] &&
+    pass "a lock refusal changes no addon" ||
+    fail "a lock refusal changes no addon"
+exec 7>&-
+run_cli apply >/dev/null
+assert_eq "apply succeeds after the stager releases its lock" \
+    "$(cat "$addon_path_active")" "signed-addon"
+
+# bootc finalize swaps addons.staged in while apply runs: apply must fail and
+# must not record the swapped-in addon as applied.
+printf 'old-addon\n' >"$staged_addon"
+printf 'older-addon\n' >"$addon_path_active"
+applied_before=$(cat "$WORK/state/applied.sha256" 2>/dev/null || true)
+if SNOSI_TEST_EXCHANGE_ON_SYNC="$WORK/esp/loader/addons" run_cli apply >/dev/null 2>"$WORK/err"; then
+    fail "apply detects a bootc finalize exchange during the change"
+else
+    pass "apply detects a bootc finalize exchange during the change"
+fi
+assert_contains "the exchange failure tells the operator to apply again" \
+    "$(cat "$WORK/err")" "run 'snosi-kargs apply' again with the same options"
+assert_eq "the exchange failure records no new applied state" \
+    "$(cat "$WORK/state/applied.sha256" 2>/dev/null || true)" "$applied_before"
+status_out=$(run_cli status)
+assert_contains "status reports the swapped-in addon as pending" "$status_out" "Pending:     yes"
+
 echo "# Secure Boot decision matrix"
 setup_fixture
 run_cli set --no-apply debug
@@ -331,6 +445,7 @@ PATH="$WORK/bin:$PATH" \
 SNOSI_KARGS_TEST_NON_ROOT=1 \
 SNOSI_KARGS_STATE_DIR="$WORK/state" \
 SNOSI_KARGS_RUN_DIR="$WORK/run" \
+SNOSI_KARGS_STAGE_LOCK="$WORK/run/update-stage.lock" \
 SNOSI_ESP_LIBRARY="$ESP_LIBRARY" \
 SNOSI_ESP_TEST_PATH="$WORK/esp" \
 SNOSI_TEST_TOOL_LOG="$WORK/tool.log" \
