@@ -71,7 +71,7 @@ through the single shared helper `shared/bootc-secure/storage-digest-probe.sh`
 `podman run` shape). The helper binds a host-filesystem scratch directory over
 the container's `/var/tmp`: bootc hardcodes its temporary composefs repository
 at `/var/tmp` inside the container (`TMPDIR` is ignored), observed on 1.16.8
-and not re-checked on 1.17.1, so the bind stays; the 1.17.1 probes passed with
+and not re-checked since, so the bind stays; the 1.17.1 and 1.17.3 probes passed with
 it. composefs object writes use `O_TMPFILE`, which fuse-overlayfs does not
 support
 — GitHub runner image ubuntu24/20260810.271 (podman 5.8.4) forces
@@ -154,17 +154,32 @@ Evidence for this pair (2026-11-04):
 - PR mechanics builds of all four products with this pair, with
   `bootc-pair.chroot` in each build.
 
-**Exception to Mandatory revalidation (below), pending Brian's decision on
-#1223:** the evidence above is not the full Task 1-3 rootfs proof or the Task 5
-artifact and negative tests against a newly built secure rootfs, which that
-section requires before the pair changes. secure-build runs only on `main`
-(the `native-build` environment allows only `main`), so no pre-merge build can
-assemble a 1.17.3 secure UKI. If Brian accepts the exception, the first main
-build after this change is the secure revalidation of all four products: both
-storage-digest probes must agree and the artifact validation must pass, or
-that leg fails before it pushes, signs or promotes. This pin change does not
-comply with Mandatory revalidation until that build passes. An N (1.17.1) to
-N+1 (1.17.3) lab lifecycle run is not done yet.
+**Secure revalidation (exception accepted by Brian, T846a, 2026-11-04):** no
+pre-merge build could run the full Task 1-3 rootfs proof and the Task 5
+artifact and negative tests that Mandatory revalidation (below) requires,
+because secure-build runs only on `main` (the `native-build` environment
+allows only `main`). Brian accepted the first main build as that
+revalidation. It passed:
+[run 41939252558](https://github.com/frostyard/snosi/actions/runs/41939252558)
+at `144bdacb81bbe670833c0a373e207a25d3e5d064` (2026-11-05). In each of the
+four secure-build legs, `bootc-pair.chroot` reported `bootc 1.17.3,
+libostree-1-1 2026.6-frostyard202611042030~deb13, storage-digest command
+present`, the second storage-digest probe matched the first (the build
+prints `Image packaged` only after that comparison), the locally assembled and
+the published secure artifact validations passed, and the initramfs gpt-auto
+structural validation passed. Published, signed and attested, with
+`io.snosi.bootc.secureboot-assembly=bootc-1.17.3-storage-digest-v1`, and
+promoted to `latest`:
+
+| Product | Version | Digest |
+| --- | --- | --- |
+| floe | `20261105001249` | `sha256:35cb54004c2b4eac084c127986aa0def77e71b9c6c775c9369da43648d3783cf` |
+| snow | `20261105001236` | `sha256:82f06d9f3defffa0c74b072f11139c8596037431d6270aea883b83c23698a3ba` |
+| snowfield | `20261105001345` | `sha256:92fb0e4dfa6ac1ee04974b23fbd1bc78c2ae98ee7266fad3e20e4775246cf467` |
+| sundog | `20261105001226` | `sha256:a32c0c2751ccabdae09e521cee344edc47bd06177f79ba7ee58e3da40f7bc4e8` |
+
+Not done yet: an N (1.17.1) to N+1 (1.17.3) lab lifecycle run, and a booted
+static-delta Flatpak update (ostree#3681).
 
 Previous pins (history):
 
