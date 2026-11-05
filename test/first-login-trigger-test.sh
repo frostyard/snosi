@@ -42,32 +42,73 @@ trap 'rm -rf "$tmp"' EXIT
 
 # --- 1. snow-first-setup is gone from every build input ----------------------
 # Comments, prose, tests and this guard's checker may name it; nothing that
-# installs or builds may.
-hits=$(cd "$root" && git ls-files -z \
-    | grep -zv -e '^docs/' -e '^\.memory/' -e '^test/' -e '\.md$' \
-        -e '^shared/composition/first-login-check\.py$' \
-    | xargs -0 grep -nIE '\bsnow-first-setup\b' 2>/dev/null \
-    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)
-if [[ -z $hits ]]; then
-    pass "no build input names snow-first-setup"
+# installs or builds may. Tracked symlinks (agent-context aliases of
+# AGENTS.md, such as .cursorrules) are skipped: their targets are scanned
+# where they are tracked as files.
+scan_first_setup() { # repo root -> "scanned N" then one hit per line
+    local repo=$1 rel found count=0
+    while IFS= read -r -d '' rel; do
+        [[ -f $repo/$rel && ! -L $repo/$rel ]] || continue
+        count=$((count + 1))
+        found=$(grep -nIE '\bsnow-first-setup\b' "$repo/$rel" \
+            | grep -vE '^[0-9]+:[[:space:]]*#' || true)
+        [[ -z $found ]] || printf '%s\n' "$found" | sed "s|^|$rel:|"
+    done < <(git -C "$repo" ls-files -z \
+        | grep -zv -e '^docs/' -e '^\.memory/' -e '^test/' -e '\.md$' \
+            -e '^shared/composition/first-login-check\.py$')
+    printf 'scanned %d\n' "$count"
+}
+out=$(scan_first_setup "$root")
+scanned=${out##*scanned }
+hits=$(grep -v '^scanned ' <<<"$out" || true)
+if [[ $scanned -lt 100 ]]; then
+    fail "scanned only $scanned tracked files for snow-first-setup"
+elif [[ -z $hits ]]; then
+    pass "no build input names snow-first-setup ($scanned files)"
 else
     fail "build inputs still name snow-first-setup:"
     printf '#   %s\n' "$hits" >&2
+fi
+# Self-check on a fixture repository: a package line and a build-script line
+# are hits; comments, docs, tests and a symlink to a hit file are not.
+fx="$tmp/scan-fixture"
+mkdir -p "$fx/shared/packages/snow" "$fx/docs" "$fx/test" "$fx/scripts"
+printf '[Content]\n# snow-first-setup retired\nPackages=frostyard-chairlift\n         snow-first-setup\n' \
+    >"$fx/shared/packages/snow/mkosi.conf"
+printf 'apt-get install -y snow-first-setup\n' >"$fx/scripts/build.chroot"
+printf 'snow-first-setup\n' >"$fx/docs/note.txt"
+printf 'snow-first-setup\n' >"$fx/test/case.sh"
+printf 'snow-first-setup\n' >"$fx/NOTES.md"
+ln -s scripts/build.chroot "$fx/.cursorrules"
+git -C "$fx" init -q && git -C "$fx" add -A
+fx_out=$(scan_first_setup "$fx")
+fx_want=$'shared/packages/snow/mkosi.conf:4:         snow-first-setup\nscripts/build.chroot:1:apt-get install -y snow-first-setup\nscanned 2'
+if [[ $(sort <<<"$fx_out") == "$(sort <<<"$fx_want")" ]]; then
+    pass "snow-first-setup scan self-check: 2 hits, comments/docs/tests/symlinks skipped"
+else
+    fail "snow-first-setup scan self-check (got: $fx_out)"
 fi
 
 # --- 2. composed trees pass the image rules ----------------------------------
 # Each product gets the base tree and its composition's ExtraTrees, in order,
 # plus a stand-in /usr/bin/chairlift-first-run (the deb supplies the real one
 # at build time; the finalize checks it there).
+# errexit is off inside `if ! dest=$(compose ...)`, so every step returns
+# its own failure.
 compose() { # product composition -> root path on stdout
-    local product=$1 composition=$2 dest="$tmp/compose-$1" tree
-    mkdir -p "$dest"
-    cp -a "$root/mkosi.images/base/mkosi.extra/." "$dest/"
-    while IFS= read -r tree; do
+    local product=$1 composition=$2 dest="$tmp/compose-$1" conf tree
+    local -a trees=()
+    conf="$root/shared/composition/$composition/mkosi.conf"
+    [[ -r $conf ]] || { echo "cannot read $conf" >&2; return 1; }
+    mapfile -t trees < <(sed -n 's/^ExtraTrees=//p' "$conf") || return 1
+    (( ${#trees[@]} > 0 )) || { echo "$conf lists no ExtraTrees" >&2; return 1; }
+    mkdir -p "$dest" || return 1
+    cp -a "$root/mkosi.images/base/mkosi.extra/." "$dest/" || return 1
+    for tree in "${trees[@]}"; do
         tree=${tree//%D/$root}
         [[ -d $tree ]] || { echo "missing ExtraTrees $tree" >&2; return 1; }
-        cp -a "$tree/." "$dest/"
-    done < <(sed -n 's/^ExtraTrees=//p' "$root/shared/composition/$composition/mkosi.conf")
+        cp -a "$tree/." "$dest/" || return 1
+    done
     printf '%s\n' "$dest"
 }
 for pair in snow:snow snowfield:snow sundog:sundog floe:floe; do
@@ -158,11 +199,24 @@ apps_case "an id in two categories" \
 apps_case "a duplicate category key" \
     '{"office": [{"name": "X", "id": "org.example.App"}], "office": [{"name": "Y", "id": "org.example.Two"}]}' \
     "duplicate key"
-printf '%s' '{"misc": [{"name": "X", "id": "io.gitlab.librewolf-community", "active": false}]}' >"$tmp/apps.json"
-if python3 "$checker" apps "$tmp/apps.json" >/dev/null 2>&1; then
-    pass "apps.json self-check: a dash in the last element and active=false pass"
+python3 - "$tmp/apps.json" <<'PY'
+import json, sys
+app = {"name": "X", "id": "org.example.App"}
+big = {"misc": [dict(app, id=f"org.example.App{i}", name="X" * 200) for i in range(5000)]}
+open(sys.argv[1], "w").write(json.dumps(big))
+PY
+if out=$(python3 "$checker" apps "$tmp/apps.json" 2>&1); then
+    fail "apps.json self-check: a list over 1 MiB was accepted"
+elif [[ $out == *"larger than 1048576 bytes"* ]]; then
+    pass "apps.json self-check: a list over 1 MiB is rejected (chairlift hides it)"
 else
-    fail "apps.json self-check: a dash in the last element and active=false pass"
+    fail "apps.json self-check: a list over 1 MiB is rejected for its size (got: $out)"
+fi
+printf '%s' '{"misc": [{"name": "X", "id": "io.gitlab.librewolf-community", "active": false}, {"name": "Y", "id": "org.example.Two", "active": null}]}' >"$tmp/apps.json"
+if python3 "$checker" apps "$tmp/apps.json" >/dev/null 2>&1; then
+    pass "apps.json self-check: a dash in the last element, active=false and active=null pass"
+else
+    fail "apps.json self-check: a dash in the last element, active=false and active=null pass"
 fi
 
 # --- 5. the finalize on fixture image trees ----------------------------------
@@ -218,6 +272,16 @@ dir=$(make_image noexec yes)
 chmod 0644 "$dir/usr/bin/chairlift-first-run"
 expect "a non-executable chairlift-first-run" reject snowfield "$dir" "not an executable regular file"
 
+for mode in 0700 0750 0754; do
+    dir=$(make_image "mode-$mode" yes)
+    chmod "$mode" "$dir/usr/bin/chairlift-first-run"
+    expect "chairlift-first-run with mode $mode (not executable by every user)" \
+        reject snow "$dir" "not an executable regular file for every user"
+done
+dir=$(make_image mode-0711 yes)
+chmod 0711 "$dir/usr/bin/chairlift-first-run"
+expect "chairlift-first-run with mode 0711" pass snow "$dir"
+
 dir=$(make_image dir-binary yes)
 rm "$dir/usr/bin/chairlift-first-run"
 mkdir -m 0755 "$dir/usr/bin/chairlift-first-run"
@@ -243,23 +307,54 @@ dir=$(make_image zero no)
 expect "Snow with zero first-login entries" reject snow "$dir" "found 0: none"
 
 dir=$(make_image two yes)
-printf '[Desktop Entry]\nName=SNOW First Setup\nExec=snow-first-setup --autostart\nNoDisplay=true\n' \
+printf '[Desktop Entry]\nType=Application\nName=SNOW First Setup\nExec=snow-first-setup --autostart\nNoDisplay=true\n' \
     >"$dir/etc/xdg/autostart/org.frostyard.FirstSetup.autostart.desktop"
 expect "Snow with chairlift and first-setup entries" reject snow "$dir" "found 2"
 
 dir=$(make_image two-by-exec yes)
-printf '[Desktop Entry]\nName=Setup\nExec=/usr/bin/chairlift-first-run\n' \
+printf '[Desktop Entry]\nType=Application\nName=Setup\nExec=/usr/bin/chairlift-first-run\n' \
     >"$dir/etc/xdg/autostart/zz-renamed.desktop"
 expect "a second entry under another name, found by Exec" reject snowfield "$dir" "found 2"
 
 dir=$(make_image skel yes)
 mkdir -p "$dir/etc/skel/.config/autostart"
-printf '[Desktop Entry]\nName=Setup\nExec=chairlift --first-run\n' \
+printf '[Desktop Entry]\nType=Application\nName=Setup\nExec=chairlift --first-run\n' \
     >"$dir/etc/skel/.config/autostart/setup.desktop"
 expect "a second entry in /etc/skel autostart" reject snow "$dir" "found 2"
 
+dir=$(make_image quoted-second yes)
+printf '[Desktop Entry]\nType=Application\nName=Setup\nExec="/usr/bin/chairlift-first-run"\n' \
+    >"$dir/etc/xdg/autostart/setup.desktop"
+expect "a second entry with a quoted Exec program" reject snow "$dir" "found 2"
+
+dir=$(make_image quoted-sundog no)
+printf '[Desktop Entry]\nType=Application\nName=Setup\nExec="chairlift" "--first-run"\n' \
+    >"$dir/etc/xdg/autostart/setup.desktop"
+expect "a quoted chairlift --first-run entry on Sundog" reject sundog "$dir" "must ship no first-login entry"
+
+dir=$(make_image bad-quote yes)
+printf '[Desktop Entry]\nType=Application\nName=Other\nExec="/usr/bin/other\n' \
+    >"$dir/etc/xdg/autostart/org.example.Other.desktop"
+expect "an entry with unbalanced Exec quoting" reject snow "$dir" "cannot parse Exec"
+
+for condition in 'OnlyShowIn=KDE;' 'NotShowIn=GNOME;' 'X-GNOME-Autostart-enabled=false' 'Type=Link'; do
+    dir=$(make_image "gnome-off" yes)
+    if [[ $condition == Type=* ]]; then
+        sed -i "s/^Type=.*/$condition/" "$dir/$entry_rel"
+    else
+        printf '%s\n' "$condition" >>"$dir/$entry_rel"
+    fi
+    expect "the chairlift entry with $condition (GNOME starts none)" reject snow "$dir" "found 0"
+done
+dir=$(make_image no-type yes)
+sed -i '/^Type=/d' "$dir/$entry_rel"
+expect "the chairlift entry with no Type (GNOME starts none)" reject snow "$dir" "found 0"
+dir=$(make_image only-gnome yes)
+printf 'OnlyShowIn=GNOME;Unity;\n' >>"$dir/$entry_rel"
+expect "the chairlift entry with OnlyShowIn=GNOME;Unity;" pass snow "$dir"
+
 dir=$(make_image first-setup-only no)
-printf '[Desktop Entry]\nName=SNOW First Setup\nExec=snow-first-setup --autostart\n' \
+printf '[Desktop Entry]\nType=Application\nName=SNOW First Setup\nExec=snow-first-setup --autostart\n' \
     >"$dir/etc/xdg/autostart/org.frostyard.FirstSetup.autostart.desktop"
 expect "Snow with only the first-setup entry" reject snow "$dir" "not /$entry_rel"
 

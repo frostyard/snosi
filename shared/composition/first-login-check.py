@@ -17,15 +17,18 @@ Usage:
       (/usr/share/snow/first-run/apps.json).
 
 A first-login entry is an autostart .desktop file whose name starts with a
-known first-login application ID, or whose [Desktop Entry] Exec program is a
-known first-login program. It is a trigger unless Hidden=true or
-X-GNOME-Autostart-enabled=false disables it. The check fails closed: an
-unreadable or malformed entry fails it.
+known first-login application ID, or whose [Desktop Entry] Exec program
+(after desktop-entry quoting) is a known first-login program. It is a
+trigger only when GNOME would start it: Type=Application, not Hidden=true,
+not X-GNOME-Autostart-enabled=false, GNOME in OnlyShowIn when that is set,
+and GNOME not in NotShowIn. The check fails closed: an unreadable or
+malformed entry, or unbalanced Exec quoting, fails it.
 """
 
 import json
 import os
 import re
+import shlex
 import stat
 import sys
 
@@ -37,6 +40,8 @@ ENTRY_DIRS = (
 CHAIRLIFT_ENTRY = "etc/xdg/autostart/org.frostyard.ChairLift.FirstRun.desktop"
 CHAIRLIFT_EXEC = "/usr/bin/chairlift-first-run"
 APPS_JSON = "usr/share/snow/first-run/apps.json"
+# chairlift's firstrun.MaxAppsFileSize: a larger list hides the Apps step.
+MAX_APPS_FILE_SIZE = 1 << 20
 FIRST_LOGIN_NAMES = ("org.frostyard.ChairLift.FirstRun", "org.frostyard.FirstSetup")
 FIRST_LOGIN_PROGRAMS = ("chairlift-first-run", "snow-first-setup")
 # IMAGE_ID -> number of first-login triggers the image must ship.
@@ -68,10 +73,17 @@ def check_apps(data):
     """Raise CheckError unless data is chairlift's first-run list shape.
 
     The shape is first-setup's: {"<category>": [{"name": str, "id": str,
-    "active": bool (optional, default true)}]}. chairlift's ParseApps rejects
-    the same faults and then hides the Apps step, so a fault here is a build
-    failure, not a silent loss of the step.
+    "active": bool or null (optional, default true)}]}. Every fault that
+    chairlift's LoadApps/ParseApps rejects (and then hides the Apps step) is a
+    build failure here, not a silent loss of the step: the 1 MiB size limit,
+    invalid JSON, a non-object top level, no categories, an empty category,
+    an entry with no name, unknown fields, an invalid Flatpak ID and an ID in
+    two places. Two snosi authoring rules are stricter than chairlift, on
+    purpose: a duplicate JSON key (chairlift keeps the last one silently) and
+    an empty category key are build failures.
     """
+    if len(data.encode("utf-8") if isinstance(data, str) else data) > MAX_APPS_FILE_SIZE:
+        raise CheckError(f"larger than {MAX_APPS_FILE_SIZE} bytes (chairlift rejects it)")
     def unique_keys(pairs):
         keys = [key for key, _ in pairs]
         if len(keys) != len(set(keys)):
@@ -104,7 +116,7 @@ def check_apps(data):
             app_id = entry.get("id")
             if not valid_flatpak_id(app_id):
                 raise CheckError(f"{where} ({name}) has an invalid Flatpak application ID {app_id!r}")
-            if "active" in entry and not isinstance(entry["active"], bool):
+            if entry.get("active") is not None and not isinstance(entry["active"], bool):
                 raise CheckError(f"{where} ({name}) has a non-boolean active")
             if app_id in seen:
                 raise CheckError(f"application ID {app_id!r} appears in {seen[app_id]!r} and {category!r}")
@@ -139,9 +151,36 @@ def parse_desktop(text, where):
     return groups["Desktop Entry"]
 
 
-def exec_program(exec_line):
-    words = exec_line.split()
-    return os.path.basename(words[0]) if words else ""
+def exec_words(exec_line, where):
+    """Split an Exec value with the desktop-entry quoting rules.
+
+    The Desktop Entry spec quotes arguments with double quotes and backslash
+    escapes, which POSIX shell splitting reads the same way for these
+    values. Unbalanced quoting fails closed.
+    """
+    try:
+        return shlex.split(exec_line, posix=True)
+    except ValueError as err:
+        raise CheckError(f"{where}: cannot parse Exec={exec_line!r}: {err}") from err
+
+
+def starts_on_gnome(entry):
+    """Whether GNOME's autostart would start this [Desktop Entry]."""
+    def listed(key):
+        return [v for v in entry.get(key, "").split(";") if v]
+
+    if entry.get("Type") != "Application":
+        return False
+    if entry.get("Hidden", "false").lower() == "true":
+        return False
+    if entry.get("X-GNOME-Autostart-enabled", "true").lower() == "false":
+        return False
+    only = listed("OnlyShowIn")
+    if only and "GNOME" not in only:
+        return False
+    if "GNOME" in listed("NotShowIn"):
+        return False
+    return True
 
 
 def resolve(root, rel):
@@ -178,18 +217,15 @@ def first_login_entries(root):
             except (OSError, UnicodeDecodeError) as err:
                 raise CheckError(f"cannot read /{rel}: {err}") from err
             entry = parse_desktop(text, f"/{rel}")
-            program = exec_program(entry.get("Exec", ""))
+            words = exec_words(entry.get("Exec", ""), f"/{rel}")
+            program = os.path.basename(words[0]) if words else ""
             by_name = name.startswith(FIRST_LOGIN_NAMES)
             by_program = program in FIRST_LOGIN_PROGRAMS or (
-                program == "chairlift" and "--first-run" in entry.get("Exec", "").split()
+                program == "chairlift" and "--first-run" in words[1:]
             )
             if not (by_name or by_program):
                 continue
-            enabled = (
-                entry.get("Hidden", "false").lower() != "true"
-                and entry.get("X-GNOME-Autostart-enabled", "true").lower() != "false"
-            )
-            yield rel, entry, enabled
+            yield rel, entry, starts_on_gnome(entry)
 
 
 def check_image(image_id, root):
@@ -229,8 +265,10 @@ def check_image(image_id, root):
         mode = os.stat(program).st_mode
     except OSError as err:
         raise CheckError(f"{CHAIRLIFT_EXEC} is missing ({err.strerror}); frostyard-chairlift is too old for the first-run trigger") from err
-    if not stat.S_ISREG(mode) or not mode & 0o111:
-        raise CheckError(f"{CHAIRLIFT_EXEC} is not an executable regular file")
+    # Every desktop user runs it, so it must be executable by "other", not
+    # only by its owner (root) or group.
+    if not stat.S_ISREG(mode) or not mode & stat.S_IXOTH:
+        raise CheckError(f"{CHAIRLIFT_EXEC} is not an executable regular file for every user (mode {stat.S_IMODE(mode):04o})")
 
     apps = resolve(root, APPS_JSON)
     try:

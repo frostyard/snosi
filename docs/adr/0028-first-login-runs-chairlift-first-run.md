@@ -48,15 +48,19 @@ translated in chairlift (T843a).
    enabled first-login entry; Sundog and Floe ship none.
    `shared/composition/first-login.finalize` (rules in
    `shared/composition/first-login-check.py`) fails the build of any OCI
-   product that breaks this, or when `/usr/bin/chairlift-first-run` is not an
-   executable file (a stale chairlift from APT), or when the entry's `Exec`
-   is anything else.
+   product that breaks this, or when `/usr/bin/chairlift-first-run` is not a
+   file every user can execute (a stale chairlift from APT), or when the
+   entry's `Exec` is anything else. An entry counts as a trigger only when
+   GNOME starts it (`Type=Application`, not hidden or disabled, not excluded
+   by `OnlyShowIn`/`NotShowIn`); `Exec` programs are compared after
+   desktop-entry quoting.
 3. **The image owns the app list.** `/usr/share/snow/first-run/apps.json`
    (first-setup's list and shape, category → `[{name, id, active?}]`) ships in
    the Snow tree. snosi ships no chairlift configuration: chairlift's default
    config names that path. The finalize and
-   `test/first-login-trigger-test.sh` check the shape as chairlift's loader
-   does.
+   `test/first-login-trigger-test.sh` fail on every fault chairlift's loader
+   rejects (it would hide the Apps step), plus a duplicate JSON key or an
+   empty category key.
 4. **The image owns the Homebrew shell environment.** Base ships
    `/etc/profile.d/snosi-brew.sh`: for a non-root user, when
    `/home/linuxbrew/.linuxbrew/bin/brew` is executable, it evaluates
