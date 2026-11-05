@@ -1,0 +1,20 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Build guard for the first-login trigger (ADR-0028). Snow and Snowfield ship
+# exactly one enabled first-login autostart entry,
+# /etc/xdg/autostart/org.frostyard.ChairLift.FirstRun.desktop, whose Exec is
+# exactly /usr/bin/chairlift-first-run, that program as an executable file
+# (a frostyard-chairlift without it gives the entry no target), and a valid
+# /usr/share/snow/first-run/apps.json. Sundog and Floe ship no first-login
+# entry. Any other IMAGE_ID fails the build. The rules live in
+# first-login-check.py, which test/first-login-trigger-test.sh also runs.
+#
+# NON-chroot FinalizeScript: it runs on the host against $BUILDROOT.
+set -euo pipefail
+
+: "${BUILDROOT:?first-login.finalize: \$BUILDROOT not set (must run as a FinalizeScript)}"
+: "${SRCDIR:?first-login.finalize: \$SRCDIR not set (must run as a FinalizeScript)}"
+: "${IMAGE_ID:?first-login.finalize: \$IMAGE_ID not set (must run as a FinalizeScript)}"
+
+exec python3 "$SRCDIR/shared/composition/first-login-check.py" image "$IMAGE_ID" "$BUILDROOT"

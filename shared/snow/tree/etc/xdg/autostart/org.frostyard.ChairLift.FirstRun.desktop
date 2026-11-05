@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=ChairLift First Run
+Comment=Set up your new desktop
+Exec=/usr/bin/chairlift-first-run
+Icon=org.frostyard.ChairLift
+Terminal=false
+NoDisplay=true
