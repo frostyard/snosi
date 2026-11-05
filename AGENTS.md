@@ -44,6 +44,14 @@ erases disks; `test/firn-gui-scope-test.sh` rejects it in every other
 package list and build script. No image may enable GDM automatic or timed
 login, because no image creates the user it would name;
 `test/gdm-autologin-scope-test.sh` enforces this.
+Snow and Snowfield ship exactly one first-login trigger,
+`shared/snow/tree/etc/xdg/autostart/org.frostyard.ChairLift.FirstRun.desktop`
+(`Exec=/usr/bin/chairlift-first-run`), and the app list
+`usr/share/snow/first-run/apps.json`; Sundog and Floe ship none, and no
+build input may name `snow-first-setup` (ADR-0028).
+`shared/composition/first-login.finalize` and
+`test/first-login-trigger-test.sh` enforce this; base's
+`/etc/profile.d/snosi-brew.sh` must stay guarded and skip root.
 No image may give the gnome-remote-desktop daemons TPM access (no `tss` group):
 48.1 seals credentials in saved TPM contexts that a reboot invalidates;
 `test/grd-no-tpm-access-test.sh` enforces this.

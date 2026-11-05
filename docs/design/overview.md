@@ -116,6 +116,23 @@ provides installation kernel arguments. For persistent custom arguments,
 [`snosi-kargs`](../snosi-kargs.md) signs a global ESP addon measured into PCR
 12, outside signed-PCR-11 LUKS unlock policy.
 
+## First login
+
+Snow and Snowfield start chairlift's first run at the first graphical login
+([ADR-0028](../adr/0028-first-login-runs-chairlift-first-run.md)). The image
+owns the trigger and the app list; chairlift owns the flow and the done
+markers. `shared/snow/tree/etc/xdg/autostart/org.frostyard.ChairLift.FirstRun.desktop`
+runs `/usr/bin/chairlift-first-run` (from `frostyard-chairlift`), which exits
+at once when the user finished the first run or SNOW First Setup before it.
+The app picker reads `shared/snow/tree/usr/share/snow/first-run/apps.json`.
+Sundog and Floe have no first-login app. `shared/composition/first-login.finalize`
+fails a build with zero or two first-login entries on Snow or Snowfield, any
+on Sundog or Floe, a different `Exec`, or no executable
+`/usr/bin/chairlift-first-run`; `test/first-login-trigger-test.sh` checks the
+trees, the list shape and the finalize in `validate.yml`. Base ships
+`/etc/profile.d/snosi-brew.sh`, which gives non-root login shells the Homebrew
+environment when brew is installed.
+
 ## Rootless Podman API
 
 Base presets disable eager `podman.service` startup; the socket retains

@@ -252,7 +252,11 @@ expect "Packages=frostyard-firn-gui in the snowfield profile" reject "$dir" \
 # A continuation line (tab-indented) in a shared product package fragment.
 dir=$(fixture continuation)
 mutate "$dir/shared/packages/snow/mkosi.conf" 's/^Packages=frostyard-chairlift$/&\n\tfrostyard-firn-gui/'
-expect "a continuation line in shared/packages/snow" reject "$dir" "shared/packages/snow/mkosi.conf:7:"
+# The added line follows Packages=frostyard-chairlift, wherever that is.
+continuation_line=$(($(grep -n '^Packages=frostyard-chairlift$' \
+    "$root/shared/packages/snow/mkosi.conf" | cut -d: -f1) + 1))
+expect "a continuation line in shared/packages/snow" reject "$dir" \
+    "shared/packages/snow/mkosi.conf:$continuation_line:"
 
 # mkosi keeps a value going across blank and comment-only lines.
 dir=$(fixture blank-continuation)

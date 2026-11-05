@@ -152,6 +152,16 @@ jobs:
         # network, or image build.
         run: ./test/gdm-autologin-scope-test.sh
 
+      - name: Validate the first-login trigger
+        # Static guard (ADR-0028): Snow and Snowfield ship exactly one
+        # first-login autostart entry, Exec=/usr/bin/chairlift-first-run,
+        # and a chairlift-shaped first-run apps.json; Sundog and Floe ship
+        # none; no build input names snow-first-setup. It also runs the
+        # first-login.finalize build guard on fixture trees and checks the
+        # guards of base's etc/profile.d/snosi-brew.sh. No root, network, or
+        # image build.
+        run: ./test/first-login-trigger-test.sh
+
       - name: Validate remote desktop has no TPM access
         # Static guard: gnome-remote-desktop 48.1 seals RDP credentials in TPM
         # contexts that a reboot's TPM Reset invalidates (snosi#1131, PR #1191),

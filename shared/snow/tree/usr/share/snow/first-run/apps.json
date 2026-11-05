@@ -1,0 +1,86 @@
+{
+    "office": [
+        {
+            "name": "LibreOffice",
+            "id": "org.libreoffice.LibreOffice"
+        },
+        {
+            "name": "OnlyOffice",
+            "id": "org.onlyoffice.desktopeditors",
+            "active": false
+        }
+    ],
+    "utilities": [
+        {
+            "name": "Boxes",
+            "id": "org.gnome.Boxes"
+        },
+        {
+            "name": "D\u00e9j\u00e0 Dup Backups",
+            "id": "org.gnome.DejaDup"
+        },
+        {
+            "name": "Flatseal",
+            "id": "com.github.tchx84.Flatseal"
+        },
+        {
+            "name": "Refine",
+            "id": "page.tesk.Refine"
+        },
+        {
+            "name": "Metadata Cleaner",
+            "id": "fr.romainvigier.MetadataCleaner"
+        },
+        {
+            "name": "Rnote",
+            "id": "com.github.flxzt.rnote"
+        },
+        {
+            "name": "Shortwave",
+            "id": "de.haeckerfelix.Shortwave"
+        },
+        {
+            "name": "Sound Recorder",
+            "id": "org.gnome.SoundRecorder"
+        },
+        {
+            "name": "Warehouse",
+            "id": "io.github.flattool.Warehouse"
+        },
+        {
+            "name": "Thunderbird",
+            "id": "org.mozilla.Thunderbird"
+        }
+    ],
+    "browsers": [
+        {
+            "name": "Firefox",
+            "id": "org.mozilla.firefox"
+        },
+        {
+            "name": "Google Chrome",
+            "id": "com.google.Chrome",
+            "active": false
+        },
+        {
+            "name": "Chromium",
+            "id": "org.chromium.Chromium",
+            "active": false
+        },
+        {
+            "name": "Brave Browser",
+            "id": "com.brave.Browser",
+            "active": false
+        },
+        {
+            "name": "Floorp",
+            "id": "one.ablaze.floorp",
+            "active": false
+        },
+        {
+            "name": "LibreWolf",
+            "id": "io.gitlab.librewolf-community",
+            "active": false
+        }
+    ]
+}

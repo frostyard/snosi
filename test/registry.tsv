@@ -62,6 +62,7 @@ firn-catalog-test.sh	ci	validate.yml
 firn-gui-scope-test.sh	ci	validate.yml
 firn-installer-iso-test.sh	ci	validate.yml
 firn-installer-ui-boot-test.sh	ci	build-installer-iso.yml
+first-login-trigger-test.sh	ci	validate.yml
 frostyard-apt-image-component-test.sh	ci	build-images.yml,validate.yml
 gdm-autologin-scope-test.sh	ci	validate.yml
 grd-no-tpm-access-test.sh	ci	validate.yml
