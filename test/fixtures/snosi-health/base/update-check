@@ -1,0 +1,6 @@
+outcome=failed
+checked_at=2026-11-05T09:00:00+00:00
+image=ghcr.io/frostyard/snow:latest
+running_version=20261101000000
+remote_version=20261104000000
+error_class=registry

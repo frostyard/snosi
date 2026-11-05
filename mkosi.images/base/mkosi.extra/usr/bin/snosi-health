@@ -1,0 +1,789 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# snosi-health -- record system problems in fixed-schema local files.
+#
+# Collect mode (root, run hourly by snosi-health.timer) reads failed units,
+# the bootc stager's /run/snosi/update-check, `bootc status`, updex's
+# /var/lib/updex/last-run.json, this boot's systemd-cryptsetup and kernel
+# journal lines, and new system-journal coredump and app-problem entries. It
+# writes two files by atomic rename (ADR-0029):
+#
+#   /var/lib/snosi-health/problems.json  0644  only report fields of core's
+#       schema frostyard.problem/1 (frostyard/core docs/specs/problem-report.md)
+#       and times: never a journal MESSAGE, a command line, a path, a username,
+#       a unit instance, a hostname, a machine ID or a boot ID.
+#   /var/lib/snosi-health/details.json   0640 root:sudo  local details for
+#       display: full unit names, up to 5 journal texts per problem.
+#
+# --list prints problems.json for any user. Nothing here uses the network.
+set -euo pipefail
+umask 022
+
+readonly SCHEMA_NAME=frostyard.problem/1
+readonly CRASH_MESSAGE_ID=fc2e22bc6ee647b6b90729ab34a250b1
+readonly APP_MESSAGE_ID=8915bdd215c84cbab0c31c05a1a33e7e
+readonly CMD_TIMEOUT=60
+readonly MAX_EVENTS=2000
+
+usage() {
+    cat <<'EOF'
+Usage: snosi-health [--list | --help]
+  (no argument)  collect: record the problems of this system in
+                 /var/lib/snosi-health/problems.json and details.json
+                 (root only; snosi-health.timer runs it hourly)
+  --list         print the recorded problems (any user)
+  --help         show this help
+EOF
+}
+
+die() {
+    echo "snosi-health: $*" >&2
+    exit 1
+}
+
+warn() {
+    echo "snosi-health: warning: $*" >&2
+}
+
+# Test hooks (ADR-0009 class 3, paired): SNOSI_HEALTH_TEST_ROOT prefixes every
+# input and output path, and the root check is relaxed, only when
+# SNOSI_HEALTH_TEST_HOOKS=1 is also set. The root alone is inert; hooks=1
+# without a root, or any other hooks value, is refused.
+TEST_HOOKS=0
+ROOT=""
+case "${SNOSI_HEALTH_TEST_HOOKS-}" in
+    "" | 0) ;;
+    1) TEST_HOOKS=1 ;;
+    *)
+        echo "snosi-health: refusing SNOSI_HEALTH_TEST_HOOKS='${SNOSI_HEALTH_TEST_HOOKS}' (only 0 or 1)" >&2
+        exit 2
+        ;;
+esac
+if [[ $TEST_HOOKS -eq 1 ]]; then
+    ROOT=${SNOSI_HEALTH_TEST_ROOT-}
+    if [[ -z $ROOT || $ROOT != /* || ! -d $ROOT ]]; then
+        echo "snosi-health: refusing SNOSI_HEALTH_TEST_HOOKS=1 without an absolute SNOSI_HEALTH_TEST_ROOT directory" >&2
+        exit 2
+    fi
+fi
+
+readonly STATE_DIR="$ROOT/var/lib/snosi-health"
+readonly PROBLEMS="$STATE_DIR/problems.json"
+readonly DETAILS="$STATE_DIR/details.json"
+readonly STATE="$STATE_DIR/state.json"
+readonly CURSOR="$STATE_DIR/journal.cursor"
+readonly LOCK="$STATE_DIR/.lock"
+readonly PENDING="$STATE_DIR/.pending"
+# Published files, in the order a commit renames them into place.
+readonly PUBLISHED=(problems.json details.json state.json journal.cursor)
+readonly OS_RELEASE="$ROOT/usr/lib/os-release"
+readonly CMDLINE="$ROOT/proc/cmdline"
+readonly BOOT_ID_FILE="$ROOT/proc/sys/kernel/random/boot_id"
+readonly UPDATE_CHECK="$ROOT/run/snosi/update-check"
+readonly LAST_RUN="$ROOT/var/lib/updex/last-run.json"
+
+# The schema rules, in jq. Each pattern is a byte copy of a pattern in core's
+# v1.json (test/snosi-health-test.sh checks that every v1 pattern appears
+# here). jq's `$` also matches before a trailing newline, so `re` refuses any
+# string with a newline first (core spec rule 8).
+read -r -d '' JQ_LIB <<'JQ' || true
+def re($p): type == "string" and (contains("\n") | not) and test($p);
+def oneof($a): . as $v | any($a[]; . == $v);
+def semver: re("^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})(-(alpha|beta|rc)\\.(0|[1-9][0-9]{0,3}))?$");
+def imgver: re("^[0-9]{14}$");
+def kinds: ["unit_failed", "update_stage_failed", "booted_older_image", "sysext_update_failed",
+            "tpm_unlock", "integrity_error", "crash", "app_problem"];
+def props($kind): if ($kind | type) != "string" then [] else {
+    unit_failed: ["unit", "result", "shipped"],
+    update_stage_failed: ["target_version", "error_class", "bootc_version"],
+    booted_older_image: ["newer_version", "how"],
+    sysext_update_failed: ["feature", "version", "outcome", "error_class"],
+    tpm_unlock: ["outcome", "tpm_rc", "retries"],
+    integrity_error: ["subsystem", "count"],
+    crash: ["exe", "package", "package_version", "signal"],
+    app_problem: ["app_id", "app_version", "runtime", "component", "class", "code", "frames", "location"]
+  }[$kind] // [] end;
+def required($kind): if ($kind | type) != "string" then [] else {
+    unit_failed: ["unit", "result", "shipped"],
+    update_stage_failed: ["target_version", "error_class", "bootc_version"],
+    booted_older_image: ["newer_version", "how"],
+    sysext_update_failed: ["feature", "version", "outcome"],
+    tpm_unlock: ["outcome", "tpm_rc", "retries"],
+    integrity_error: ["subsystem", "count"],
+    crash: ["exe", "signal"],
+    app_problem: ["app_id", "app_version", "runtime", "component", "class"]
+  }[$kind] // [] end;
+def frame_ok: type == "string" and length <= 160
+  and re("^(other|(github\\.com/frostyard(/[A-Za-z0-9_-]+){1,6}|(github\\.com/emersion/go-imap/v2|archive|bufio|bytes|cmp|compress|container|context|crypto|database|debug|embed|encoding|errors|expvar|flag|fmt|go|hash|html|image|index|internal|io|iter|log|main|maps|math|mime|net|os|path|plugin|reflect|regexp|runtime|slices|sort|strconv|strings|structs|sync|syscall|testing|text|time|unicode|unique|unsafe|vendor|weak)(/[a-z0-9_]+){0,4})\\.[A-Za-z0-9_.()*\\[\\]-]+)$");
+def field_ok($kind; $k):
+  if $kind == "unit_failed" then
+    if $k == "unit" then re("^[A-Za-z0-9][A-Za-z0-9:_.-]{0,95}@?\\.(service|socket|timer|mount|automount|swap|path|target|slice|scope)$")
+    elif $k == "result" then oneof(["exit-code", "signal", "timeout", "core-dump", "start-limit-hit", "other"])
+    elif $k == "shipped" then . == true
+    else false end
+  elif $kind == "update_stage_failed" then
+    if $k == "target_version" then imgver
+    elif $k == "error_class" then oneof(["network", "registry", "signature", "disk_space", "lock", "other"])
+    elif $k == "bootc_version" then semver
+    else false end
+  elif $kind == "booted_older_image" then
+    if $k == "newer_version" then imgver
+    elif $k == "how" then oneof(["manual_rollback", "boot_menu", "unknown", "other"])
+    else false end
+  elif $kind == "sysext_update_failed" then
+    if $k == "feature" then re("^[a-z0-9][a-z0-9._-]{0,63}$")
+    elif $k == "version" then re("^[0-9A-Za-z][0-9A-Za-z.+~_-]{0,63}$")
+    elif $k == "outcome" then oneof(["failed", "held_by_rollback", "needs_image", "skipped_unreachable", "skipped_busy", "other"])
+    elif $k == "error_class" then oneof(["network", "http_status", "signature", "checksum", "disk_space", "link", "config", "other"])
+    else false end
+  elif $kind == "tpm_unlock" then
+    if $k == "outcome" then oneof(["ok_after_retry", "recovery_key", "passphrase", "other"])
+    elif $k == "tpm_rc" then oneof(["PCR_CHANGED", "POLICY_FAIL", "LOCKOUT", "other"])
+    elif $k == "retries" then type == "number" and . == floor and . >= 0 and . <= 10
+    else false end
+  elif $kind == "integrity_error" then
+    if $k == "subsystem" then oneof(["composefs", "fs-verity", "dm-verity", "other"])
+    elif $k == "count" then oneof(["1", "2-10", ">10"])
+    else false end
+  elif $kind == "crash" then
+    if $k == "exe" then re("^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$")
+    elif $k == "package" then re("^[a-z0-9][a-z0-9+.-]{1,99}$")
+    elif $k == "package_version" then re("^([0-9]{1,4}:)?[0-9][A-Za-z0-9.+~-]{0,63}$")
+    elif $k == "signal" then oneof(["SIGSEGV", "SIGABRT", "SIGBUS", "SIGILL", "SIGFPE", "SIGTRAP", "SIGSYS", "other"])
+    else false end
+  elif $kind == "app_problem" then
+    if $k == "app_id" then oneof(["org.frostyard.ChairLift", "org.frostyard.nsl", "org.frostyard.intuneme",
+                                  "org.frostyard.pilothouse", "org.frostyard.Frostmail",
+                                  "org.frostyard.Frostnotes", "org.frostyard.Frostread"])
+    elif $k == "app_version" then semver
+    elif $k == "runtime" then oneof(["go", "rust"])
+    elif $k == "component" then oneof(["daemon", "cli", "gui", "shell", "other"])
+    elif $k == "class" then oneof(["panic", "error"])
+    elif $k == "code" then re("^[a-z][a-z0-9_.]{0,63}$")
+    elif $k == "frames" then type == "array" and length >= 1 and length <= 32 and all(.[]; frame_ok)
+    elif $k == "location" then type == "string" and length <= 128 and re("^src/([a-z0-9_]+/){0,8}[a-z0-9_]+\\.rs:[1-9][0-9]{0,5}$")
+    else false end
+  else false end;
+# Keep only the fields of the kind whose value matches its v1 property schema.
+def sanitize($kind):
+  if type != "object" then {} else
+    with_entries(select(.key as $k | any(props($kind)[]; . == $k) and (.value | field_ok($kind; $k))))
+  end;
+# The allOf rules of v1's app_problem definition.
+def app_rules:
+  (if .class == "error" then (has("code") and (has("frames") | not) and (has("location") | not)) else true end)
+  and (if .class == "panic" then (has("code") | not) else true end)
+  and (if .runtime == "go" then (has("location") | not) else true end)
+  and (if .runtime == "rust" then (has("frames") | not) else true end);
+def detail_valid($kind):
+  type == "object"
+  and (. as $d | all(required($kind)[]; . as $k | $d | has($k)))
+  and (. as $d | all(keys[]; . as $k | any(props($kind)[]; . == $k) and ($d[$k] | field_ok($kind; $k))))
+  and (if $kind == "app_problem" then app_rules else true end);
+def envelope_ok($env; $week):
+  ($env.image.id | oneof(["snow", "snowfield", "sundog", "floe"]))
+  and ($env.image.version | imgver)
+  and ($env.secure | type == "boolean")
+  and ($env.client | re("^(chairlift/(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})(-(alpha|beta|rc)\\.(0|[1-9][0-9]{0,3}))?|snosi-health/[0-9]{14})$"))
+  and ($week | re("^20[2-9][0-9]-W(0[1-9]|[1-4][0-9]|5[0-3])$"));
+def ts_ok: re("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and ((try fromdateiso8601 catch null) != null);
+def week_of: fromdateiso8601 | strftime("%G-W%V");
+def jts: (.__REALTIME_TIMESTAMP // "0") | (try (tonumber / 1000000 | floor | todate) catch null);
+def str: if type == "string" then . else null end;
+def sysuid: (str // "") | test("^[0-9]{1,9}$") and (tonumber < 1000);
+def drop_nulls: with_entries(select(.value != null));
+JQ
+
+# --list -------------------------------------------------------------------
+
+list_problems() {
+    if [[ ! -e $PROBLEMS ]]; then
+        echo "No problem record yet"
+        return 0
+    fi
+    jq -r '
+        def s: if . == null then "?" else tostring end;
+        def summary:
+          .detail as $d
+          | if .kind == "unit_failed" then "\($d.unit // "a local unit") failed (\($d.result | s))"
+            elif .kind == "update_stage_failed" then "OS update to \($d.target_version // "an unknown version") not staged (\($d.error_class | s))"
+            elif .kind == "booted_older_image" then "booted an older image; \($d.newer_version // "a newer one") is installed (\($d.how | s))"
+            elif .kind == "sysext_update_failed" then "sysext \($d.feature | s) update \($d.outcome | s)" + (if $d.error_class then " (\($d.error_class))" else "" end)
+            elif .kind == "tpm_unlock" then "disk unlock \($d.outcome | s), TPM \($d.tpm_rc | s), \($d.retries | s) retries"
+            elif .kind == "integrity_error" then "\($d.subsystem | s) integrity errors: \($d.count | s)"
+            elif .kind == "crash" then "\($d.exe // "a system program") crashed (\($d.signal | s))"
+            elif .kind == "app_problem" then "\($d.app_id | s) \($d.app_version | s) \($d.class | s)" + (if $d.code then " \($d.code)" else "" end)
+            else "unknown problem" end;
+        if (.format != 1) then error("unknown format \(.format)") else . end
+        | if (.problems | length) == 0 then "No problems recorded (last checked \(.generated | s))"
+          else (.problems | sort_by(.last_seen) | reverse | .[]
+                | "\(.last_seen)  \(.kind)  \(summary)  seen \(.occurrences) time(s)  reportable: \(if .reportable == true then "yes" else "no" end)")
+          end
+    ' "$PROBLEMS" || die "cannot read $PROBLEMS"
+}
+
+case $# in
+    0) MODE=collect ;;
+    1)
+        case $1 in
+            --list) MODE=list ;;
+            --help | -h)
+                usage
+                exit 0
+                ;;
+            *)
+                usage >&2
+                exit 2
+                ;;
+        esac
+        ;;
+    *)
+        usage >&2
+        exit 2
+        ;;
+esac
+
+if [[ $MODE == list ]]; then
+    list_problems
+    exit 0
+fi
+
+# --- collect ----------------------------------------------------------------
+
+if [[ $EUID -ne 0 && $TEST_HOOKS -ne 1 ]]; then
+    die "collect mode must run as root (try --list)"
+fi
+
+run_cmd() {
+    timeout --kill-after=5 "$CMD_TIMEOUT" "$@"
+}
+
+# os_key FILE KEY -- the value of KEY in an os-release file, without sourcing it.
+os_key() {
+    local line value=""
+    while IFS= read -r line; do
+        if [[ $line == "$2="* ]]; then
+            value=${line#*=}
+            value=${value#\"}
+            value=${value%\"}
+            value=${value#\'}
+            value=${value%\'}
+        fi
+    done <"$1"
+    printf '%s' "$value"
+}
+
+# kv FILE KEY -- the value of a key=value line (the stager's format).
+kv() {
+    sed -n "s/^$2=//p" "$1" 2>/dev/null | head -n1
+}
+
+install -d -m 0755 "$STATE_DIR"
+exec {lock_fd}>"$LOCK"
+if ! flock -n "$lock_fd"; then
+    echo "snosi-health: another run holds $LOCK; not running concurrently."
+    exit 0
+fi
+
+# fault_point NAME -- a test-only stop (ADR-0009 class 3, under the paired
+# hooks only): exit as a crash would at that point of a commit.
+fault_point() {
+    if [[ $TEST_HOOKS -eq 1 && ${SNOSI_HEALTH_TEST_FAULT-} == "$1" ]]; then
+        echo "snosi-health: test fault at $1" >&2
+        exit 70
+    fi
+}
+
+# publish_pending -- rename each staged file of a committed transaction into
+# place, in PUBLISHED order. A staged file that is gone was already moved by a
+# run that stopped part way, or was not staged (no new journal cursor).
+publish_pending() {
+    local name
+    for name in "${PUBLISHED[@]}"; do
+        if [[ -e $PENDING/$name ]]; then
+            mv -f "$PENDING/$name" "$STATE_DIR/$name"
+        fi
+        fault_point "$name"
+    done
+    rm -rf "$PENDING"
+}
+
+# A run that stopped during a commit left $PENDING. With COMMIT, the whole
+# transaction (problems, details, state and cursor) is published now; without
+# it nothing was published, so the staged files go and this run replays from
+# the old state and cursor.
+if [[ -e $PENDING ]]; then
+    if [[ -f $PENDING/COMMIT ]]; then
+        echo "snosi-health: finishing a committed transaction of a stopped run"
+        publish_pending
+    else
+        rm -rf "$PENDING"
+    fi
+fi
+
+WORK=$(mktemp -d)
+NEW_CURSOR=""
+trap 'rm -rf "$WORK"' EXIT
+
+now_epoch=$(date -u +%s)
+now=$(date -u -d "@$now_epoch" +%Y-%m-%dT%H:%M:%SZ)
+
+image_id=""
+image_version=""
+if [[ -r $OS_RELEASE ]]; then
+    image_id=$(os_key "$OS_RELEASE" IMAGE_ID)
+    image_version=$(os_key "$OS_RELEASE" IMAGE_VERSION)
+fi
+secure=false
+if [[ -r $CMDLINE ]]; then
+    read -r -a cmdline_tokens <"$CMDLINE" || true
+    for token in "${cmdline_tokens[@]}"; do
+        [[ $token == lockdown=integrity ]] && secure=true
+    done
+fi
+boot_id=""
+if [[ -r $BOOT_ID_FILE ]]; then
+    boot_id=$(tr -dc '0-9a-f' <"$BOOT_ID_FILE")
+fi
+
+prev_state='{}'
+if [[ -r $STATE ]] && jq -e 'type == "object"' "$STATE" >/dev/null 2>&1; then
+    prev_state=$(jq -c . "$STATE")
+fi
+prev_uc=$(jq -r '.update_check // ""' <<<"$prev_state")
+prev_lr=$(jq -r '.last_run // ""' <<<"$prev_state")
+prev_updex_keys=$(jq -c '.updex_keys // {} | if type == "object" then . else {} end' <<<"$prev_state")
+updex_keys=$prev_updex_keys
+
+OBS="$WORK/obs.jsonl"
+: >"$OBS"
+uc_hash=""
+lr_hash=""
+
+# unit_messages UNIT -- up to 5 of this boot's journal texts of UNIT, as JSON.
+unit_messages() {
+    local out
+    if out=$(run_cmd journalctl --system -b -u "$1" -n 5 -o json --output-fields=MESSAGE --no-pager 2>/dev/null); then
+        jq -nc '[inputs | .MESSAGE | strings | .[0:1024]] | .[-5:]' <<<"$out" 2>/dev/null || echo '[]'
+    else
+        echo '[]'
+    fi
+}
+
+# S1 unit_failed ------------------------------------------------------------
+collect_units() {
+    local list unit show result fragment template shipped messages
+    command -v systemctl >/dev/null || return 0
+    if ! list=$(run_cmd systemctl list-units --failed --output=json --no-pager); then
+        warn "systemctl list-units failed"
+        return 0
+    fi
+    while IFS= read -r unit; do
+        [[ -n $unit ]] || continue
+        if ! show=$(run_cmd systemctl show -p Result -p FragmentPath -- "$unit"); then
+            warn "systemctl show failed"
+            continue
+        fi
+        result=$(sed -n 's/^Result=//p' <<<"$show" | head -n1)
+        fragment=$(sed -n 's/^FragmentPath=//p' <<<"$show" | head -n1)
+        case $result in
+            exit-code | signal | timeout | core-dump | start-limit-hit) ;;
+            *) result=other ;;
+        esac
+        template=$unit
+        if [[ $unit == *@*.* ]]; then
+            template="${unit%%@*}@.${unit##*.}"
+        fi
+        shipped=false
+        [[ $fragment == /usr/lib/systemd/system/* && $fragment != *..* ]] && shipped=true
+        messages=$(unit_messages "$unit")
+        # A unit that is not shipped stays local: its name can name a user or
+        # a path, so problems.json gets only its result (ADR-0029).
+        jq -nc --arg unit "$template" --arg full "$unit" --arg result "$result" \
+            --argjson shipped "$shipped" --arg at "$now" --argjson messages "$messages" '
+            {kind: "unit_failed", mode: "boot",
+             local: {unit: $unit, result: $result, shipped: $shipped},
+             detail: (if $shipped then {unit: $unit, result: $result, shipped: true} else {result: $result} end),
+             at: $at, messages: $messages, extra: {units: [$full]}}' >>"$OBS"
+    done < <(jq -r '.[]? | .unit? // empty | strings' <<<"$list" 2>/dev/null | head -n 100)
+}
+
+# S2 update_stage_failed and S3 booted_older_image -------------------------
+collect_update() {
+    local outcome="" checked_at="" remote="" class="" at bootc_version="" status booted rollback how messages
+    if [[ -r $UPDATE_CHECK ]]; then
+        uc_hash=$(sha256sum <"$UPDATE_CHECK" | cut -c1-64)
+        outcome=$(kv "$UPDATE_CHECK" outcome)
+        checked_at=$(kv "$UPDATE_CHECK" checked_at)
+        remote=$(kv "$UPDATE_CHECK" remote_version)
+        class=$(kv "$UPDATE_CHECK" error_class)
+    fi
+
+    if [[ $outcome == failed && $uc_hash != "$prev_uc" ]]; then
+        case $class in
+            "" | network | registry | signature | disk_space | lock | other) ;;
+            *) class=other ;;
+        esac
+        at=$(date -u -d "$checked_at" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null) || at=$now
+        [[ -n $at ]] || at=$now
+        if command -v bootc >/dev/null; then
+            bootc_version=$(run_cmd bootc --version 2>/dev/null |
+                grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?' | head -n1) || bootc_version=""
+        fi
+        messages=$(unit_messages bootc-update-stage.service)
+        jq -nc --arg target "$remote" --arg class "$class" --arg bootc "$bootc_version" \
+            --arg at "$at" --argjson messages "$messages" '
+            {target_version: $target, error_class: $class, bootc_version: $bootc}
+            | with_entries(select(.value != "")) as $d
+            | {kind: "update_stage_failed", mode: "event", local: $d, detail: $d,
+               at: $at, messages: $messages, extra: {}}' >>"$OBS"
+    fi
+
+    command -v bootc >/dev/null || return 0
+    if ! status=$(run_cmd bootc status --format json 2>/dev/null); then
+        warn "bootc status failed"
+        return 0
+    fi
+    booted=$(jq -r '.status.booted.image.version // empty | strings' <<<"$status" 2>/dev/null) || booted=""
+    rollback=$(jq -r '.status.rollback.image.version // empty | strings' <<<"$status" 2>/dev/null) || rollback=""
+    if [[ $booted =~ ^[0-9]{14}$ && $rollback =~ ^[0-9]{14}$ && $rollback > $booted ]]; then
+        how=unknown
+        [[ $outcome == held-rollback ]] && how=manual_rollback
+        jq -nc --arg newer "$rollback" --arg how "$how" --arg at "$now" '
+            {newer_version: $newer, how: $how} as $d
+            | {kind: "booted_older_image", mode: "boot", slot: "booted_older_image",
+               local: $d, detail: $d, at: $at, messages: [], extra: {}}' >>"$OBS"
+    fi
+}
+
+# S4 sysext_update_failed ---------------------------------------------------
+collect_sysext() {
+    [[ -r $LAST_RUN ]] || return 0
+    # Absent, unreadable or another format: no record (updex last-run spec).
+    jq -e 'type == "object" and .format == 1' "$LAST_RUN" >/dev/null 2>&1 || return 0
+    lr_hash=$(sha256sum <"$LAST_RUN" | cut -c1-64)
+    # Fast path: the same file counts nothing.
+    [[ $lr_hash != "$prev_lr" ]] || return 0
+    # updex carries the previous entry of a feature, with its own at, into a
+    # run that names other features. So each feature keeps the key of its last
+    # counted entry (at, outcome, error_class, version) in state.json, and only
+    # an entry with another key counts.
+    local keys
+    if ! keys=$(jq -c --argjson prev "$prev_updex_keys" '
+        $prev + ([(.features // []) | if type == "array" then .[] else empty end
+                  | select(type == "object" and (.feature | type) == "string")
+                  | {key: .feature, value: ([.at, .outcome, .error_class, .version] | tojson)}]
+                 | from_entries)' "$LAST_RUN" 2>/dev/null); then
+        warn "cannot read $LAST_RUN"
+        return 0
+    fi
+    jq -c --arg now "$now" --argjson prev "$prev_updex_keys" "$JQ_LIB"'
+        (.features // []) | if type == "array" then .[] else empty end
+        | select(type == "object" and (.origin == "image" or .origin == "catalog"))
+        | select(.outcome != "updated" and .outcome != "current")
+        | select((.feature | type) != "string" or $prev[.feature] != ([.at, .outcome, .error_class, .version] | tojson))
+        | . as $f
+        | {feature: .feature,
+           version: (.version | str),
+           outcome: (if (.outcome | oneof(["failed", "held_by_rollback", "needs_image", "skipped_unreachable", "skipped_busy"])) then .outcome else "other" end),
+           error_class: (if .error_class == null then null
+                         elif (.error_class | oneof(["network", "http_status", "signature", "checksum", "disk_space", "link", "config", "other"])) then .error_class
+                         else "other" end)} | drop_nulls as $d
+        | {kind: "sysext_update_failed", mode: "event", local: $d, detail: $d,
+           at: (if ($f.at | ts_ok) then $f.at else $now end), messages: [], extra: {}}
+    ' "$LAST_RUN" >>"$OBS" 2>/dev/null || { warn "cannot read $LAST_RUN"; return 0; }
+    updex_keys=$keys
+}
+
+# S5 tpm_unlock -------------------------------------------------------------
+# Texts of systemd v262 (src/cryptsetup/cryptsetup.c,
+# src/shared/cryptsetup-tpm2.c, src/shared/tpm2-util.c) and of tpm2-tss's
+# ESYS logger, which systemd-cryptsetup's stderr carries to the journal. Only
+# the classification leaves this function; no text is copied to problems.json.
+# Only the system journal and only entries of UID 0 count: a user can write
+# SYSLOG_IDENTIFIER=systemd-cryptsetup to the journal with systemd-cat.
+collect_tpm() {
+    local out
+    command -v journalctl >/dev/null || return 0
+    if ! out=$(run_cmd journalctl --system -b -o json --output-fields=MESSAGE,_UID --no-pager \
+        SYSLOG_IDENTIFIER=systemd-cryptsetup _UID=0 2>/dev/null); then
+        warn "journalctl (systemd-cryptsetup) failed"
+        return 0
+    fi
+    [[ -n $out ]] || return 0
+    jq -nc --arg now "$now" "$JQ_LIB"'
+        def hex2num: ascii_downcase | explode | reduce .[] as $c (0; . * 16 + (if $c >= 97 then $c - 87 else $c - 48 end));
+        def esys_rc: [capture("Esys Finish ErrorCode \\(0x(?<c>[0-9a-fA-F]{1,8})\\)")]
+          | if length > 0 then (.[0].c | hex2num % 65536) else null end;
+        [inputs | select(type == "object" and ._UID == "0") | {m: (.MESSAGE | str // ""), t: jts}] as $e
+        | ($e | map(select(.m | test("A PCR value changed during the TPM2 policy session")))) as $pcr_debug
+        | ($e | map(select((.m | esys_rc) == 296))) as $pcr_esys
+        | (if ($pcr_debug | length) > 0 then $pcr_debug else $pcr_esys end) as $pcr
+        | ($e | map(select(.m | test("falling back to traditional unlocking")))) as $fallback
+        | ($e | map(select((.m | test("dictionary attack lock-?out mode")) or ((.m | esys_rc) == 2337)
+                           or (.m | test("TPM2 PIN unlock failed, falling back"))))) as $lockout
+        | ($e | map(select((.m | test("TPM policy does not match current system state|No signature for current PCR policy|Current policy digest does not match stored policy digest|No TPM2 metadata matching the current system state"))
+                             or ((.m | esys_rc) as $c | $c != null and ($c % 256) >= 128 and ($c % 64) == 29)))) as $policy
+        | ($e | map(select(.m | test("falling back to traditional unlocking: Structure needs cleaning")))) as $pcr_exhausted
+        | if ($fallback | length) == 0 and ($pcr | length) == 0 then empty else
+            {outcome: (if ($fallback | length) > 0 then "other" else "ok_after_retry" end),
+             tpm_rc: (if ($lockout | length) > 0 then "LOCKOUT"
+                      elif ($policy | length) > 0 then "POLICY_FAIL"
+                      elif ($pcr | length) > 0 or ($pcr_exhausted | length) > 0 then "PCR_CHANGED"
+                      else "other" end),
+             retries: ([($pcr | length), 10] | min)} as $d
+            | ($pcr + $fallback + $lockout + $policy | sort_by(.t) ) as $hits
+            | {kind: "tpm_unlock", mode: "boot", slot: "tpm_unlock", local: $d, detail: $d,
+               at: (($hits | map(.t | select(. != null)) | max) // $now),
+               messages: ($hits | map(.m) | unique | .[-5:] | map(.[0:1024])), extra: {}}
+          end
+    ' <<<"$out" >>"$OBS" 2>/dev/null || warn "cannot parse the systemd-cryptsetup journal"
+}
+
+# S6 integrity_error --------------------------------------------------------
+collect_integrity() {
+    local out
+    command -v journalctl >/dev/null || return 0
+    if ! out=$(run_cmd journalctl --system -b -k -o json --output-fields=MESSAGE,PRIORITY --no-pager 2>/dev/null); then
+        warn "journalctl (kernel) failed"
+        return 0
+    fi
+    [[ -n $out ]] || return 0
+    jq -nc --arg now "$now" "$JQ_LIB"'
+        def subsystem:
+          if test("^fs-verity \\(") then "fs-verity"
+          elif test("^device-mapper: verity") and test("corrupt|error|fail|mismatch"; "i") then "dm-verity"
+          elif test("^overlayfs: .*(fs-verity|verity|digest)") then "composefs"
+          elif test("^erofs[: ]") and test("corrupt|error|fail|invalid"; "i") then "composefs"
+          elif test("^composefs") then "composefs"
+          else null end;
+        [inputs
+         | select(((.PRIORITY // "6") | str // "6" | tonumber? // 6) <= 4)
+         | {m: (.MESSAGE | str // ""), t: jts}
+         | .s = (.m | subsystem)
+         | select(.s != null)]
+        | group_by(.s)[]
+        | length as $n
+        | {subsystem: .[0].s, count: (if $n == 1 then "1" elif $n <= 10 then "2-10" else ">10" end)} as $d
+        | {kind: "integrity_error", mode: "boot", slot: ("integrity_error:" + .[0].s), local: $d, detail: $d,
+           at: ((map(.t | select(. != null)) | max) // $now),
+           messages: (map(.m) | .[-5:] | map(.[0:1024])), extra: {}}
+    ' <<<"$out" >>"$OBS" 2>/dev/null || warn "cannot parse the kernel journal"
+}
+
+# S7 crash and S8 app_problem: new system-journal entries since the cursor ---
+# journalctl refuses --since together with a cursor option, so the cursor is
+# kept here: --after-cursor=<saved cursor>, or --since=-90d without one. The
+# new cursor is the __CURSOR of the last entry read; it is committed together
+# with the records, so every entry after the cursor counts exactly once.
+collect_events() {
+    local out raw cursor
+    command -v journalctl >/dev/null || return 0
+    local from=(--since=-90d)
+    if [[ -s $CURSOR ]]; then
+        cursor=$(head -c 4096 "$CURSOR")
+        from=("--after-cursor=$cursor")
+    fi
+    raw="$WORK/events.json"
+    if ! run_cmd journalctl --system --no-pager "${from[@]}" -o json \
+        --output-fields=MESSAGE_ID,MESSAGE,_UID,COREDUMP_UID,COREDUMP_EXE,COREDUMP_SIGNAL,COREDUMP_PACKAGE_NAME,COREDUMP_PACKAGE_VERSION,FROSTYARD_SCHEMA,FROSTYARD_APP_ID,FROSTYARD_APP_VERSION,FROSTYARD_RUNTIME,FROSTYARD_COMPONENT,FROSTYARD_CLASS,FROSTYARD_CODE,FROSTYARD_FRAMES,FROSTYARD_LOCATION \
+        "MESSAGE_ID=$CRASH_MESSAGE_ID" "MESSAGE_ID=$APP_MESSAGE_ID" >"$raw" 2>/dev/null; then
+        warn "journalctl (events) failed; the cursor does not move"
+        return 0
+    fi
+    # At most MAX_EVENTS entries a run; the rest come next run.
+    out=$(head -n "$MAX_EVENTS" "$raw")
+    [[ -n $out ]] || return 0
+    cursor=$(tail -n1 <<<"$out" | jq -r '.__CURSOR // empty | strings' 2>/dev/null) || cursor=""
+    [[ -n $out ]] || return 0
+    if ! jq -nc --arg now "$now" --arg crash "$CRASH_MESSAGE_ID" --arg app "$APP_MESSAGE_ID" \
+        --arg schema "$SCHEMA_NAME" "$JQ_LIB"'
+        def signame: (str // "") as $s
+          | if ($s | test("^[0-9]{1,3}$")) | not then null
+            else ({"4": "SIGILL", "5": "SIGTRAP", "6": "SIGABRT", "7": "SIGBUS", "8": "SIGFPE",
+                   "11": "SIGSEGV", "31": "SIGSYS"}[$s] // "other") end;
+        def crash:
+          (.COREDUMP_EXE | str) as $exe
+          | (if $exe == null then null else ($exe | split("/") | last) end) as $base
+          | ($exe != null and ($exe | startswith("/usr/")) and ($exe | test("/\\.\\.?/") | not)) as $in_usr
+          | {exe: (if $base != null and ($base | field_ok("crash"; "exe")) then $base else null end),
+             signal: (.COREDUMP_SIGNAL | signame),
+             package: (.COREDUMP_PACKAGE_NAME | if field_ok("crash"; "package") then . else null end),
+             package_version: (.COREDUMP_PACKAGE_VERSION | if field_ok("crash"; "package_version") then . else null end)}
+          | drop_nulls as $l
+          | {kind: "crash", mode: "event", local: $l,
+             detail: (if $in_usr then $l else ($l | del(.exe)) end),
+             extra: {exe_path: $exe}};
+        # Core spec rule 4: every FROSTYARD_* value must pass, else no record.
+        def app:
+          if (.FROSTYARD_SCHEMA | str) != $schema then empty else
+            {app_id: .FROSTYARD_APP_ID, app_version: .FROSTYARD_APP_VERSION,
+             runtime: .FROSTYARD_RUNTIME, component: .FROSTYARD_COMPONENT,
+             class: .FROSTYARD_CLASS, code: .FROSTYARD_CODE,
+             frames: (if .FROSTYARD_FRAMES == null then null
+                      elif (.FROSTYARD_FRAMES | type) == "string" then (.FROSTYARD_FRAMES | split("\n"))
+                      else .FROSTYARD_FRAMES end),
+             location: .FROSTYARD_LOCATION}
+            | drop_nulls
+            | select(detail_valid("app_problem"))
+            | {kind: "app_problem", mode: "event", local: ., detail: ., extra: {}}
+          end;
+        inputs
+        | select(type == "object")
+        | select(._UID | sysuid)
+        | . as $e
+        | (if .MESSAGE_ID == $crash then (select(.COREDUMP_UID | sysuid) | crash)
+           elif .MESSAGE_ID == $app then app
+           else empty end)
+        | . + {at: ($e | jts // $now), messages: [($e.MESSAGE | str // empty | .[0:1024])]}
+    ' <<<"$out" >>"$OBS" 2>/dev/null; then
+        warn "cannot parse the event journal; the cursor does not move"
+        return 0
+    fi
+    NEW_CURSOR=$cursor
+}
+
+collect_units || warn "unit collection failed"
+collect_update || warn "update collection failed"
+collect_sysext || warn "sysext collection failed"
+collect_tpm || warn "TPM unlock collection failed"
+collect_integrity || warn "integrity collection failed"
+collect_events || warn "event collection failed"
+
+# Each problem's id: the first 16 hex digits of sha256(kind + the canonical
+# JSON of its local detail), so the same problem merges across runs.
+IDS="$WORK/ids"
+: >"$IDS"
+while IFS= read -r key; do
+    printf '%s' "$key" | sha256sum | cut -c1-16 >>"$IDS"
+done < <(jq -r '.kind + (.local | to_entries | sort_by(.key) | from_entries | tojson)' "$OBS")
+
+prev_problems='null'
+if [[ -r $PROBLEMS ]] && jq -e '.format == 1 and (.problems | type) == "array"' "$PROBLEMS" >/dev/null 2>&1; then
+    prev_problems=$(jq -c . "$PROBLEMS")
+fi
+prev_details='null'
+if [[ -r $DETAILS ]] && jq -e '.format == 1 and (.problems | type) == "object"' "$DETAILS" >/dev/null 2>&1; then
+    prev_details=$(jq -c . "$DETAILS")
+fi
+
+client=""
+[[ -n $image_version ]] && client="snosi-health/$image_version"
+
+RESULT="$WORK/result.json"
+jq -n \
+    --slurpfile obs "$OBS" \
+    --rawfile ids "$IDS" \
+    --argjson prev "$prev_problems" \
+    --argjson pdet "$prev_details" \
+    --argjson st "$prev_state" \
+    --arg now "$now" \
+    --arg schema "$SCHEMA_NAME" \
+    --argjson nowe "$now_epoch" \
+    --arg boot "$boot_id" \
+    --arg image_id "$image_id" \
+    --arg image_version "$image_version" \
+    --argjson secure "$secure" \
+    --arg client "$client" \
+    --arg uc "$uc_hash" \
+    --arg lr "${lr_hash:-$prev_lr}" \
+    --argjson updex_keys "$updex_keys" \
+    "$JQ_LIB"'
+    def tsmax($a; $b): if $a == null then $b elif $b == null then $a elif $a > $b then $a else $b end;
+    def tsmin($a; $b): if $a == null then $b elif $b == null then $a elif $a < $b then $a else $b end;
+    def mergex($a; $b): reduce ($b | keys[]) as $k ($a;
+        if (.[$k] | type) == "array" and ($b[$k] | type) == "array"
+        then .[$k] = ((.[$k] + $b[$k]) | unique | .[-5:]) else .[$k] = $b[$k] end);
+    ($ids | split("\n") | map(select(length > 0))) as $idl
+    | [range(0; $obs | length) as $i | $obs[$i] + {id: $idl[$i]}] as $o_all
+    | {image: {id: (if ($image_id | oneof(["snow", "snowfield", "sundog", "floe"])) then $image_id else null end),
+               version: (if ($image_version | imgver) then $image_version else null end)},
+       secure: $secure,
+       client: (if ($client | re("^snosi-health/[0-9]{14}$")) then $client else null end)} as $env
+    | (($prev // {}).problems // [] | map(select(type == "object" and (.id | re("^[0-9a-f]{16}$"))))
+       | map({key: .id, value: .}) | from_entries) as $recs0
+    | (if ($st.boot_id // "") == $boot and $boot != "" then ($st.boot_slots // {}) else {} end) as $slots0
+    # Each observation here is new: the journal cursor, the update-check hash,
+    # the updex keys and the boot slots of state.json are committed in 1
+    # transaction with problems.json (see the commit below).
+    | reduce ($o_all | sort_by(.at))[] as $o ({recs: $recs0, slots: $slots0, det: (($pdet // {}).problems // {})};
+        ($o.slot // $o.id) as $slot
+        | (if $o.mode == "boot" and .slots[$slot] == $o.id and .recs[$o.id] != null then
+             .recs[$o.id].last_seen = tsmax(.recs[$o.id].last_seen; $o.at)
+           else
+             (if $o.mode == "boot" then .slots[$slot] else null end) as $old
+             | (if $old != null and .recs[$old] != null then
+                  .recs[$old].occurrences -= 1
+                  | if .recs[$old].occurrences < 1 then .recs |= del(.[$old]) else . end
+                else . end)
+             | .recs[$o.id] = ((.recs[$o.id] // {id: $o.id, occurrences: 0})
+                 | .occurrences = ((.occurrences // 0) + 1)
+                 | .first_seen = tsmin(.first_seen; $o.at)
+                 | .last_seen = tsmax(.last_seen; $o.at))
+             | (if $o.mode == "boot" then .slots[$slot] = $o.id else . end)
+           end)
+        | .recs[$o.id] += {kind: $o.kind, detail: $o.detail}
+        | .det[$o.id] = ((.det[$o.id] // {}) as $d
+            | {kind: $o.kind, local: $o.local,
+               extra: mergex(($d.extra // {}); ($o.extra // {})),
+               messages: ((($d.messages // []) + ($o.messages // [])) | map(strings | .[0:1024])
+                          | reduce .[] as $m ([]; if any(.[]; . == $m) then . else . + [$m] end)
+                          | .[-5:])}))
+    | . as $acc
+    | [$acc.recs[]
+       | select(type == "object" and (.kind | oneof(kinds)))
+       | select((.first_seen | ts_ok) and (.last_seen | ts_ok))
+       | select((.last_seen | fromdateiso8601) >= ($nowe - 90 * 86400))
+       | .kind as $kind
+       | .detail = (.detail | sanitize($kind))
+       | .occurrences = (if (.occurrences | type) == "number" and .occurrences >= 1 then (.occurrences | floor) else 1 end)]
+    | sort_by(.last_seen) | reverse | .[:200]
+    | map((.last_seen | week_of) as $week
+          | {id, kind, detail, week: $week, first_seen, last_seen, occurrences,
+             reportable: (.kind as $kind | envelope_ok($env; $week) and (.detail | detail_valid($kind)))}) as $problems
+    | ($problems | map(.id)) as $keep
+    | {problems: ({format: 1, schema: $schema, generated: $now} + $env + {problems: $problems}),
+       details: {format: 1, generated: $now,
+                 problems: ($acc.det | with_entries(select(.key as $k | any($keep[]; . == $k))))},
+       state: {format: 1, boot_id: $boot,
+               boot_slots: ($acc.slots | with_entries(select(.value as $v | any($keep[]; . == $v)))),
+               update_check: $uc, last_run: $lr, updex_keys: $updex_keys}}
+    ' >"$RESULT"
+
+# stage FILTER NAME MODE GROUP -- write a part of the result to $PENDING/NAME
+# with its final mode and owner.
+stage() {
+    local filter=$1 name=$2 mode=$3 group=$4
+    jq "$filter" "$RESULT" >"$PENDING/$name"
+    chmod "$mode" "$PENDING/$name"
+    # Test hooks keep the modes but cannot chown as a normal user.
+    if [[ $TEST_HOOKS -ne 1 ]]; then
+        chown "root:$group" "$PENDING/$name"
+    fi
+}
+
+# The commit is 1 recoverable transaction (ADR-0029): stage every output in
+# $PENDING, write $PENDING/COMMIT by atomic rename, then rename the staged
+# files into place (problems, details, state, cursor) and remove $PENDING. A
+# stop before COMMIT publishes nothing; a stop after it is finished by the
+# next run (see the recovery after the lock). So problems.json, the boot
+# slots, the input keys and the journal cursor always move together: nothing
+# is lost and nothing counts twice.
+rm -rf "$PENDING"
+install -d -m 0700 "$PENDING"
+stage .problems problems.json 0644 root
+stage .details details.json 0640 sudo
+stage .state state.json 0600 root
+if [[ -n $NEW_CURSOR ]]; then
+    printf '%s\n' "$NEW_CURSOR" >"$PENDING/journal.cursor"
+    chmod 0600 "$PENDING/journal.cursor"
+fi
+fault_point before-commit
+commit_tmp=$(mktemp "$PENDING/.COMMIT.XXXXXX")
+printf 'committed=%s\n' "$now" >"$commit_tmp"
+mv -f "$commit_tmp" "$PENDING/COMMIT"
+fault_point commit
+publish_pending
+
+count=$(jq '.problems.problems | length' "$RESULT")
+echo "snosi-health: $count problem record(s) in $PROBLEMS"

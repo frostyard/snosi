@@ -29,6 +29,24 @@ dpkg-status gate that blocks OCI publication when `frostyard-nbc` is installed.
 `test/updex-timer-guard-test.sh` fixtures the `updex-timer.finalize` build
 guard (updex's update timer must ship and be in the enablement manifest), its
 composition wiring and the base preset line.
+`test/snosi-health-timer-guard-test.sh` does the same for
+`snosi-health-timer.finalize` (the timer, the service, `/usr/bin/snosi-health`
+and the manifest entry). `test/snosi-health-test.sh` drives the collector
+(ADR-0029) with PATH stubs for `journalctl`, `systemctl` and `bootc` and the
+paired test hooks: fixture journals, unit states, `bootc status`,
+`update-check` and `last-run.json` files, valid and forged library entries.
+Every reportable record validates against the vendored core `v1.json`
+(sha256 pinned) through `test/lib/json_schema_subset.py`; no message, path,
+username, unit instance or boot ID reaches `problems.json`; it also checks
+modes, the cursor, the boot-scoped counts, pruning, the static unit
+contract, user-UID entries that S5 must ignore, carried updex entries,
+same-second and out-of-order journal entries, and the commit transaction: a
+stop before `COMMIT`, after it, or after each rename (a test-only fault
+hook), after which the next run gives the same problems as a run with no
+stop. `test/coredump-guard-test.sh` fixtures `coredump.finalize`
+(`Storage=none`, `ProcessSizeMax`, `%d` and `%F`, `fs.suid_dumpable`, libdw
+and libelf). `test/bootc-container-policy-test.sh` pins 1 stager
+`error_class` case for each class.
 `test/ghostty-terminfo-test.sh` checks that base compiles the shipped
 `xterm-ghostty` terminfo (Debian ships only `ghostty`) into `/usr/share/terminfo`.
 `test/firn-catalog-test.sh` checks the
@@ -106,7 +124,7 @@ signed index and tests second-promotion history. It does not write R2.
 runbook; `test/bootc-secure-artifact-test.sh --fixtures` covers the
 Issue 517 GPT-auto udev-rule check and the sealed `lockdown=integrity`
 command-line check (ADR-0027). `test/check-forky-systemd-test.sh`
-exercises the Forky sentinel and its three recheck obligations.
+exercises the Forky sentinel and its four systemd recheck obligations.
 
 ## Bootc installation and update tests
 

@@ -70,10 +70,17 @@ The sole shipped stager writes two key/value files under `/run/snosi/`:
 ```text
 update-check: outcome=current|staged|held-rollback|failed
               checked_at=<timestamp>, image=<ref>, running_version=<label>, remote_version=<label>
+              error_class=network|registry|signature|disk_space|lock|other   (outcome=failed only)
 update-staged: image=<ref>, digest=sha256:<hex>, staged_at=<timestamp>
 ```
 
 `snosi-update-status`, the motd hook and desktop notifier read these files.
+Readers take keys by name, so they ignore keys they do not know. 🟢
+`error_class` ([ADR-0029](adr/0029-snosi-health-records-problems.md)) is the
+class of the stderr of the stager's podman and bootc calls, picked by fixed
+patterns; it never holds error text. `snosi-health` reads it for
+`update_stage_failed`; `test/bootc-container-policy-test.sh` pins 1 case for
+each class.
 The notifier acknowledges each staged digest once. Files under `/run` clear
 at reboot. `snosi-update-status --pkg-diff` resolves only an identity-matched
 write-once package sidecar through
@@ -156,3 +163,42 @@ OpenPGP-signed checksum index signature-first/manifest-last. The public
 from the live index, without an independent version pointer. There is no
 automatic ISO retention workflow. Future deletion of published objects is
 subject to [ADR-0018's exact-object gate](adr/0018-remove-native-ab-and-nbc-lanes.md).
+
+## Problem records (snosi-health)
+
+🟢 `snosi-health` ([ADR-0029](adr/0029-snosi-health-records-problems.md)) is
+the system collector of frostyard/core's problem reports (schema
+`frostyard.problem/1`,
+[core spec](https://github.com/frostyard/core/blob/main/docs/specs/problem-report.md)).
+It publishes these files together as 1 recoverable transaction (staged in
+`.pending/`, a `COMMIT` marker, then renames; ADR-0029):
+
+| File | Mode | Content |
+| --- | --- | --- |
+| `/var/lib/snosi-health/problems.json` | 0644 root | Format 1: `format`, `schema`, `generated`, `image` (`id`, `version`), `secure`, `client`, and `problems[]` with `id`, `kind`, `detail`, `week`, `first_seen`, `last_seen`, `occurrences`, `reportable`. `detail` holds only v1 report fields whose value passes its v1 property schema; `reportable` is true only when the envelope validates. No journal text, command line, path, username, unit instance, hostname, machine ID or boot ID. At most 200 records, none older than 90 days |
+| `/var/lib/snosi-health/details.json` | 0640 root:sudo | Format 1: for each `id`, `kind`, `local` (the detail before sanitizing), `extra` (full unit names, a crash's executable path) and up to 5 journal texts of at most 1024 characters |
+| `/var/lib/snosi-health/state.json`, `journal.cursor` | 0600 root | Private collector state: boot slots, the hashes of the last counted inputs, the updex feature keys, and the system-journal cursor |
+
+Consumers: chairlift's Problems page (both files; `details.json` only for
+`sudo` members), `snosi-health --list`, and the later Floe sender (T857 t20),
+which adds a `report_id` to a reportable record. A consumer must accept a
+`null` `image.id`, `image.version` or `client` (a host that is not a snosi
+product). The collector's inputs are other contracts:
+
+- `/run/snosi/update-check` (above), with `error_class`;
+- `bootc status --format json`: `.status.booted.image.version` and
+  `.status.rollback.image.version`;
+- `/var/lib/updex/last-run.json`, format 1
+  ([updex spec](https://github.com/frostyard/updex/blob/main/docs/specs/last-run-record.md)):
+  an absent file or another format is no record; only features of origin
+  `image` or `catalog` count; an unknown `outcome` or `error_class` becomes
+  `other`;
+- the system journal: systemd-coredump entries and the frostyard library's
+  entries (`MESSAGE_ID` `8915bdd215c84cbab0c31c05a1a33e7e`, `FROSTYARD_*`
+  fields validated by core's spec rule 4), and this boot's
+  systemd-cryptsetup and kernel lines. The systemd-cryptsetup texts are
+  systemd v262's; the Forky sentinel PR body asks for a recheck.
+
+`test/snosi-health-test.sh` validates the output against a pinned byte copy
+of core's `v1.json` (`test/fixtures/snosi-health/schema/`) with
+`test/lib/json_schema_subset.py`.

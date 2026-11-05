@@ -1,0 +1,238 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+#
+# Build guard: systemd-coredump ships on every secure bootc product with the
+# settings that ADR-0029 decided (T857a).
+#
+# snosi-health and chairlift read crash records from the journal. Those exist
+# only when systemd-coredump is installed (from the Forky systemd family in
+# shared/bootc-secure/mkosi.conf) and the kernel pipes cores to it. The image
+# must never keep core files: a core is a full memory image of the process.
+#
+# This is a NON-chroot mkosi FinalizeScript: it runs on the host against
+# $BUILDROOT. It fails the build unless:
+#   1. usr/lib/systemd/systemd-coredump is an executable regular file;
+#   2. the resolved [Coredump] Storage= is `none` and ProcessSizeMax= is at
+#      most 1G, across usr/lib/systemd/coredump.conf,
+#      usr/lib/systemd/coredump.conf.d/*.conf, etc/systemd/coredump.conf and
+#      etc/systemd/coredump.conf.d/*.conf. The last assignment wins. Both
+#      orders must pass: systemd's own (the main file from /etc, else /usr,
+#      then all drop-ins by file name, /etc masking a /usr drop-in of the same
+#      name) and the plain order "every /usr file, then every /etc file";
+#   3. the resolved kernel.core_pattern of the sysctl.d files pipes to
+#      /usr/lib/systemd/systemd-coredump and passes %d and %F. systemd 258 and
+#      257.6 fixed CVE-2025-4598 (a crashed SUID process whose PID is reused)
+#      with the dumpable flag %d and the pidfd %F of the crashed process;
+#   4. no sysctl.d file under usr/lib or etc sets fs.suid_dumpable=1, which
+#      dumps set-user-ID programs as the user ("2", suidsafe, is the default
+#      that systemd-coredump ships);
+#   5. libdw.so.1 and libelf.so.1 exist under usr/lib/x86_64-linux-gnu:
+#      systemd-coredump dlopens them for the stack text.
+set -euo pipefail
+
+: "${BUILDROOT:?coredump.finalize: \$BUILDROOT not set (must run as a FinalizeScript)}"
+
+readonly LIMIT_BYTES=$((1024 * 1024 * 1024))
+readonly LIBDIR=usr/lib/x86_64-linux-gnu
+
+die() {
+    echo "coredump.finalize: $*" >&2
+    exit 1
+}
+
+# in_root PATH -- PATH (relative to the image root) resolved inside the image:
+# an absolute symlink target is taken relative to $BUILDROOT, never the host.
+in_root() {
+    local rel=$1 path target hops=0
+    path="$BUILDROOT/$rel"
+    while [[ -L $path ]]; do
+        hops=$((hops + 1))
+        ((hops <= 16)) || die "too many symlinks at $rel"
+        target=$(readlink "$path")
+        if [[ $target == /* ]]; then
+            path="$BUILDROOT$target"
+        else
+            path="$(dirname "$path")/$target"
+        fi
+    done
+    printf '%s\n' "$path"
+}
+
+# --- 1. the binary ----------------------------------------------------------
+binary=$(in_root usr/lib/systemd/systemd-coredump)
+[[ -f $binary && -x $binary ]] || die "usr/lib/systemd/systemd-coredump is missing or not executable (is systemd-coredump/forky installed?)"
+
+# --- 2. coredump.conf -------------------------------------------------------
+# list_dropins DIR... -- *.conf names in DIRs, sorted by name, the first DIR
+# winning a name (systemd's masking).
+list_dropins() {
+    local dir file name
+    declare -A seen=()
+    local -a out=()
+    for dir in "$@"; do
+        [[ -d $BUILDROOT/$dir ]] || continue
+        for file in "$BUILDROOT/$dir"/*.conf; do
+            [[ -e $file || -L $file ]] || continue
+            name=$(basename "$file")
+            [[ -z ${seen[$name]-} ]] || continue
+            seen[$name]=1
+            out+=("$name"$'\t'"$dir/$name")
+        done
+    done
+    ((${#out[@]} > 0)) || return 0
+    printf '%s\n' "${out[@]}" | LC_ALL=C sort -t $'\t' -k1,1 | cut -f2
+}
+
+# conf_values FILE... -- print the last Storage= and ProcessSizeMax= of the
+# [Coredump] sections of FILEs in order, as "storage<TAB>size". An empty
+# assignment restores the default; "default" marks an unset key.
+conf_values() {
+    local storage=default size=default rel file line section="" key value
+    for rel in "$@"; do
+        file=$(in_root "$rel")
+        [[ -e $file ]] || continue
+        [[ -r $file ]] || die "cannot read $rel"
+        section=""
+        while IFS= read -r line || [[ -n $line ]]; do
+            line=${line%$'\r'}
+            line="${line#"${line%%[![:space:]]*}"}"
+            [[ -z $line || $line == [\#\;]* ]] && continue
+            if [[ $line == \[*\] ]]; then
+                section=$line
+                continue
+            fi
+            [[ $section == "[Coredump]" && $line == *=* ]] || continue
+            key=${line%%=*}
+            key="${key%"${key##*[![:space:]]}"}"
+            value=${line#*=}
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
+            case $key in
+                Storage) storage=${value:-default} ;;
+                ProcessSizeMax) size=${value:-default} ;;
+            esac
+        done <"$file"
+    done
+    printf '%s\t%s\n' "$storage" "$size"
+}
+
+# to_bytes SIZE -- systemd's size syntax (base 1024 suffixes) in bytes, or
+# nothing for "infinity", "default" or an unparsable value.
+to_bytes() {
+    local v=$1 n unit mult
+    [[ $v =~ ^([0-9]+)[[:space:]]*([KMGTPE]?)i?B?$ ]] || return 0
+    n=${BASH_REMATCH[1]}
+    unit=${BASH_REMATCH[2]}
+    ((${#n} <= 15)) || return 0
+    # Base 10 always: a leading zero must not make the number octal.
+    n=$((10#$n))
+    case $unit in
+        "") mult=1 ;;
+        K) mult=1024 ;;
+        M) mult=$((1024 ** 2)) ;;
+        G) mult=$((1024 ** 3)) ;;
+        T) mult=$((1024 ** 4)) ;;
+        *) return 0 ;;
+    esac
+    # Compare before multiplying: n * mult can overflow 64 bits and wrap
+    # below the cap. Anything above the cap is reported as cap + 1.
+    if ((n > LIMIT_BYTES / mult)); then
+        printf '%s\n' "$((LIMIT_BYTES + 1))"
+        return 0
+    fi
+    printf '%s\n' "$((n * mult))"
+}
+
+check_resolution() { # label file...
+    local label=$1 storage size bytes resolved
+    shift
+    resolved=$(conf_values "$@")
+    IFS=$'\t' read -r storage size <<<"$resolved"
+    [[ $storage == none ]] || die "[Coredump] Storage= resolves to '$storage' ($label order); it must be 'none'"
+    bytes=$(to_bytes "$size")
+    [[ -n $bytes ]] || die "[Coredump] ProcessSizeMax= resolves to '$size' ($label order); it must be a size of at most 1G"
+    ((bytes <= LIMIT_BYTES)) || die "[Coredump] ProcessSizeMax=$size ($label order) is above the 1G cap"
+}
+
+main_conf=usr/lib/systemd/coredump.conf
+[[ -e $(in_root etc/systemd/coredump.conf) ]] && main_conf=etc/systemd/coredump.conf
+mapfile -t systemd_order < <(
+    printf '%s\n' "$main_conf"
+    list_dropins etc/systemd/coredump.conf.d usr/lib/systemd/coredump.conf.d
+)
+check_resolution systemd "${systemd_order[@]}"
+
+mapfile -t plain_order < <(
+    printf '%s\n' usr/lib/systemd/coredump.conf
+    list_dropins usr/lib/systemd/coredump.conf.d
+    printf '%s\n' etc/systemd/coredump.conf
+    list_dropins etc/systemd/coredump.conf.d
+)
+check_resolution plain "${plain_order[@]}"
+
+# --- 3. and 4. sysctl.d -----------------------------------------------------
+mapfile -t sysctl_files < <(list_dropins etc/sysctl.d usr/lib/sysctl.d)
+core_pattern=""
+all_sysctl=()
+for dir in usr/lib/sysctl.d etc/sysctl.d; do
+    [[ -d $BUILDROOT/$dir ]] || continue
+    for file in "$BUILDROOT/$dir"/*.conf; do
+        [[ -e $file || -L $file ]] || continue
+        all_sysctl+=("$dir/$(basename "$file")")
+    done
+done
+
+# sysctl_assignments FILE -- "key<TAB>value" lines, keys with / as . and a
+# leading "-" (ignore errors) removed.
+sysctl_assignments() {
+    local file line key value
+    file=$(in_root "$1")
+    [[ -e $file ]] || return 0
+    [[ -r $file ]] || die "cannot read $1"
+    while IFS= read -r line || [[ -n $line ]]; do
+        line="${line#"${line%%[![:space:]]*}"}"
+        [[ -z $line || $line == [\#\;]* || $line != *=* ]] && continue
+        key=${line%%=*}
+        key="${key%"${key##*[![:space:]]}"}"
+        key=${key#-}
+        key=${key//\//.}
+        value=${line#*=}
+        value="${value#"${value%%[![:space:]]*}"}"
+        value="${value%"${value##*[![:space:]]}"}"
+        printf '%s\t%s\n' "$key" "$value"
+    done <"$file"
+}
+
+for rel in "${sysctl_files[@]}"; do
+    assignments=$(sysctl_assignments "$rel")
+    while IFS=$'\t' read -r key value; do
+        [[ $key == kernel.core_pattern ]] && core_pattern=$value
+    done <<<"$assignments"
+done
+[[ -n $core_pattern ]] || die "no sysctl.d file sets kernel.core_pattern (usr/lib/sysctl.d/50-coredump.conf from systemd-coredump is expected)"
+read -r -a pattern_words <<<"$core_pattern"
+[[ ${pattern_words[0]} == "|/usr/lib/systemd/systemd-coredump" ]] ||
+    die "kernel.core_pattern does not pipe to /usr/lib/systemd/systemd-coredump: '$core_pattern'"
+for spec in %d %F; do
+    found=0
+    for word in "${pattern_words[@]:1}"; do
+        [[ $word == "$spec" ]] && found=1
+    done
+    ((found)) || die "kernel.core_pattern lacks $spec (the CVE-2025-4598 fix of systemd 258 and 257.6 needs %d and %F): '$core_pattern'"
+done
+
+for rel in "${all_sysctl[@]}"; do
+    assignments=$(sysctl_assignments "$rel")
+    while IFS=$'\t' read -r key value; do
+        if [[ $key == fs.suid_dumpable && $value == 1 ]]; then
+            die "$rel sets fs.suid_dumpable=1 (unsafe: set-user-ID programs would dump as the user)"
+        fi
+    done <<<"$assignments"
+done
+
+# --- 5. the stack-text libraries --------------------------------------------
+for lib in libdw.so.1 libelf.so.1; do
+    [[ -e $(in_root "$LIBDIR/$lib") ]] || die "$LIBDIR/$lib is missing (install libdw1t64 and libelf1t64)"
+done
+
+echo "coredump.finalize: systemd-coredump ships with Storage=none, ProcessSizeMax <= 1G, core_pattern %d %F, no fs.suid_dumpable=1, libdw and libelf"

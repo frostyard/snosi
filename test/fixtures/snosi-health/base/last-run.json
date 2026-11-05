@@ -1,0 +1,7 @@
+{"format":1,"started":"2026-11-05T08:00:00Z","finished":"2026-11-05T08:00:42Z","outcome":"failed","refresh":"done","selected":false,"features":[
+{"feature":"docker","origin":"image","outcome":"failed","error_class":"network","version":"29.0.1","at":"2026-11-05T08:00:42Z","transfers":[]},
+{"feature":"incus","origin":"catalog","outcome":"skipped_busy","at":"2026-11-05T08:00:42Z","transfers":[]},
+{"feature":"brian-tools","origin":"local","outcome":"failed","error_class":"network","version":"1.0","at":"2026-11-05T08:00:42Z","transfers":[]},
+{"feature":"podman","origin":"image","outcome":"exploded","error_class":"cosmic_rays","version":"5.4.0","at":"2026-11-05T08:00:42Z","transfers":[]},
+{"feature":"tailscale","origin":"image","outcome":"updated","version":"1.80.0","at":"2026-11-05T08:00:42Z","transfers":[]}
+]}

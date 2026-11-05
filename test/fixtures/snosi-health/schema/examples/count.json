@@ -1,0 +1,16 @@
+{
+  "schema": "frostyard.problem/1",
+  "report_id": "99f8e6be-d4e1-4ad4-9c49-43eeeb263433",
+  "week": "2026-W45",
+  "image": {
+    "id": "floe",
+    "version": "20261031093822"
+  },
+  "secure": false,
+  "client": "snosi-health/20261031093822",
+  "kind": "count",
+  "detail": {
+    "install_age": "<6m",
+    "channel": "latest"
+  }
+}

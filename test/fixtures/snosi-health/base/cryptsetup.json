@@ -1,0 +1,6 @@
+{"__CURSOR":"k1","_UID":"0","__REALTIME_TIMESTAMP":"1793862000000000","MESSAGE":"Set cipher aes, mode xts-plain64, key size 512 bits for device /dev/disk/by-uuid/luks-brian."}
+{"__CURSOR":"k2","_UID":"0","__REALTIME_TIMESTAMP":"1793862001000000","MESSAGE":"WARNING:esys:src/tss2-esys/api/Esys_PolicyPCR.c:302:Esys_PolicyPCR_Finish() Received TPM Error "}
+{"__CURSOR":"k3","_UID":"0","__REALTIME_TIMESTAMP":"1793862001100000","MESSAGE":"ERROR:esys:src/tss2-esys/api/Esys_PolicyPCR.c:103:Esys_PolicyPCR() Esys Finish ErrorCode (0x00000128) "}
+{"__CURSOR":"k4","_UID":"0","__REALTIME_TIMESTAMP":"1793862002000000","MESSAGE":"WARNING:esys:src/tss2-esys/api/Esys_Unseal.c:295:Esys_Unseal_Finish() Received TPM Error "}
+{"__CURSOR":"k5","_UID":"0","__REALTIME_TIMESTAMP":"1793862002100000","MESSAGE":"ERROR:esys:src/tss2-esys/api/Esys_Unseal.c:98:Esys_Unseal() Esys Finish ErrorCode (0x00000128) "}
+{"__CURSOR":"k6","_UID":"0","__REALTIME_TIMESTAMP":"1793862003000000","MESSAGE":"Automatically discovered security TPM2 token unlocks volume luks-brian."}

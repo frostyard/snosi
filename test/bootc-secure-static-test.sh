@@ -136,7 +136,7 @@ grep -q '^Pin-Priority: 50$' "$package_manager/etc/apt/preferences.d/forky"
 for package in libnss-myhostname libnss-mymachines libnss-systemd \
     libpam-systemd libsystemd-shared libsystemd0 libudev1 systemd \
     systemd-boot systemd-boot-efi systemd-boot-tools systemd-container \
-    systemd-cryptsetup systemd-repart systemd-resolved systemd-sysv \
+    systemd-coredump systemd-cryptsetup systemd-repart systemd-resolved systemd-sysv \
     systemd-timesyncd systemd-tpm systemd-ukify udev; do
     grep -qE "^(Packages=|[[:space:]]*)$package/forky$" "$secure"
 done

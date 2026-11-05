@@ -1,0 +1,6 @@
+{"__CURSOR":"j1","__REALTIME_TIMESTAMP":"1793862100000000","PRIORITY":"6","MESSAGE":"fs-verity: sha256 using implementation \"sha256-ni\""}
+{"__CURSOR":"j2","__REALTIME_TIMESTAMP":"1793862200000000","PRIORITY":"3","MESSAGE":"fs-verity (nvme0n1p3, inode 4242): FILE CORRUPTED! pos=4096, level=0, want_hash=sha256:aa, real_hash=sha256:bb (file /home/brian/secret.txt)"}
+{"__CURSOR":"j3","__REALTIME_TIMESTAMP":"1793862300000000","PRIORITY":"3","MESSAGE":"fs-verity (nvme0n1p3, inode 4243): FILE CORRUPTED! pos=0, level=0, want_hash=sha256:cc, real_hash=sha256:dd"}
+{"__CURSOR":"j4","__REALTIME_TIMESTAMP":"1793862400000000","PRIORITY":"3","MESSAGE":"device-mapper: verity: 252:0: data block 77 is corrupted"}
+{"__CURSOR":"j5","__REALTIME_TIMESTAMP":"1793862500000000","PRIORITY":"4","MESSAGE":"overlayfs: lower file 'brian-notes' has the wrong fs-verity digest"}
+{"__CURSOR":"j6","__REALTIME_TIMESTAMP":"1793862600000000","PRIORITY":"6","MESSAGE":"EXT4-fs (nvme0n1p3): mounted filesystem with ordered data mode"}

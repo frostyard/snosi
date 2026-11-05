@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Run snosi-health 3 minutes after boot, then hourly (ADR-0029). The boot
+# delay keeps the collector out of the first login.
+[Unit]
+Description=Record system problems hourly (snosi-health)
+Documentation=https://github.com/frostyard/snosi/blob/main/docs/adr/0029-snosi-health-records-problems.md
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=1h
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target
