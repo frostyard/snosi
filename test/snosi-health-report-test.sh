@@ -124,7 +124,8 @@ foreign_presets=$(tracked_files | grep -E '\.preset$' | grep -vE '^shared/snosi-
 check "no preset outside the Floe report tree enables the report timer${foreign_presets:+ ($foreign_presets)}" \
     test -z "$foreign_presets"
 
-report_trees=$(git -C "$ROOT_DIR" grep -F -l 'ExtraTrees=%D/shared/snosi-report/tree' -- . |
+# Only mkosi configuration can add a tree; this test file names the line too.
+report_trees=$(git -C "$ROOT_DIR" grep -F -l 'ExtraTrees=%D/shared/snosi-report/tree' -- '*.conf' |
     grep -vx 'shared/composition/floe/mkosi.conf' || true)
 check "only shared/composition/floe/mkosi.conf adds the report tree${report_trees:+ ($report_trees)}" \
     test -z "$report_trees"
