@@ -42,6 +42,13 @@ CHAIRLIFT_EXEC = "/usr/bin/chairlift-first-run"
 APPS_JSON = "usr/share/snow/first-run/apps.json"
 # chairlift's firstrun.MaxAppsFileSize: a larger list hides the Apps step.
 MAX_APPS_FILE_SIZE = 1 << 20
+# The keys the canonical entry may carry. Every other key (TryExec,
+# OnlyShowIn, NotShowIn, Hidden, AutostartCondition, X-GNOME-Autostart-*,
+# X-KDE-*, ...) can stop GNOME from starting it, and this guard does not
+# model those conditions, so it rejects them.
+CANONICAL_KEYS = {"Type", "Name", "GenericName", "Comment", "Exec", "Icon",
+                  "Terminal", "NoDisplay", "StartupNotify", "Categories", "Version"}
+CANONICAL_LOCALIZED = ("Name[", "GenericName[", "Comment[")
 FIRST_LOGIN_NAMES = ("org.frostyard.ChairLift.FirstRun", "org.frostyard.FirstSetup")
 FIRST_LOGIN_PROGRAMS = ("chairlift-first-run", "snow-first-setup")
 # IMAGE_ID -> number of first-login triggers the image must ship.
@@ -82,8 +89,15 @@ def check_apps(data):
     purpose: a duplicate JSON key (chairlift keeps the last one silently) and
     an empty category key are build failures.
     """
-    if len(data.encode("utf-8") if isinstance(data, str) else data) > MAX_APPS_FILE_SIZE:
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+    # Bytes as on disk, as chairlift's LoadApps counts them.
+    if len(data) > MAX_APPS_FILE_SIZE:
         raise CheckError(f"larger than {MAX_APPS_FILE_SIZE} bytes (chairlift rejects it)")
+    try:
+        data = data.decode("utf-8")
+    except UnicodeDecodeError as err:
+        raise CheckError(f"invalid JSON: not UTF-8: {err}") from err
     def unique_keys(pairs):
         keys = [key for key, _ in pairs]
         if len(keys) != len(set(keys)):
@@ -175,8 +189,8 @@ def starts_on_gnome(entry):
         return False
     if entry.get("X-GNOME-Autostart-enabled", "true").lower() == "false":
         return False
-    only = listed("OnlyShowIn")
-    if only and "GNOME" not in only:
+    # A present but empty OnlyShowIn allows no desktop at all.
+    if "OnlyShowIn" in entry and "GNOME" not in listed("OnlyShowIn"):
         return False
     if "GNOME" in listed("NotShowIn"):
         return False
@@ -259,6 +273,16 @@ def check_image(image_id, root):
     stale = [rel for rel, _, enabled in entries if not enabled]
     if stale:
         raise CheckError(f"{image_id} ships disabled first-login entries: " + ", ".join("/" + r for r in stale))
+    canonical = next(entry for rel, entry, _ in entries if rel == CHAIRLIFT_ENTRY)
+    extra = sorted(k for k in canonical
+                   if k not in CANONICAL_KEYS and not k.startswith(CANONICAL_LOCALIZED))
+    if extra:
+        raise CheckError(
+            f"/{CHAIRLIFT_ENTRY} carries keys the guard does not validate: {', '.join(extra)}"
+            " (they can stop GNOME from starting it)"
+        )
+    if canonical.get("Terminal", "false") != "false":
+        raise CheckError(f"/{CHAIRLIFT_ENTRY} must not set Terminal={canonical['Terminal']}")
 
     program = resolve(root, CHAIRLIFT_EXEC.lstrip("/"))
     try:
@@ -272,9 +296,9 @@ def check_image(image_id, root):
 
     apps = resolve(root, APPS_JSON)
     try:
-        with open(apps, encoding="utf-8") as handle:
+        with open(apps, "rb") as handle:
             count = check_apps(handle.read())
-    except (OSError, UnicodeDecodeError) as err:
+    except OSError as err:
         raise CheckError(f"cannot read /{APPS_JSON}: {err}") from err
     except CheckError as err:
         raise CheckError(f"/{APPS_JSON}: {err}") from err
@@ -287,9 +311,9 @@ def main(argv):
             print("first-login-check: " + check_image(argv[2], argv[3]))
         elif len(argv) == 3 and argv[1] == "apps":
             try:
-                with open(argv[2], encoding="utf-8") as handle:
+                with open(argv[2], "rb") as handle:
                     count = check_apps(handle.read())
-            except (OSError, UnicodeDecodeError) as err:
+            except OSError as err:
                 raise CheckError(f"cannot read {argv[2]}: {err}") from err
             print(f"first-login-check: {argv[2]} lists {count} apps")
         else:

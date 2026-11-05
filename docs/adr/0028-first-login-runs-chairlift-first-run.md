@@ -53,7 +53,8 @@ translated in chairlift (T843a).
    entry's `Exec` is anything else. An entry counts as a trigger only when
    GNOME starts it (`Type=Application`, not hidden or disabled, not excluded
    by `OnlyShowIn`/`NotShowIn`); `Exec` programs are compared after
-   desktop-entry quoting.
+   desktop-entry quoting. The canonical entry may carry only keys the guard
+   validates, so no `TryExec` or other launch condition can silence it.
 3. **The image owns the app list.** `/usr/share/snow/first-run/apps.json`
    (first-setup's list and shape, category → `[{name, id, active?}]`) ships in
    the Snow tree. snosi ships no chairlift configuration: chairlift's default

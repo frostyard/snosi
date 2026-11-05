@@ -46,22 +46,30 @@ trap 'rm -rf "$tmp"' EXIT
 # AGENTS.md, such as .cursorrules) are skipped: their targets are scanned
 # where they are tracked as files.
 scan_first_setup() { # repo root -> "scanned N" then one hit per line
-    local repo=$1 rel found count=0
+    local repo=$1 rel found status count=0
     while IFS= read -r -d '' rel; do
         [[ -f $repo/$rel && ! -L $repo/$rel ]] || continue
         count=$((count + 1))
-        found=$(grep -nIE '\bsnow-first-setup\b' "$repo/$rel" \
-            | grep -vE '^[0-9]+:[[:space:]]*#' || true)
+        # grep: 0 match, 1 no match, 2 or more an error (fails the scan).
+        found=$(grep -nIE '\bsnow-first-setup\b' "$repo/$rel") && status=0 || status=$?
+        if (( status > 1 )); then
+            printf 'scan error %s (grep exit %d)\n' "$rel" "$status"
+            return 1
+        fi
+        found=$(grep -vE '^[0-9]+:[[:space:]]*#' <<<"$found") || true
         [[ -z $found ]] || printf '%s\n' "$found" | sed "s|^|$rel:|"
     done < <(git -C "$repo" ls-files -z \
         | grep -zv -e '^docs/' -e '^\.memory/' -e '^test/' -e '\.md$' \
             -e '^shared/composition/first-login-check\.py$')
     printf 'scanned %d\n' "$count"
 }
-out=$(scan_first_setup "$root")
+scan_status=0
+out=$(scan_first_setup "$root") || scan_status=$?
 scanned=${out##*scanned }
 hits=$(grep -v '^scanned ' <<<"$out" || true)
-if [[ $scanned -lt 100 ]]; then
+if (( scan_status != 0 )); then
+    fail "the snow-first-setup scan failed: $out"
+elif [[ ! $scanned =~ ^[0-9]+$ || $scanned -lt 100 ]]; then
     fail "scanned only $scanned tracked files for snow-first-setup"
 elif [[ -z $hits ]]; then
     pass "no build input names snow-first-setup ($scanned files)"
@@ -88,6 +96,18 @@ if [[ $(sort <<<"$fx_out") == "$(sort <<<"$fx_want")" ]]; then
 else
     fail "snow-first-setup scan self-check (got: $fx_out)"
 fi
+# An unreadable tracked file is a scan error, not "no match".
+chmod 000 "$fx/scripts/build.chroot"
+if [[ -r $fx/scripts/build.chroot ]]; then
+    pass "snow-first-setup scan self-check: unreadable file (skipped: running as root)"
+elif fx_out=$(scan_first_setup "$fx" 2>/dev/null); then
+    fail "snow-first-setup scan self-check: an unreadable file was not an error (got: $fx_out)"
+elif [[ $fx_out == *"scan error scripts/build.chroot (grep exit 2)"* ]]; then
+    pass "snow-first-setup scan self-check: an unreadable file fails the scan"
+else
+    fail "snow-first-setup scan self-check: an unreadable file fails the scan (got: $fx_out)"
+fi
+chmod 0644 "$fx/scripts/build.chroot"
 
 # --- 2. composed trees pass the image rules ----------------------------------
 # Each product gets the base tree and its composition's ExtraTrees, in order,
@@ -96,11 +116,12 @@ fi
 # errexit is off inside `if ! dest=$(compose ...)`, so every step returns
 # its own failure.
 compose() { # product composition -> root path on stdout
-    local product=$1 composition=$2 dest="$tmp/compose-$1" conf tree
+    local product=$1 composition=$2 dest="$tmp/compose-$1" conf tree listing
     local -a trees=()
     conf="$root/shared/composition/$composition/mkosi.conf"
     [[ -r $conf ]] || { echo "cannot read $conf" >&2; return 1; }
-    mapfile -t trees < <(sed -n 's/^ExtraTrees=//p' "$conf") || return 1
+    listing=$(sed -n 's/^ExtraTrees=//p' "$conf") || return 1
+    [[ -n $listing ]] && mapfile -t trees <<<"$listing"
     (( ${#trees[@]} > 0 )) || { echo "$conf lists no ExtraTrees" >&2; return 1; }
     mkdir -p "$dest" || return 1
     cp -a "$root/mkosi.images/base/mkosi.extra/." "$dest/" || return 1
@@ -211,6 +232,33 @@ elif [[ $out == *"larger than 1048576 bytes"* ]]; then
     pass "apps.json self-check: a list over 1 MiB is rejected (chairlift hides it)"
 else
     fail "apps.json self-check: a list over 1 MiB is rejected for its size (got: $out)"
+fi
+# On-disk bytes count, not decoded text: CRLF must not shrink the size.
+python3 - "$tmp/apps.json" <<'PY'
+import sys
+body = b'{"misc": [{"name": "X", "id": "org.example.App"}]}'
+open(sys.argv[1], "wb").write(body + b"\r\n" * 600000)
+PY
+if out=$(python3 "$checker" apps "$tmp/apps.json" 2>&1); then
+    fail "apps.json self-check: a list over 1 MiB on disk only through CRLF was accepted"
+elif [[ $out == *"larger than 1048576 bytes"* ]]; then
+    pass "apps.json self-check: a list over 1 MiB on disk only through CRLF is rejected"
+else
+    fail "apps.json self-check: a CRLF-padded list is rejected for its size (got: $out)"
+fi
+printf '{"misc": [{"name": "X", "id": "org.example.App"}]}\r\n' >"$tmp/apps.json"
+if python3 "$checker" apps "$tmp/apps.json" >/dev/null 2>&1; then
+    pass "apps.json self-check: a small list with a CRLF line end passes"
+else
+    fail "apps.json self-check: a small list with a CRLF line end passes"
+fi
+printf '\xff{}' >"$tmp/apps.json"
+if out=$(python3 "$checker" apps "$tmp/apps.json" 2>&1); then
+    fail "apps.json self-check: a non-UTF-8 list was accepted"
+elif [[ $out == *"not UTF-8"* ]]; then
+    pass "apps.json self-check: a non-UTF-8 list is rejected"
+else
+    fail "apps.json self-check: a non-UTF-8 list is rejected as not UTF-8 (got: $out)"
 fi
 printf '%s' '{"misc": [{"name": "X", "id": "io.gitlab.librewolf-community", "active": false}, {"name": "Y", "id": "org.example.Two", "active": null}]}' >"$tmp/apps.json"
 if python3 "$checker" apps "$tmp/apps.json" >/dev/null 2>&1; then
@@ -349,9 +397,26 @@ done
 dir=$(make_image no-type yes)
 sed -i '/^Type=/d' "$dir/$entry_rel"
 expect "the chairlift entry with no Type (GNOME starts none)" reject snow "$dir" "found 0"
-dir=$(make_image only-gnome yes)
-printf 'OnlyShowIn=GNOME;Unity;\n' >>"$dir/$entry_rel"
-expect "the chairlift entry with OnlyShowIn=GNOME;Unity;" pass snow "$dir"
+dir=$(make_image empty-only yes)
+printf 'OnlyShowIn=\n' >>"$dir/$entry_rel"
+expect "the chairlift entry with an empty OnlyShowIn= (GNOME starts none)" reject snow "$dir" "found 0"
+# The guard models only Type, Hidden, X-GNOME-Autostart-enabled, OnlyShowIn
+# and NotShowIn; any other launch condition on the canonical entry fails.
+for condition in 'OnlyShowIn=GNOME;Unity;' 'TryExec=/usr/bin/not-installed' \
+    'AutostartCondition=unless-exists foo' 'X-GNOME-Autostart-Phase=Initialization' \
+    'X-GNOME-Autostart-Delay=600'; do
+    dir=$(make_image "extra-key" yes)
+    printf '%s\n' "$condition" >>"$dir/$entry_rel"
+    expect "the chairlift entry with ${condition%%=*}=" reject snow "$dir" \
+        "keys the guard does not validate: ${condition%%=*}"
+done
+dir=$(make_image terminal yes)
+printf 'Terminal=true\n' >>"$dir/$entry_rel"
+expect "the chairlift entry with Terminal=true" reject snow "$dir" "must not set Terminal=true"
+dir=$(make_image localized yes)
+printf 'Name[de]=ChairLift Ersteinrichtung\nComment[fr]=Configurer\nIcon=org.frostyard.ChairLift\nTerminal=false\n' \
+    >>"$dir/$entry_rel"
+expect "the chairlift entry with localized names, Icon and Terminal=false" pass snow "$dir"
 
 dir=$(make_image first-setup-only no)
 printf '[Desktop Entry]\nType=Application\nName=SNOW First Setup\nExec=snow-first-setup --autostart\n' \
