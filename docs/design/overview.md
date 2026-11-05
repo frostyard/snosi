@@ -176,8 +176,12 @@ priority) runs `snosi-health`, which records failed image units, failed
 stages (the stager's `error_class`), rollbacks, failed sysext updates
 (updex's `last-run.json`), TPM unlock retries, integrity errors, system
 crashes (systemd-coredump with `Storage=none`) and frostyard app problems in
-`/var/lib/snosi-health/problems.json` and `details.json`. It sends nothing
+`/var/lib/snosi-health/problems.json` and `details.json`. It sends nothing;
+only Floe ships the opt-in sender `snosi-health-report`, whose daily timer
+posts at most 20 reportable problems and 1 weekly count once the
+administrator runs `snosi-health reporting on`
 ([ADR-0029](../adr/0029-snosi-health-records-problems.md),
+[ADR-0030](../adr/0030-floe-sends-problem-reports-with-admin-consent.md),
 [integration contracts](../integration-contracts.md#problem-records-snosi-health)).
 
 Sysexts are EROFS `/usr` overlays downloaded by per-component

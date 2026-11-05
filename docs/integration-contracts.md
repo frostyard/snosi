@@ -183,10 +183,12 @@ It publishes these files together as 1 recoverable transaction (staged in
 | `/var/lib/snosi-health/state.json`, `journal.cursor` | 0600 root | Private collector state: boot slots, the hashes of the last counted inputs, the updex feature keys, and the system-journal cursor |
 
 Consumers: chairlift's Problems page (both files; `details.json` only for
-`sudo` members), `snosi-health --list`, and the later Floe sender (T857 t20),
-which adds a `report_id` to a reportable record. A consumer must accept a
-`null` `image.id`, `image.version` or `client` (a host that is not a snosi
-product). The collector's inputs are other contracts:
+`sudo` members), `snosi-health --list`, and Floe's sender
+`snosi-health-report` ([ADR-0030](adr/0030-floe-sends-problem-reports-with-admin-consent.md)),
+which builds a report document with a new `report_id` from a reportable
+record and posts it (below). A consumer must accept a `null` `image.id`,
+`image.version` or `client` (a host that is not a snosi product). The
+collector's inputs are other contracts:
 
 - `/run/snosi/update-check` (above), with `error_class`;
 - `bootc status --format json`: `.status.booted.image.version` and
@@ -205,3 +207,40 @@ product). The collector's inputs are other contracts:
 `test/snosi-health-test.sh` validates the output against a pinned byte copy
 of core's `v1.json` (`test/fixtures/snosi-health/schema/`) with
 `test/lib/json_schema_subset.py`.
+
+### Problem reports from Floe
+
+🟢 Only the tree `shared/snosi-report/tree` ships the sender
+([ADR-0030](adr/0030-floe-sends-problem-reports-with-admin-consent.md)):
+`/usr/libexec/snosi-health-report`, `snosi-health-report.service`,
+`snosi-health-report.timer`, `06-snosi-health-report.preset` and the motd hook
+`/etc/update-motd.d/87-snosi-health-reporting`. Snow, Snowfield and Sundog
+ship no sender: chairlift's Problems page sends their reports. Base's
+`snosi-health` dispatches `reporting` and `send` to the sender, and prints
+that problem reporting is not part of the image when it is absent.
+
+| File | Mode | Content |
+| --- | --- | --- |
+| `/etc/snosi-health/reporting.conf` | 0644 root | Written only by `sudo snosi-health reporting on` and `sudo snosi-health reporting off`: 2 comment lines, `enabled=` 0 or 1, `schema=` (consent is for `frostyard.problem/1` only), `decided_at=` (UTC RFC 3339) and `endpoint=` when a valid one was set. Only lines starting with those 4 keys count and the last value wins; `off` never deletes the file. No image ships this path |
+| `/var/lib/snosi-health/sent.jsonl` | 0644 root | 1 line for each posted document: `sent_at` (UTC RFC 3339), `status` (`accepted` or `rejected`), `http_status`, `problem_id` (16 hex, `null` for the count) and the posted `report`. Entries older than 90 days are dropped; a line that is not JSON is skipped by the reader |
+
+HTTP contract with frostyard/problem-intake
+([intake API](https://github.com/frostyard/problem-intake/blob/main/docs/specs/intake-api.md)):
+`POST` to `https://report.frostyard.org/v1/report` by default (or the
+`endpoint=` of the consent file) with `Content-Type: application/json`, no
+`User-Agent`, no `Accept`, no redirect followed, and 7 seconds between 2
+requests. At most 20 problem reports a day and 1 `count` a week; a report
+of kind `crash` is never sent.
+
+| Answer | Sender |
+| --- | --- |
+| 2xx | record the document as `accepted` |
+| 400, 413, 415 | record it as `rejected`; it is never retried |
+| 429, 503, another code, a redirect, a curl failure | stop the run, record nothing, exit 0; the next daily run tries again |
+
+`snosi-health --validate` (base, any user, no lock and no state) is the 1
+validator of a report document: it reads JSON values from stdin, prints each
+valid one as compact JSON, 1 per line, and exits 1 when any is invalid or the
+input is not JSON. The sender asks it about every document before a post. 🟢
+`test/snosi-health-report-test.sh` (a fake intake on 127.0.0.1, no root, no
+image build).

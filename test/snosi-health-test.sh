@@ -80,9 +80,9 @@ negative "33 frames" \
 negative "retries out of range" \
     '.kind = "tpm_unlock" | .detail = {outcome: "ok_after_retry", tpm_rc: "PCR_CHANGED", retries: 11}'
 
-# Every pattern of v1.json (except report_id's, which only a sender uses)
-# appears in the collector as the same JSON string, so the collector's jq
-# rules cannot drift from the schema copy.
+# Every pattern of v1.json appears in the collector as the same JSON string,
+# so the collector's jq rules cannot drift from the schema copy. That includes
+# report_id's pattern: the collector holds it for --validate (ADR-0030).
 missing_patterns=$(python3 - "$SCHEMA" "$COLLECTOR" <<'PY'
 import json, sys
 schema = json.load(open(sys.argv[1]))
@@ -91,8 +91,7 @@ found = []
 def walk(node, parent):
     if isinstance(node, dict):
         for key, value in node.items():
-            # problems.json has no report_id: a sender makes one per report.
-            if key == "pattern" and parent != "report_id":
+            if key == "pattern":
                 found.append(value)
             walk(value, key)
     elif isinstance(node, list):

@@ -1,27 +1,40 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# Build guard: a preset that enables snosi-health.timer must be consistent with
-# the image it is packed into (ADR-0029, modeled on updex-timer.finalize).
+# Build guard for the snosi-health timers and the Floe problem-report sender
+# (ADR-0029, ADR-0030, modeled on updex-timer.finalize).
 #
 # The base tree ships /usr/bin/snosi-health, snosi-health.service and
-# snosi-health.timer, and `06-snosi-health.preset` turns the timer on. A preset
-# line with no unit behind it would leave every install without problem
-# records, silently, and a preset line with no enablement-manifest entry would
-# leave an EXISTING host without the timer: preset-reconcile only presets the
-# units ADDED to /usr/share/snosi/enablement-manifest.txt (ADR-0002).
+# snosi-health.timer, and `06-snosi-health.preset` turns the timer on. The Floe
+# tree adds /usr/libexec/snosi-health-report, snosi-health-report.service,
+# snosi-health-report.timer and `06-snosi-health-report.preset`. A preset line
+# with no unit behind it would leave every install without problem records or
+# without the report sender, silently, and a preset line with no
+# enablement-manifest entry would leave an EXISTING host without the timer:
+# preset-reconcile only presets the units ADDED to
+# /usr/share/snosi/enablement-manifest.txt (ADR-0002).
 #
 # This is a NON-chroot mkosi FinalizeScript: it runs on the host against
 # $BUILDROOT, after shared/outformat/image/finalize/mkosi.finalize.chroot has
 # written the manifest and stripped the /etc enablement links.
 #
-# It fails the build when any *.preset under usr/lib/systemd/system-preset or
-# etc/systemd/system-preset enables snosi-health.timer AND
-#   - usr/lib/systemd/system/snosi-health.timer,
+# It fails the build when
+#   - $BUILDROOT/etc/snosi-health exists: no image may ship the problem-report
+#     consent file. It exists only after `snosi-health reporting on|off`
+#     (ADR-0030), and a shipped one would turn reporting on for every install.
+#   - any *.preset under usr/lib/systemd/system-preset or
+#     etc/systemd/system-preset enables snosi-health.timer AND
+#     usr/lib/systemd/system/snosi-health.timer,
 #     usr/lib/systemd/system/snosi-health.service or usr/bin/snosi-health is
-#     not a regular file, or
-#   - the manifest is missing or lacks the exact line
+#     not a regular file, or the manifest is missing or lacks the exact line
 #     "system timers.target.wants/snosi-health.timer".
+#   - any such preset enables snosi-health-report.timer AND
+#     usr/lib/systemd/system/snosi-health-report.timer,
+#     usr/lib/systemd/system/snosi-health-report.service or
+#     usr/libexec/snosi-health-report is not a regular file, or the manifest is
+#     missing or lacks the exact line
+#     "system timers.target.wants/snosi-health-report.timer".
+# Both timers are checked in full: 1 failure never hides the other.
 #
 # The guard fails closed: an unreadable preset directory, a find(1) error or a
 # grep(1) read error fails the build instead of reporting the image clean.
@@ -29,19 +42,30 @@ set -euo pipefail
 
 : "${BUILDROOT:?snosi-health-timer.finalize: \$BUILDROOT not set (must run as a FinalizeScript)}"
 
+readonly PREFIX="snosi-health-timer.finalize:"
 USR_PRESET_DIR="$BUILDROOT/usr/lib/systemd/system-preset"
 ETC_PRESET_DIR="$BUILDROOT/etc/systemd/system-preset"
-TIMER_UNIT="$BUILDROOT/usr/lib/systemd/system/snosi-health.timer"
-SERVICE_UNIT="$BUILDROOT/usr/lib/systemd/system/snosi-health.service"
-COLLECTOR="$BUILDROOT/usr/bin/snosi-health"
+UNIT_DIR="$BUILDROOT/usr/lib/systemd/system"
 MANIFEST="$BUILDROOT/usr/share/snosi/enablement-manifest.txt"
-MANIFEST_LINE="system timers.target.wants/snosi-health.timer"
-PRESET_LINE='^[[:space:]]*enable[[:space:]]+snosi-health\.timer([[:space:]]|$)'
+CONSENT_DIR="$BUILDROOT/etc/snosi-health"
 
+fails=0
+
+fail() {
+    echo "$PREFIX $*" >&2
+    fails=$((fails + 1))
+}
+
+# die -- a check that cannot run at all stops the build at once.
 die() {
-    echo "snosi-health-timer.finalize: $*" >&2
+    fail "$@"
     exit 1
 }
+
+# --- 0. no image ships the consent file -------------------------------------
+if [[ -e $CONSENT_DIR ]]; then
+    fail "etc/snosi-health must not ship in an image; problem reporting is off until an administrator agrees (ADR-0030)"
+fi
 
 # --- 1. the base preset directory must exist and be readable ----------------
 # base owns usr/lib/systemd/system-preset; a missing or unreadable directory
@@ -53,7 +77,7 @@ if [[ ! -r "$USR_PRESET_DIR" ]]; then
     die "$USR_PRESET_DIR is unreadable (preset policy cannot be checked)"
 fi
 
-# --- 2. which presets enable the timer? -------------------------------------
+# --- 2. the preset files ----------------------------------------------------
 list=$(mktemp)
 trap 'rm -f "$list"' EXIT
 
@@ -63,44 +87,76 @@ if ! find "${preset_dirs[@]}" -maxdepth 1 -type f -name '*.preset' -print >"$lis
     die "cannot list the *.preset files under ${preset_dirs[*]}"
 fi
 
-enabled_by=""
-status=0
-while IFS= read -r preset; do
-    if grep -qE "$PRESET_LINE" "$preset"; then
-        enabled_by="$preset"
-        break
+# enabling_preset TIMER -- print the first preset that enables TIMER, print
+# nothing when none does, and return 2 when a preset cannot be read.
+enabling_preset() {
+    local timer=$1 preset status
+    while IFS= read -r preset; do
+        if grep -qE "^[[:space:]]*enable[[:space:]]+${timer//./\\.}([[:space:]]|\$)" "$preset"; then
+            printf '%s\n' "$preset"
+            return 0
+        else
+            status=$?
+            # grep exits 1 for "no match" (clean) and 2 for a read error (fatal).
+            if [[ $status -ne 1 ]]; then
+                return 2
+            fi
+        fi
+    done <"$list"
+    return 1
+}
+
+# check_timer TIMER EXTRA-PATH MANIFEST-LINE -- the units (and the program) of an
+# enabled timer must ship, and an existing host needs the manifest entry to get
+# it (preset-reconcile only presets units that the manifest names).
+check_timer() {
+    local name=$1 extra=$2 manifest_line=$3
+    local timer="$UNIT_DIR/$1" preset service enabled_by="" rc=0 status unit
+    service="$UNIT_DIR/${name%.timer}.service"
+    enabled_by=$(enabling_preset "$name") || rc=$?
+    if [[ $rc -eq 2 ]]; then
+        die "cannot read a preset file (grep exited 2)"
+    fi
+    if [[ -z $enabled_by ]]; then
+        echo "$PREFIX no preset enables $name; nothing to check"
+        return 0
+    fi
+    echo "$PREFIX $(basename "$enabled_by") enables $name"
+
+    local units=("$timer" "$service")
+    if [[ -n $extra ]]; then
+        units+=("$BUILDROOT$extra")
+    fi
+    for unit in "${units[@]}"; do
+        if [[ ! -f $unit ]]; then
+            fail "$(basename "$enabled_by") enables $name but ${unit#"$BUILDROOT"} is missing or not a regular file"
+        fi
+    done
+
+    if [[ ! -f $MANIFEST ]]; then
+        fail "$(basename "$enabled_by") enables $name but ${MANIFEST#"$BUILDROOT"} is missing (preset-reconcile would never enable it on an existing host)"
+        return 0
+    fi
+    if grep -Fqx "$manifest_line" "$MANIFEST"; then
+        :
     else
         status=$?
-        # grep exits 1 for "no match" (clean) and 2 for a read error (fatal).
         if [[ $status -ne 1 ]]; then
-            die "cannot read $preset (grep exit $status)"
+            die "cannot read ${MANIFEST#"$BUILDROOT"} (grep exit $status)"
         fi
+        fail "${MANIFEST#"$BUILDROOT"} lacks the entry \"$manifest_line\" (preset-reconcile would never enable $name on an existing host)"
+        return 0
     fi
-done <"$list"
+    echo "$PREFIX $name ships, is preset-enabled and is recorded in the enablement manifest"
+}
 
-if [[ -z "$enabled_by" ]]; then
-    echo "snosi-health-timer.finalize: no preset enables snosi-health.timer; nothing to check"
-    exit 0
+check_timer snosi-health.timer /usr/bin/snosi-health \
+    "system timers.target.wants/snosi-health.timer"
+check_timer snosi-health-report.timer /usr/libexec/snosi-health-report \
+    "system timers.target.wants/snosi-health-report.timer"
+
+if [[ $fails -ne 0 ]]; then
+    echo "$PREFIX $fails problem(s) found" >&2
+    exit 1
 fi
-
-echo "snosi-health-timer.finalize: $(basename "$enabled_by") enables snosi-health.timer"
-
-# --- 3. both units and the collector must ship ------------------------------
-for unit in "$TIMER_UNIT" "$SERVICE_UNIT" "$COLLECTOR"; do
-    [[ -f "$unit" ]] || die "$enabled_by enables snosi-health.timer but ${unit#"$BUILDROOT"} is missing or not a regular file"
-done
-
-# --- 4. an existing host needs the manifest entry to get the timer ----------
-[[ -f "$MANIFEST" ]] || die "$enabled_by enables snosi-health.timer but ${MANIFEST#"$BUILDROOT"} is missing (preset-reconcile would never enable it on an existing host)"
-
-if grep -Fqx "$MANIFEST_LINE" "$MANIFEST"; then
-    :
-else
-    status=$?
-    if [[ $status -ne 1 ]]; then
-        die "cannot read ${MANIFEST#"$BUILDROOT"} (grep exit $status)"
-    fi
-    die "${MANIFEST#"$BUILDROOT"} lacks the entry \"$MANIFEST_LINE\" (preset-reconcile would never enable snosi-health.timer on an existing host)"
-fi
-
-echo "snosi-health-timer.finalize: snosi-health.timer ships, is preset-enabled and is recorded in the enablement manifest"
+exit 0

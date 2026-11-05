@@ -202,6 +202,16 @@ libdw and libelf. Tests: `test/snosi-health-test.sh` (fixtures validated
 against a pinned copy of core's `v1.json`),
 `test/snosi-health-timer-guard-test.sh`, `test/coredump-guard-test.sh`.
 
+Floe alone ships the problem-report sender: `shared/snosi-report/tree` holds
+`/usr/libexec/snosi-health-report`, `snosi-health-report.timer` and the motd
+line "Problem reporting is off", and only `shared/composition/floe/mkosi.conf`
+adds that tree (Sundog includes `shared/floe/tree`, so the sender has its own).
+Reporting is off by default and opt-in: `sudo snosi-health reporting on|off`
+writes `enabled=1|0` in `/etc/snosi-health/reporting.conf` and never deletes
+that file, and no image ships `/etc/snosi-health`. The daily timer posts at
+most 20 reportable problems and 1 weekly count, never a `crash` report, and
+`test/snosi-health-report-test.sh` enforces all of it (ADR-0030).
+
 `.github/workflows/build.yml` publishes sysexts; `build-images.yml` publishes
 signed OCI images by immutable digest before promoting `latest`. The
 first-party sysexts `lodge`, `notesd`, `maild`, `porterd` and `readd` pin

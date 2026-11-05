@@ -95,6 +95,7 @@ runtime-etc-guard-test.sh	ci	validate.yml
 service-account-memberships-test.py	ci	validate.yml
 secure-vm-fixture-test.sh	ci	validate.yml
 snosi-etc-diff-test.sh	ci	validate.yml
+snosi-health-report-test.sh	ci	validate.yml
 snosi-health-test.sh	ci	validate.yml
 snosi-health-timer-guard-test.sh	ci	validate.yml
 snosi-kargs-test.sh	ci	validate.yml

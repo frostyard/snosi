@@ -27,11 +27,18 @@ readonly MAX_EVENTS=2000
 
 usage() {
     cat <<'EOF'
-Usage: snosi-health [--list | --help]
+Usage: snosi-health [--list | --validate | --help]
   (no argument)  collect: record the problems of this system in
                  /var/lib/snosi-health/problems.json and details.json
                  (root only; snosi-health.timer runs it hourly)
   --list         print the recorded problems (any user)
+  --validate     read problem reports as JSON from stdin and print each valid
+                 one (frostyard.problem/1) as compact JSON, 1 per line; exit 1
+                 when any is invalid (any user)
+  reporting on|off|status (Floe)
+                 turn problem reporting on or off, or print its state
+  send [--dry-run] (Floe)
+                 send the reportable problems now, or print what a send posts
   --help         show this help
 EOF
 }
@@ -67,6 +74,21 @@ if [[ $TEST_HOOKS -eq 1 ]]; then
     fi
 fi
 
+# Problem reporting is the Floe sender's (ADR-0030). Only the Floe image ships
+# /usr/libexec/snosi-health-report (from shared/snosi-report/tree); every other
+# image answers here, so a Snow, Snowfield or Sundog host gets a clear answer
+# instead of a silent success. The dispatch runs before the root check because
+# `reporting status` and `send --dry-run` are for any user.
+case ${1-} in
+    reporting | send)
+        if [[ -x "$ROOT/usr/libexec/snosi-health-report" ]]; then
+            exec "$ROOT/usr/libexec/snosi-health-report" "$@"
+        fi
+        echo "snosi-health: problem reporting is not part of this image. On Snow, Snowfield and Sundog, ChairLift's Problems page sends reports." >&2
+        exit 1
+        ;;
+esac
+
 readonly STATE_DIR="$ROOT/var/lib/snosi-health"
 readonly PROBLEMS="$STATE_DIR/problems.json"
 readonly DETAILS="$STATE_DIR/details.json"
@@ -93,6 +115,9 @@ def semver: re("^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})
 def imgver: re("^[0-9]{14}$");
 def kinds: ["unit_failed", "update_stage_failed", "booted_older_image", "sysext_update_failed",
             "tpm_unlock", "integrity_error", "crash", "app_problem"];
+# kinds are what the collector records; a report may also be the weekly count
+# that Floe's sender posts (ADR-0030). The collector never makes one.
+def report_kinds: kinds + ["count"];
 def props($kind): if ($kind | type) != "string" then [] else {
     unit_failed: ["unit", "result", "shipped"],
     update_stage_failed: ["target_version", "error_class", "bootc_version"],
@@ -101,7 +126,8 @@ def props($kind): if ($kind | type) != "string" then [] else {
     tpm_unlock: ["outcome", "tpm_rc", "retries"],
     integrity_error: ["subsystem", "count"],
     crash: ["exe", "package", "package_version", "signal"],
-    app_problem: ["app_id", "app_version", "runtime", "component", "class", "code", "frames", "location"]
+    app_problem: ["app_id", "app_version", "runtime", "component", "class", "code", "frames", "location"],
+    count: ["install_age", "channel"]
   }[$kind] // [] end;
 def required($kind): if ($kind | type) != "string" then [] else {
     unit_failed: ["unit", "result", "shipped"],
@@ -111,7 +137,8 @@ def required($kind): if ($kind | type) != "string" then [] else {
     tpm_unlock: ["outcome", "tpm_rc", "retries"],
     integrity_error: ["subsystem", "count"],
     crash: ["exe", "signal"],
-    app_problem: ["app_id", "app_version", "runtime", "component", "class"]
+    app_problem: ["app_id", "app_version", "runtime", "component", "class"],
+    count: ["install_age", "channel"]
   }[$kind] // [] end;
 def frame_ok: type == "string" and length <= 160
   and re("^(other|(github\\.com/frostyard(/[A-Za-z0-9_-]+){1,6}|(github\\.com/emersion/go-imap/v2|archive|bufio|bytes|cmp|compress|container|context|crypto|database|debug|embed|encoding|errors|expvar|flag|fmt|go|hash|html|image|index|internal|io|iter|log|main|maps|math|mime|net|os|path|plugin|reflect|regexp|runtime|slices|sort|strconv|strings|structs|sync|syscall|testing|text|time|unicode|unique|unsafe|vendor|weak)(/[a-z0-9_]+){0,4})\\.[A-Za-z0-9_.()*\\[\\]-]+)$");
@@ -163,6 +190,10 @@ def field_ok($kind; $k):
     elif $k == "frames" then type == "array" and length >= 1 and length <= 32 and all(.[]; frame_ok)
     elif $k == "location" then type == "string" and length <= 128 and re("^src/([a-z0-9_]+/){0,8}[a-z0-9_]+\\.rs:[1-9][0-9]{0,5}$")
     else false end
+  elif $kind == "count" then
+    if $k == "install_age" then oneof(["<1w", "<1m", "<6m", ">=6m"])
+    elif $k == "channel" then oneof(["latest", "other"])
+    else false end
   else false end;
 # Keep only the fields of the kind whose value matches its v1 property schema.
 def sanitize($kind):
@@ -186,6 +217,18 @@ def envelope_ok($env; $week):
   and ($env.secure | type == "boolean")
   and ($env.client | re("^(chairlift/(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})(-(alpha|beta|rc)\\.(0|[1-9][0-9]{0,3}))?|snosi-health/[0-9]{14})$"))
   and ($week | re("^20[2-9][0-9]-W(0[1-9]|[1-4][0-9]|5[0-3])$"));
+# One report document, exactly as an intake sender posts it: the v1 envelope
+# with kind count included. `--validate` uses these rules, and Floe's sender
+# asks this collector to check every document before it posts one (ADR-0030).
+def report_valid:
+  type == "object"
+  and ((keys | sort) == (["schema", "report_id", "week", "image", "secure", "client", "kind", "detail"] | sort))
+  and .schema == "frostyard.problem/1"
+  and (.report_id | re("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
+  and (.image | type == "object" and ((keys | sort) == ["id", "version"]))
+  and envelope_ok(.; .week)
+  and (.kind | oneof(report_kinds))
+  and (.kind as $k | .detail | detail_valid($k));
 def ts_ok: re("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") and ((try fromdateiso8601 catch null) != null);
 def week_of: fromdateiso8601 | strftime("%G-W%V");
 def jts: (.__REALTIME_TIMESTAMP // "0") | (try (tonumber / 1000000 | floor | todate) catch null);
@@ -222,11 +265,38 @@ list_problems() {
     ' "$PROBLEMS" || die "cannot read $PROBLEMS"
 }
 
+# --validate: read problem reports as JSON values from stdin and print each
+# valid one as compact JSON, 1 per line. An unparsable stream or any invalid
+# document exits 1. No root, no lock and no state: this is the 1 validator that
+# a sender asks before it posts a report (ADR-0030).
+validate_reports() {
+    local compact line n=0 bad=0
+    # `jq -c .` re-emits every JSON value of the stream on 1 line, and refuses
+    # input that is not JSON at all.
+    if ! compact=$(jq -c . 2>/dev/null); then
+        echo "snosi-health: the report input is not JSON (frostyard.problem/1 expected)" >&2
+        return 1
+    fi
+    while IFS= read -r line; do
+        [[ -n $line ]] || continue
+        n=$((n + 1))
+        if [[ $(jq -nr --argjson doc "$line" "$JQ_LIB"'
+                $doc | if report_valid then "ok" else "no" end' 2>/dev/null) == ok ]]; then
+            printf '%s\n' "$line"
+        else
+            echo "snosi-health: report $n fails frostyard.problem/1" >&2
+            bad=1
+        fi
+    done <<<"$compact"
+    return "$bad"
+}
+
 case $# in
     0) MODE=collect ;;
     1)
         case $1 in
             --list) MODE=list ;;
+            --validate) MODE=validate ;;
             --help | -h)
                 usage
                 exit 0
@@ -246,6 +316,12 @@ esac
 if [[ $MODE == list ]]; then
     list_problems
     exit 0
+fi
+
+if [[ $MODE == validate ]]; then
+    rc=0
+    validate_reports || rc=$?
+    exit "$rc"
 fi
 
 # --- collect ----------------------------------------------------------------

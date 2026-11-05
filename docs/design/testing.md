@@ -43,7 +43,11 @@ contract, user-UID entries that S5 must ignore, carried updex entries,
 same-second and out-of-order journal entries, and the commit transaction: a
 stop before `COMMIT`, after it, or after each rename (a test-only fault
 hook), after which the next run gives the same problems as a run with no
-stop. `test/coredump-guard-test.sh` fixtures `coredump.finalize`
+stop. `test/snosi-health-report-test.sh` drives Floe's sender (ADR-0030) against a
+fake intake on 127.0.0.1 inside a scratch root: consent on and off, dry run,
+the daily limit and the weekly count, the answer handling, `install_age` and
+`channel`, the motd line, the collector's dispatch and `--validate`.
+`test/coredump-guard-test.sh` fixtures `coredump.finalize`
 (`Storage=none`, `ProcessSizeMax`, `%d` and `%F`, `fs.suid_dumpable`, libdw
 and libelf). `test/bootc-container-policy-test.sh` pins 1 stager
 `error_class` case for each class.

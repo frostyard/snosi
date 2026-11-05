@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Always enable Floe's problem-report timer (ADR-0030). The sender itself
+# gates on the consent file, so an enabled timer sends nothing until an
+# administrator runs `snosi-health reporting on`. No runtime systemctl enable
+# and no administrator step: the timer is on from the first boot.
+enable snosi-health-report.timer

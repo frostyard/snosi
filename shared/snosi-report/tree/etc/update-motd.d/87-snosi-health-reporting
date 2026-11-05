@@ -1,0 +1,14 @@
+#!/bin/sh
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# motd hook (Floe server logins): problem reporting is off until the
+# administrator agrees (ADR-0030). The line appears only while
+# /etc/snosi-health/reporting.conf has no enabled= decision, so it stops as
+# soon as `snosi-health reporting on` or `off` has run. It only reads.
+CONF=/etc/snosi-health/reporting.conf
+
+if [ -r "$CONF" ] && grep -qE '^enabled=(0|1)$' "$CONF"; then
+    exit 0
+fi
+
+# shellcheck disable=SC2016 # the backticks are literal text for the reader
+printf '\nProblem reporting is off. See `snosi-health reporting --help`.\n'
