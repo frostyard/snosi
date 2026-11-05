@@ -1,0 +1,18 @@
+{
+  "schema": "frostyard.problem/1",
+  "report_id": "2b9771b7-361e-4262-bd75-da13bb3cc365",
+  "week": "2026-W45",
+  "image": {
+    "id": "sundog",
+    "version": "20261031093822"
+  },
+  "secure": false,
+  "client": "chairlift/0.14.0",
+  "kind": "crash",
+  "detail": {
+    "exe": "gnome-shell",
+    "package": "gnome-shell",
+    "package_version": "48.4-1",
+    "signal": "SIGSEGV"
+  }
+}

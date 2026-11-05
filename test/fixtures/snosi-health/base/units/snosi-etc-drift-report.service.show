@@ -1,0 +1,2 @@
+Result=watchdog
+FragmentPath=/usr/lib/systemd/system/snosi-etc-drift-report.service

@@ -103,11 +103,56 @@ if [[ -r /usr/lib/os-release ]]; then
     running_version=$(. /usr/lib/os-release && echo "${IMAGE_VERSION:-}")
 fi
 
-write_check() { # outcome
+write_check() { # outcome [error_class]
     mkdir -p "$RUN_DIR"
-    printf 'outcome=%s\nchecked_at=%s\nimage=%s\nrunning_version=%s\nremote_version=%s\n' \
-        "$1" "$(date --iso-8601=seconds)" "${image:-}" "$running_version" \
-        "${remote_version:-}" >"$CHECK"
+    {
+        printf 'outcome=%s\nchecked_at=%s\nimage=%s\nrunning_version=%s\nremote_version=%s\n' \
+            "$1" "$(date --iso-8601=seconds)" "${image:-}" "$running_version" \
+            "${remote_version:-}"
+        # Only outcome=failed carries a class (snosi-health S2, ADR-0029).
+        [[ -z ${2:-} ]] || printf 'error_class=%s\n' "$2"
+    } >"$CHECK"
+}
+
+# Error class of a failed run: stderr of podman and bootc goes to a private
+# temp file as well as to the journal, and fixed patterns classify it as
+# network, registry, signature, disk_space, lock or other. update-check gets
+# only the class, never the error text.
+err_log=$(mktemp 2>/dev/null) || err_log=""
+
+# cap CMD... -- run CMD with its stderr also appended to the private log.
+cap() {
+    if [[ -z $err_log ]]; then
+        "$@"
+        return
+    fi
+    local start rc=0
+    start=$(stat -c %s "$err_log" 2>/dev/null) || start=0
+    "$@" 2>>"$err_log" || rc=$?
+    tail -c +"$((start + 1))" "$err_log" >&2 || true
+    return "$rc"
+}
+
+classify_error() {
+    if [[ -z $err_log || ! -s $err_log ]]; then
+        echo other
+    elif grep -qiE 'no space left on device|ENOSPC|disk quota exceeded' "$err_log"; then
+        echo disk_space
+    elif grep -qiE 'Source image rejected|policy requirements|does not satisfy policy' "$err_log"; then
+        # An explicit policy rejection wins over the network words it can hold.
+        echo signature
+    elif grep -qiE 'no such host|name resolution|lookup .* on .*:53|connection refused|connection reset|network is unreachable|i/o timeout|timed out|timeout|dial tcp|tls:|x509|certificate|handshake' "$err_log"; then
+        # Before the generic signature words: a failed signature fetch is network.
+        echo network
+    elif grep -qiE 'signature|sigstore|not trusted' "$err_log"; then
+        echo signature
+    elif grep -qiE 'manifest unknown|unauthorized|denied: |access to the resource is denied|toomanyrequests|too many requests|status( code)?:? [45][0-9][0-9]|statuscode[=: ]+[45][0-9][0-9]|unexpected http status' "$err_log"; then
+        echo registry
+    elif grep -qiwE 'lock|locked|locking' "$err_log"; then
+        echo lock
+    else
+        echo other
+    fi
 }
 
 # A real staged semaphore may coexist with outcome=failed when a later check fails.
@@ -116,9 +161,9 @@ write_check() { # outcome
 # up-to-date system. The trap also removes the private packages.txt temp file
 # (ADR-0014 capture-before-stage) on every exit path.
 pkg_temp=""
-trap '[[ $? -eq 0 ]] || write_check failed; [[ -n $pkg_temp ]] && rm -f "$pkg_temp"' EXIT
+trap '[[ $? -eq 0 ]] || write_check failed "$(classify_error)"; [[ -n $err_log ]] && rm -f "$err_log"; [[ -n $pkg_temp ]] && rm -f "$pkg_temp"' EXIT
 
-status=$(bootc status --format json)
+status=$(cap bootc status --format json)
 
 image=$(jq -r '.spec.image.image // empty' <<<"$status")
 if [[ -z "$image" ]]; then
@@ -148,8 +193,8 @@ write_staged_semaphore() {
 # no longer be download-only, or it would never apply.
 unlock_staged() { # digest
     local digest=$1 after staged_now locked_now
-    bootc upgrade --quiet --from-downloaded
-    after=$(bootc status --format json)
+    cap bootc upgrade --quiet --from-downloaded
+    after=$(cap bootc status --format json)
     staged_now=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$after")
     locked_now=$(jq -r '.status.staged.downloadOnly // false' <<<"$after")
     if [[ "$staged_now" != "$digest" ]]; then
@@ -171,7 +216,7 @@ podman image prune -f >/dev/null || true
 
 # A failed pull does not invalidate a real deployment staged earlier. Reassert
 # it when bootc reports one; otherwise remove a stale runtime semaphore.
-if ! pulled_id=$(podman pull --quiet --signature-policy "$BOOTC_POLICY" "$image"); then
+if ! pulled_id=$(cap podman pull --quiet --signature-policy "$BOOTC_POLICY" "$image"); then
     if [[ -n "$staged" ]]; then
         write_staged_semaphore "$staged"
     else
@@ -185,7 +230,7 @@ if [[ ! $pulled_id =~ ^[[:xdigit:]]{64}$ ]]; then
     echo "ERROR: podman pull printed no valid image ID: '${pulled_id:-none}'" >&2
     exit 1
 fi
-pulled=$(podman image inspect --format '{{.Digest}}' "$pulled_id")
+pulled=$(cap podman image inspect --format '{{.Digest}}' "$pulled_id")
 if [[ ! $pulled =~ ^sha256:[[:xdigit:]]{64}$ ]]; then
     echo "ERROR: pulled image has no valid registry manifest digest: '${pulled:-none}'" >&2
     exit 1
@@ -276,15 +321,15 @@ if [[ "$transport" == "containers-storage" ]]; then
     # install unable to take a second update while this script reported
     # success (root-caused 2026-07-06 on minisnow). `bootc upgrade` pulls the
     # spec's image and stages it properly.
-    bootc upgrade --quiet --download-only
+    cap bootc upgrade --quiet --download-only
 else
-    bootc switch --quiet --download-only --transport containers-storage "$image"
+    cap bootc switch --quiet --download-only --transport containers-storage "$image"
 fi
 
 # Verify bootc staged the image the strict policy accepted AND that it left the
 # deployment locked. Both failure modes here have been observed to be SILENT
 # (exit 0), so do not trust the exit code alone.
-locked_status=$(bootc status --format json)
+locked_status=$(cap bootc status --format json)
 staged_now=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$locked_status")
 locked_now=$(jq -r '.status.staged.downloadOnly // false' <<<"$locked_status")
 if [[ "$staged_now" != "$pulled" ]]; then

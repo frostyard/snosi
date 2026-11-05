@@ -184,6 +184,14 @@ jobs:
         # fixtures. No root, firmware access, image build, or real ESP.
         run: ./test/snosi-kargs-test.sh
 
+      - name: Validate snosi-health problem records
+        # PATH-stubbed journalctl, systemctl and bootc serve fixture journals,
+        # unit states, bootc status, update-check and last-run.json files to
+        # the collector (ADR-0029). Records validate against the vendored
+        # frostyard.problem/1 schema; no message, path, username or unit
+        # instance reaches problems.json. No root, network, or image build.
+        run: ./test/snosi-health-test.sh
+
       - name: Validate verified-download split checksum lookup
         # Fixture test ensures verified_download() resolves keys from both split
         # metadata files and honors CHECKSUMS_FILE overrides. No root, network,
@@ -367,6 +375,7 @@ jobs:
           bash ./test/no-nbc-test.sh
           ./test/no-private-keys-test.sh
           ./test/updex-timer-guard-test.sh
+          ./test/snosi-health-timer-guard-test.sh
           ./test/ghostty-terminfo-test.sh
           ./test/base-hardware-utils-test.sh
           ./test/wifi-backend-test.sh
@@ -491,6 +500,8 @@ jobs:
         run: ./test/bootc-secure-ci-test.sh
       - name: Validate bootc secure static contract and sysupdate masks
         run: ./test/bootc-secure-static-test.sh
+      - name: Validate systemd-coredump guard (Storage=none, CVE-2025-4598)
+        run: ./test/coredump-guard-test.sh
       - name: Validate bootc publication guard
         run: ./check-bootc-publication-guard.sh
       - name: Validate bootc publication guard fixtures

@@ -46,6 +46,7 @@ states intent; the categories below hold the record.
 - [adr/0025-scope-strict-container-policy-to-bootc-updates.md](adr/0025-scope-strict-container-policy-to-bootc-updates.md) — **Proposed:** bootc updates pull with an immutable `/usr/lib/snosi/containers/bootc-policy.json`; the system policy default accepts workload images and keeps Frostyard product repositories `sigstoreSigned`
 - [adr/0026-sysexts-with-system-units-reload-the-manager.md](adr/0026-sysexts-with-system-units-reload-the-manager.md) — **Proposed:** every sysext that ships a system unit sets `EXTENSION_RELOAD_MANAGER=1`, so PID 1 loads its units in the same boot; a build-time guard enforces it
 - [adr/0027-seal-lockdown-into-the-secure-uki-command-line.md](adr/0027-seal-lockdown-into-the-secure-uki-command-line.md) — **Accepted:** the signed UKI command line of all four secure products is `rw composefs=?<digest> lockdown=integrity`, because linux-surface does not raise lockdown under Secure Boot and kargs.d does not reach a Type #2 UKI
+- [adr/0029-snosi-health-records-problems.md](adr/0029-snosi-health-records-problems.md) — **Accepted:** base ships the root collector `snosi-health`, which writes schema-checked `problems.json` (0644, no journal text, path or name) and `details.json` (0640 root:sudo); the stager adds `error_class`; systemd-coredump ships on all four products with `Storage=none`; the Floe sender is later work
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design

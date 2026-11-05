@@ -1,0 +1,17 @@
+{
+  "schema": "frostyard.problem/1",
+  "report_id": "d2c1a334-53a9-4ebd-b57d-5b5f33528bc6",
+  "week": "2026-W45",
+  "image": {
+    "id": "snow",
+    "version": "20261031093822"
+  },
+  "secure": true,
+  "client": "chairlift/0.14.0",
+  "kind": "tpm_unlock",
+  "detail": {
+    "outcome": "recovery_key",
+    "tpm_rc": "PCR_CHANGED",
+    "retries": 3
+  }
+}

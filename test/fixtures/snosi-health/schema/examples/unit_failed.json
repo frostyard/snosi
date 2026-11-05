@@ -1,0 +1,17 @@
+{
+  "schema": "frostyard.problem/1",
+  "report_id": "3c5cdc67-effb-40a6-9c8c-30e74903ab79",
+  "week": "2026-W45",
+  "image": {
+    "id": "floe",
+    "version": "20261031093822"
+  },
+  "secure": false,
+  "client": "snosi-health/20261031093822",
+  "kind": "unit_failed",
+  "detail": {
+    "unit": "user@.service",
+    "result": "exit-code",
+    "shipped": true
+  }
+}

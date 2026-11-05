@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# snosi-health records system problems in /var/lib/snosi-health; it never
+# sends anything (ADR-0029). Opt out on a host with
+# `systemctl mask snosi-health.timer`.
+enable snosi-health.timer

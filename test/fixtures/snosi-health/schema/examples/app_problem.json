@@ -1,0 +1,26 @@
+{
+  "schema": "frostyard.problem/1",
+  "report_id": "12616652-d6c2-4a03-b434-22edcf4c0c7f",
+  "week": "2026-W45",
+  "image": {
+    "id": "snow",
+    "version": "20261031093822"
+  },
+  "secure": true,
+  "client": "chairlift/0.14.0",
+  "kind": "app_problem",
+  "detail": {
+    "app_id": "org.frostyard.nsl",
+    "app_version": "0.9.2",
+    "runtime": "go",
+    "component": "daemon",
+    "class": "panic",
+    "frames": [
+      "runtime.gopanic",
+      "runtime.panicmem",
+      "github.com/frostyard/nsl/internal/resolver.(*Cache).Lookup",
+      "github.com/frostyard/nsl/internal/resolver.(*Server).serveDNS",
+      "main.main"
+    ]
+  }
+}

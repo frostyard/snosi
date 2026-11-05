@@ -378,6 +378,63 @@ EOF
 run_updater_fixture sha256:already-staged
 run_updater_fixture ''
 
+# A failed run adds exactly one error_class line to update-check (snosi-health
+# S2, ADR-0029). The class comes from the stderr of podman or bootc, which is
+# still re-emitted to the journal; the error text never reaches the file.
+run_error_class_fixture() { # expected-class failing-step stderr-text
+    local expected=$1 step=$2 text=$3 work status rc keys
+    work=$(mktemp -d)
+    trap 'rm -rf "$work"' RETURN
+    mkdir "$work/bin" "$work/run"
+    cat >"$work/bin/bootc" <<'STUB'
+#!/bin/bash
+if [[ $1 == status ]]; then
+    if [[ $FAIL_STEP == status ]]; then
+        printf '%s\n' "$FAIL_TEXT" >&2
+        exit 1
+    fi
+    printf '%s\n' "$BOOTC_STATUS"
+fi
+STUB
+    cat >"$work/bin/podman" <<'STUB'
+#!/bin/bash
+[[ $1 == image ]] && exit 0
+printf '%s\n' "$FAIL_TEXT" >&2
+exit 1
+STUB
+    chmod +x "$work/bin/bootc" "$work/bin/podman"
+    status=$(jq -nc '{spec:{image:{image:"ghcr.io/frostyard/floe:latest",transport:"containers-storage"}},status:{booted:{image:{imageDigest:"sha256:booted"}},staged:{},rollback:{image:{}}}}')
+    set +e
+    PATH="$work/bin:$PATH" BOOTC_STATUS="$status" FAIL_STEP="$step" FAIL_TEXT="$text" \
+        SNOSI_RUN_DIR="$work/run" "$UPDATER" >"$work/output" 2>&1
+    rc=$?
+    set -e
+    keys=$(sed 's/=.*//' "$work/run/update-check" 2>/dev/null | tr '\n' ' ')
+    if [[ $rc -ne 0 ]] && grep -Fqx 'outcome=failed' "$work/run/update-check" &&
+            [[ $(grep -c '^error_class=' "$work/run/update-check") == 1 ]] &&
+            grep -Fqx "error_class=$expected" "$work/run/update-check" &&
+            [[ $keys == 'outcome checked_at image running_version remote_version error_class ' ]] &&
+            ! grep -Fq -- "$text" "$work/run/update-check" &&
+            grep -Fq -- "$text" "$work/output"; then
+        pass "a failed stage records error_class=$expected without the error text"
+    else
+        fail "a failed stage records error_class=$expected without the error text (rc=$rc keys='$keys'; check: $(tr '\n' '|' <"$work/run/update-check" 2>/dev/null); output: $(<"$work/output"))"
+    fi
+}
+run_error_class_fixture disk_space pull 'Error: writing blob: storing blob to file "/var/tmp/storage1": write /var/tmp/storage1: no space left on device'
+run_error_class_fixture signature pull 'Error: Source image rejected: A signature was required, but no signature exists'
+run_error_class_fixture network pull 'Error: initializing source docker://ghcr.io/frostyard/floe:latest: pinging container registry ghcr.io: Get "https://ghcr.io/v2/": dial tcp: lookup ghcr.io on 127.0.0.53:53: no such host'
+run_error_class_fixture network pull 'Error: copying system image from manifest list: read tcp 10.0.2.15:41234->140.82.112.34:443: read: connection reset by peer'
+# A network failure while fetching signatures is network, not signature.
+run_error_class_fixture network pull 'Error: copying system image: reading signatures: Get "https://ghcr.io/v2/frostyard/floe/manifests/sha256-0123.sig": dial tcp: lookup ghcr.io on 127.0.0.53:53: no such host'
+# An explicit policy rejection is signature, even with network words in it.
+run_error_class_fixture signature pull 'Error: Source image rejected: Signature for identity ghcr.io/frostyard/floe is not accepted: x509: certificate signed by unknown authority'
+run_error_class_fixture registry pull 'Error: initializing source docker://ghcr.io/frostyard/floe:latest: reading manifest latest in ghcr.io/frostyard/floe: manifest unknown'
+run_error_class_fixture registry pull 'Error: reading blob sha256:0123: fetching blob: received unexpected HTTP status: 503 Service Unavailable'
+run_error_class_fixture registry pull 'Error: initializing source docker://ghcr.io/frostyard/floe:latest: reading manifest latest in ghcr.io/frostyard/floe: toomanyrequests: retry-after: 0'
+run_error_class_fixture lock status 'error: Acquiring sysroot lock: Locking: Resource temporarily unavailable'
+run_error_class_fixture other pull 'Error: something unexpected happened'
+
 # make_stager_fixture DIR -- stub binaries for one stager run.
 #
 # The podman stub records the full argument list of every call in
@@ -562,6 +619,7 @@ run_updater_digest_fixture() { # description booted staged-before staged-after e
 
     operation=$(cat "$work/state/operation" 2>/dev/null || true)
     if [[ $rc -eq 0 ]] && grep -Fqx "outcome=$expected_outcome" "$work/run/update-check" && \
+            ! grep -q '^error_class=' "$work/run/update-check" && \
             [[ "$operation" == "$expected_operation" ]]; then
         if [[ $expected_outcome == staged ]]; then
             if grep -Fqx "digest=$manifest" "$work/run/update-staged"; then

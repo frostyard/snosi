@@ -154,6 +154,15 @@ identity-bound local staged-package sidecar; the shared library at
 `version=` parser as an API even though the sole shipped producer uses
 `digest=`. Details are in [build pipeline](build-pipeline.md).
 
+The base's `snosi-health.timer` (3 minutes after boot, then hourly, at idle
+priority) runs `snosi-health`, which records failed image units, failed
+stages (the stager's `error_class`), rollbacks, failed sysext updates
+(updex's `last-run.json`), TPM unlock retries, integrity errors, system
+crashes (systemd-coredump with `Storage=none`) and frostyard app problems in
+`/var/lib/snosi-health/problems.json` and `details.json`. It sends nothing
+([ADR-0029](../adr/0029-snosi-health-records-problems.md),
+[integration contracts](../integration-contracts.md#problem-records-snosi-health)).
+
 Sysexts are EROFS `/usr` overlays downloaded by per-component
 systemd-sysupdate transfers and merged by systemd-sysext. They do not carry
 `/etc` or `/var` payload; tmpfiles copies narrowly captured factory `/etc`

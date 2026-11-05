@@ -1,0 +1,2 @@
+Result=exit-code
+FragmentPath=/usr/lib/systemd/system/user@.service
