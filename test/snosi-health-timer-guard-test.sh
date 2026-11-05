@@ -1,9 +1,11 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Fixtures for shared/outformat/image/finalize/snosi-health-timer.finalize
-# (ADR-0029) plus wiring checks: every OCI composition that runs the image
+# (ADR-0029, and ADR-0030 for the Floe report sender) plus wiring checks: every OCI composition that runs the image
 # finalize also runs this guard after it (and after updex-timer.finalize), and
-# the base preset enables snosi-health.timer.
+# the base preset enables snosi-health.timer. Both timers are fixtured: a
+# preset-enabled timer needs its units, its program and its manifest entry, and
+# no image may ship /etc/snosi-health.
 # No root needed.
 set -euo pipefail
 
@@ -40,9 +42,26 @@ add_units() {
     printf '#!/bin/bash\n' >"$BUILDROOT/usr/bin/snosi-health"
 }
 
-add_manifest() { # [line]
-    printf 'system multi-user.target.wants/foo.service\n%s\n' \
-        "${1-system timers.target.wants/snosi-health.timer}" >"$BUILDROOT/$MANIFEST_PATH"
+# The Floe sender: snosi-health-report.timer, its service and the sender.
+add_report_units() {
+    printf '[Unit]\nDescription=fixture timer\n' >"$BUILDROOT/$UNIT_DIR/snosi-health-report.timer"
+    printf '[Unit]\nDescription=fixture service\n' >"$BUILDROOT/$UNIT_DIR/snosi-health-report.service"
+    mkdir -p "$BUILDROOT/usr/libexec"
+    printf '#!/bin/bash\n' >"$BUILDROOT/usr/libexec/snosi-health-report"
+}
+
+add_report_preset() { # [line]
+    printf 'enable something-else.timer\n%s\n' "${1:-}" >"$BUILDROOT/$PRESET_DIR/06-snosi-health-report.preset"
+}
+
+add_manifest() { # [line...] (default: the base timer's entry)
+    if [[ $# -eq 0 ]]; then
+        set -- 'system timers.target.wants/snosi-health.timer'
+    fi
+    {
+        printf 'system multi-user.target.wants/foo.service\n'
+        printf '%s\n' "$@"
+    } >"$BUILDROOT/$MANIFEST_PATH"
 }
 
 run() {
@@ -154,6 +173,77 @@ printf 'enable snosi-health.timer\n' >"$BUILDROOT/etc/systemd/system-preset/90-a
 add_units
 add_manifest
 expect_pass "an /etc preset that enables the timer is honored"
+
+# --- the Floe report sender (ADR-0030) --------------------------------------
+
+both_timers() { # both presets, every unit, both manifest entries
+    add_preset 'enable snosi-health.timer'
+    add_report_preset 'enable snosi-health-report.timer'
+    add_units
+    add_report_units
+    add_manifest 'system timers.target.wants/snosi-health.timer' \
+        'system timers.target.wants/snosi-health-report.timer'
+}
+
+reset_root
+both_timers
+expect_pass "both timers, their units, the sender and both manifest entries pass"
+
+reset_root
+both_timers
+rm -f "$BUILDROOT/$UNIT_DIR/snosi-health-report.timer"
+expect_reject "missing report timer unit is rejected" "snosi-health-report.timer is missing"
+
+reset_root
+both_timers
+rm -f "$BUILDROOT/$UNIT_DIR/snosi-health-report.service"
+expect_reject "missing report service unit is rejected" "snosi-health-report.service is missing"
+
+reset_root
+both_timers
+rm -f "$BUILDROOT/usr/libexec/snosi-health-report"
+expect_reject "missing sender is rejected" "usr/libexec/snosi-health-report is missing"
+
+reset_root
+both_timers
+rm -f "$BUILDROOT/usr/libexec/snosi-health-report"
+mkdir -p "$BUILDROOT/usr/libexec/snosi-health-report"
+expect_reject "a sender that is not a regular file is rejected" "not a regular file"
+
+reset_root
+both_timers
+add_manifest 'system timers.target.wants/snosi-health.timer'
+expect_reject "a manifest without the report timer entry is rejected" "lacks the entry"
+
+reset_root
+add_preset 'enable snosi-health.timer'
+add_report_preset 'enable snosi-health-report.timer'
+add_units
+add_report_units
+expect_reject "no manifest at all is rejected for both timers" "is missing"
+
+reset_root
+add_preset 'enable snosi-health.timer'
+add_report_preset 'enable snosi-health-report.timer'
+add_units
+add_report_units
+add_manifest
+mkdir -p "$BUILDROOT/etc/snosi-health"
+printf 'enabled=1\n' >"$BUILDROOT/etc/snosi-health/reporting.conf"
+expect_reject "a shipped consent directory is rejected" "etc/snosi-health must not ship"
+
+# 1 failure never hides the other: both are reported in 1 run.
+reset_root
+both_timers
+mkdir -p "$BUILDROOT/etc/snosi-health"
+rm -f "$BUILDROOT/$UNIT_DIR/snosi-health-report.timer"
+run
+if [[ $RUN_STATUS -ne 0 && "$RUN_OUTPUT" == *"etc/snosi-health must not ship"* &&
+    "$RUN_OUTPUT" == *"snosi-health-report.timer is missing"* ]]; then
+    pass "a shipped consent directory and a missing report unit are both reported"
+else
+    fail "both problems must be reported (exit $RUN_STATUS): $RUN_OUTPUT"
+fi
 
 # Fail closed: grep's error status (2) must fail, not pass.
 SHIM_DIR="$WORK_DIR/shims"

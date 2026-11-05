@@ -106,8 +106,11 @@ Image builds have four phases, in order:
    enablement-manifest entry is missing (see
    [sysexts](sysexts.md#automatic-sysext-updates-updex-update-timer)).
    `shared/outformat/image/finalize/snosi-health-timer.finalize` does the
-   same for `snosi-health.timer`, its service and `/usr/bin/snosi-health`
-   ([ADR-0029](../adr/0029-snosi-health-records-problems.md)).
+   same for `snosi-health.timer`, its service and `/usr/bin/snosi-health`,
+   for Floe's `snosi-health-report.timer` with its service and
+   `/usr/libexec/snosi-health-report`, and it fails a build that ships
+   `/etc/snosi-health` ([ADR-0029](../adr/0029-snosi-health-records-problems.md),
+   [ADR-0030](../adr/0030-floe-sends-problem-reports-with-admin-consent.md)).
    `shared/bootc-secure/finalize/coredump.finalize` (secure composition)
    fails the build unless systemd-coredump ships with `Storage=none`,
    `ProcessSizeMax` at most 1G, `%d` and `%F` in `kernel.core_pattern`, no

@@ -1,6 +1,6 @@
 # 0029 — snosi-health records problems; Floe sends with admin consent
 
-- **Status:** Accepted
+- **Status:** Accepted; the Floe sender is decided in [0030](0030-floe-sends-problem-reports-with-admin-consent.md)
 - **Date:** 2026-11-05
 
 ## Context

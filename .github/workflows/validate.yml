@@ -202,6 +202,14 @@ jobs:
         # instance reaches problems.json. No root, network, or image build.
         run: ./test/snosi-health-test.sh
 
+      - name: Validate Floe problem-report sender
+        # A fake intake on 127.0.0.1, a scratch root and the paired collector
+        # hooks drive the sender (ADR-0030): consent on and off, the dry run,
+        # the daily limit, the weekly count, the answer handling, the motd line
+        # and the collector's --validate. No root, no image build, and no
+        # network other than 127.0.0.1.
+        run: ./test/snosi-health-report-test.sh
+
       - name: Validate verified-download split checksum lookup
         # Fixture test ensures verified_download() resolves keys from both split
         # metadata files and honors CHECKSUMS_FILE overrides. No root, network,

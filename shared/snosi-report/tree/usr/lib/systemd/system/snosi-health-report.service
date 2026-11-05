@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Send opted-in problem reports (ADR-0030). Started only by
+# snosi-health-report.timer: no [Install] section and no Before=, so no login
+# waits for it. The script gates on /etc/snosi-health/reporting.conf, so the
+# unit is inert on a host that never agreed and no image ships that file.
+[Unit]
+Description=Send opted-in problem reports (snosi-health)
+Documentation=https://github.com/frostyard/snosi/blob/main/docs/adr/0030-floe-sends-problem-reports-with-admin-consent.md
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/snosi-health/reporting.conf
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/snosi-health-report send
+# StateDirectory= creates /var/lib/snosi-health (0644 sent.jsonl beside the
+# collector's problems.json) and grants it to this unit under
+# ProtectSystem=strict.
+StateDirectory=snosi-health
+StateDirectoryMode=0755
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=15min
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

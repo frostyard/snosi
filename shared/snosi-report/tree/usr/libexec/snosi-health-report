@@ -1,0 +1,766 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# snosi-health-report -- send opted-in problem reports (Floe only, ADR-0030).
+#
+# `snosi-health` (base) records problems locally in
+# /var/lib/snosi-health/problems.json and sends nothing. This sender is the
+# one sender of this host (frostyard/core ADR-0069) and ships only in the Floe
+# tree: Floe has no chairlift, whose Problems page sends reports on Snow,
+# Snowfield and Sundog.
+#
+# Reporting is OFF until an administrator runs
+# `sudo snosi-health reporting on`, which writes
+# /etc/snosi-health/reporting.conf. snosi-health-report.timer is always
+# enabled by a preset; the timer's script gates on that consent file, so no
+# image ships /etc/snosi-health and no runtime `systemctl enable` is needed.
+#
+# A run posts the reportable problems of problems.json and, once a week, 1
+# count. Reports of kind `crash` are never sent: they stay on this host. Every
+# document is checked by `snosi-health --validate` (the 1 validator) before it
+# is posted, and what was posted is appended to /var/lib/snosi-health/sent.jsonl
+# for the record.
+#
+# Consent and time are read again around each post: `reporting off` takes
+# /var/lib/snosi-health/.post.lock, which this sender holds for the duration of
+# 1 post, so a decision never lands between 2 posts unseen; and a run that
+# would cross midnight or the end of the ISO week stops and lets the next run
+# select again. curl runs with -q first, so a user's ~/.curlrc cannot change a
+# request (no extra header, no redirect, no proxy).
+# Privacy: https://frostyard.org/privacy/problem-reports/
+set -euo pipefail
+umask 022
+
+readonly SCHEMA=frostyard.problem/1
+readonly DEFAULT_ENDPOINT=https://report.frostyard.org/v1/report
+readonly PRIVACY_URL=https://frostyard.org/privacy/problem-reports/
+readonly MAX_PER_DAY=20
+readonly KEEP_DAYS=90
+readonly CMD_TIMEOUT=60
+readonly DAY_SECONDS=86400
+# The kinds this sender may post. `crash` is deliberately absent and must stay
+# absent: crash reports stay local in phases 1 and 2 (plan T857 S7). Crash
+# reporting with stacks is phase 3 work, with its own privacy review, and the
+# privacy page promises no crash report until then.
+readonly REPORT_KINDS='["unit_failed", "update_stage_failed", "booted_older_image", "sysext_update_failed", "tpm_unlock", "integrity_error", "app_problem"]'
+# A plain http(s) URL with no query, no fragment and no credentials.
+readonly ENDPOINT_RE='^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$'
+# The report_id source is always the kernel's, never a test root.
+readonly UUID_FILE=/proc/sys/kernel/random/uuid
+
+usage() {
+    cat <<'EOF'
+Usage: snosi-health reporting on|off|status
+       snosi-health send [--dry-run]
+
+Floe records system problems locally in /var/lib/snosi-health/problems.json.
+Problem reporting is off by default: nothing leaves this host until the
+administrator agrees here.
+
+  sudo snosi-health reporting on     agree to send frostyard.problem/1 problem
+                                     reports; snosi-health-report.timer then
+                                     sends once a day
+  sudo snosi-health reporting off    stop sending; the consent file stays
+  snosi-health reporting status      print the state (any user)
+  snosi-health send --dry-run        print the exact reports and send nothing
+                                     (any user)
+  snosi-health send                  send now, as the timer does (root only)
+
+The timer sends at most 20 problem reports a day and 1 count a week.
+Crash reports stay local: they are never sent. Each sent report carries a
+new random report_id. Sent reports are listed in
+/var/lib/snosi-health/sent.jsonl.
+
+Privacy: https://frostyard.org/privacy/problem-reports/
+EOF
+}
+
+die() {
+    echo "snosi-health: $*" >&2
+    exit 1
+}
+
+warn() {
+    echo "snosi-health: warning: $*" >&2
+}
+
+# Test hooks (ADR-0009 class 3, paired): SNOSI_HEALTH_TEST_ROOT prefixes every
+# input and output path, and the root check is relaxed, only when
+# SNOSI_HEALTH_TEST_HOOKS=1 is also set. The root alone is inert; hooks=1
+# without a root, or any other hooks value, is refused.
+TEST_HOOKS=0
+ROOT=""
+case "${SNOSI_HEALTH_TEST_HOOKS-}" in
+    "" | 0) ;;
+    1) TEST_HOOKS=1 ;;
+    *)
+        echo "snosi-health: refusing SNOSI_HEALTH_TEST_HOOKS='${SNOSI_HEALTH_TEST_HOOKS}' (only 0 or 1)" >&2
+        exit 2
+        ;;
+esac
+if [[ $TEST_HOOKS -eq 1 ]]; then
+    ROOT=${SNOSI_HEALTH_TEST_ROOT-}
+    if [[ -z $ROOT || $ROOT != /* || ! -d $ROOT ]]; then
+        echo "snosi-health: refusing SNOSI_HEALTH_TEST_HOOKS=1 without an absolute SNOSI_HEALTH_TEST_ROOT directory" >&2
+        exit 2
+    fi
+fi
+
+# A clock, a request pace and a clock step are test-only too: a fixture must be
+# able to sit on a fixed day (the daily limit and the weekly count depend on it),
+# must not wait 7 seconds between 2 requests, and must be able to walk a run over
+# a day or week boundary.
+NOW=""
+PACE=7
+CLOCK_STEP=0
+TEST_CLOCK=0
+if [[ $TEST_HOOKS -eq 1 ]]; then
+    test_now=${SNOSI_HEALTH_TEST_NOW-}
+    if [[ -n $test_now ]]; then
+        if [[ ! $test_now =~ ^[0-9]+$ ]]; then
+            echo "snosi-health: refusing SNOSI_HEALTH_TEST_NOW='$test_now' (epoch seconds only)" >&2
+            exit 2
+        fi
+        NOW=$test_now
+        TEST_CLOCK=1
+    fi
+    test_pace=${SNOSI_HEALTH_TEST_PACE-}
+    if [[ -n $test_pace ]]; then
+        if [[ ! $test_pace =~ ^[0-9]+$ ]] || ((test_pace > 60)); then
+            echo "snosi-health: refusing SNOSI_HEALTH_TEST_PACE='$test_pace' (an integer from 0 to 60)" >&2
+            exit 2
+        fi
+        PACE=$test_pace
+    fi
+    test_step=${SNOSI_HEALTH_TEST_CLOCK_STEP-}
+    if [[ -n $test_step ]]; then
+        if [[ ! $test_step =~ ^[0-9]+$ ]] || ((test_step > 86400)); then
+            echo "snosi-health: refusing SNOSI_HEALTH_TEST_CLOCK_STEP='$test_step' (an integer from 0 to 86400)" >&2
+            exit 2
+        fi
+        CLOCK_STEP=$test_step
+    fi
+fi
+if [[ -z $NOW ]]; then
+    NOW=$(date -u +%s)
+fi
+readonly NOW PACE CLOCK_STEP TEST_CLOCK
+
+readonly CONF="$ROOT/etc/snosi-health/reporting.conf"
+readonly STATE_DIR="$ROOT/var/lib/snosi-health"
+readonly PROBLEMS="$STATE_DIR/problems.json"
+readonly SENT="$STATE_DIR/sent.jsonl"
+readonly LOCK="$STATE_DIR/.send.lock"
+# 1 post at a time, and `reporting on|off` waits on the same lock, so a consent
+# decision can never land between 2 posts of 1 run.
+readonly POST_LOCK="$STATE_DIR/.post.lock"
+readonly UPDATE_CHECK="$ROOT/run/snosi/update-check"
+# The collector's --validate is the 1 validator of a report document.
+readonly COLLECTOR="$ROOT/usr/bin/snosi-health"
+
+now_iso=$(date -u -d "@$NOW" +%Y-%m-%dT%H:%M:%SZ)
+today=$(date -u -d "@$NOW" +%Y-%m-%d)
+iso_week=$(date -u -d "@$NOW" +%G-W%V)
+
+# POST_INDEX is the number of reports this run already posted. clock_now is
+# read again before each post, because a run can outlive its day: the daily
+# limit, the year-week of a count and a new consent file all belong to the
+# moment of the post, not to the moment the run started.
+POST_INDEX=0
+
+# clock_now -- the current epoch second. Under the paired hooks with a fixed
+# clock it is that clock plus 1 step for each report the run already posted, so
+# a fixture can walk a run over a day or week boundary.
+clock_now() {
+    if [[ $TEST_CLOCK -eq 1 ]]; then
+        echo $((NOW + POST_INDEX * CLOCK_STEP))
+        return 0
+    fi
+    date -u +%s
+}
+
+# Consent state, set by read_conf.
+ENABLED=""
+CONF_SCHEMA=""
+DECIDED_AT=""
+ENDPOINT_RAW=""
+ENDPOINT=""
+ENVELOPE=""
+
+# read_conf -- read the consent file. Only lines enabled=, schema=,
+# decided_at= and endpoint= count; a comment, a blank line and every other
+# line are ignored, and the last value of a key wins.
+read_conf() {
+    ENABLED=""
+    CONF_SCHEMA=""
+    DECIDED_AT=""
+    ENDPOINT_RAW=""
+    [[ -r $CONF ]] || return 0
+    local line
+    while IFS= read -r line; do
+        case $line in
+            enabled=*) ENABLED=${line#enabled=} ;;
+            schema=*) CONF_SCHEMA=${line#schema=} ;;
+            decided_at=*) DECIDED_AT=${line#decided_at=} ;;
+            endpoint=*) ENDPOINT_RAW=${line#endpoint=} ;;
+        esac
+    done <"$CONF"
+}
+
+# reporting_on -- consent for exactly this schema is what turns a send on.
+reporting_on() {
+    [[ ${ENABLED-} == 1 && ${CONF_SCHEMA-} == "$SCHEMA" ]]
+}
+
+require_root() {
+    if [[ $EUID -ne 0 && $TEST_HOOKS -ne 1 ]]; then
+        if [[ $1 == send ]]; then
+            die "sending needs root (try sudo snosi-health send)"
+        fi
+        die "changing the consent file needs root (try sudo snosi-health reporting $1)"
+    fi
+}
+
+resolve_endpoint() {
+    ENDPOINT=$DEFAULT_ENDPOINT
+    if [[ -n ${ENDPOINT_RAW-} ]]; then
+        if [[ $ENDPOINT_RAW =~ $ENDPOINT_RE ]]; then
+            ENDPOINT=$ENDPOINT_RAW
+        else
+            die "the endpoint= value in $CONF is not a plain http(s) URL; fix or remove that line"
+        fi
+    fi
+}
+
+# post_fd -- the file descriptor of .post.lock while this process holds it.
+post_fd=""
+
+# take_post_lock -- open .post.lock and wait (at most 60 s) until no other
+# process holds it. The sender holds it for 1 post; `reporting on|off` waits on
+# it, so a decision and a post can never interleave.
+take_post_lock() {
+    exec {post_fd}>"$POST_LOCK"
+    if flock -w 60 "$post_fd"; then
+        return 0
+    fi
+    exec {post_fd}>&-
+    post_fd=""
+    return 1
+}
+
+release_post_lock() {
+    if [[ -n $post_fd ]]; then
+        flock -u "$post_fd" 2>/dev/null || true
+        exec {post_fd}>&-
+        post_fd=""
+    fi
+}
+
+# set_reporting on|off -- write the consent file as a whole, by atomic rename,
+# and then wait for a post that is already running: `reporting off` must not
+# return while the sender still posts, so it takes .post.lock and the posting
+# loop sees the new file before its next post. `off` keeps the file (and a
+# valid endpoint) for a later `on`.
+set_reporting() {
+    local action=$1 enabled=0 kept="" dir tmp
+    if [[ $action == on ]]; then
+        enabled=1
+    fi
+    require_root "$action"
+    read_conf
+    if [[ -n ${ENDPOINT_RAW-} ]] && [[ $ENDPOINT_RAW =~ $ENDPOINT_RE ]]; then
+        kept=$ENDPOINT_RAW
+    fi
+    dir=$(dirname -- "$CONF")
+    install -d -m 0755 "$dir"
+    tmp=$(mktemp "$dir/.reporting.conf.XXXXXX")
+    {
+        printf '# Written by snosi-health reporting %s. Problem reports of schema %s.\n' "$action" "$SCHEMA"
+        printf '# Privacy: %s\n' "$PRIVACY_URL"
+        printf 'enabled=%s\n' "$enabled"
+        printf 'schema=%s\n' "$SCHEMA"
+        printf 'decided_at=%s\n' "$now_iso"
+        if [[ -n $kept ]]; then
+            printf 'endpoint=%s\n' "$kept"
+        fi
+    } >"$tmp"
+    chmod 0644 "$tmp"
+    mv -f "$tmp" "$CONF"
+    install -d -m 0755 "$STATE_DIR"
+    if take_post_lock; then
+        release_post_lock
+    else
+        warn "a send still holds $POST_LOCK; it stops before its next report (the consent file is written)"
+    fi
+    if [[ $action == on ]]; then
+        echo "Problem reporting is on. snosi-health-report.timer sends reportable problems and a weekly count once a day."
+        echo "Preview the reports with: snosi-health send --dry-run"
+        echo "Privacy: $PRIVACY_URL"
+    else
+        echo "Problem reporting is off. Nothing is sent."
+    fi
+}
+
+# new_uuid -- the kernel's random UUID, 1 for each report document.
+new_uuid() {
+    cat "$UUID_FILE"
+}
+
+# problems_envelope -- problems.json must be format 1; its envelope fields go
+# to every report. An absent, unreadable or other-format file has nothing to
+# send.
+problems_envelope() {
+    ENVELOPE=""
+    [[ -r $PROBLEMS ]] || return 1
+    jq -e 'type == "object" and .format == 1 and (.problems | type) == "array"' \
+        "$PROBLEMS" >/dev/null 2>&1 || return 1
+    ENVELOPE=$(jq -c '{image: .image, secure: .secure, client: .client}' "$PROBLEMS" 2>/dev/null) || return 1
+    [[ -n $ENVELOPE ]]
+}
+
+# sent_stream -- the JSON lines of sent.jsonl, 1 object per line. A line that is
+# not JSON is skipped, so 1 bad line never hides the rest.
+sent_stream() {
+    if [[ -r $SENT ]]; then
+        jq -R 'fromjson? // empty' "$SENT" 2>/dev/null || true
+    fi
+}
+
+# sent_summary -- what the selection needs from sent.jsonl: the (problem_id,
+# week) key of every resolved problem report, the weeks of resolved counts, and
+# how many problem reports went out on the UTC day of NOW.
+sent_summary() {
+    local entries
+    entries=$(sent_stream)
+    if [[ -z $entries ]]; then
+        printf '{"keys":[],"count_weeks":[],"today":0}\n'
+        return 0
+    fi
+    if ! printf '%s\n' "$entries" | jq -s -c --arg day "$today" '
+        [ .[] | select(type == "object") ] as $all
+        | [ $all[] | select(.status == "accepted" or .status == "rejected")
+            | select((.report | type) == "object") ] as $done
+        | {keys: ([ $done[]
+                    | select(.problem_id != null and .report.kind != "count")
+                    | (.problem_id | tostring) + "|" + (.report.week | tostring) ] | unique),
+           count_weeks: ([ $done[] | select(.report.kind == "count")
+                    | (.report.week | tostring) ] | unique),
+           today: ([ $done[] | select(.report.kind != "count")
+                    | select((.sent_at | tostring)[0:10] == $day) ] | length)}
+    ' 2>/dev/null; then
+        printf '{"keys":[],"count_weeks":[],"today":0}\n'
+    fi
+}
+
+# select_problems SUMMARY LIMIT -- the problems a send posts now: reportable,
+# of a kind this sender may post (never crash), not already resolved for that
+# week, oldest last_seen first, at most LIMIT of them.
+select_problems() {
+    local summary=$1 limit=$2
+    if ! jq -c --argjson sum "$summary" --argjson limit "$limit" --argjson kinds "$REPORT_KINDS" '
+        (.problems // [])
+        | map(select(type == "object"))
+        | map(select(.reportable == true))
+        | map(select(.kind as $k | any($kinds[]; . == $k)))
+        | map(select(((.id | tostring) + "|" + (.week | tostring)) as $key
+                     | any($sum.keys[]; . == $key) | not))
+        | sort_by(.last_seen)
+        | .[0:$limit]
+    ' "$PROBLEMS" 2>/dev/null; then
+        echo '[]'
+    fi
+}
+
+# limit_of SUMMARY -- at most MAX_PER_DAY problem reports a day.
+limit_of() {
+    local summary=$1 sent_today limit
+    sent_today=$(jq -nr --argjson sum "$summary" '$sum.today' 2>/dev/null) || sent_today=0
+    limit=$((MAX_PER_DAY - sent_today))
+    if ((limit < 0)); then
+        limit=0
+    fi
+    echo "$limit"
+}
+
+# count_due SUMMARY -- 1 count a week, so only when no resolved count carries
+# the ISO week of NOW.
+count_due() {
+    local summary=$1 answer
+    answer=$(jq -nr --argjson sum "$summary" --arg week "$iso_week" \
+        'if any($sum.count_weeks[]; . == $week) then "no" else "yes" end' 2>/dev/null) || answer=no
+    [[ $answer == yes ]]
+}
+
+# install_age -- "<1w", "<1m", "<6m" or ">=6m" from the age of this install:
+# the birth time of /var when the filesystem records one, else the mtime of
+# /etc/machine-id. Prints nothing when neither is known.
+install_age() {
+    local install="" birth mtime age
+    if [[ -d $ROOT/var ]]; then
+        birth=$(stat -c %W "$ROOT/var" 2>/dev/null) || birth=""
+        if [[ $birth =~ ^[0-9]+$ ]] && ((birth > 0)); then
+            install=$birth
+        fi
+    fi
+    if [[ -z $install && -e $ROOT/etc/machine-id ]]; then
+        mtime=$(stat -c %Y "$ROOT/etc/machine-id" 2>/dev/null) || mtime=""
+        if [[ $mtime =~ ^[0-9]+$ ]]; then
+            install=$mtime
+        fi
+    fi
+    [[ -n $install ]] || return 1
+    age=$((NOW - install))
+    if ((age < 7 * DAY_SECONDS)); then
+        echo "<1w"
+    elif ((age < 30 * DAY_SECONDS)); then
+        echo "<1m"
+    elif ((age < 182 * DAY_SECONDS)); then
+        echo "<6m"
+    else
+        echo ">=6m"
+    fi
+}
+
+# image_channel -- "latest" only for a tagged :latest image; any other tag and
+# an unknown image are "other". `bootc status` needs root, so a dry run by
+# another user reads the image= key of the stager's world-readable
+# /run/snosi/update-check instead (the same .spec.image.image value).
+image_channel() {
+    local status_json="" image=""
+    if command -v bootc >/dev/null 2>&1; then
+        status_json=$(timeout "$CMD_TIMEOUT" bootc status --format json 2>/dev/null) || status_json=""
+    fi
+    if [[ -n $status_json ]]; then
+        image=$(jq -r '.spec.image.image // empty | strings' <<<"$status_json" 2>/dev/null) || image=""
+    fi
+    if [[ -z $image && -r $UPDATE_CHECK ]]; then
+        image=$(sed -n 's/^image=//p' "$UPDATE_CHECK" 2>/dev/null | head -n1) || image=""
+    fi
+    if [[ $image == *:latest ]]; then
+        echo latest
+    else
+        echo other
+    fi
+}
+
+# problem_report RECORD -- 1 report document for a problem record. The
+# report_id is new for each document, so 2 documents never share one.
+problem_report() {
+    local record=$1
+    jq -c --arg schema "$SCHEMA" --arg rid "$(new_uuid)" --argjson env "$ENVELOPE" '
+        {schema: $schema, report_id: $rid, week: .week,
+         image: $env.image, secure: $env.secure, client: $env.client,
+         kind: .kind, detail: .detail}
+    ' <<<"$record"
+}
+
+# count_report -- 1 count document for the ISO week of NOW. Prints nothing when
+# the install time is unknown.
+count_report() {
+    local age channel
+    if ! age=$(install_age); then
+        warn "cannot tell when this system was installed; the weekly count waits"
+        return 0
+    fi
+    channel=$(image_channel)
+    jq -c -n --arg schema "$SCHEMA" --arg rid "$(new_uuid)" --arg week "$iso_week" \
+        --argjson env "$ENVELOPE" --arg age "$age" --arg channel "$channel" '
+        {schema: $schema, report_id: $rid, week: $week,
+         image: $env.image, secure: $env.secure, client: $env.client,
+         kind: "count", detail: {install_age: $age, channel: $channel}}
+    '
+}
+
+# add_document PROBLEM_ID KIND DOCUMENT -- keep the document only when
+# `snosi-health --validate` accepts it; an invalid one stays on this host.
+DOCUMENTS=()
+DOC_PROBLEM_IDS=()
+DOC_KINDS=()
+DOC_WEEKS=()
+add_document() {
+    local problem_id=$1 kind=$2 document=$3 valid="" week=""
+    if valid=$(printf '%s\n' "$document" | "$COLLECTOR" --validate 2>/dev/null) && [[ -n $valid ]]; then
+        week=$(jq -r '.week' <<<"$valid" 2>/dev/null) || week=""
+        DOCUMENTS+=("$valid")
+        DOC_PROBLEM_IDS+=("$problem_id")
+        DOC_KINDS+=("$kind")
+        DOC_WEEKS+=("$week")
+    else
+        warn "a $kind report is not valid $SCHEMA; it stays on this host"
+    fi
+}
+
+# post_report DOCUMENT -- POST 1 document and print the HTTP status; 000 when
+# curl itself failed. `-q` is the first argument because curl ignores it
+# anywhere else: a user's ~/.curlrc must not add a header, follow a redirect or
+# set a proxy. No -L: a redirect is a failure, so the intake's own answer is the
+# only success.
+post_report() {
+    local document=$1 code=""
+    if code=$(printf '%s' "$document" | curl -q --silent --show-error --proto '=http,https' \
+        --connect-timeout 10 --max-time 30 -A '' -H 'Accept:' \
+        -H 'Content-Type: application/json' --data-binary @- -o /dev/null \
+        -w '%{http_code}' "$ENDPOINT" 2>/dev/null); then
+        printf '%s' "$code"
+    else
+        printf '000'
+    fi
+}
+
+# record_sent STATUS HTTP_STATUS PROBLEM_ID DOCUMENT SENT_AT -- append 1 line
+# to sent.jsonl, the local record of what was posted. SENT_AT is the clock of
+# that post, not of the run start.
+record_sent() {
+    local status=$1 http_status=$2 problem_id=$3 document=$4 sent_at=$5 problem_json
+    if [[ -n $problem_id ]]; then
+        problem_json="\"$problem_id\""
+    else
+        problem_json=null
+    fi
+    if [[ ! -e $SENT ]]; then
+        : >"$SENT"
+        chmod 0644 "$SENT"
+    fi
+    printf '{"sent_at":"%s","status":"%s","http_status":%s,"problem_id":%s,"report":%s}\n' \
+        "$sent_at" "$status" "$http_status" "$problem_json" "$document" >>"$SENT" ||
+        die "cannot write $SENT"
+}
+
+# prune_sent -- drop the entries older than KEEP_DAYS, by temp file and rename.
+prune_sent() {
+    local cutoff tmp
+    [[ -e $SENT ]] || return 0
+    cutoff=$(date -u -d "@$((NOW - KEEP_DAYS * DAY_SECONDS))" +%Y-%m-%dT%H:%M:%SZ)
+    tmp=$(mktemp "$STATE_DIR/.sent.XXXXXX")
+    if sent_stream | jq -c --arg cutoff "$cutoff" \
+        'select((.sent_at | type) == "string" and .sent_at >= $cutoff)' >"$tmp" 2>/dev/null; then
+        chmod 0644 "$tmp"
+        mv -f "$tmp" "$SENT"
+    else
+        rm -f "$tmp"
+    fi
+}
+
+# pending_count -- how many reports a send posts now (the count included).
+pending_count() {
+    local summary limit selected total
+    if ! problems_envelope; then
+        echo 0
+        return 0
+    fi
+    summary=$(sent_summary)
+    limit=$(limit_of "$summary")
+    selected=$(select_problems "$summary" "$limit")
+    total=$(jq 'length' <<<"$selected" 2>/dev/null) || total=0
+    if count_due "$summary"; then
+        total=$((total + 1))
+    fi
+    echo "$total"
+}
+
+reporting_status() {
+    read_conf
+    local sent="?"
+    if reporting_on; then
+        printf 'on (consent for %s since %s)\n' "$SCHEMA" "${DECIDED_AT:-unknown}"
+    elif [[ ${ENABLED-} == 0 ]]; then
+        printf 'off (chosen %s)\n' "${DECIDED_AT:-unknown}"
+    elif [[ ${ENABLED-} == 1 ]]; then
+        printf 'off (consent was given for %s; run sudo snosi-health reporting on to agree to %s)\n' \
+            "${CONF_SCHEMA:-another schema}" "$SCHEMA"
+    else
+        echo "off (not chosen yet)"
+    fi
+    if [[ -n ${ENDPOINT_RAW-} ]]; then
+        if [[ $ENDPOINT_RAW =~ $ENDPOINT_RE ]]; then
+            printf 'endpoint: %s\n' "$ENDPOINT_RAW"
+        else
+            printf 'endpoint: the value in %s is not a plain http(s) URL; a send refuses\n' "$CONF"
+        fi
+    else
+        printf 'endpoint: %s (default)\n' "$DEFAULT_ENDPOINT"
+    fi
+    if [[ -r $SENT ]]; then
+        sent=$(sent_stream | jq -s 'length' 2>/dev/null) || sent="?"
+    else
+        sent=0
+    fi
+    printf 'sent reports: %s\n' "$sent"
+    printf 'reports a send posts now: %s\n' "$(pending_count)"
+    exit 0
+}
+
+# send_reporting [--dry-run] -- post the selected reports, or print them.
+send_reporting() {
+    local dry_run=$1 on=0
+    read_conf
+    if reporting_on; then
+        on=1
+    fi
+    resolve_endpoint
+
+    if [[ $dry_run -eq 0 ]]; then
+        require_root send
+        install -d -m 0755 "$STATE_DIR"
+        exec {lock_fd}>"$LOCK"
+        if ! flock -n "$lock_fd"; then
+            echo "snosi-health: another send holds $LOCK; nothing sent."
+            exit 0
+        fi
+        if [[ $on -ne 1 ]]; then
+            echo "snosi-health: problem reporting is off; nothing sent"
+            exit 0
+        fi
+    fi
+
+    if ! problems_envelope; then
+        if [[ $dry_run -eq 0 ]]; then
+            echo "snosi-health: no problem record to send ($PROBLEMS); nothing sent"
+        else
+            printf 'snosi-health: no problem record to send (%s); nothing to print.\n' "$PROBLEMS" >&2
+        fi
+        exit 0
+    fi
+
+    local summary limit selected record document index total code status
+    summary=$(sent_summary)
+    limit=$(limit_of "$summary")
+    selected=$(select_problems "$summary" "$limit")
+
+    while IFS= read -r record; do
+        [[ -n $record ]] || continue
+        document=$(problem_report "$record")
+        add_document "$(jq -r '.id' <<<"$record")" "$(jq -r '.kind' <<<"$record")" "$document"
+    done < <(jq -c '.[]' <<<"$selected")
+
+    if count_due "$summary"; then
+        document=$(count_report)
+        if [[ -n $document ]]; then
+            add_document "" count "$document"
+        fi
+    fi
+
+    total=${#DOCUMENTS[@]}
+    if [[ $dry_run -eq 1 ]]; then
+        for ((index = 0; index < total; index++)); do
+            printf '%s\n' "${DOCUMENTS[index]}"
+        done
+        printf 'snosi-health: dry run: %s report(s) would be sent to %s; nothing was sent.\n' \
+            "$total" "$ENDPOINT" >&2
+        echo "snosi-health: each report_id above is new in this preview and again in a real send." >&2
+        if [[ $on -ne 1 ]]; then
+            echo "snosi-health: problem reporting is off; a real send now sends nothing." >&2
+        fi
+        exit 0
+    fi
+
+    if [[ $total -eq 0 ]]; then
+        echo "snosi-health: no reportable problem to send"
+        exit 0
+    fi
+
+    local post_now post_day post_week
+    for ((index = 0; index < total; index++)); do
+        if ((index > 0)); then
+            sleep "$PACE"
+        fi
+        if ! take_post_lock; then
+            warn "cannot take $POST_LOCK within 60 s; stopping this run, the next daily run tries again"
+            exit 0
+        fi
+        # Consent can change while a run posts. `reporting off` writes the file
+        # and then closes this lock, so 1 of the 2 always sees the other: a post
+        # under the lock re-reads the file, and a decision waits for the post in
+        # flight and stops every later post.
+        read_conf
+        if ! reporting_on; then
+            release_post_lock
+            echo "snosi-health: problem reporting was turned off; stopping"
+            exit 0
+        fi
+        # The day and the week belong to the run that selected the reports: a
+        # run that would cross midnight, or the end of the ISO week of its
+        # count, stops here and the next run selects again.
+        POST_INDEX=$index
+        post_now=$(clock_now)
+        post_day=$(date -u -d "@$post_now" +%Y-%m-%d)
+        if [[ $post_day != "$today" ]]; then
+            release_post_lock
+            echo "snosi-health: the UTC day changed before the next report; stopping this run, the next run selects again"
+            exit 0
+        fi
+        if [[ ${DOC_KINDS[index]} == count ]]; then
+            post_week=$(date -u -d "@$post_now" +%G-W%V)
+            if [[ $post_week != "${DOC_WEEKS[index]}" ]]; then
+                release_post_lock
+                echo "snosi-health: the ISO week changed before the weekly count; stopping this run, the next run selects again"
+                exit 0
+            fi
+        fi
+        code=$(post_report "${DOCUMENTS[index]}")
+        case $code in
+            2[0-9][0-9]) status=accepted ;;
+            400 | 413 | 415) status=rejected ;;
+            *)
+                release_post_lock
+                warn "the intake answered $code; stopping this run, the next daily run tries again"
+                exit 0
+                ;;
+        esac
+        record_sent "$status" "$code" "${DOC_PROBLEM_IDS[index]}" "${DOCUMENTS[index]}" \
+            "$(date -u -d "@$post_now" +%Y-%m-%dT%H:%M:%SZ)"
+        printf 'snosi-health: sent %s %s (%s)\n' \
+            "$(jq -r '.kind' <<<"${DOCUMENTS[index]}")" \
+            "$(jq -r '.report_id' <<<"${DOCUMENTS[index]}")" "$code"
+        release_post_lock
+    done
+    prune_sent
+}
+
+main() {
+    case ${1-} in
+        reporting)
+            shift
+            case ${1-} in
+                --help | -h)
+                    usage
+                    exit 0
+                    ;;
+                on | off) set_reporting "$1" ;;
+                status) reporting_status ;;
+                *)
+                    usage >&2
+                    exit 2
+                    ;;
+            esac
+            ;;
+        send)
+            shift
+            dry_run=0
+            while (($# > 0)); do
+                case $1 in
+                    --dry-run) dry_run=1 ;;
+                    --help | -h)
+                        usage
+                        exit 0
+                        ;;
+                    *)
+                        usage >&2
+                        exit 2
+                        ;;
+                esac
+                shift
+            done
+            send_reporting "$dry_run"
+            ;;
+        --help | -h)
+            usage
+            exit 0
+            ;;
+        *)
+            usage >&2
+            exit 2
+            ;;
+    esac
+}
+
+main "$@"

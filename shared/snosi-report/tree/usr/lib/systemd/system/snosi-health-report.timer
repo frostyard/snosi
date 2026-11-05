@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Once a day, in a random 4-hour window, send the opted-in problem reports
+# (ADR-0030). Persistent=true makes a day that the host slept through run at
+# the next boot. The script gates on consent, so an enabled timer sends nothing
+# until an administrator runs `snosi-health reporting on`.
+[Unit]
+Description=Send opted-in problem reports once a day (snosi-health)
+Documentation=https://github.com/frostyard/snosi/blob/main/docs/adr/0030-floe-sends-problem-reports-with-admin-consent.md
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=4h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
