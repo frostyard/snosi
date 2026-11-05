@@ -38,8 +38,10 @@ paired test hooks: fixture journals, unit states, `bootc status`,
 Every reportable record validates against the vendored core `v1.json`
 (sha256 pinned) through `test/lib/json_schema_subset.py`; no message, path,
 username, unit instance or boot ID reaches `problems.json`; it also checks
-modes, the cursor, the boot-scoped counts, pruning and the static unit
-contract. `test/coredump-guard-test.sh` fixtures `coredump.finalize`
+modes, the cursor, the boot-scoped counts, pruning, the static unit
+contract, user-UID entries that S5 must ignore, carried updex entries, and a
+stop after each rename (a test-only fault hook): the next run loses no
+problem and counts no event twice. `test/coredump-guard-test.sh` fixtures `coredump.finalize`
 (`Storage=none`, `ProcessSizeMax`, `%d` and `%F`, `fs.suid_dumpable`, libdw
 and libelf). `test/bootc-container-policy-test.sh` pins 1 stager
 `error_class` case for each class.

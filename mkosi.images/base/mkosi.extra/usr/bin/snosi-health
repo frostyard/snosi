@@ -330,7 +330,7 @@ lr_hash=""
 # unit_messages UNIT -- up to 5 of this boot's journal texts of UNIT, as JSON.
 unit_messages() {
     local out
-    if out=$(run_cmd journalctl -b -u "$1" -n 5 -o json --output-fields=MESSAGE --no-pager 2>/dev/null); then
+    if out=$(run_cmd journalctl --system -b -u "$1" -n 5 -o json --output-fields=MESSAGE --no-pager 2>/dev/null); then
         jq -nc '[inputs | .MESSAGE | strings | .[0:1024]] | .[-5:]' <<<"$out" 2>/dev/null || echo '[]'
     else
         echo '[]'
@@ -451,10 +451,13 @@ collect_sysext() {
 # src/shared/cryptsetup-tpm2.c, src/shared/tpm2-util.c) and of tpm2-tss's
 # ESYS logger, which systemd-cryptsetup's stderr carries to the journal. Only
 # the classification leaves this function; no text is copied to problems.json.
+# Only the system journal and only entries of UID 0 count: a user can write
+# SYSLOG_IDENTIFIER=systemd-cryptsetup to the journal with systemd-cat.
 collect_tpm() {
     local out
     command -v journalctl >/dev/null || return 0
-    if ! out=$(run_cmd journalctl -b -o json --output-fields=MESSAGE --no-pager SYSLOG_IDENTIFIER=systemd-cryptsetup 2>/dev/null); then
+    if ! out=$(run_cmd journalctl --system -b -o json --output-fields=MESSAGE,_UID --no-pager \
+        SYSLOG_IDENTIFIER=systemd-cryptsetup _UID=0 2>/dev/null); then
         warn "journalctl (systemd-cryptsetup) failed"
         return 0
     fi
@@ -463,7 +466,7 @@ collect_tpm() {
         def hex2num: ascii_downcase | explode | reduce .[] as $c (0; . * 16 + (if $c >= 97 then $c - 87 else $c - 48 end));
         def esys_rc: [capture("Esys Finish ErrorCode \\(0x(?<c>[0-9a-fA-F]{1,8})\\)")]
           | if length > 0 then (.[0].c | hex2num % 65536) else null end;
-        [inputs | {m: (.MESSAGE | str // ""), t: jts}] as $e
+        [inputs | select(type == "object" and ._UID == "0") | {m: (.MESSAGE | str // ""), t: jts}] as $e
         | ($e | map(select(.m | test("A PCR value changed during the TPM2 policy session")))) as $pcr_debug
         | ($e | map(select((.m | esys_rc) == 296))) as $pcr_esys
         | (if ($pcr_debug | length) > 0 then $pcr_debug else $pcr_esys end) as $pcr
@@ -492,7 +495,7 @@ collect_tpm() {
 collect_integrity() {
     local out
     command -v journalctl >/dev/null || return 0
-    if ! out=$(run_cmd journalctl -b -k -o json --output-fields=MESSAGE,PRIORITY --no-pager 2>/dev/null); then
+    if ! out=$(run_cmd journalctl --system -b -k -o json --output-fields=MESSAGE,PRIORITY --no-pager 2>/dev/null); then
         warn "journalctl (kernel) failed"
         return 0
     fi
@@ -654,10 +657,21 @@ jq -n \
     | (($prev // {}).problems // [] | map(select(type == "object" and (.id | re("^[0-9a-f]{16}$"))))
        | map({key: .id, value: .}) | from_entries) as $recs0
     | (if ($st.boot_id // "") == $boot and $boot != "" then ($st.boot_slots // {}) else {} end) as $slots0
-    | reduce $o_all[] as $o ({recs: $recs0, slots: $slots0, det: (($pdet // {}).problems // {})};
+    # Replay safety: an event observation (a journal entry, an update-check
+    # or updex result) counts only when it is newer than the last_seen of its
+    # record in the previous problems.json. A run that stopped after the
+    # problems.json rename, or an updex record that carries an older feature
+    # entry, then counts nothing twice. Boot observations rely on the boot
+    # slots of state.json, which is renamed after problems.json: a stop
+    # between those 2 renames can over-count a boot record by 1 (ADR-0029).
+    | reduce ($o_all | sort_by(.at))[] as $o ({recs: $recs0, slots: $slots0, det: (($pdet // {}).problems // {})};
         ($o.slot // $o.id) as $slot
         | (if $o.mode == "boot" and .slots[$slot] == $o.id and .recs[$o.id] != null then
              .recs[$o.id].last_seen = tsmax(.recs[$o.id].last_seen; $o.at)
+           elif $o.mode != "boot" and .recs[$o.id] != null and $recs0[$o.id] != null
+                and (($recs0[$o.id].last_seen // "") | type) == "string"
+                and $o.at <= $recs0[$o.id].last_seen then
+             .
            else
              (if $o.mode == "boot" then .slots[$slot] else null end) as $old
              | (if $old != null and .recs[$old] != null then
@@ -674,7 +688,9 @@ jq -n \
         | .det[$o.id] = ((.det[$o.id] // {}) as $d
             | {kind: $o.kind, local: $o.local,
                extra: mergex(($d.extra // {}); ($o.extra // {})),
-               messages: ((($d.messages // []) + ($o.messages // [])) | map(strings | .[0:1024]) | .[-5:])}))
+               messages: ((($d.messages // []) + ($o.messages // [])) | map(strings | .[0:1024])
+                          | reduce .[] as $m ([]; if any(.[]; . == $m) then . else . + [$m] end)
+                          | .[-5:])}))
     | . as $acc
     | [$acc.recs[]
        | select(type == "object" and (.kind | oneof(kinds)))
@@ -696,28 +712,58 @@ jq -n \
                update_check: $uc, last_run: $lr}}
     ' >"$RESULT"
 
-# write_atomic NAME MODE GROUP FILTER -- a temp file in the state directory,
-# then chmod/chown, then rename over NAME.
-write_atomic() {
-    local dest=$1 mode=$2 group=$3 filter=$4 tmp
-    tmp=$(mktemp "$STATE_DIR/.$(basename "$dest").XXXXXX")
-    TEMPS+=("$tmp")
+# new_temp NAME -- an empty temp file for NAME in the state directory, so the
+# rename onto NAME stays on 1 file system. The EXIT trap removes leftovers.
+new_temp() {
+    mktemp "$STATE_DIR/.$1.XXXXXX"
+}
+
+# fill_temp TMP MODE GROUP FILTER -- write a part of the result to TMP, then
+# set its mode and owner.
+fill_temp() {
+    local tmp=$1 mode=$2 group=$3 filter=$4
     jq "$filter" "$RESULT" >"$tmp"
     chmod "$mode" "$tmp"
     # Test hooks keep the modes but cannot chown as a normal user.
     if [[ $TEST_HOOKS -ne 1 ]]; then
         chown "root:$group" "$tmp"
     fi
-    mv -f "$tmp" "$dest"
 }
 
-write_atomic "$DETAILS" 0640 sudo .details
-write_atomic "$STATE" 0600 root .state
-write_atomic "$PROBLEMS" 0644 root .problems
+# fault_point NAME -- a test-only stop (ADR-0009 class 3, under the paired
+# hooks only): exit as a crash would at that point of the renames.
+fault_point() {
+    if [[ $TEST_HOOKS -eq 1 && ${SNOSI_HEALTH_TEST_FAULT-} == "$1" ]]; then
+        echo "snosi-health: test fault after $1" >&2
+        exit 70
+    fi
+}
 
-# The event cursor moves only after the records are safe on disk.
+# Write every temp file first, then rename problems.json, details.json,
+# state.json and the cursor, in that order. problems.json goes first: its
+# last_seen values make a replay of event observations count nothing twice
+# (see the merge above), so a stop at any later point loses no problem.
+tmp_problems=$(new_temp problems.json)
+TEMPS+=("$tmp_problems")
+tmp_details=$(new_temp details.json)
+TEMPS+=("$tmp_details")
+tmp_state=$(new_temp state.json)
+TEMPS+=("$tmp_state")
+fill_temp "$tmp_problems" 0644 root .problems
+fill_temp "$tmp_details" 0640 sudo .details
+fill_temp "$tmp_state" 0600 root .state
 if [[ -n $NEW_CURSOR && -s $NEW_CURSOR ]]; then
     chmod 0600 "$NEW_CURSOR"
+fi
+
+mv -f "$tmp_problems" "$PROBLEMS"
+fault_point problems
+mv -f "$tmp_details" "$DETAILS"
+fault_point details
+mv -f "$tmp_state" "$STATE"
+fault_point state
+# The event cursor moves last, after the records are safe on disk.
+if [[ -n $NEW_CURSOR && -s $NEW_CURSOR ]]; then
     mv -f "$NEW_CURSOR" "$CURSOR"
 fi
 

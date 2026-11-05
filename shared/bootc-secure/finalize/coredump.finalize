@@ -124,6 +124,8 @@ to_bytes() {
     n=${BASH_REMATCH[1]}
     unit=${BASH_REMATCH[2]}
     ((${#n} <= 15)) || return 0
+    # Base 10 always: a leading zero must not make the number octal.
+    n=$((10#$n))
     case $unit in
         "") mult=1 ;;
         K) mult=1024 ;;
@@ -132,6 +134,12 @@ to_bytes() {
         T) mult=$((1024 ** 4)) ;;
         *) return 0 ;;
     esac
+    # Compare before multiplying: n * mult can overflow 64 bits and wrap
+    # below the cap. Anything above the cap is reported as cap + 1.
+    if ((n > LIMIT_BYTES / mult)); then
+        printf '%s\n' "$((LIMIT_BYTES + 1))"
+        return 0
+    fi
     printf '%s\n' "$((n * mult))"
 }
 

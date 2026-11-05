@@ -137,7 +137,12 @@ check "no preset enables the service directly" \
 check "no var-outcomes map names /var/lib/snosi-health (StateDirectory= creates it)" \
     bash -c "! grep -q 'snosi-health' '$ROOT_DIR'/shared/composition/*/var-outcomes.txt"
 check "collector is executable" test -x "$COLLECTOR"
-check "collector writes by temp file and rename" grep -qF 'mv -f "$tmp" "$dest"' "$COLLECTOR"
+check "collector writes by temp file and rename" grep -qF 'mv -f "$tmp_problems" "$PROBLEMS"' "$COLLECTOR"
+rename_order=$(grep -E '^[[:space:]]*mv -f "\$(tmp_problems|tmp_details|tmp_state|NEW_CURSOR)"' "$COLLECTOR" | sed 's/^[[:space:]]*mv -f "\$\([a-z_A-Z]*\)".*/\1/' | tr '\n' ' ')
+check "renames run problems, details, state, then the cursor (got: $rename_order)" \
+    test "$rename_order" = 'tmp_problems tmp_details tmp_state NEW_CURSOR '
+check "every temp file is written before the first rename" \
+    test "$(grep -n 'fill_temp "\$tmp_state"' "$COLLECTOR" | cut -d: -f1)" -lt "$(grep -n '^mv -f "\$tmp_problems"' "$COLLECTOR" | cut -d: -f1)"
 check "collector takes a lock" grep -qF 'flock -n "$lock_fd"' "$COLLECTOR"
 check "collector puts a timeout on external commands" grep -qF 'timeout --kill-after=5 "$CMD_TIMEOUT" "$@"' "$COLLECTOR"
 help=$("$COLLECTOR" --help)
@@ -365,7 +370,7 @@ check "state.json is mode 0600" test "$(mode_of "$STATE/state.json")" = 600
 check "the journal cursor is mode 0600" test "$(mode_of "$STATE/journal.cursor")" = 600
 check "chown to root:sudo is skipped only under the test hooks" \
     grep -qF 'if [[ $TEST_HOOKS -ne 1 ]]; then' "$COLLECTOR"
-check "details.json is chowned to root:sudo" grep -qF 'write_atomic "$DETAILS" 0640 sudo .details' "$COLLECTOR"
+check "details.json is chowned to root:sudo" grep -qF 'fill_temp "$tmp_details" 0640 sudo .details' "$COLLECTOR"
 check "no temp file is left" test -z "$(find "$STATE" -name '.*.json.*' -o -name '.journal.cursor.*')"
 if validate_problems; then
     pass "records validate against the v1 schema copy (reportable exactly when the envelope is valid)"
@@ -478,12 +483,25 @@ check "a new failed stage result adds 1 occurrence" test "$(occurrences "$s2_id"
 
 # A new updex run is a new S4 occurrence.
 s4_id=$(jq -r '.problems[] | select(.detail.feature == "docker") | .id' "$PROBLEMS")
-jq --arg at "$(date -u -d '-30 minutes' +%Y-%m-%dT%H:%M:%SZ)" '.finished = $at' \
+jq --arg at "$(date -u -d '-30 minutes' +%Y-%m-%dT%H:%M:%SZ)" '.finished = $at | .features[].at = $at' \
     "$HROOT/var/lib/updex/last-run.json" >"$WORK_DIR/lr" && mv "$WORK_DIR/lr" "$HROOT/var/lib/updex/last-run.json"
 collect
 check "a new updex run adds 1 occurrence" test "$(occurrences "$s4_id")" -eq 2
 collect
 check "an unchanged updex record adds no occurrence" test "$(occurrences "$s4_id")" -eq 2
+
+# updex carries the previous entry of a feature, with its own at, into a run
+# that names another feature. The file changes, but the old failure is not a
+# new occurrence; the new feature's failure is.
+jq --arg at "$(date -u -d '-20 minutes' +%Y-%m-%dT%H:%M:%SZ)" '
+    .finished = $at | .selected = true
+    | .features += [{feature: "k3s", origin: "catalog", outcome: "failed", error_class: "checksum",
+                     version: "1.33.1", at: $at, transfers: []}]' \
+    "$HROOT/var/lib/updex/last-run.json" >"$WORK_DIR/lr" && mv "$WORK_DIR/lr" "$HROOT/var/lib/updex/last-run.json"
+collect
+check "a carried updex entry with its old at adds no occurrence" test "$(occurrences "$s4_id")" -eq 2
+check "the new feature of that run is recorded once" \
+    test "$(jq '[.problems[] | select(.detail.feature == "k3s") | .occurrences] == [1]' "$PROBLEMS")" = true
 
 # More fs-verity errors in the same boot move the record to the >10 bucket
 # instead of adding a second record for the boot.
@@ -529,7 +547,7 @@ tpm_case() { # description expected-detail-or-empty jsonl-messages...
     for message in "$@"; do
         i=$((i + 1))
         jq -nc --arg m "$message" --arg c "k$i" --arg t "$(((now_s - 600 + i) * 1000000))" \
-            '{__CURSOR: $c, __REALTIME_TIMESTAMP: $t, MESSAGE: $m}' >>"$FIX/cryptsetup.json"
+            '{__CURSOR: $c, __REALTIME_TIMESTAMP: $t, _UID: ($ENV.TPM_UID // "0"), MESSAGE: $m}' >>"$FIX/cryptsetup.json"
     done
     collect || return 0
     if [[ -z $expected ]]; then
@@ -560,7 +578,47 @@ tpm_case "no TPM2 metadata for this boot state" '{"outcome":"other","tpm_rc":"PO
 mapfile -t many < <(for _ in $(seq 1 14); do echo 'ERROR:esys:src/tss2-esys/api/Esys_PolicyPCR.c:103:Esys_PolicyPCR() Esys Finish ErrorCode (0x00000128) '; done)
 tpm_case "retries are capped at 10" '{"outcome":"ok_after_retry","tpm_rc":"PCR_CHANGED","retries":10}' "${many[@]}"
 
-# --- 3e. inputs that give no record --------------------------------------
+TPM_UID=1000 tpm_case "a user entry with the fallback text is not recorded" '' \
+    'TPM2 operation failed, falling back to traditional unlocking: Operation not permitted' \
+    'ERROR:esys:src/tss2-esys/api/Esys_Unseal.c:98:Esys_Unseal() Esys Finish ErrorCode (0x00000128) '
+check "every journalctl call reads only the system journal" \
+    bash -c "! grep -v -- '--system' '$FIX/journalctl-calls' | grep -q ."
+check "S5 asks journalctl for UID 0 only" grep -qE 'SYSLOG_IDENTIFIER=systemd-cryptsetup _UID=0' "$FIX/journalctl-calls"
+
+# --- 3e. a stop between the renames loses nothing ------------------------
+# Reference: one clean run.
+setup_fixture
+collect
+ref=$(jq -c '[.problems[] | {key: .id, value: [.kind, .occurrences]}] | from_entries' "$PROBLEMS")
+# A run that stops after the problems.json, details.json or state.json rename
+# (the later files and the cursor stay old), then a normal run.
+for fault in problems details state; do
+    setup_fixture
+    if PATH="$STUBS:$PATH" FIX="$FIX" SNOSI_HEALTH_TEST_HOOKS=1 SNOSI_HEALTH_TEST_ROOT="$HROOT" \
+        SNOSI_HEALTH_TEST_FAULT=$fault "$COLLECTOR" >/dev/null 2>&1; then
+        fail "the fault hook stops the run after the $fault rename"
+        continue
+    fi
+    # A stop must leave the problems of this run already on disk.
+    stopped_ids=$(jq -c '[.problems[].id] | sort' "$PROBLEMS" 2>/dev/null) || stopped_ids=null
+    collect
+    got=$(jq -c '[.problems[] | {key: .id, value: [.kind, .occurrences]}] | from_entries' "$PROBLEMS")
+    check "after a stop at the $fault rename the next run loses no problem" \
+        test "$(jq -n --argjson r "$ref" --argjson g "$got" --argjson s "$stopped_ids" \
+            '($r | keys) == ($g | keys) and ($s == ($r | keys))')" = true
+    check "after a stop at the $fault rename no event record counts twice" \
+        test "$(jq -n --argjson r "$ref" --argjson g "$got" '
+            [$r | to_entries[] | select(.value[0] | IN("update_stage_failed", "sysext_update_failed", "crash", "app_problem"))
+             | .value[1] == $g[.key][1]] | all')" = true
+    check "after a stop at the $fault rename a boot record over-counts by at most 1" \
+        test "$(jq -n --argjson r "$ref" --argjson g "$got" '
+            [$r | to_entries[] | select(.value[0] | IN("unit_failed", "booted_older_image", "tpm_unlock", "integrity_error"))
+             | $g[.key][1] - .value[1] | . >= 0 and . <= 1] | all')" = true
+    check "no temp file is left after a stop at the $fault rename and a new run" \
+        test -z "$(find "$STATE" -name '.*.json.*' -o -name '.journal.cursor.*')"
+done
+
+# --- 3f. inputs that give no record --------------------------------------
 setup_fixture
 rm -f "$FIX/events.json" "$FIX/kernel.json" "$FIX/cryptsetup.json" "$FIX/units.json" "$FIX/bootc-status.json"
 jq '.format = 2' "$FIX/last-run.json" >"$HROOT/var/lib/updex/last-run.json"
@@ -598,7 +656,7 @@ check "an image id outside the enum makes nothing reportable" \
 check "an image id outside the enum is stored as null" test "$(jq -c '.image.id' "$PROBLEMS")" = null
 if validate_problems; then pass "records still validate with an unknown image id"; else fail "records still validate with an unknown image id"; fi
 
-# --- 3f. pruning and re-sanitizing an older file -------------------------
+# --- 3g. pruning and re-sanitizing an older file -------------------------
 setup_fixture
 rm -f "$FIX/events.json" "$FIX/kernel.json" "$FIX/cryptsetup.json" "$FIX/units.json" "$FIX/bootc-status.json"
 rm -f "$HROOT/run/snosi/update-check" "$HROOT/var/lib/updex/last-run.json"

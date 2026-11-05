@@ -123,6 +123,18 @@ conf usr/lib/systemd/coredump.conf.d/50-snosi.conf $'[Coredump]\nStorage=none\nP
 expect_reject "ProcessSizeMax=2G is rejected" "above the 1G cap"
 
 reset_root
+conf usr/lib/systemd/coredump.conf.d/50-snosi.conf $'[Coredump]\nStorage=none\nProcessSizeMax=8388608T'
+expect_reject "a size that overflows 64 bits (8388608T) is rejected" "above the 1G cap"
+
+reset_root
+conf usr/lib/systemd/coredump.conf.d/50-snosi.conf $'[Coredump]\nStorage=none\nProcessSizeMax=999999999999999G'
+expect_reject "a 15-digit size in G is rejected" "above the 1G cap"
+
+reset_root
+conf usr/lib/systemd/coredump.conf.d/50-snosi.conf $'[Coredump]\nStorage=none\nProcessSizeMax=0900M'
+expect_pass "a leading zero is read in base 10 (0900M passes)"
+
+reset_root
 conf usr/lib/systemd/coredump.conf.d/50-snosi.conf $'[Coredump]\nStorage=none\nProcessSizeMax=infinity'
 expect_reject "ProcessSizeMax=infinity is rejected" "ProcessSizeMax= resolves to 'infinity'"
 

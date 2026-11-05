@@ -60,17 +60,26 @@ command has a `timeout`; a `flock` keeps 2 runs apart.
 | `update_stage_failed` | `/run/snosi/update-check` `outcome=failed`, its new `error_class` key, `remote_version`, and `bootc --version` |
 | `booted_older_image` | `bootc status --format json`: the rollback deployment's version label is newer than the booted one; `how` is `manual_rollback` with `outcome=held-rollback`, else `unknown` |
 | `sysext_update_failed` | only `/var/lib/updex/last-run.json` format 1 (updex `docs/specs/last-run-record.md`); origin `image` or `catalog` only |
-| `tpm_unlock` | this boot's `SYSLOG_IDENTIFIER=systemd-cryptsetup` journal lines (initrd included), matched against the texts of systemd v262 and tpm2-tss's ESYS logger; only a retry or a fallback is recorded |
+| `tpm_unlock` | this boot's system-journal `SYSLOG_IDENTIFIER=systemd-cryptsetup` lines of `_UID=0` (initrd included; a user can forge the identifier, not the UID), matched against the texts of systemd v262 and tpm2-tss's ESYS logger; only a retry or a fallback is recorded |
 | `integrity_error` | this boot's kernel lines at warning or worse (fs-verity, dm-verity, overlayfs verity and erofs as `composefs`), counted in the buckets `1`, `2-10`, `>10` |
 | `crash` | system-journal coredump entries (`MESSAGE_ID=fc2e22bc6ee647b6b90729ab34a250b1`) with `_UID` and `COREDUMP_UID` below 1000; `exe` only for a program under `/usr` |
 | `app_problem` | system-journal library entries (`MESSAGE_ID=8915bdd215c84cbab0c31c05a1a33e7e`) with `_UID` below 1000; every `FROSTYARD_*` value must pass the spec, else the entry is dropped |
 
-`crash` and `app_problem` read new entries only, through 1 journal cursor in
-the state directory (90 days on the first run). The cursor moves only after
-the records are on disk. `unit_failed`, `booted_older_image`, `tpm_unlock`
-and `integrity_error` count at most once for each boot; a different value
-in the same boot (a bigger bucket) replaces that boot's record. A new
-`update-check` or `last-run.json` content counts once.
+Every `journalctl` call reads only the system journal (`--system`): root can
+also read user journals, where a user can write any field.
+
+`crash` and `app_problem` read new entries only, after 1 journal cursor in
+the state directory (`--after-cursor`; 90 days on the first run, because
+journalctl refuses `--since` together with a cursor). `update_stage_failed`,
+`sysext_update_failed`, `crash` and `app_problem` are event observations:
+each counts only when its time is later than the `last_seen` of its record in
+the previous `problems.json`. So a replayed journal entry, an unchanged
+`update-check`, or an updex record that carries an older feature entry with
+its own `at` counts nothing twice; the hashes of `update-check` and
+`last-run.json` in `state.json` are only a fast path. `unit_failed`,
+`booted_older_image`, `tpm_unlock` and `integrity_error` count at most once
+for each boot, through the boot slots in `state.json`; a different value in
+the same boot (a bigger bucket) replaces that boot's record.
 
 A fallback to a passphrase or a recovery key is recorded as `outcome`
 `other`: systemd v262 logs no line that tells which secret was typed. Users
@@ -109,14 +118,21 @@ for each `id`, the kind, the local detail, extra local names (full unit names,
 the core's executable path) and up to 5 journal texts of at most 1024
 characters. `state.json` (0600) holds the boot ID, the boot-scoped slots and
 the hashes of the last counted `update-check` and `last-run.json`. Every file
-is written to a temp file in the same directory, then `chmod`, `chown` and
-`mv -f`. `snosi-health --list` prints `problems.json` for any user.
+is first written to a temp file in the same directory, with `chmod` and
+`chown`; then `mv -f` renames `problems.json`, `details.json`, `state.json`
+and, last, the journal cursor. A stop after any rename loses no problem: the
+next run reads the old cursor and inputs again, and the `last_seen` rule
+above keeps event counts exact. The known limit: a stop between the
+`problems.json` and `state.json` renames leaves old boot slots, so the next
+run can count a boot record 1 time too many. `snosi-health --list` prints
+`problems.json` for any user.
 
 **Test hooks** ([ADR-0009](0009-snosi-env-var-classes.md), class 3, paired):
 `SNOSI_HEALTH_TEST_ROOT` prefixes every path and the root check relaxes only
 with `SNOSI_HEALTH_TEST_HOOKS=1`; the root alone is inert, and hooks=1 without
-a root or any value other than 0 or 1 is refused. The hooks are not in
-`--help`.
+a root or any value other than 0 or 1 is refused. Only under these hooks,
+`SNOSI_HEALTH_TEST_FAULT=problems|details|state` stops the run after that
+rename, so a test can prove the replay rule. The hooks are not in `--help`.
 
 **update-check `error_class`.** On `outcome=failed`, `bootc-update-stage`
 adds 1 line `error_class=network|registry|signature|disk_space|lock|other`.
