@@ -105,6 +105,13 @@ Image builds have four phases, in order:
    when a preset enables `updex-update.timer` and the unit or its
    enablement-manifest entry is missing (see
    [sysexts](sysexts.md#automatic-sysext-updates-updex-update-timer)).
+   `shared/outformat/image/finalize/snosi-health-timer.finalize` does the
+   same for `snosi-health.timer`, its service and `/usr/bin/snosi-health`
+   ([ADR-0029](../adr/0029-snosi-health-records-problems.md)).
+   `shared/bootc-secure/finalize/coredump.finalize` (secure composition)
+   fails the build unless systemd-coredump ships with `Storage=none`,
+   `ProcessSizeMax` at most 1G, `%d` and `%F` in `kernel.core_pattern`, no
+   `fs.suid_dumpable=1`, and libdw and libelf.
 4. **PostOutputScripts:** `shared/manifest/postoutput/mkosi.postoutput`
    records the image manifest; `shared/composition/core-flatpaks.postoutput`
    fails the build unless the output tree's core Flatpak set matches its
@@ -168,7 +175,8 @@ when Debian's systemd source advances. Rebuild a secure profile and execute
 `bootc --version` plus `bootc container --help` in its isolated root; also
 recheck the Issue 517 `90-image-dissect.rules` inclusion through
 `shared/bootc-secure/tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf`
-and NvPCR masks in `shared/bootc-secure/finalize/disable-nvpcr.chroot`.
+and NvPCR masks in `shared/bootc-secure/finalize/disable-nvpcr.chroot`,
+and the systemd-cryptsetup texts that `snosi-health` parses (ADR-0029).
 `test/check-forky-systemd-test.sh` enforces the sentinel consumer and PR
 obligations. Signed-PCR-11 LUKS unlock is retained while unused NvPCR writers
 are masked. The most recent build-root compatibility recheck is in `AGENTS.md`.

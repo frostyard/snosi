@@ -1,0 +1,16 @@
+{
+  "schema": "frostyard.problem/1",
+  "report_id": "de230484-797f-4f36-8488-aba7542ff591",
+  "week": "2026-W45",
+  "image": {
+    "id": "snowfield",
+    "version": "20261031093822"
+  },
+  "secure": false,
+  "client": "chairlift/0.14.0",
+  "kind": "booted_older_image",
+  "detail": {
+    "newer_version": "20261104081517",
+    "how": "boot_menu"
+  }
+}

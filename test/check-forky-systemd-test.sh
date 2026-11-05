@@ -126,7 +126,11 @@ check 'PR body excludes retired native NvPCR finalize' \
 check 'PR body excludes retired native build-pr lane' \
     test "$(grep -c 'build-native-images.yml' "$work/body.md" || true)" -eq 0
 check 'PR body gives the systemd 262 NvPCR reason' body_has '`ukify --sign-initrd-pcrs` initrd policy'
-check 'PR body lists exactly three recheck items' test "$(grep -c '^- \[ \] ' "$work/body.md")" -eq 3
+check 'PR body names the snosi-health systemd-cryptsetup text re-check' body_has '**snosi-health systemd-cryptsetup text.**'
+check 'PR body names the snosi-health parser and fixtures' body_has '`test/snosi-health-test.sh`'
+check 'PR body names the v262 cryptsetup sources' body_has '`src/cryptsetup/cryptsetup.c`'
+check 'PR body asks for all four rechecks' body_has 'Merge only after all four pass'
+check 'PR body lists exactly four recheck items' test "$(grep -c '^- \[ \] ' "$work/body.md")" -eq 4
 check 'PR body links the new changelog' \
     body_has 'https://metadata.ftp-master.debian.org/changelogs/main/s/systemd/systemd_262-1_changelog'
 
@@ -240,7 +244,7 @@ check 'wsdd changelog drops the epoch' body_has 'https://metadata.ftp-master.deb
 run_check '{"systemd":"261.2-1","wsdd":"2:0.8-5"}'
 check 'simultaneous updates advance both versions' \
     test "$(jq -c '[.systemd,.wsdd]' "$work/forky-versions.json")" = '["262-1","2:0.8-6"]'
-check 'simultaneous updates require all four rechecks' test "$(grep -c '^- \[ \] ' "$work/body.md")" -eq 4
+check 'simultaneous updates require all five rechecks' test "$(grep -c '^- \[ \] ' "$work/body.md")" -eq 5
 make_sources 261.2-1 2:0.8-6
 run_check '{"systemd":"262-1","wsdd":"2:0.8-5"}'
 check 'a wsdd update does not downgrade stale systemd' test "$(sentinel_version)" = 262-1
@@ -298,6 +302,8 @@ check 'AGENTS.md keeps the Task 4 build/root recheck rule' grep -qF 'Repeat that
 check 'AGENTS.md keeps the Task 4 "Last repeated" record' grep -qF '**Last repeated' "$agents"
 check 'AGENTS.md keeps the Issue 517 section' grep -qF '**Issue 517' "$agents"
 check 'AGENTS.md documents the Forky systemd sentinel' grep -qF 'shared/download/forky-versions.json' "$agents"
+check 'AGENTS.md counts four systemd recheck obligations' grep -qF 'four recheck obligations' "$agents"
+check 'AGENTS.md names the snosi-health cryptsetup text recheck' grep -qF 'snosi-health systemd-cryptsetup text' "$agents"
 
 # --- check-packages.yml job wiring: token scope, timeout, PR plumbing.
 job=$(awk '

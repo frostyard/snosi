@@ -1,0 +1,18 @@
+{
+  "schema": "frostyard.problem/1",
+  "report_id": "4e71f40f-ab33-4758-a77e-ee3c7da70425",
+  "week": "2026-W45",
+  "image": {
+    "id": "floe",
+    "version": "20261031093822"
+  },
+  "secure": false,
+  "client": "snosi-health/20261031093822",
+  "kind": "sysext_update_failed",
+  "detail": {
+    "feature": "docker",
+    "version": "28.5.1",
+    "outcome": "failed",
+    "error_class": "checksum"
+  }
+}

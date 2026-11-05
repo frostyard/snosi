@@ -1,0 +1,17 @@
+{
+  "schema": "frostyard.problem/1",
+  "report_id": "ecc58178-7494-4a54-9b31-5aa256bb3d18",
+  "week": "2026-W45",
+  "image": {
+    "id": "snow",
+    "version": "20261031093822"
+  },
+  "secure": true,
+  "client": "chairlift/0.14.0",
+  "kind": "update_stage_failed",
+  "detail": {
+    "target_version": "20261104081517",
+    "error_class": "network",
+    "bootc_version": "1.1.6"
+  }
+}

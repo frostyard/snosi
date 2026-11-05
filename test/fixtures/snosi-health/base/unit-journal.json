@@ -1,0 +1,2 @@
+{"__CURSOR":"u1","__REALTIME_TIMESTAMP":"1793869200000000","MESSAGE":"Failed to start backup of /home/brian on host frosty-desk"}
+{"__CURSOR":"u2","__REALTIME_TIMESTAMP":"1793869260000000","MESSAGE":"brian-backup.service: Main process exited, code=exited, status=1/FAILURE"}

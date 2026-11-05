@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Record system problems in /var/lib/snosi-health (ADR-0029). Started only by
+# snosi-health.timer: no [Install] section, no Before=, and no ordering on a
+# login or graphical unit, so first login never waits for it.
+[Unit]
+Description=Record system problems (snosi-health)
+Documentation=https://github.com/frostyard/snosi/blob/main/docs/adr/0029-snosi-health-records-problems.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/snosi-health
+# systemd creates /var/lib/snosi-health at run time, so no image ships it
+# and the var-audit outcome maps need no line for it.
+StateDirectory=snosi-health
+StateDirectoryMode=0755
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+TimeoutStartSec=5min
+ProtectHome=yes
+ProtectSystem=full
+PrivateTmp=yes
+PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=yes

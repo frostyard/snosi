@@ -1,0 +1,1 @@
+BOOT_IMAGE=/vmlinuz root=UUID=x rw composefs=?abcd lockdown=integrity quiet

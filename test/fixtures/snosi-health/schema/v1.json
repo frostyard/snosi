@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://frostyard.org/schemas/problem-report/v1.json",
+  "title": "frostyard.problem/1",
+  "description": "One problem report sent by an opted-in snosi host. Contract: frostyard/core docs/specs/problem-report.md. Immutable: a new field or enum value is a new schema version in a new file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "report_id", "week", "image", "secure", "client", "kind", "detail"],
+  "properties": {
+    "schema": { "const": "frostyard.problem/1" },
+    "report_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "week": {
+      "type": "string",
+      "pattern": "^20[2-9][0-9]-W(0[1-9]|[1-4][0-9]|5[0-3])$"
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "enum": ["snow", "snowfield", "sundog", "floe"] },
+        "version": { "$ref": "#/$defs/image_version" }
+      }
+    },
+    "secure": { "type": "boolean" },
+    "client": {
+      "type": "string",
+      "pattern": "^(chairlift/(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})(-(alpha|beta|rc)\\.(0|[1-9][0-9]{0,3}))?|snosi-health/[0-9]{14})$"
+    },
+    "kind": {
+      "enum": [
+        "unit_failed",
+        "update_stage_failed",
+        "booted_older_image",
+        "sysext_update_failed",
+        "tpm_unlock",
+        "integrity_error",
+        "crash",
+        "app_problem",
+        "count"
+      ]
+    },
+    "detail": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "unit_failed" } } },
+      "then": { "properties": { "detail": { "$ref": "#/$defs/unit_failed" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "update_stage_failed" } } },
+      "then": { "properties": { "detail": { "$ref": "#/$defs/update_stage_failed" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "booted_older_image" } } },
+      "then": { "properties": { "detail": { "$ref": "#/$defs/booted_older_image" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "sysext_update_failed" } } },
+      "then": { "properties": { "detail": { "$ref": "#/$defs/sysext_update_failed" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "tpm_unlock" } } },
+      "then": { "properties": { "detail": { "$ref": "#/$defs/tpm_unlock" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "integrity_error" } } },
+      "then": { "properties": { "detail": { "$ref": "#/$defs/integrity_error" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "crash" } } },
+      "then": { "properties": { "detail": { "$ref": "#/$defs/crash" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "app_problem" } } },
+      "then": { "properties": { "detail": { "$ref": "#/$defs/app_problem" } } }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "count" } } },
+      "then": { "properties": { "detail": { "$ref": "#/$defs/count" } } }
+    }
+  ],
+  "$defs": {
+    "image_version": {
+      "type": "string",
+      "pattern": "^[0-9]{14}$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})(-(alpha|beta|rc)\\.(0|[1-9][0-9]{0,3}))?$"
+    },
+    "unit_failed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["unit", "result", "shipped"],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_.-]{0,95}@?\\.(service|socket|timer|mount|automount|swap|path|target|slice|scope)$"
+        },
+        "result": { "enum": ["exit-code", "signal", "timeout", "core-dump", "start-limit-hit", "other"] },
+        "shipped": { "const": true }
+      }
+    },
+    "update_stage_failed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_version", "error_class", "bootc_version"],
+      "properties": {
+        "target_version": { "$ref": "#/$defs/image_version" },
+        "error_class": { "enum": ["network", "registry", "signature", "disk_space", "lock", "other"] },
+        "bootc_version": { "$ref": "#/$defs/semver" }
+      }
+    },
+    "booted_older_image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["newer_version", "how"],
+      "properties": {
+        "newer_version": { "$ref": "#/$defs/image_version" },
+        "how": { "enum": ["manual_rollback", "boot_menu", "unknown", "other"] }
+      }
+    },
+    "sysext_update_failed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["feature", "version", "outcome"],
+      "properties": {
+        "feature": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z][0-9A-Za-z.+~_-]{0,63}$"
+        },
+        "outcome": {
+          "enum": ["failed", "held_by_rollback", "needs_image", "skipped_unreachable", "skipped_busy", "other"]
+        },
+        "error_class": {
+          "enum": ["network", "http_status", "signature", "checksum", "disk_space", "link", "config", "other"]
+        }
+      }
+    },
+    "tpm_unlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "tpm_rc", "retries"],
+      "properties": {
+        "outcome": { "enum": ["ok_after_retry", "recovery_key", "passphrase", "other"] },
+        "tpm_rc": { "enum": ["PCR_CHANGED", "POLICY_FAIL", "LOCKOUT", "other"] },
+        "retries": { "type": "integer", "minimum": 0, "maximum": 10 }
+      }
+    },
+    "integrity_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subsystem", "count"],
+      "properties": {
+        "subsystem": { "enum": ["composefs", "fs-verity", "dm-verity", "other"] },
+        "count": { "enum": ["1", "2-10", ">10"] }
+      }
+    },
+    "crash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["exe", "signal"],
+      "properties": {
+        "exe": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"
+        },
+        "package": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9+.-]{1,99}$"
+        },
+        "package_version": {
+          "type": "string",
+          "pattern": "^([0-9]{1,4}:)?[0-9][A-Za-z0-9.+~-]{0,63}$"
+        },
+        "signal": { "enum": ["SIGSEGV", "SIGABRT", "SIGBUS", "SIGILL", "SIGFPE", "SIGTRAP", "SIGSYS", "other"] }
+      }
+    },
+    "app_problem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app_id", "app_version", "runtime", "component", "class"],
+      "properties": {
+        "app_id": {
+          "enum": [
+            "org.frostyard.ChairLift",
+            "org.frostyard.nsl",
+            "org.frostyard.intuneme",
+            "org.frostyard.pilothouse",
+            "org.frostyard.Frostmail",
+            "org.frostyard.Frostnotes",
+            "org.frostyard.Frostread"
+          ]
+        },
+        "app_version": { "$ref": "#/$defs/semver" },
+        "runtime": { "enum": ["go", "rust"] },
+        "component": { "enum": ["daemon", "cli", "gui", "shell", "other"] },
+        "class": { "enum": ["panic", "error"] },
+        "code": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.]{0,63}$"
+        },
+        "frames": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "maxLength": 160,
+            "pattern": "^(other|(github\\.com/frostyard(/[A-Za-z0-9_-]+){1,6}|(github\\.com/emersion/go-imap/v2|archive|bufio|bytes|cmp|compress|container|context|crypto|database|debug|embed|encoding|errors|expvar|flag|fmt|go|hash|html|image|index|internal|io|iter|log|main|maps|math|mime|net|os|path|plugin|reflect|regexp|runtime|slices|sort|strconv|strings|structs|sync|syscall|testing|text|time|unicode|unique|unsafe|vendor|weak)(/[a-z0-9_]+){0,4})\\.[A-Za-z0-9_.()*\\[\\]-]+)$"
+          }
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^src/([a-z0-9_]+/){0,8}[a-z0-9_]+\\.rs:[1-9][0-9]{0,5}$"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "class": { "const": "error" } } },
+          "then": { "required": ["code"], "properties": { "code": true, "frames": false, "location": false } }
+        },
+        {
+          "if": { "properties": { "class": { "const": "panic" } } },
+          "then": { "properties": { "code": false } }
+        },
+        {
+          "if": { "properties": { "runtime": { "const": "go" } } },
+          "then": { "properties": { "location": false } }
+        },
+        {
+          "if": { "properties": { "runtime": { "const": "rust" } } },
+          "then": { "properties": { "frames": false } }
+        }
+      ]
+    },
+    "count": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["install_age", "channel"],
+      "properties": {
+        "install_age": { "enum": ["<1w", "<1m", "<6m", ">=6m"] },
+        "channel": { "enum": ["latest", "other"] }
+      }
+    }
+  }
+}

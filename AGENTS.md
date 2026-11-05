@@ -125,8 +125,8 @@ pair ran `bootc --version`, `bootc container --help` and the hidden
 and 1.17.1 and 1.17.3 gave the same composefs digest for one fixed tree.
 `shared/packages/bootc/finalize/bootc-pair.chroot` repeats the version,
 hidden-command and libostree-floor checks in every OCI build. Secure assembly
-on 1.17.3 is not proven until the first main build assembles all four
-products; the 1.17.1 evidence (run 40370164077, lab `l6596`) is history in
+on 1.17.3 passed on all four products in main run 41939252558 (2026-11-05;
+Brian accepted the post-merge revalidation, T846a); the 1.17.1 evidence (run 40370164077, lab `l6596`) is history in
 `docs/bootc-secure-assembly-compatibility.md`. bootc 1.17.3 stages global UKI
 addons with an update and swaps them in at finalize, so `snosi-kargs` mirrors
 `apply` and `revert` into `<ESP>/loader/addons.staged`.
@@ -141,7 +141,9 @@ our UKIs lack the initrd NvPCR definitions and `--sign-initrd-pcrs` policy,
 while signed-PCR-11 LUKS unlock remains active. Recheck mask coverage on
 Forky updates. The daily sentinel `shared/download/forky-versions.json`
 opens a review PR when the source version advances; `test/check-forky-systemd-test.sh`
-guards its systemd consumers and three recheck obligations. Snow/Snowfield's
+guards its systemd consumers and four recheck obligations (the fourth,
+"snosi-health systemd-cryptsetup text", rechecks the v262 texts that
+`snosi-health` parses). Snow/Snowfield's
 `wsdd` is the deliberate non-systemd Forky exception (absent from Trixie),
 also tracked by this sentinel. Its updates require checking the Python floor,
 the Trixie dependency solve, and GVfs discovery; never select `wsdd/forky`
@@ -181,6 +183,24 @@ enablement-manifest entry is missing; the host opt-out is
 `systemctl mask updex-update.timer`. A sysext revision that needs a base
 change must set `UPDEX_MIN_IMAGE_VERSION`; see
 [docs/design/sysexts.md](docs/design/sysexts.md#automatic-sysext-updates-updex-update-timer).
+
+Base ships the root collector `snosi-health` (bash and jq; ADR-0029) and its
+hourly `snosi-health.timer` (`OnBootSec=3min`, idle I/O, no `Before=`, wanted
+only by `timers.target`; `06-snosi-health.preset`). It writes
+`/var/lib/snosi-health/problems.json` (0644: only fields of core's
+`frostyard.problem/1` that pass their v1 schema, never journal text, a path,
+a username or a unit instance) and `details.json` (0640 root:sudo) by atomic
+rename; `snosi-health --list` prints the problems. On a failed stage
+`bootc-update-stage` adds `error_class=` to update-check, never error text.
+`shared/outformat/image/finalize/snosi-health-timer.finalize` guards the
+preset and manifest entry like `updex-timer.finalize`. systemd-coredump comes
+from the Forky family with `Storage=none` and `ProcessSizeMax=1G`
+(`shared/bootc-secure/tree/usr/lib/systemd/coredump.conf.d/50-snosi.conf`);
+`shared/bootc-secure/finalize/coredump.finalize` also requires `%d` and `%F`
+in the core pattern (the CVE-2025-4598 fix), no `fs.suid_dumpable=1`, and
+libdw and libelf. Tests: `test/snosi-health-test.sh` (fixtures validated
+against a pinned copy of core's `v1.json`),
+`test/snosi-health-timer-guard-test.sh`, `test/coredump-guard-test.sh`.
 
 `.github/workflows/build.yml` publishes sysexts; `build-images.yml` publishes
 signed OCI images by immutable digest before promoting `latest`. The

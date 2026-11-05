@@ -47,6 +47,7 @@ states intent; the categories below hold the record.
 - [adr/0026-sysexts-with-system-units-reload-the-manager.md](adr/0026-sysexts-with-system-units-reload-the-manager.md) — **Proposed:** every sysext that ships a system unit sets `EXTENSION_RELOAD_MANAGER=1`, so PID 1 loads its units in the same boot; a build-time guard enforces it
 - [adr/0027-seal-lockdown-into-the-secure-uki-command-line.md](adr/0027-seal-lockdown-into-the-secure-uki-command-line.md) — **Accepted:** the signed UKI command line of all four secure products is `rw composefs=?<digest> lockdown=integrity`, because linux-surface does not raise lockdown under Secure Boot and kargs.d does not reach a Type #2 UKI
 - [adr/0028-first-login-runs-chairlift-first-run.md](adr/0028-first-login-runs-chairlift-first-run.md) — **Accepted:** Snow and Snowfield start chairlift's first run from one image-owned XDG autostart entry (`Exec=/usr/bin/chairlift-first-run`) with an image-owned app list; Sundog and Floe have none; snow-first-setup retires; base ships the Homebrew `profile.d` file
+- [adr/0029-snosi-health-records-problems.md](adr/0029-snosi-health-records-problems.md) — **Accepted:** base ships the root collector `snosi-health`, which writes schema-checked `problems.json` (0644, no journal text, path or name) and `details.json` (0640 root:sudo); the stager adds `error_class`; systemd-coredump ships on all four products with `Storage=none`; the Floe sender is later work
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design
