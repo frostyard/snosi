@@ -168,6 +168,22 @@ neg "the sender enables no unit at runtime" \
     bash -c "grep -vE '^[[:space:]]*#' '$SENDER' | grep -qE 'systemctl[[:space:]]+(enable|disable)'"
 neg "the sender follows no redirect" \
     grep -qE -- '(^|[[:space:]])-(L|--location)([[:space:]]|$)' "$SENDER"
+check "curl disables the user's configuration as its first argument" \
+    grep -qF 'curl -q --silent' "$SENDER"
+check "the sender takes the post lock around each post" \
+    grep -qF 'if ! take_post_lock; then' "$SENDER"
+check "reporting on and off wait for a post in flight" \
+    grep -qF 'if take_post_lock; then' "$SENDER"
+check "the sender reads consent again under the post lock" \
+    grep -qF 'problem reporting was turned off; stopping' "$SENDER"
+check "the sender reads the clock before each post" \
+    grep -qF 'post_now=$(clock_now)' "$SENDER"
+check "the sender stamps a sent line with the clock of that post" \
+    grep -qF 'date -u -d "@$post_now" +%Y-%m-%dT%H:%M:%SZ' "$SENDER"
+check "the sender refuses a run that crosses the end of its ISO week" \
+    grep -qF 'the ISO week changed before the weekly count' "$SENDER"
+check "the sender refuses a run that crosses midnight" \
+    grep -qF 'the UTC day changed before the next report' "$SENDER"
 check "the sender never posts a crash report" \
     grep -qF 'readonly REPORT_KINDS=' "$SENDER"
 neg "the crash kind is not in the sendable kinds" \
@@ -218,6 +234,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
         }
         with open(os.path.join(directory, "requests.jsonl"), "a", encoding="utf-8") as log:
             log.write(json.dumps(record) + "\n")
+        # Optional mode: the file "off-after" holds the path of a consent file.
+        # The first request turns reporting off in it, so a case can prove that
+        # a run reads consent again before it posts the next report.
+        trigger = os.path.join(directory, "off-after")
+        if os.path.exists(trigger):
+            with open(trigger, encoding="utf-8") as handle:
+                consent_path = handle.read().strip()
+            os.unlink(trigger)
+            if consent_path:
+                with open(consent_path, "w", encoding="utf-8") as handle:
+                    handle.write(
+                        "enabled=0\nschema=frostyard.problem/1\ndecided_at=2026-11-03T12:00:00Z\n"
+                    )
         try:
             with open(os.path.join(directory, "status"), encoding="utf-8") as handle:
                 status = int(handle.read().strip())
@@ -314,10 +343,10 @@ write_problems() {
     ' >"$1"
 }
 
-# 25 reportable unit_failed records with distinct ids.
-write_problems_25() {
-    jq -n '
-      [range(25) as $i
+# N reportable unit_failed records with distinct ids.
+write_problems_n() { # count file
+    jq -n --argjson n "$1" '
+      [range($n) as $i
        | {id: (("abc000000000000" + ($i | tostring)) | .[-16:]),
           kind: "unit_failed",
           detail: {unit: ("svc" + ($i | tostring) + ".service"), result: "exit-code", shipped: true},
@@ -327,7 +356,7 @@ write_problems_25() {
       | {format: 1, schema: "frostyard.problem/1", generated: "2026-11-03T11:00:00Z",
          image: {id: "floe", version: "20261101120000"}, secure: false,
          client: "snosi-health/20261101120000", problems: .}
-    ' >"$1"
+    ' >"$2"
 }
 
 reset_root() {
@@ -365,11 +394,15 @@ OUT=""
 SEND_RC=0
 ERR_FILE="$WORK_DIR/stderr.txt"
 
+CLOCK_STEP=0
+EXTRA_ENV=()
+
 run_sender() { # now args...
     local now=$1
     shift
-    PATH="$STUBS:$PATH" SNOSI_HEALTH_TEST_HOOKS=1 SNOSI_HEALTH_TEST_ROOT="$RROOT" \
+    env PATH="$STUBS:$PATH" SNOSI_HEALTH_TEST_HOOKS=1 SNOSI_HEALTH_TEST_ROOT="$RROOT" \
         SNOSI_HEALTH_TEST_NOW="$now" SNOSI_HEALTH_TEST_PACE=0 \
+        SNOSI_HEALTH_TEST_CLOCK_STEP="$CLOCK_STEP" "${EXTRA_ENV[@]}" \
         "$RROOT/usr/libexec/snosi-health-report" "$@"
 }
 
@@ -378,6 +411,14 @@ send_now() { # now [send args...]
     shift
     SEND_RC=0
     OUT=$(run_sender "$now" send "$@" 2>"$ERR_FILE") || SEND_RC=$?
+}
+
+send_with_step() { # step now [send args...]
+    local step=$1 now=$2
+    shift 2
+    CLOCK_STEP=$step
+    send_now "$now" "$@"
+    CLOCK_STEP=0
 }
 
 mode_of() { stat -c %a "$1"; }
@@ -559,7 +600,7 @@ check "a second send on the same day posts nothing" test "$(requests)" -eq 0
 
 reset_root
 consent_on
-write_problems_25 "$STATE/problems.json"
+write_problems_n 25 "$STATE/problems.json"
 reset_requests
 send_now "$NOW_FIXED"
 check "the first day posts 20 problems and 1 count" test "$(requests)" -eq 21
@@ -621,6 +662,92 @@ send_now "$NOW_FIXED"
 check "an entry older than 90 days is dropped" neg_has_sent '9999999999999999'
 check "a line that is not JSON is dropped" neg_has_sent 'this line is not JSON'
 check "the entries of this run stay" test "$(wc -l <"$SENT" | tr -d ' ')" -eq 7
+
+# --- 8c. consent between posts ---------------------------------------------
+
+# `reporting off` must not return while the sender still posts. The fake intake
+# turns consent off when it gets the first request; the run must stop before
+# the second one.
+reset_root
+consent_on
+write_problems "$STATE/problems.json"
+reset_requests
+printf '%s\n' "$CONF" >"$SRV/off-after"
+send_now "$NOW_FIXED"
+rm -f "$SRV/off-after"
+check "a run stops when consent is turned off after its first post" test "$(requests)" -eq 1
+check "the stopped run records only the 1 post it made" \
+    test "$(wc -l <"$SENT" | tr -d ' ')" -eq 1
+check "the stopped run says reporting was turned off" \
+    grep -qF 'problem reporting was turned off; stopping' <<<"$OUT"
+check "the stopped run exits 0" test "$SEND_RC" -eq 0
+
+# The consent file decides again at the next run.
+reset_requests
+send_now "$NOW_FIXED"
+check "the next run with consent off posts nothing" test "$(requests)" -eq 0
+
+# --- 8d. the clock across a day and a week boundary ------------------------
+
+# (a) 23:59:50 with a 20-second step for each post: the second post belongs to
+# the next day, so the run stops after 1 request.
+CLOCK_LATE=$(date -u -d '2026-11-03T23:59:50Z' +%s)
+reset_root
+consent_on
+write_problems_n 3 "$STATE/problems.json"
+reset_requests
+send_with_step 20 "$CLOCK_LATE"
+check "a run that would cross midnight posts only the report of its own day" \
+    test "$(requests)" -eq 1
+check "the crossing run says the UTC day changed" \
+    grep -qF 'the UTC day changed before the next report' <<<"$OUT"
+check "the crossing run exits 0" test "$SEND_RC" -eq 0
+check "the crossing run records the 1 post it made" \
+    test "$(wc -l <"$SENT" | tr -d ' ')" -eq 1
+
+# (b) The last minute of an ISO week: the problem of that week posts, and the
+# weekly count does not post with the old week.
+CLOCK_SUNDAY=$(date -u -d '2026-11-08T23:59:50Z' +%s)
+check "the Sunday fixture is the last day of its ISO week" \
+    test "$(date -u -d "@$CLOCK_SUNDAY" +%u)" = 7
+reset_root
+consent_on
+write_problems_n 1 "$STATE/problems.json"
+reset_requests
+send_with_step 20 "$CLOCK_SUNDAY"
+check "on the last day of the week the problem of that week posts" \
+    test "$(requests)" -eq 1
+neg "the weekly count does not post with the old week" requests_have '"kind":"count"'
+check "the run stops at the week boundary" \
+    grep -qF 'the UTC day changed before the next report' <<<"$OUT"
+
+# (c) sent_at is the clock of that post, not of the run start.
+CLOCK_MIDDAY=$(date -u -d '2026-11-03T12:00:00Z' +%s)
+reset_root
+consent_on
+write_problems_n 2 "$STATE/problems.json"
+reset_requests
+send_with_step 20 "$CLOCK_MIDDAY"
+check "the first sent line carries the run start" \
+    test "$(jq -s -r '.[0].sent_at' "$SENT")" = '2026-11-03T12:00:00Z'
+check "the second sent line carries the stepped clock of its post" \
+    test "$(jq -s -r '.[1].sent_at' "$SENT")" = '2026-11-03T12:00:20Z'
+
+# --- 8e. a user's curl configuration cannot change a report ----------------
+
+CURLRC_DIR="$WORK_DIR/curlrc"
+mkdir -p "$CURLRC_DIR"
+printf 'header = "X-Leak: 1"\nlocation\n' >"$CURLRC_DIR/.curlrc"
+reset_root
+consent_on
+write_problems "$STATE/problems.json"
+reset_requests
+EXTRA_ENV=(HOME="$CURLRC_DIR" CURL_HOME="$CURLRC_DIR" XDG_CONFIG_HOME="$CURLRC_DIR")
+send_now "$NOW_FIXED"
+EXTRA_ENV=()
+check "a .curlrc header never reaches the intake" \
+    jq_ok 'all(.[]; (.headers | has("x-leak")) | not)' "$SRV/requests.jsonl"
+check "the send with a .curlrc still posts every report" test "$(requests)" -eq 7
 
 # --- 9. install_age and channel -------------------------------------------
 

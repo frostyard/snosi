@@ -68,6 +68,15 @@ status` works for any user and prints 4 states: on since a date, off by
 choice since a date, off (not chosen yet), and off with a consent for another
 schema plus the command that agrees to this one.
 
+**Consent holds through a run.** A run can last minutes, so the file is not
+read only at start. `snosi-health-report` holds
+`/var/lib/snosi-health/.post.lock` for the duration of 1 post and reads the
+consent file again under it; when the file says off, the run releases the
+lock, prints "problem reporting was turned off; stopping" and exits 0.
+`reporting on|off` writes the file first and then takes the same lock (60 s
+timeout): the decision waits for the post in flight and no later post of that
+run starts, so `reporting off` never returns while the sender still posts.
+
 **No `/etc/snosi-health` in any image.** The file exists only after an
 administrator runs 1 of those commands, so an image never ships consent. The
 unmodified answer of every Floe install is "off".
@@ -117,12 +126,24 @@ root, takes no lock and writes no state. The sender validates every document
 with it and drops an invalid one with a warning: an invalid report stays
 local.
 
-**Posting.** Each document is 1 `curl` POST with `--proto '=http,https'`,
-`--connect-timeout 10`, `--max-time 30`, an empty `-A ''`, `-H 'Accept:'` to
-remove the header, `-H 'Content-Type: application/json'`, the compact JSON as
-`--data-binary`, `-o /dev/null -w '%{http_code}'` and **no `-L`**. Between 2
-requests the sender sleeps 7 seconds, so a run stays under the Worker's 10
-requests a minute. The order is problems first, then the count.
+**Posting.** Each document is 1 `curl` POST with `-q` (`--disable`) as its
+first argument, then `--proto '=http,https'`, `--connect-timeout 10`,
+`--max-time 30`, an empty `-A ''`, `-H 'Accept:'` to remove the header,
+`-H 'Content-Type: application/json'`, the compact JSON as `--data-binary`,
+`-o /dev/null -w '%{http_code}'` and **no `-L`**. `-q` must come first or curl
+ignores it: a user's `~/.curlrc` must not add a header, follow a redirect or
+set a proxy on a report. Between 2 requests the sender sleeps 7 seconds, so a
+run stays under the Worker's 10 requests a minute. The order is problems
+first, then the count.
+
+**The clock of each post.** The UTC day, the ISO week and `sent_at` belong to
+the post, not to the run start. Before each post the sender reads the clock
+again: when its UTC day differs from the day the run started, the run stops
+with a message and exits 0, and when the document is the weekly count and the
+clock's ISO week differs from the week in that document, the run stops too.
+The next daily run selects again, so a run that crosses midnight cannot post
+the reports of yesterday under yesterday's count of 20. `sent_at` in
+`sent.jsonl` is the clock of that post.
 
 **Answers.** 2xx is `accepted`. 400, 413 and 415 are `rejected` and never
 retried: the intake has judged the document itself. Any other answer (429,
@@ -164,8 +185,11 @@ hides the other.
 **Test hooks.** The sender copies the collector's paired hooks
 ([ADR-0009](0009-snosi-env-var-classes.md) class 3): `SNOSI_HEALTH_TEST_HOOKS`
 (only `""`, `0` or `1`) plus `SNOSI_HEALTH_TEST_ROOT`, and, only under them, a
-fixed clock `SNOSI_HEALTH_TEST_NOW` and a request pace
-`SNOSI_HEALTH_TEST_PACE` (0 to 60). The report_id source is always the real
+fixed clock `SNOSI_HEALTH_TEST_NOW`, a request pace `SNOSI_HEALTH_TEST_PACE`
+(0 to 60) and a clock step `SNOSI_HEALTH_TEST_CLOCK_STEP` (0 to 86400
+seconds): the step moves the clock forward by 1 step for each report the run
+already posted, so a fixture can walk a run over midnight or over the end of
+an ISO week. The report_id source is always the real
 `/proc/sys/kernel/random/uuid`, never the test root. The hooks are not in
 `--help`.
 
@@ -178,6 +202,9 @@ fixed clock `SNOSI_HEALTH_TEST_NOW` and a request pace
   from.
 - **A stop between the POST and the append can send 1 duplicate.** The intake
   has no idempotency key, so the next run posts that document again.
+- `reporting off` waits at most 60 s for the post in flight. If a post runs
+  longer, the command prints a warning and returns; that post finishes, and no
+  later post starts because the run reads the file again under the lock.
 - `install_age` depends on the birth time of `/var`, which some filesystems do
   not record; the fallback is the mtime of `/etc/machine-id`, which is close
   to the first boot but not exact.

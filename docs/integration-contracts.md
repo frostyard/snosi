@@ -221,16 +221,19 @@ that problem reporting is not part of the image when it is absent.
 
 | File | Mode | Content |
 | --- | --- | --- |
-| `/etc/snosi-health/reporting.conf` | 0644 root | Written only by `sudo snosi-health reporting on` and `sudo snosi-health reporting off`: 2 comment lines, `enabled=` 0 or 1, `schema=` (consent is for `frostyard.problem/1` only), `decided_at=` (UTC RFC 3339) and `endpoint=` when a valid one was set. Only lines starting with those 4 keys count and the last value wins; `off` never deletes the file. No image ships this path |
-| `/var/lib/snosi-health/sent.jsonl` | 0644 root | 1 line for each posted document: `sent_at` (UTC RFC 3339), `status` (`accepted` or `rejected`), `http_status`, `problem_id` (16 hex, `null` for the count) and the posted `report`. Entries older than 90 days are dropped; a line that is not JSON is skipped by the reader |
+| `/etc/snosi-health/reporting.conf` | 0644 root | Written only by `sudo snosi-health reporting on` and `sudo snosi-health reporting off`: 2 comment lines, `enabled=` 0 or 1, `schema=` (consent is for `frostyard.problem/1` only), `decided_at=` (UTC RFC 3339) and `endpoint=` when a valid one was set. Only lines starting with those 4 keys count and the last value wins; `off` never deletes the file. No image ships this path. `/var/lib/snosi-health/.post.lock` carries the decision: a post holds it and re-reads the file, and `reporting on` and `off` take it after writing, so `off` returns only after the post in flight and no later post starts |
+| `/var/lib/snosi-health/sent.jsonl` | 0644 root | 1 line for each posted document: `sent_at` (UTC RFC 3339 of that post, read again before each post), `status` (`accepted` or `rejected`), `http_status`, `problem_id` (16 hex, `null` for the count) and the posted `report`. Entries older than 90 days are dropped; a line that is not JSON is skipped by the reader |
 
 HTTP contract with frostyard/problem-intake
 ([intake API](https://github.com/frostyard/problem-intake/blob/main/docs/specs/intake-api.md)):
 `POST` to `https://report.frostyard.org/v1/report` by default (or the
 `endpoint=` of the consent file) with `Content-Type: application/json`, no
-`User-Agent`, no `Accept`, no redirect followed, and 7 seconds between 2
-requests. At most 20 problem reports a day and 1 `count` a week; a report
-of kind `crash` is never sent.
+`User-Agent`, no `Accept`, no redirect followed, 7 seconds between 2 requests,
+and curl `-q` as its first argument so no `~/.curlrc` can add a header, follow
+a redirect or set a proxy. At most 20 problem reports a day and 1 `count` a
+week; a report of kind `crash` is never sent. A run stops with exit 0 and lets
+the next run select again when its clock passes midnight, or the end of the
+ISO week of its count, before the next post.
 
 | Answer | Sender |
 | --- | --- |
