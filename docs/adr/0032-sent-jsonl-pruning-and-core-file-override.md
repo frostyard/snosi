@@ -73,12 +73,11 @@ larger than 1G is stored but gets no stack text while `ProcessSizeMax` stays
    A drop-in named `50-snosi.conf` in `/etc` replaces the image file whole, so
    `ProcessSizeMax` falls back to the systemd default (32G on 64-bit).
    With a drop-in of another name, `ProcessSizeMax=1G` in `50-snosi.conf`
-   still limits stack text. To get
-   stack text for a process whose core is larger, the same drop-in also sets
-   a larger `ProcessSizeMax=`. `ProcessSizeMax=` gates only the stack text:
-   the larger of `ProcessSizeMax=` and `ExternalSizeMax=`, and the core
-   resource limit of the process, decide how much systemd-coredump captures,
-   and a core above `ExternalSizeMax=` is not kept. This replaces the
+   still limits stack text. To get stack text for a process whose core is
+   larger, the same drop-in also sets a larger `ProcessSizeMax=`.
+   `ProcessSizeMax=` gates only the stack text: the larger of
+   `ProcessSizeMax=` and `ExternalSizeMax=`, and the core resource limit of
+   the process, decide how much systemd-coredump captures. This replaces the
    ADR-0029 consequence bullet.
 
 ## Consequences

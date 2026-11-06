@@ -211,7 +211,9 @@ against a pinned copy of core's `v1.json`),
 `ProcessSizeMax` gates only the stack text, on the captured core size;
 systemd-coredump captures up to the larger of it and the storage limit, and a
 host `Storage=external` override must be an `/etc/systemd/coredump.conf.d/`
-drop-in that sorts after `50-snosi.conf` (ADR-0032).
+drop-in that sorts after `50-snosi.conf` (ADR-0032). State no core retention
+rule from `ExternalSizeMax`: it compares the stored, possibly compressed size,
+and with storage on, the cores of PID 1 and journald stay.
 
 Floe alone ships the problem-report sender: `shared/snosi-report/tree` holds
 `/usr/libexec/snosi-health-report`, `snosi-health-report.timer` and the motd
