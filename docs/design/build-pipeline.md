@@ -61,12 +61,21 @@ kernel. Include order controls mkosi list-valued settings (`Packages=`,
 profile. mkosi's `ToolsTree=default` uses `mkosi.tools.sandbox/`; target APT
 settings use `mkosi.sandbox/`. Network retry/timeouts need both trees.
 
+A file that replaces a package's dpkg conffile (for example
+`etc/plymouth/plymouthd.conf`) ships through `ExtraTrees=`, which lands after
+dpkg runs. Never ship it through `SkeletonTrees=`: dpkg then finds a
+pre-existing conffile, prompts, and the build fails at EOF on mkosi's
+non-interactive stdin (`shared/composition/snow/mkosi.conf`).
+
 Image builds have four phases, in order:
 
 1. **BuildScripts:** `shared/scripts/build/brew.chroot` installs Homebrew;
    Snow/Snowfield also run verified Hotedge, Logomenu and Bazaar Companion
    downloads through `shared/snow/scripts/build/`. Build scripts must write
-   image content under `$DESTDIR`: mkosi discards the build overlay.
+   image content under `$DESTDIR`: mkosi discards the build overlay. For the
+   same reason, a build-only tool a script needs goes in `BuildPackages=`
+   (for example `jq` in `shared/firn-installer/mkosi.conf`); the script does
+   not install it.
    Downloads use `shared/download/verified-download.sh` and pinned SHA-256
    metadata, not unchecked network content. Frostyard's `bootc` and
    `libostree-1-1` arrive as debs from the configured APT source, not an
@@ -171,6 +180,22 @@ for support/evidence limits. The Frostyard bootc/libostree package pair that
 this adapter binds is pinned exactly in `shared/packages/bootc/mkosi.conf` and
 guarded by `test/bootc-secure-static-test.sh`; a change to either version is a
 revalidation trigger, not a routine bump.
+
+Before packaging, `probe_rootfs_bootc_version` in `buildah-package.sh` runs
+`chroot ROOTFS /usr/bin/bootc --version` and requires
+`bootc $BOOTC_SECURE_VERSION`. A path into a rootfs does not activate that
+rootfs's dynamic loader and libraries, so the probe uses `chroot` with only
+the host `/proc` bind-mounted. It refuses a missing or already-mounted
+`ROOTFS/proc`, unmounts its own bind on every exit path, and fails when that
+unmount fails, so the mount never reaches an OCI layer or the composefs
+identity. The version gate adds no host bootc, host libostree, `bwrap` or APT
+prerequisite.
+
+Every TPM-enabled dracut profile (base, Snow and Floe `20-tpm-luks.conf`) that
+adds `tpm2-tss` must also force-add the `95tss-user` module: the tpm2-tss
+tmpfiles and udev rules run in the initrd and fail there without the `tss`
+passwd and group entries (snosi#723). `test/tss-user-initrd-static-test.sh`
+enforces it in `validate.yml`.
 
 Forky can change independently of the Frostyard bootc/libostree debs. The
 daily `shared/download/forky-versions.json` sentinel creates a review PR

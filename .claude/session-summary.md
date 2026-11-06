@@ -10,13 +10,14 @@ Related learning artifacts:
   past sessions (see `.memory/README.md` for conventions).
 - `docs/design/` (formerly `yeti/`) — AI-oriented architecture and
   decision-rationale documentation; start at `docs/design/overview.md`.
-- `CLAUDE.md` — top-level guidance for Claude Code (and other agents) working
-  in this repository.
+- `AGENTS.md` — the canonical agent instructions for this repository;
+  `CLAUDE.md`, `GEMINI.md`, `.cursorrules` and
+  `.github/copilot-instructions.md` are symlinks to it.
 
 ## Conventions
 
 - Keep entries short: date, scope, what changed, and any follow-up.
-- Prefer promoting durable facts to `CLAUDE.md` or `docs/` and note that here
+- Prefer promoting durable facts to `AGENTS.md` or `docs/` and note that here
   rather than duplicating long-form detail in this file.
 - This file complements, but does not replace, `.memory/corrections.jsonl`.
 
@@ -24,3 +25,6 @@ Related learning artifacts:
 
 - 2026-08-08: Added this `session-summary.md` artifact to satisfy the ACMM
   `acmm:session-summary` criterion (frostyard/snosi#567). No source changes.
+- 2026-11-05: Brought the repository to core's baseline (ADR-0071): `make
+  verify`/`check`/`ci`, `mise.toml`/`mise.lock`, `ci.yml`, the template gate,
+  `.claude/skills`, and `docs/superpowers/` folded into `docs/` and deleted.

@@ -3,8 +3,6 @@
 **Status:** Shipped — `mkosi.profiles/cayo.conf` and `shared/packages/cayo/` are in tree.  
 **Last verified:** 2026-08-29
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Ship the cayo server image and cayoloaded variant by rebasing onto main, auditing packages/configs, and creating a clean PR.
 
 **Architecture:** cayo is a headless server profile (podman, no desktop). cayoloaded extends cayo with docker + incus baked in (not sysexts). The virt package set gets split into virt-base (headless) and virt (GUI) so both snowloaded and cayoloaded can reuse appropriate pieces.

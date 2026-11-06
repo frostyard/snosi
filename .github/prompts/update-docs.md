@@ -5,7 +5,7 @@ Goal: bring the documentation back in sync with `<the change that just landed>`.
 A task in this repository is not complete until the documentation is reviewed
 and updated. Work through these, in order:
 
-1. `CLAUDE.md` — the operational contract summary an agent reads before any
+1. `AGENTS.md` — the operational contract summary an agent reads before any
    change. Update the section that covers the area you touched. Record *why* a
    constraint exists and what breaks without it, not just what the code does.
 2. `docs/design/` (formerly `yeti/`) — written for AI consumption:

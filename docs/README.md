@@ -127,7 +127,6 @@ when next rewritten.
 - [2026-07-03-bootc-migration-record.md](2026-07-03-bootc-migration-record.md) — record of the day the bootc path was first fully validated
 - [native-ab-prototype-history.md](native-ab-prototype-history.md) — historical native A/B build journal and installer prototype
 - [OCIFIX.md](OCIFIX.md) — record of the PAX-header/OCI-layer problem and its fix
-- [superpowers/](superpowers/) — archived mill-run specs (`superpowers/specs/`) and plans (`superpowers/plans/`); historical, reference paths as they were at the time (including the former `yeti/`)
 
 ## Conventions
 

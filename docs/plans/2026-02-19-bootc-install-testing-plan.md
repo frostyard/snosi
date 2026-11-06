@@ -3,8 +3,6 @@
 **Status:** Shipped — `test/bootc-install-test.sh` and `.github/workflows/test-install.yml` exist; see the design doc for the shape that landed.  
 **Last verified:** 2026-08-29
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Build a test harness that validates snosi snow image installation via `bootc install to-disk` by booting the result in QEMU and running checks over SSH.
 
 **Architecture:** Shell scripts orchestrate a pipeline: load OCI image into podman, install to raw disk via `bootc install to-disk --via-loopback`, boot in QEMU with KVM, run 4 tiers of tests via SSH, teardown. Same scripts run locally and in GitHub Actions.

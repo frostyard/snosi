@@ -25,13 +25,31 @@ The `mechanics-build` job also runs `test/frostyard-apt-image-component-test.sh
 --live` on each built image: it checks that the image ships no Frostyard APT
 source and that `apt-get update` against the live repository, with only the
 sandbox `frostyard.sources` (`main image`, core ADR-0059), prints no warning.
+Both OCI build jobs write
+`/etc/containers/containers.conf.d/99-snosi-ci-runtime.conf` to select the
+runner's bundled `runc`: hosted Podman 5.8.4 (runner image 20260726) with its
+default crun rejects the generated OCI version for the nested `podman run`
+calls of secure UKI assembly and chunking. The step fails when Podman reports
+another runtime, and it changes only the disposable runner, not an image
+(`test/bootc-secure-ci-test.sh` guards it).
 Protected assembly obtains signing credentials through transient mode-0600
 runner files. The supplied MOK certificate and derived PCR public key must
 match `shared/native-ab/keys/mok-2026.crt` and
 `shared/native-ab/keys/pcr-signing-2026.pub`. Private bytes never enter OCI
 layers and runner-local keys are removed before registry writes. The
 candidate's pinned bootc calculates the storage composefs digest; the
-assembled image is checked again to ensure digest continuity. Registry
+assembled image is checked again to ensure digest continuity. Local and
+policy-copied artifact validation run the candidate image's own bootc through
+host Podman; a host `bootc` must never become a prerequisite, because it would
+be an unpinned version at the digest-authority boundary
+(`test/bootc-secure-static-test.sh` rejects it). A step `env:` entry does not
+cross `sudo`, so the packaging step assigns each `SNOSI_BOOTC_*` variable and
+credential path again after `sudo`; `sudo --preserve-env` is not used, so the
+privilege boundary stays visible at the call site. A new `SNOSI_BOOTC_*`
+variable needs the `env:` line, the `sudo` assignment and an entry in the
+fixed variable lists of `check-bootc-publication-guard.sh`; the guard checks
+only the variables it lists, and fails a listed variable that is not
+forwarded. Registry
 authentication uses the run-scoped `GITHUB_TOKEN`; PR jobs have no registry
 write permission. `shared/bootc-secure/ci/push-immutable-image.sh` pushes the
 immutable version tag: at most 3 attempts for a transient GHCR blob-upload
@@ -45,7 +63,12 @@ annotation, equal to os-release `IMAGE_VERSION`; bootc reads the annotation.
 `shared/outformat/image/check-image-version.sh` checks the local image and
 the pushed digest before promotion. Syft SBOMs attach via ORAS. Snow release
 discovery requires a previous signed immutable Snow image with the exact Syft
-SBOM referrer, not an arbitrary tag. The release job creates the release tag
+SBOM referrer, not an arbitrary tag. The Snow leg records and uploads the
+`snow-tag` artifact only after the SBOM upload, SBOM signature, provenance
+attestation and manifest upload succeed, so a failed metadata step skips the
+release instead of releasing an incomplete image
+(`check-bootc-publication-guard.sh` pins the step order). The release job
+creates the release tag
 with `GITHUB_TOKEN`. When GitHub refuses that tag with
 `HTTP 403: Resource not accessible by integration` because the
 `.github/workflows` tree of the built commit differs from the tree on the

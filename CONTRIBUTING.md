@@ -11,7 +11,7 @@ Thanks for contributing to snosi.
   cheapest way to find out that an idea is already planned — or already
   declined.
 - Follow the [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) in all project spaces.
-- Read `CLAUDE.md` and `docs/design/overview.md` for repository architecture, contracts, and operational constraints.
+- Read `AGENTS.md` and `docs/design/overview.md` for repository architecture, contracts, and operational constraints.
 - For security issues, follow the private reporting instructions in
   `SECURITY.md`; do not open a public issue.
 - If you work with an AI coding agent, start from a prompt in `.github/prompts/`.
@@ -36,7 +36,9 @@ just snowfield
 just floe
 ```
 
-Validation scripts used by CI are in `test/` and `.github/workflows/validate.yml`.
+`make verify` is the baseline gate (it needs Node.js from `mise install` and
+`python3`; no root). `make ci` is what `.github/workflows/ci.yml` runs.
+The full static suite is in `test/` and `.github/workflows/validate.yml`.
 Run targeted tests for your changes instead of running unrelated full-system builds.
 
 ## Pull request expectations

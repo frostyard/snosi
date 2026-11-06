@@ -43,6 +43,12 @@ The adapter relies on all of the following observed behavior:
    bootc remains storage-digest authority.
 7. Final host byte comparisons depend on first-pass `cp -a` identity.
 8. Candidate ukify runs with network disabled and all Linux capabilities dropped.
+   It runs with `--entrypoint=/usr/bin/ukify`, so a future image `CMD` or
+   `ENTRYPOINT` cannot intercept the ukify arguments, and with
+   `--security-opt label=type:unconfined_t` instead of `:z`/`:Z` bind
+   suffixes, which would relabel host credential files. It uses no Podman
+   secrets, no credential directory mount and no retained container
+   (`--rm`).
    It runs as the common numeric owner of its mode-0600 credentials; mismatches
    fail before Podman.
    Its authoritative active and optional previous PCR public identities remain

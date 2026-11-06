@@ -7,14 +7,14 @@ cold.
 
 It complements, and does not replace, the existing documentation:
 
-- `CLAUDE.md` — normative build/architecture guidance for agents.
+- `AGENTS.md` — normative build/architecture guidance for agents.
 - `docs/` — the four-category documentation tree (`docs/README.md`); its
   `docs/design/` docs (formerly `yeti/`) carry the detailed architecture and
   decision rationale written for AI consumption.
 
 Use `.memory/` for the *deltas* between what an agent believed and what turned
 out to be true. When a correction hardens into a general rule, promote it into
-`CLAUDE.md` or the relevant `docs/` page and keep the correction entry as the
+`AGENTS.md` or the relevant `docs/` page and keep the correction entry as the
 record of how it was learned.
 
 ## Files

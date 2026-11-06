@@ -25,7 +25,7 @@ applicable gate:
   candidates prevented from promotion and are credentials kept out of images,
   logs, retained artifacts, and committed files?
 - **Documentation:** Are directly related docs updated, especially contracts in
-  `docs/`, operational context in `CLAUDE.md`, and architecture notes in
+  `docs/`, operational context in `AGENTS.md`, and architecture notes in
   `docs/design/` (formerly `yeti/`)
   when source behavior changes?
 

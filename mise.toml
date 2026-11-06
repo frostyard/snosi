@@ -1,0 +1,12 @@
+# Tool pins for the make gate (frostyard/core ADR-0043). Every tool that
+# `make verify` needs beyond the runner baseline (make, python3, git) is listed
+# here; mise.lock carries the checksums. `mise install` provisions the same
+# versions locally and in CI. Image builds pin mkosi separately
+# (ADR-0011, .github/workflows/build.yml).
+[settings]
+lockfile = true
+
+[tools]
+# scripts/check-template.mjs and test/*.test.mjs need Node 22 or later.
+# Node 24 LTS, the major that validate.yml uses for the redirect Worker.
+node = "24.22.2"
