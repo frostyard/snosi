@@ -15,11 +15,12 @@ people who want a desktop or server that installs and updates as one image.
 
 | Image | Purpose | Base |
 | --- | --- | --- |
-| **Snow** (`snow`) | GNOME workstation | Debian Trixie, backports kernel |
+| **Snow** (`snow`) | GNOME workstation | Debian Trixie, newer Debian kernel |
 | **Snowfield** (`snowfield`) | GNOME workstation for Surface devices | Debian Trixie, linux-surface kernel |
-| **Floe** (`floe`) | Headless Podman server | Debian Trixie, backports kernel |
-| **Sundog** (`sundog`) | KDE Plasma Wayland workstation | Debian Trixie, backports kernel |
+| **Floe** (`floe`) | Headless Podman server | Debian Trixie, newer Debian kernel |
+| **Sundog** (`sundog`) | KDE Plasma Wayland workstation | Debian Trixie, newer Debian kernel |
 
+`shared/kernel/` selects each kernel and says which suite it comes from.
 The sysexts add optional software to any image; the
 [sysext design](docs/design/sysexts.md) lists them.
 

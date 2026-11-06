@@ -256,3 +256,6 @@ update path: `bootc-update-stage.timer` for images (next reboot),
 A row of core's repository baseline (ADR-0071) is done only when its whole
 rule holds, not only its check; a known gap is a follow-up issue, named in
 the PR's row table.
+`README.md` names no kernel suite: `shared/kernel/backports/mkosi.conf`
+selects it (Forky while trixie-backports kernels are uninstallable), and a
+suite named in the README goes stale when that selection moves.
