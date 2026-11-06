@@ -45,9 +45,16 @@ annotation, equal to os-release `IMAGE_VERSION`; bootc reads the annotation.
 `shared/outformat/image/check-image-version.sh` checks the local image and
 the pushed digest before promotion. Syft SBOMs attach via ORAS. Snow release
 discovery requires a previous signed immutable Snow image with the exact Syft
-SBOM referrer, not an arbitrary tag. Every packaging lane stamps the product's
-`org.frostyard.core-flatpaks` label and checks it on the packaged image
-before any push ([core Flatpak sets](../integration-contracts.md#core-flatpak-sets)).
+SBOM referrer, not an arbitrary tag. The release job creates the release tag
+with `GITHUB_TOKEN`. When GitHub refuses that tag with
+`HTTP 403: Resource not accessible by integration` because the
+`.github/workflows` tree of the built commit differs from the tree on the
+default branch, `shared/bootc-secure/ci/create-github-release.sh` compares the
+two tree identities and retries once with the `WORKFLOW_PAT` secret; it then
+checks that the tag points at the built commit. Any other failure fails the
+job. Every packaging lane stamps the
+product's `org.frostyard.core-flatpaks` label and checks it on the packaged
+image before any push ([core Flatpak sets](../integration-contracts.md#core-flatpak-sets)).
 
 `build-installer-iso.yml` retains the scripts at `shared/native-ab/publish/`
 and the mkosi pin helpers at `shared/native-ab/ci/`. `native` in their names
