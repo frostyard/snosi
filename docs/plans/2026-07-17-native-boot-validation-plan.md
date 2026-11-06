@@ -8,8 +8,6 @@
 > historical plan was retired; Firn's lab matrix owns secure native
 > install-and-boot coverage, and the deeper lifecycle harness remains manual.
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
-
 **Goal:** Gate native A/B promotion on a QEMU boot smoke test of the published bytes, and add a nightly deep secure-boot validation workflow.
 
 **Architecture:** Two new root+KVM harness scripts (`test/native-boot-smoke-test.sh`, `test/native-iso-boot-smoke-test.sh`) reuse `test/lib/vm.sh`/`ssh.sh` and consume the same prepared-dir + base-url interface as `verify-remote.sh`. They are wired into `build-native-images.yml`'s `test-public-origin`/`test-public-origin-iso` jobs so the `native-verified-*` marker (the existing promotion gate) also requires a successful boot. A new `native-nightly.yml` runs the existing `test/native-ab-secure-boot-test.sh` on a schedule with ephemeral keys and zero repository secrets.

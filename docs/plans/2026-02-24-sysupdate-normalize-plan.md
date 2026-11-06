@@ -3,8 +3,6 @@
 **Status:** Shipped with a changed layout — per-sysext `sysupdate.<name>.d/` drop-in directories replaced the single shared `sysupdate.d/` directory this plan assumed.  
 **Last verified:** 2026-08-29
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Ensure every sysext has a standalone `<name>.transfer` + `<name>.feature` pair in `mkosi.images/base/mkosi.extra/usr/lib/sysupdate.d/`.
 
 **Architecture:** Declarative systemd-sysupdate config files. Each `.transfer` defines how to download a sysext, referencing a `.feature` that controls whether it's enabled. One pair per sysext, consistent naming.

@@ -3,8 +3,6 @@
 **Status:** Shipped — `mkosi.images/tailscale/` and `sysupdate.tailscale.d/tailscale.transfer` are in tree.  
 **Last verified:** 2026-08-29
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Add a Tailscale VPN sysext to snosi following the established Docker sysext pattern.
 
 **Architecture:** APT-based sysext using official Tailscale repo. Factory defaults pattern for `/etc/default/tailscaled`. System preset for service enablement.

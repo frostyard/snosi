@@ -8,6 +8,27 @@ native QEMU harnesses and profiles belong in
 [prototype history](../native-ab-prototype-history.md), not current test
 instructions.
 
+## Make gate
+
+The root `Makefile` holds the make gate of core ADR-0043 and ADR-0044 (row
+B4 of core's repository baseline, ADR-0071). It needs no root and no
+credentials; `mise install` provides the Node release that `mise.toml` and
+`mise.lock` pin. `make verify` runs `scripts/check-template.mjs` (the agent
+symlinks, the `docs/README.md` index, the risk-path list and caller, the
+`.memory/corrections.jsonl` schema and the two hash-pinned copies of core
+scripts), `node --test test/*.test.mjs`, and the policy tests
+`policy-as-code-test.py`, `risk-paths-test.py` and
+`build-workflow-permissions-test.py`. It does not change the checkout.
+`make check` is the same gate. `make ci` adds
+`scripts/check-corrections.mjs --base BASE`, which fails when a pull request
+edits or removes an existing corrections line. `.github/workflows/ci.yml`
+(job `verify`) runs `make ci` with the pull request or merge-group base.
+`scripts/check-template.mjs`, `scripts/check-corrections.mjs`,
+`scripts/lib/risk-paths.mjs` and `test/check-template.test.mjs` are copies
+from bketelsen/agentic-template: copy them again, never edit them by hand.
+The make gate does not replace `validate.yml`, which runs shellcheck and the
+fixture suites below.
+
 ## Test registry and static gates
 
 `test/registry.tsv` records whether each test runs in CI (`ci`), is invoked

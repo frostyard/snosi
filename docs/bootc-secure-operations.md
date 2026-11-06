@@ -125,7 +125,9 @@ live installation and hardware gates.
 Skopeo inspections use `--authfile`, root policy copy uses source-only
 `--src-authfile`, and promotion uses source and destination auth files. Pinned
 Cosign has no registry-config flag; its command receives only the config
-directory through `DOCKER_CONFIG`. Version-tag resolution must equal the pushed
+directory through `DOCKER_CONFIG`. For that reason the auth file that
+`verify-published-image.sh` and `promote-published-image.sh` receive must be a
+regular file named exactly `config.json`; both refuse any other name. Version-tag resolution must equal the pushed
 digest before policy copy.
 
 ## Fresh Installation

@@ -3,8 +3,6 @@
 **Status:** Shipped — `shared/outformat/image/buildah-package.sh` packages the rootfs and `mkosi.images/base/mkosi.conf` sets `Format=directory`.  
 **Last verified:** 2026-08-29
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
 **Goal:** Replace mkosi's broken OCI tar output with `buildah mount` + `cp -a` + `commit` to produce composefs-rs compatible images that preserve all file metadata (SUID, SGID, xattrs, capabilities).
 
 **Architecture:** Switch mkosi from `Format=oci` to `Format=directory` so it outputs a raw rootfs. A new `buildah-package.sh` script packages that rootfs into a proper OCI image using buildah's mount/commit workflow, which bypasses the `COPY`/`buildah copy` SUID-dropping bug. CI and local test workflows call this script instead of skopeo for image creation.

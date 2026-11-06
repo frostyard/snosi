@@ -118,5 +118,5 @@ and `/etc`.
 - Shapes: [plans/2026-10-29-container-policy-scope-plan.md](../plans/2026-10-29-container-policy-scope-plan.md),
   [bootc-secure-install-contract.md](../bootc-secure-install-contract.md),
   [bootc-secure-operations.md](../bootc-secure-operations.md)
-- Builds on: [secure bootc platform plan](../superpowers/plans/2026-07-28-bootc-secure-platform.md),
+- Builds on: [secure bootc platform plan](https://github.com/frostyard/snosi/blob/baa28fddb53b701391ee1996bf4a5f04cec332d4/docs/superpowers/plans/2026-07-28-bootc-secure-platform.md),
   the rootless split of #872 (`4eed2cd`)

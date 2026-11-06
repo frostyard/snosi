@@ -1,0 +1,48 @@
+# CI entry (frostyard/core ADR-0071 row B12): runs `make ci`, the make gate
+# of ADR-0043 and ADR-0044. validate.yml stays the full static suite; this
+# workflow adds the baseline gate (template gate, its Node tests, the policy
+# tests) and the append-only corrections check against the base commit.
+# ADR-0021: SHA-pinned actions, top-level permissions {}, contents: read only,
+# and checkout does not persist credentials. No secrets.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group: {}
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # check-corrections.mjs --base reads the base commit's copy.
+          fetch-depth: 0
+
+      # mise.toml and mise.lock are the only source of the Node pin: this
+      # installs the locked, checksum-verified Node, as `mise install` does
+      # on a developer host.
+      - name: Install pinned tools
+        uses: jdx/mise-action@3c2e0cf82a5b2e5249f0d3635a4d83d0ae861518 # v4.2.5
+        with:
+          install: true
+          cache: true
+
+      - name: make ci
+        run: make ci BASE="$BASE"
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
