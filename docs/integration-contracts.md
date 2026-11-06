@@ -136,8 +136,9 @@ set and was retired once the ISO's Firn read the label.
 `flatpaks/legacy/firn-core-flatpaks.json`, Snow's set in the legacy
 `{"core": [...]}` shape and generated from `flatpaks/snow.json`, now feeds
 only `just firn-flatpak-seed`. `snow-first-setup` no longer ships
-([ADR-0028](adr/0028-first-login-runs-chairlift-first-run.md)); its
-`core.json` defined no set.
+([ADR-0028](adr/0028-first-login-runs-chairlift-first-run.md)) and is
+withdrawn from APT ([ADR-0031](adr/0031-first-setup-retired-without-a-soak.md));
+its `core.json` defined no set.
 
 ## Public repository and ISO signing
 

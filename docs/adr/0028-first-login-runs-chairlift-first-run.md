@@ -1,6 +1,6 @@
 # 0028 — First login runs chairlift's first-run mode
 
-- **Status:** Accepted
+- **Status:** Accepted; its retirement and lab-gate consequences are amended by [ADR-0031](0031-first-setup-retired-without-a-soak.md)
 - **Date:** 2026-11-04
 
 ## Context
