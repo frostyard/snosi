@@ -33,13 +33,17 @@ replaces the image file completely. Drop-ins override the main file
 `/etc/systemd/coredump.conf` ([systemd v262 standard configuration](https://github.com/systemd/systemd/blob/v262/man/standard-conf.xml)).
 
 The image file `50-snosi.conf` sets `Storage=none` and `ProcessSizeMax=1G`.
-`coredump_submit` makes no stack text for a core larger than
-`ProcessSizeMax`. With `Storage=none`,
-systemd-coredump reads at most `ProcessSizeMax` of the core. A larger core is
-truncated, and its stack text can be incomplete. With `Storage=external`, a
-stored core can be as large as `ExternalSizeMax`. A core larger than
-`ProcessSizeMax` still gets no stack text while `ProcessSizeMax` remains 1G.
-`coredumpctl debug` can still open a stored core
+systemd-coredump first captures the core to a file. It captures at most the
+larger of `ProcessSizeMax` and the storage limit (`ExternalSizeMax` for
+`Storage=external`, 0 for `Storage=none`), and never more than the core
+resource limit of the process. A larger core is truncated, and the journal
+entry gets `COREDUMP_TRUNCATED=1`. `coredump_submit` then makes no stack
+text when the captured core is larger than `ProcessSizeMax`. With
+`Storage=none` the capture limit is `ProcessSizeMax` (1G), so a larger core is
+truncated to 1G and its stack text can be incomplete. With `Storage=external`
+the capture limit is `ExternalSizeMax` (32G by default on 64-bit), so a core
+larger than 1G is stored but gets no stack text while `ProcessSizeMax` stays
+1G. `coredumpctl debug` can still open a stored core
 ([systemd v262 coredump configuration](https://github.com/systemd/systemd/blob/v262/man/coredump.conf.xml),
 [systemd v262 coredump submission](https://github.com/systemd/systemd/blob/v262/src/coredump/coredump-submit.c)).
 
@@ -50,9 +54,10 @@ stored core can be as large as `ExternalSizeMax`. A core larger than
    posts every report it selected and records each answer. It then keeps only
    JSON lines whose `sent_at` is a string at or after the 90-day cutoff. It
    drops lines that are not JSON, lines without a string `sent_at`, and older
-   entries. If `jq` fails, the file stays unchanged. A dry run, a run that
-   posts nothing and a run that stops early leave the file unchanged. This
-   replaces the ADR-0030 sentence.
+   entries. If `jq` fails, the file stays unchanged. A dry run and a run that
+   posts nothing leave the file unchanged. A run that stops early keeps the
+   lines it already appended, 1 for each post with a recorded answer, and
+   prunes nothing. This replaces the ADR-0030 sentence.
 2. **A host override of core storage sorts after `50-snosi.conf`.** To keep
    core files, an administrator adds a drop-in in
    `/etc/systemd/coredump.conf.d/` whose name sorts after
@@ -70,8 +75,11 @@ stored core can be as large as `ExternalSizeMax`. A core larger than
    With a drop-in of another name, `ProcessSizeMax=1G` in `50-snosi.conf`
    still limits stack text. To get
    stack text for a process whose core is larger, the same drop-in also sets
-   a larger `ProcessSizeMax=`. systemd-coredump then reads and writes up to
-   that size. This replaces the ADR-0029 consequence bullet.
+   a larger `ProcessSizeMax=`. `ProcessSizeMax=` gates only the stack text:
+   the larger of `ProcessSizeMax=` and `ExternalSizeMax=`, and the core
+   resource limit of the process, decide how much systemd-coredump captures,
+   and a core above `ExternalSizeMax=` is not kept. This replaces the
+   ADR-0029 consequence bullet.
 
 ## Consequences
 
