@@ -37,6 +37,7 @@ The ones that bind snosi:
 - [ADR-0061 — Add the image APT component on the first publication run](https://github.com/frostyard/core/blob/main/docs/adr/0061-add-the-image-apt-component-on-the-first-publication-run.md) — apt-publisher adds the empty `image` to `trixie` and `forky` by itself; snosi's step 4 starts when both `Release` files list it (amends ADR-0059 step 3)
 - [ADR-0068 — Label pull requests that touch high-risk paths](https://github.com/frostyard/core/blob/main/docs/adr/0068-label-pull-requests-that-touch-high-risk-paths.md) — .github/risk-paths.json and the risk-paths.yml caller; each why names a protectedBoundaries entry
 - [ADR-0071 — Hold every code repository to one baseline](https://github.com/frostyard/core/blob/main/docs/adr/0071-hold-every-code-repository-to-one-baseline.md) — rows B1 to B16 of core's repository baseline spec; `.github/workflows/ci.yml` runs `make ci`, `SECURITY.md` names private vulnerability reporting, no `CODEOWNERS`, no leftover agent-framework trees
+- [ADR-0072 — Write every README to one standard](https://github.com/frostyard/core/blob/main/docs/adr/0072-write-every-readme-to-one-standard.md) — the root `README.md` follows core's README spec for kind `image` (baseline row B17)
 
 When changing behavior covered by one of these, update or supersede the ADR
 in frostyard/core first, then change this repo in the same effort.

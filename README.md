@@ -1,98 +1,77 @@
+<!-- readme-kind: image -->
 # snosi
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/frostyard/snosi/badge)](https://scorecard.dev/viewer/?uri=github.com/frostyard/snosi)
 
-Snosi builds Debian Trixie bootc OCI images and `/usr`-only system extensions
-(sysexts) with [mkosi](https://github.com/systemd/mkosi). The four products are:
+snosi builds Debian Trixie bootc OCI images and `/usr`-only system
+extensions (sysexts) with [mkosi](https://github.com/systemd/mkosi), for
+people who want a desktop or server that installs and updates as one image.
 
-| Product | Purpose | Kernel |
+**Status:** pre-release. Snow, Floe and Sundog pass VM fresh installs; Snowfield is untested on Surface hardware.
+
+**Documentation:** [frostyard.org/docs](https://frostyard.org/docs/)
+
+## Images
+
+| Image | Purpose | Base |
 | --- | --- | --- |
-| **Snow** (`snow`) | GNOME workstation | Trixie backports |
-| **Snowfield** (`snowfield`) | GNOME workstation for Surface devices | linux-surface |
-| **Floe** (`floe`) | Headless Podman server | Trixie backports |
-| **Sundog** (`sundog`) | KDE Plasma Wayland workstation | Trixie backports |
+| **Snow** (`snow`) | GNOME workstation | Debian Trixie, backports kernel |
+| **Snowfield** (`snowfield`) | GNOME workstation for Surface devices | Debian Trixie, linux-surface kernel |
+| **Floe** (`floe`) | Headless Podman server | Debian Trixie, backports kernel |
+| **Sundog** (`sundog`) | KDE Plasma Wayland workstation | Debian Trixie, backports kernel |
 
-Firn offers only these four bootc choices. **Snowfield is untested on
-representative Surface hardware**: its catalog inclusion gate was waived,
-not passed. Snow, Floe and Sundog have VM fresh-install PASS evidence from
-minideb lab runs (2026-10-24/25). See
-[testing](docs/design/testing.md). Fixture coverage does not establish
-production Secure Boot support, nor signed update/rollback evidence; see
-[secure bootc operations](docs/bootc-secure-operations.md).
+The sysexts add optional software to any image; the
+[sysext design](docs/design/sysexts.md) lists them.
 
-## Download and install
+## Install
 
-- [Firn bootc installer (latest x86-64)](https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso)
-- [Installer checksums](https://repository.frostyard.org/isos/native/v1/SHA256SUMS)
-  and [OpenPGP signature](https://repository.frostyard.org/isos/native/v1/SHA256SUMS.gpg)
+Download the Firn installer, check it, and follow the
+[installation guide](docs/installing.md):
 
-The `native` segment in the retained ISO URL is a publication namespace, not
-an A/B installer choice. Follow the [installation guide](docs/installing.md)
-to verify the ISO, select a disk and install safely. Native A/B and nbc hosts
-receive no new images or updates: back up, reinstall with Firn, and restore
-state following the [migration guide](docs/nbc-to-bootc-migration.md).
-Repository cleanup deletes no published artifacts; future disposal requires
-the exact-object gate in
-[ADR-0018](docs/adr/0018-remove-native-ab-and-nbc-lanes.md). For the removed
-implementation see [native prototype history](docs/native-ab-prototype-history.md).
+- [Firn installer ISO (x86-64)](https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso)
+- [SHA256SUMS](https://repository.frostyard.org/isos/native/v1/SHA256SUMS) and its [signature](https://repository.frostyard.org/isos/native/v1/SHA256SUMS.gpg)
 
-## Architecture
+The `native` segment in the URL is a publication namespace, not an install
+choice. Firn offers the four bootc choices above. Native A/B and nbc hosts
+get no new images: reinstall with Firn as the
+[migration guide](docs/nbc-to-bootc-migration.md) says.
+Repository cleanup deletes no published artifacts; any disposal needs the
+exact-object gate of [ADR-0018](docs/adr/0018-remove-native-ab-and-nbc-lanes.md).
 
-The root `mkosi.conf` builds the base image and sysexts. Each of the four
-`mkosi.profiles/` profiles resets inherited dependencies to `base`, includes
-bootc packages and `shared/bootc-secure/mkosi.conf`, and composes its
-product payload, kernel and directory output format from `shared/` fragments.
-The build uses BuildScripts, PostInstallationScripts, FinalizeScripts and
-PostOutputScripts. See [overview](docs/design/overview.md) and
-[build pipeline](docs/design/build-pipeline.md) for exact ordering.
+## How it works
 
-Images keep `/usr` immutable, `/etc` deployment-managed and `/var`
-persistent. Sysexts overlay `/usr` only; packages that install into `/opt`
-must be relocated under `/usr` and factory `/etc` captures must be limited
-to tmpfiles-referenced paths. See [sysext design](docs/design/sysexts.md).
-The base contains the bootc updater, staged-update status and notifier.
-`bootc-update-stage.timer` checks hourly, pulls with Podman under the strict
-update policy in `/usr/lib/snosi/containers/bootc-policy.json`, verifies the
-staged digest, and waits for a natural reboot.
-`snosi-update-status --pkg-diff` compares the running and locally staged
-package inventories. The secure bootc
-[`snosi-kargs` CLI](docs/snosi-kargs.md) writes a signed append-only
-cmdline addon measured into PCR 12, outside the PCR-11 unlock policy.
+The root `mkosi.conf` builds the base image and the sysexts; each product
+profile in `mkosi.profiles/` adds its payload, kernel and the secure bootc
+fragment. `/usr` is immutable, `/etc` is managed by the deployment and
+`/var` persists. On an installed host, `bootc-update-stage.timer` pulls the
+next signed image and stages it for the next reboot, and
+`updex-update.timer` stages sysext updates for the next boot. The
+[overview](docs/design/overview.md) has the details.
 
-`shared/native-ab/keys/` remains at its existing path: external bootc lab
-consumers fetch its public MOK/PCR keys and protected OCI builds verify their
-signing identities against them. `shared/native-ab/ci/` contains the retained
-mkosi pin helpers for the ISO. The ISO publisher under
-`shared/native-ab/publish/` and the
-`workers/native-installer-redirect/` Worker remain operational. Neither
-directory name implies a buildable native A/B product.
+## Limits
 
-## Build and verify locally
+- Snowfield ships untested on representative Surface hardware: its catalog
+  gate is waived, not passed.
+- Fixture tests do not establish production Secure Boot support or signed
+  update and rollback evidence; see
+  [secure bootc operations](docs/bootc-secure-operations.md).
 
-Install `just`, Git and Python 3; mkosi is bootstrapped at the commit pinned
-in `.github/workflows/build.yml` by the Justfile. Image builds and VM installs
-need the documented privileged build/runtime tools.
+## Develop
 
-```bash
-just                      # List available recipes
-just sysexts              # Build base and system extensions
-just snow                 # GNOME OCI image
-just snowfield            # Surface-kernel GNOME OCI image (hardware untested)
-just floe                 # Headless OCI image
-just sundog               # KDE Plasma OCI image
-just test-install         # Bootc install test in QEMU/KVM
-just run-qemu             # Interactive bootc VM
+```sh
+mise install   # the pinned tools (Node for the make gate)
+make ci        # what ci.yml runs
+just           # list the build recipes (mkosi is bootstrapped at its pin)
 ```
 
-The [CI/CD design](docs/design/ci-cd.md) documents sysext and OCI publication,
-Firn ISO publishing, and validation; [testing](docs/design/testing.md)
-separates non-root fixtures from live installation and lifecycle evidence.
-Protected OCI publication signs and validates an immutable digest before
-promoting `latest`. Local PR builds have no publication credentials.
+Image builds and VM tests need root and privileged tools: see the
+[build pipeline](docs/design/build-pipeline.md) and
+[testing](docs/design/testing.md).
 
-## Contributing
+## Where to go next
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md), the
-[Code of Conduct](CODE_OF_CONDUCT.md), and the
-[documentation index](docs/README.md). Report vulnerabilities privately via
-[SECURITY.md](SECURITY.md), not a public issue.
+- [AGENTS.md](AGENTS.md): the rules for agents and contributors.
+- [CONTRIBUTING.md](CONTRIBUTING.md): how to contribute.
+- [docs/README.md](docs/README.md): the decisions, designs, specs and plans.
+- [SECURITY.md](SECURITY.md): report a vulnerability privately.
+- [LICENSE](LICENSE): MIT.
