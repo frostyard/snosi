@@ -51,7 +51,8 @@ Snow and Snowfield ship exactly one first-login trigger,
 `shared/snow/tree/etc/xdg/autostart/org.frostyard.ChairLift.FirstRun.desktop`
 (`Exec=/usr/bin/chairlift-first-run`), and the app list
 `usr/share/snow/first-run/apps.json`; Sundog and Floe ship none, and no
-build input may name `snow-first-setup` (ADR-0028).
+build input may name `snow-first-setup` (ADR-0028; its deb is withdrawn
+from APT, so a revert needs a republication first, ADR-0031).
 `shared/composition/first-login.finalize` and
 `test/first-login-trigger-test.sh` enforce this; base's
 `/etc/profile.d/snosi-brew.sh` must stay guarded and skip root.
@@ -259,3 +260,6 @@ the PR's row table.
 `README.md` names no kernel suite: `shared/kernel/backports/mkosi.conf`
 selects it (Forky while trixie-backports kernels are uninstallable), and a
 suite named in the README goes stale when that selection moves.
+A snosi ADR links another repository's gate or schedule (a lab gate, a soak,
+an APT withdrawal) and never states it as snosi's; when a plan changes an
+accepted ADR's consequence, a new ADR amends it (ADR-0031).

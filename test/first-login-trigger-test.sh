@@ -20,7 +20,9 @@
 #   5. the finalize itself, on fixture image trees (missing or
 #      non-executable chairlift-first-run, a wrong Exec, zero or two
 #      entries, an entry on Sundog or Floe, an unknown IMAGE_ID);
-#   6. the brew profile.d file is shellcheck-clean and its guards hold.
+#   6. the brew profile.d file is shellcheck-clean and its guards hold;
+#   7. ADR-0028's stale retirement and lab-gate consequences are amended by
+#      ADR-0031 (accepted ADRs are immutable).
 #
 # No root, no network, no image build.
 set -euo pipefail
@@ -512,6 +514,36 @@ brew_case "root never takes the brew prefix" unset 0 0755
 brew_case "no environment when brew is not executable" unset 1000 0644
 rm "$fake/bin/brew"
 brew_case "no environment and no error when brew is absent" unset 1000 0755
+
+# --- 7. ADR records stay true ------------------------------------------------
+# ADR-0028's consequences name a soak, a deb kept in APT and a lab gate that
+# did not hold. Accepted ADRs are immutable, so ADR-0031 amends them; the
+# status line of ADR-0028 must point there, and ADR-0031 must carry both
+# corrections.
+adr28="$root/docs/adr/0028-first-login-runs-chairlift-first-run.md"
+adr31="$root/docs/adr/0031-first-setup-retired-without-a-soak.md"
+status28=$(grep -m1 '^- \*\*Status:\*\*' "$adr28" || true)
+if grep -qiE 'soak|gates the lane' "$adr28"; then
+    if [[ $status28 == *'amended by [ADR-0031](0031-first-setup-retired-without-a-soak.md)'* ]]; then
+        pass "ADR-0028 status points to its amendment ADR-0031"
+    else
+        fail "ADR-0028 keeps stale soak or lab-gate text, but its status names no amendment: $status28"
+    fi
+fi
+if [[ -f $adr31 ]] \
+    && grep -q '^- \*\*Status:\*\* Accepted' "$adr31" \
+    && grep -q "withdrawn from the \`trixie\` suite" "$adr31" \
+    && grep -q 'needs a republication first' "$adr31" \
+    && grep -q 'its gate status lives in lab' "$adr31"; then
+    pass "ADR-0031 records the withdrawn deb, the revert path and the lab gate owner"
+else
+    fail "ADR-0031 is missing or does not record the withdrawn deb, the revert path and the lab gate owner"
+fi
+if grep -q '(adr/0031-first-setup-retired-without-a-soak.md)' "$root/docs/README.md"; then
+    pass "docs/README.md indexes ADR-0031"
+else
+    fail "docs/README.md does not index ADR-0031"
+fi
 
 printf '# Results: %d passed, %d failed, %d total\n' "$PASS" "$FAIL" "$((PASS + FAIL))"
 [[ $FAIL -eq 0 ]]
