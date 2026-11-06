@@ -516,34 +516,64 @@ rm "$fake/bin/brew"
 brew_case "no environment and no error when brew is absent" unset 1000 0755
 
 # --- 7. ADR records stay true ------------------------------------------------
-# ADR-0028's consequences name a soak, a deb kept in APT and a lab gate that
-# did not hold. Accepted ADRs are immutable, so ADR-0031 amends them; the
-# status line of ADR-0028 must point there, and ADR-0031 must carry both
-# corrections.
-adr28="$root/docs/adr/0028-first-login-runs-chairlift-first-run.md"
-adr31="$root/docs/adr/0031-first-setup-retired-without-a-soak.md"
-status28=$(grep -m1 '^- \*\*Status:\*\*' "$adr28" || true)
-if grep -qiE 'soak|gates the lane' "$adr28"; then
-    if [[ $status28 == *'amended by [ADR-0031](0031-first-setup-retired-without-a-soak.md)'* ]]; then
-        pass "ADR-0028 status points to its amendment ADR-0031"
+# ADR-0028's consequences named a soak, a deb kept in APT and a lab gate that
+# did not hold. Accepted ADRs are immutable, so ADR-0031 amends them. Every
+# check is unconditional: a missing or unreadable record is a failure.
+adr_records() { # docs dir -> one problem per line; exit 1 on any problem
+    local docs=$1 problems=() status28
+    local adr28="$docs/adr/0028-first-login-runs-chairlift-first-run.md"
+    local adr31="$docs/adr/0031-first-setup-retired-without-a-soak.md"
+    if [[ ! -r $adr28 ]]; then
+        problems+=("ADR-0028 is missing")
     else
-        fail "ADR-0028 keeps stale soak or lab-gate text, but its status names no amendment: $status28"
+        status28=$(grep -m1 '^- \*\*Status:\*\*' "$adr28" || true)
+        [[ $status28 == *'amended by [ADR-0031](0031-first-setup-retired-without-a-soak.md)'* ]] \
+            || problems+=("ADR-0028 status names no ADR-0031 amendment: ${status28:-none}")
     fi
-fi
-if [[ -f $adr31 ]] \
-    && grep -q '^- \*\*Status:\*\* Accepted' "$adr31" \
-    && grep -q "withdrawn from the \`trixie\` suite" "$adr31" \
-    && grep -q 'needs a republication first' "$adr31" \
-    && grep -q 'its gate status lives in lab' "$adr31"; then
-    pass "ADR-0031 records the withdrawn deb, the revert path and the lab gate owner"
+    if [[ ! -r $adr31 ]]; then
+        problems+=("ADR-0031 is missing")
+    else
+        grep -q '^- \*\*Status:\*\* Accepted' "$adr31" || problems+=("ADR-0031 is not Accepted")
+        grep -q "withdrawn from the \`trixie\` suite" "$adr31" || problems+=("ADR-0031 omits the withdrawn deb")
+        grep -q 'needs a republication first' "$adr31" || problems+=("ADR-0031 omits the revert path")
+        grep -q 'its gate status lives in lab' "$adr31" || problems+=("ADR-0031 omits the lab gate owner")
+    fi
+    if [[ ! -r $docs/README.md ]] \
+        || ! grep -q '(adr/0031-first-setup-retired-without-a-soak.md)' "$docs/README.md"; then
+        problems+=("docs/README.md does not index ADR-0031")
+    fi
+    (( ${#problems[@]} == 0 )) && return 0
+    printf '%s\n' "${problems[@]}"
+    return 1
+}
+if out=$(adr_records "$root/docs"); then
+    pass "ADR records: ADR-0028 points to ADR-0031, which records the withdrawn deb, the revert path and the lab gate owner"
 else
-    fail "ADR-0031 is missing or does not record the withdrawn deb, the revert path and the lab gate owner"
+    fail "ADR records: $(tr '\n' ';' <<<"$out")"
 fi
-if grep -q '(adr/0031-first-setup-retired-without-a-soak.md)' "$root/docs/README.md"; then
-    pass "docs/README.md indexes ADR-0031"
-else
-    fail "docs/README.md does not index ADR-0031"
-fi
+adr_case() { # description problem-the-check-must-name; fixture in $tmp/adr
+    local description=$1 want=$2 out
+    if out=$(adr_records "$tmp/adr"); then
+        fail "ADR records self-check: $description passes"
+    elif [[ $out == *"$want"* ]]; then
+        pass "ADR records self-check: $description is detected"
+    else
+        fail "ADR records self-check: $description gives the wrong problem: $out"
+    fi
+}
+adr_fixture() { rm -rf "$tmp/adr"; mkdir -p "$tmp/adr"; cp -r "$root/docs/adr" "$root/docs/README.md" "$tmp/adr/"; }
+adr_fixture; rm "$tmp/adr/adr/0028-first-login-runs-chairlift-first-run.md"
+adr_case "a missing ADR-0028" "ADR-0028 is missing"
+adr_fixture; sed -i 's/^- \*\*Status:\*\* Accepted;.*/- **Status:** Accepted/' "$tmp/adr/adr/0028-first-login-runs-chairlift-first-run.md"
+adr_case "ADR-0028 without its amendment pointer" "names no ADR-0031 amendment"
+adr_fixture; sed -i '/^- \*\*Status:\*\*/d; /soak/d; /gates the lane/d' "$tmp/adr/adr/0028-first-login-runs-chairlift-first-run.md"
+adr_case "ADR-0028 with no status line and no stale text" "names no ADR-0031 amendment"
+adr_fixture; rm "$tmp/adr/adr/0031-first-setup-retired-without-a-soak.md"
+adr_case "a missing ADR-0031" "ADR-0031 is missing"
+adr_fixture; sed -i 's/needs a republication first/can be reverted/' "$tmp/adr/adr/0031-first-setup-retired-without-a-soak.md"
+adr_case "ADR-0031 without the revert path" "omits the revert path"
+adr_fixture; sed -i '/0031-first-setup-retired-without-a-soak.md/d' "$tmp/adr/README.md"
+adr_case "an index without ADR-0031" "does not index ADR-0031"
 
 printf '# Results: %d passed, %d failed, %d total\n' "$PASS" "$FAIL" "$((PASS + FAIL))"
 [[ $FAIL -eq 0 ]]
