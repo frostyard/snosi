@@ -58,14 +58,23 @@ case $1 in
         ;;
     api)
         path=${2:?}
+        filter=${4:?}
         case $path in
-            */compare/*)
-                printf 'compare %s\n' "$path" >>"$state/compares"
-                case $RELEASE_FIXTURE_CASE in
-                    compare-fails) printf 'HTTP 500: Server Error\n' >&2; exit 1 ;;
-                    no-diff-with-fallback) printf '%s\n' 'README.md' 'docs/design/ci-cd.md' ;;
-                    *) printf '%s\n' '.github/workflows/validate.yml' 'docs/design/ci-cd.md' ;;
+            */contents/.github\?ref=*)
+                ref=${path#*ref=}
+                printf 'contents %s\n' "$ref" >>"$state/contents"
+                case "$RELEASE_FIXTURE_CASE:$ref" in
+                    contents-fail-branch:"$RELEASE_FIXTURE_DEFAULT_BRANCH")
+                        printf 'HTTP 500: Server Error\n' >&2
+                        exit 1
+                        ;;
+                    contents-fail-target:"$RELEASE_FIXTURE_TARGET_SHA")
+                        printf 'HTTP 500: Server Error\n' >&2
+                        exit 1
+                        ;;
                 esac
+                # Run the real classification filter over the case payload.
+                contents_payload "$RELEASE_FIXTURE_CASE" "$ref" | jq -r "$filter"
                 ;;
             */commits/*)
                 printf 'verify %s\n' "$path" >>"$state/verifies"
@@ -82,6 +91,42 @@ esac
 STUB
 chmod +x "$work/bin/gh"
 
+# Payloads of `gh api repos/<repo>/contents/.github`: the .github entries.
+cat >"$work/bin/contents_payload" <<'PAYLOAD'
+#!/bin/bash
+# contents_payload CASE REF: prints the .github entry list for the case.
+set -euo pipefail
+case_name=$1
+ref=$2
+branch=$RELEASE_FIXTURE_DEFAULT_BRANCH
+entry() { printf '{"name":"%s","type":"%s","sha":"%s"}' "$1" "$2" "$3"; }
+list() { local out='[' first=1 item; for item in "$@"; do [[ $first -eq 1 ]] || out+=','; out+=$item; first=0; done; printf '%s]\n' "$out"; }
+case $case_name in
+    no-diff-with-fallback | same-tree-other-entries)
+        # Same workflows tree; only a sibling entry differs in one case.
+        sibling='tree-sibling-a'
+        [[ $case_name == same-tree-other-entries && $ref == "$branch" ]] && sibling='tree-sibling-b'
+        list "$(entry workflows dir tree-same)" "$(entry ISSUE_TEMPLATE dir "$sibling")"
+        ;;
+    renamed-out-of-workflows)
+        # The directory was renamed away on the default branch.
+        if [[ $ref == "$branch" ]]; then
+            list "$(entry ISSUE_TEMPLATE dir tree-sibling-b)"
+        else
+            list "$(entry workflows dir tree-target)" "$(entry ISSUE_TEMPLATE dir tree-sibling-b)"
+        fi
+        ;;
+    *)
+        if [[ $ref == "$branch" ]]; then
+            list "$(entry workflows dir tree-branch)"
+        else
+            list "$(entry workflows dir tree-target)"
+        fi
+        ;;
+esac
+PAYLOAD
+chmod +x "$work/bin/contents_payload"
+
 LAST_STATUS=0
 LAST_STATE=''
 
@@ -91,7 +136,7 @@ run_case() { # case-name job-token fallback-token tag sha notes-file
     mkdir -p "$state"
     : >"$state/calls"
     : >"$state/creates"
-    : >"$state/compares"
+    : >"$state/contents"
     : >"$state/verifies"
     RELEASE_FIXTURE_STATE="$state" \
         RELEASE_FIXTURE_CASE="$name" \
@@ -99,6 +144,7 @@ run_case() { # case-name job-token fallback-token tag sha notes-file
         RELEASE_FIXTURE_FALLBACK_TOKEN="$MARKER_FALLBACK_TOKEN" \
         RELEASE_FIXTURE_TARGET_SHA="$TARGET_SHA" \
         RELEASE_FIXTURE_OTHER_SHA="$OTHER_SHA" \
+        RELEASE_FIXTURE_DEFAULT_BRANCH="$DEFAULT_BRANCH" \
         GH_TOKEN="$job" \
         FALLBACK_TOKEN="$fallback" \
         PATH="$work/bin:$PATH" \
@@ -118,8 +164,8 @@ uses_fallback() {
     grep -q 'token=fallback' "$1/creates"
 }
 
-compares_called() {
-    [[ -s "$1/compares" ]]
+contents_called() {
+    [[ -s "$1/contents" ]]
 }
 
 verifies_called() {
@@ -137,16 +183,17 @@ else
     fail 'job token creates the release and the tag is verified'
 fi
 
-# b. Exact 403 plus a workflow difference retries with the fallback token.
+# b. Exact 403 plus a differing workflows tree retries with the fallback token.
 run_case diff-with-fallback "$MARKER_JOB_TOKEN" "$MARKER_FALLBACK_TOKEN" "$TAG" "$TARGET_SHA" "$NOTES_FILE"
 if [[ $LAST_STATUS -eq 0 ]] &&
     [[ $(create_count "$LAST_STATE") -eq 2 ]] &&
     uses_fallback "$LAST_STATE" &&
     grep -Fq '::warning::' "$LAST_STATE/stderr" &&
-    grep -Fq 'validate.yml' "$LAST_STATE/stderr"; then
-    pass 'workflow difference retries with WORKFLOW_PAT and warns with the file name'
+    grep -Fq 'tree-target' "$LAST_STATE/stderr" &&
+    grep -Fq 'tree-branch' "$LAST_STATE/stderr"; then
+    pass 'a differing workflows tree retries with WORKFLOW_PAT and warns with both tree identities'
 else
-    fail 'workflow difference retries with WORKFLOW_PAT and warns with the file name'
+    fail 'a differing workflows tree retries with WORKFLOW_PAT and warns with both tree identities'
 fi
 
 # c. The same 403 without a fallback token fails and names WORKFLOW_PAT.
@@ -155,40 +202,42 @@ if [[ $LAST_STATUS -ne 0 ]] &&
     [[ $(create_count "$LAST_STATE") -eq 1 ]] &&
     ! uses_fallback "$LAST_STATE" &&
     grep -Fq '::error::' "$LAST_STATE/stderr" &&
-    grep -Fq 'WORKFLOW_PAT' "$LAST_STATE/stderr"; then
+    grep -Fq 'WORKFLOW_PAT' "$LAST_STATE/stderr" &&
+    grep -Fq '.github/workflows tree differs' "$LAST_STATE/stderr"; then
     pass 'missing WORKFLOW_PAT fails the job with the required secret named'
 else
     fail 'missing WORKFLOW_PAT fails the job with the required secret named'
 fi
 
-# d. No workflow difference means the 403 is a token or setting problem.
+# d. An equal workflows tree means the 403 is a token or setting problem.
 run_case no-diff-with-fallback "$MARKER_JOB_TOKEN" "$MARKER_FALLBACK_TOKEN" "$TAG" "$TARGET_SHA" "$NOTES_FILE"
 if [[ $LAST_STATUS -ne 0 ]] &&
     ! uses_fallback "$LAST_STATE" &&
-    grep -Fq '::error::' "$LAST_STATE/stderr"; then
-    pass 'a 403 without a workflow difference fails and never uses the fallback'
+    grep -Fq '::error::' "$LAST_STATE/stderr" &&
+    grep -Fq 'the .github/workflows tree is the same' "$LAST_STATE/stderr"; then
+    pass 'an equal workflows tree fails the 403 case and never uses the fallback'
 else
-    fail 'a 403 without a workflow difference fails and never uses the fallback'
+    fail 'an equal workflows tree fails the 403 case and never uses the fallback'
 fi
 
 # e. Any other failure is reported at once.
 run_case other-error-with-fallback "$MARKER_JOB_TOKEN" "$MARKER_FALLBACK_TOKEN" "$TAG" "$TARGET_SHA" "$NOTES_FILE"
 if [[ $LAST_STATUS -ne 0 ]] &&
-    ! compares_called "$LAST_STATE" &&
+    ! contents_called "$LAST_STATE" &&
     ! uses_fallback "$LAST_STATE"; then
-    pass 'a non-403 failure fails the job without a compare call or fallback'
+    pass 'a non-403 failure fails the job without a tree read or fallback'
 else
-    fail 'a non-403 failure fails the job without a compare call or fallback'
+    fail 'a non-403 failure fails the job without a tree read or fallback'
 fi
 
-# f. A failed compare call fails the job.
-run_case compare-fails "$MARKER_JOB_TOKEN" "$MARKER_FALLBACK_TOKEN" "$TAG" "$TARGET_SHA" "$NOTES_FILE"
+# f. A failed tree read of the target commit fails the job.
+run_case contents-fail-target "$MARKER_JOB_TOKEN" "$MARKER_FALLBACK_TOKEN" "$TAG" "$TARGET_SHA" "$NOTES_FILE"
 if [[ $LAST_STATUS -ne 0 ]] &&
     ! uses_fallback "$LAST_STATE" &&
-    grep -Fq '::error::' "$LAST_STATE/stderr"; then
-    pass 'a failed compare call fails the job and never uses the fallback'
+    grep -Fq 'Could not read the .github/workflows tree' "$LAST_STATE/stderr"; then
+    pass 'a failed tree read of the built commit fails the job and never uses the fallback'
 else
-    fail 'a failed compare call fails the job and never uses the fallback'
+    fail 'a failed tree read of the built commit fails the job and never uses the fallback'
 fi
 
 # g. A tag that points at another commit fails the job.
@@ -231,6 +280,51 @@ elif grep -rqF -e "$MARKER_JOB_TOKEN" -e "$MARKER_FALLBACK_TOKEN" "$work"/state-
     fail 'a token value never appears in captured output or stub logs'
 else
     pass 'a token value never appears in captured output or stub logs'
+fi
+
+# l. A workflows directory renamed away on the default branch: fallback runs.
+run_case renamed-out-of-workflows "$MARKER_JOB_TOKEN" "$MARKER_FALLBACK_TOKEN" "$TAG" "$TARGET_SHA" "$NOTES_FILE"
+if [[ $LAST_STATUS -eq 0 ]] &&
+    [[ $(create_count "$LAST_STATE") -eq 2 ]] &&
+    uses_fallback "$LAST_STATE" &&
+    grep -Fq 'tree-target' "$LAST_STATE/stderr" &&
+    grep -Fq 'absent' "$LAST_STATE/stderr"; then
+    pass 'a workflows directory renamed away on the default branch uses the fallback'
+else
+    fail 'a workflows directory renamed away on the default branch uses the fallback'
+fi
+
+# m. Equal workflows trees with other .github changes: no fallback.
+run_case same-tree-other-entries "$MARKER_JOB_TOKEN" "$MARKER_FALLBACK_TOKEN" "$TAG" "$TARGET_SHA" "$NOTES_FILE"
+if [[ $LAST_STATUS -ne 0 ]] &&
+    ! uses_fallback "$LAST_STATE" &&
+    grep -Fq 'the .github/workflows tree is the same' "$LAST_STATE/stderr"; then
+    pass 'an equal workflows tree is not a fallback case when other .github entries differ'
+else
+    fail 'an equal workflows tree is not a fallback case when other .github entries differ'
+fi
+
+# n. A failed tree read of the default branch fails the job.
+run_case contents-fail-branch "$MARKER_JOB_TOKEN" "$MARKER_FALLBACK_TOKEN" "$TAG" "$TARGET_SHA" "$NOTES_FILE"
+if [[ $LAST_STATUS -ne 0 ]] &&
+    ! uses_fallback "$LAST_STATE" &&
+    grep -Fq "Could not read the .github/workflows tree of $DEFAULT_BRANCH" "$LAST_STATE/stderr"; then
+    pass 'a failed tree read of the default branch fails the job and never uses the fallback'
+else
+    fail 'a failed tree read of the default branch fails the job and never uses the fallback'
+fi
+
+# The classification must use the contents API, never the compare endpoint.
+if grep -rq '/compare/' "$work"/state-*/calls; then
+    fail 'the script never calls the compare endpoint'
+else
+    pass 'the script never calls the compare endpoint'
+fi
+
+if grep -Fq '/compare/' "$SCRIPT"; then
+    fail 'the script names no compare endpoint'
+else
+    pass 'the script names no compare endpoint'
 fi
 
 # k. Static wiring: the workflow calls the script and owns the only secret use.

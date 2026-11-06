@@ -91,13 +91,16 @@ listing as a fallback; that reintroduces the original incident class.
 ## Step 4b — Release job 403 `Resource not accessible by integration`
 
 The `release` job failed at `Create GitHub Release` with
-`HTTP 403: Resource not accessible by integration`. Cause: the tag commit and
-the default branch had different workflow files, and `GITHUB_TOKEN` cannot
-create a tag in that case (it cannot get the `workflows` permission).
+`HTTP 403: Resource not accessible by integration`. Cause: the
+`.github/workflows` tree of the tag commit differed from the tree on the
+default branch, and `GITHUB_TOKEN` cannot create a tag in that case (it cannot
+get the `workflows` permission). The helper compares the 2 tree identities, so
+a workflow renamed out of the directory also counts; a compare file list would
+miss it and stops at 300 files.
 
 - The fix is the `WORKFLOW_PAT` repository secret with the `workflow` scope.
   Without it, `shared/bootc-secure/ci/create-github-release.sh` fails the job
-  with an `::error::` that names the differing files.
+  with an `::error::` that names the 2 `.github/workflows` tree identities.
 - A re-run of an old run uses the old workflow definition at the old commit,
   and main still differs, so a re-run fails the same way. The release job runs
   only on a push to main; the next release's changelog starts at the last

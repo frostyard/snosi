@@ -3,11 +3,11 @@
 #
 # Create the GitHub release for a built image tag.
 #
-# GITHUB_TOKEN cannot create a tag when the workflow files at that commit
-# differ from the workflow files on the default branch: the job token has no
+# GITHUB_TOKEN cannot create a tag when the `.github/workflows` tree of that
+# commit differs from the tree on the default branch: the job token has no
 # `workflows` permission and cannot get one. When gh reports exactly that 403
-# and workflow files differ, the release is retried once with FALLBACK_TOKEN
-# (the WORKFLOW_PAT secret). Every other failure fails the job.
+# and the two tree identities differ, the release is retried once with
+# FALLBACK_TOKEN (the WORKFLOW_PAT secret). Every other failure fails the job.
 set -euo pipefail
 
 usage='Usage: create-github-release.sh REPOSITORY TAG TITLE TARGET_SHA NOTES_FILE DEFAULT_BRANCH'
@@ -75,31 +75,46 @@ if [[ $status -ne 0 ]]; then
     fi
 
     # Only this exact 403 can come from the missing `workflows` permission.
-    # Decide from the actual compare, never from a guess.
-    compare_status=0
-    differences=$(GH_TOKEN=$GH_TOKEN gh api \
-        "repos/$REPOSITORY/compare/$TARGET_SHA...$DEFAULT_BRANCH" \
-        --jq '.files[]?.filename' 2>"$work/compare-stderr") || compare_status=$?
-    if [[ $compare_status -ne 0 ]]; then
-        show_stderr "$work/compare-stderr"
-        echo "::error::Could not compare $TARGET_SHA with $DEFAULT_BRANCH to classify the HTTP 403 from gh release create." >&2
+    # GitHub refuses the tag when the `.github/workflows` tree of the target
+    # commit differs from the one on the default branch. Compare the tree
+    # identities: a compare file list misses a workflow renamed out of the
+    # directory and stops at 300 files, so it cannot decide this.
+    workflow_tree() { # ref; sets WORKFLOW_TREE_VALUE
+        local tree_status=0 tree
+        tree=$(GH_TOKEN=$GH_TOKEN gh api \
+            "repos/$REPOSITORY/contents/.github?ref=$1" \
+            --jq '[.[] | select(.name == "workflows" and .type == "dir") | .sha] | first // ""' \
+            2>"$work/tree-stderr") || tree_status=$?
+        if [[ $tree_status -ne 0 ]]; then
+            show_stderr "$work/tree-stderr"
+            echo "::error::Could not read the .github/workflows tree of $1 to classify the HTTP 403 from gh release create." >&2
+            return 1
+        fi
+        if [[ -z $tree ]]; then
+            tree='absent'
+        fi
+        WORKFLOW_TREE_VALUE=$tree
+        return 0
+    }
+
+    workflow_tree "$TARGET_SHA" || exit 1
+    target_tree=$WORKFLOW_TREE_VALUE
+    workflow_tree "$DEFAULT_BRANCH" || exit 1
+    branch_tree=$WORKFLOW_TREE_VALUE
+
+    if [[ $target_tree == "$branch_tree" ]]; then
+        echo "::error::gh release create failed with HTTP 403 but the .github/workflows tree is the same at $TARGET_SHA (tree $target_tree) and $DEFAULT_BRANCH (tree $branch_tree). This is not the workflow-file case; check the token and the repository settings (Settings > Actions > General > Workflow permissions, and any tag ruleset that blocks tag creation)." >&2
         exit 1
     fi
 
-    workflow_files=$(grep -E '^[.]github/workflows/' <<<"$differences" || true)
-    if [[ -z $workflow_files ]]; then
-        echo "::error::gh release create failed with HTTP 403 but no workflow file differs between $TARGET_SHA and $DEFAULT_BRANCH. This is not the workflow-file case; check the token and the repository settings (Settings > Actions > General > Workflow permissions, and any tag ruleset that blocks tag creation)." >&2
-        exit 1
-    fi
-
-    names=${workflow_files//$'\n'/, }
+    difference="the .github/workflows tree differs between $TARGET_SHA (tree $target_tree) and $DEFAULT_BRANCH (tree $branch_tree)"
 
     if [[ -z $FALLBACK_TOKEN ]]; then
-        echo "::error::GITHUB_TOKEN cannot create tag $TAG because these workflow files differ between $TARGET_SHA and $DEFAULT_BRANCH: $names. Set the WORKFLOW_PAT secret (a token with the workflow scope) so this release can use it." >&2
+        echo "::error::GITHUB_TOKEN cannot create tag $TAG because $difference. Set the WORKFLOW_PAT secret (a token with the workflow scope) so this release can use it." >&2
         exit 1
     fi
 
-    echo "::warning::Workflow files differ between $TARGET_SHA and $DEFAULT_BRANCH: $names. Creating the release with WORKFLOW_PAT instead of GITHUB_TOKEN." >&2
+    echo "::warning::$difference. Creating the release with WORKFLOW_PAT instead of GITHUB_TOKEN." >&2
 
     status=0
     create_release "$FALLBACK_TOKEN" || status=$?
