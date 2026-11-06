@@ -88,6 +88,26 @@ as predecessor by guessing from registry tag listings). An empty changelog
 is the correct, safe outcome here — do not "fix" it by reintroducing tag
 listing as a fallback; that reintroduces the original incident class.
 
+## Step 4b — Release job 403 `Resource not accessible by integration`
+
+The `release` job failed at `Create GitHub Release` with
+`HTTP 403: Resource not accessible by integration`. Cause: the tag commit and
+the default branch had different workflow files, and `GITHUB_TOKEN` cannot
+create a tag in that case (it cannot get the `workflows` permission).
+
+- The fix is the `WORKFLOW_PAT` repository secret with the `workflow` scope.
+  Without it, `shared/bootc-secure/ci/create-github-release.sh` fails the job
+  with an `::error::` that names the differing files.
+- A re-run of an old run uses the old workflow definition at the old commit,
+  and main still differs, so a re-run fails the same way. The release job runs
+  only on a push to main; the next release's changelog starts at the last
+  released Snow tag, so it covers the gap.
+- The published images, their immutable timestamp tags, signatures and
+  `latest` are unaffected; only the GitHub release object is missing. Brian
+  can create it by hand with his own account: `gh release create <date>.<N>
+  --target <built commit SHA> --title "Build ..."` with notes that end in the
+  `<!-- snow-tag: <snow timestamp tag> -->` marker.
+
 ## Step 5 — Escalate / close out
 
 - If root cause is unclear after Steps 1–4, or the guard (Step 2) is
