@@ -22,8 +22,9 @@ Native A/B and NBC build/runtime lanes were removed; see
 `ci.yml` runs (core ADR-0044; see [testing](docs/design/testing.md#make-gate));
 Node comes from `mise install`. `just` lists targets; `just sysexts`,
 `just snow`, `just snowfield`, `just sundog`, `just floe`,
-`just test-install` and `just run-qemu` cover local builds and bootc tests. The Justfile bootstraps mkosi at the commit
-pinned in `.github/workflows/build.yml`. The retained
+`just test-install` and `just run-qemu` cover local builds and bootc tests.
+The Justfile bootstraps mkosi at the commit pinned in
+`.github/workflows/build.yml`. The retained
 `shared/native-ab/ci/bootstrap-mkosi.sh` and `check-mkosi-pin.sh` enforce
 the same pin for the installer ISO; their directory name is historical.
 
@@ -252,3 +253,6 @@ plans and historical records. Use `.memory/README.md` for correction-log
 conventions; do not record secrets. `SECURITY.md` names each artifact's own
 update path: `bootc-update-stage.timer` for images (next reboot),
 `updex-update.timer` for sysexts (next boot) and a new download for the ISO.
+A row of core's repository baseline (ADR-0071) is done only when its whole
+rule holds, not only its check; a known gap is a follow-up issue, named in
+the PR's row table.
