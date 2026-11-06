@@ -1,6 +1,6 @@
 # 0030 — Floe sends problem reports with admin consent
 
-- **Status:** Accepted
+- **Status:** Accepted; the `sent.jsonl` pruning statement is amended by [ADR-0032](0032-sent-jsonl-pruning-and-core-file-override.md)
 - **Date:** 2026-11-05
 
 ## Context
