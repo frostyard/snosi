@@ -838,15 +838,14 @@ jobs:
           echo "tag=$tag"     >> "$GITHUB_OUTPUT"
           echo "title=$title" >> "$GITHUB_OUTPUT"
 
+      # GITHUB_TOKEN cannot create a tag whose commit has workflow files that
+      # differ from the default branch, so the helper retries with WORKFLOW_PAT.
       - name: Create GitHub Release
         if: steps.current.outputs.tag != '' && steps.versions.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FALLBACK_TOKEN: ${{ secrets.WORKFLOW_PAT }}
           TAG: ${{ steps.release-meta.outputs.tag }}
           TITLE: ${{ steps.release-meta.outputs.title }}
-        run: |
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "$TITLE" \
-            --notes-file changelog.md
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: ./shared/bootc-secure/ci/create-github-release.sh "$GITHUB_REPOSITORY" "$TAG" "$TITLE" "$GITHUB_SHA" changelog.md "$DEFAULT_BRANCH"

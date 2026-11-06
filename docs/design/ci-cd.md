@@ -67,9 +67,17 @@ SBOM referrer, not an arbitrary tag. The Snow leg records and uploads the
 `snow-tag` artifact only after the SBOM upload, SBOM signature, provenance
 attestation and manifest upload succeed, so a failed metadata step skips the
 release instead of releasing an incomplete image
-(`check-bootc-publication-guard.sh` pins the step order). Every packaging lane stamps the product's
-`org.frostyard.core-flatpaks` label and checks it on the packaged image
-before any push ([core Flatpak sets](../integration-contracts.md#core-flatpak-sets)).
+(`check-bootc-publication-guard.sh` pins the step order). The release job
+creates the release tag
+with `GITHUB_TOKEN`. When GitHub refuses that tag with
+`HTTP 403: Resource not accessible by integration` because the
+`.github/workflows` tree of the built commit differs from the tree on the
+default branch, `shared/bootc-secure/ci/create-github-release.sh` compares the
+two tree identities and retries once with the `WORKFLOW_PAT` secret; it then
+checks that the tag points at the built commit. Any other failure fails the
+job. Every packaging lane stamps the
+product's `org.frostyard.core-flatpaks` label and checks it on the packaged
+image before any push ([core Flatpak sets](../integration-contracts.md#core-flatpak-sets)).
 
 `build-installer-iso.yml` retains the scripts at `shared/native-ab/publish/`
 and the mkosi pin helpers at `shared/native-ab/ci/`. `native` in their names

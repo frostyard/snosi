@@ -253,6 +253,11 @@ jobs:
         # updates must remain publishable through the ordinary job token.
         run: ./test/check-dependencies-workflow-token-test.sh
 
+      - name: Validate GitHub Release token fallback
+        # The release helper retries a tag-creating 403 with WORKFLOW_PAT only
+        # when workflow files differ from the default branch; all else fails.
+        run: ./test/github-release-create-test.sh
+
       - name: Validate workflow failure masking guards
         # Exercise the shell lint, Flatpak label, and dependency read-failure
         # paths with PATH stubs; no network or real image inspection is used.
