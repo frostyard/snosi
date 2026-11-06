@@ -10,9 +10,10 @@ snosi publishes rolling images; there are no maintained release branches.
 | Artifact | Gets security fixes |
 | --- | --- |
 | The `main` branch | Yes |
-| The newest published `snow`, `snowfield`, `floe` and `sundog` images (`latest`) | Yes: a fix ships in the next published image |
-| The newest published sysexts and the newest Firn installer ISO | Yes: a fix ships in the next published artifact |
-| Older image digests, sysext revisions and ISOs | No: update to the newest image (`bootc-update-stage.timer` stages it) |
+| The newest published `snow`, `snowfield`, `floe` and `sundog` images (`latest`) | Yes: a fix ships in the next published image. `bootc-update-stage.timer` stages it, and it applies at the next reboot |
+| The newest published sysext revisions | Yes: a fix ships in the next revision. `updex-update.timer` stages it, and it applies at the next boot |
+| The newest Firn installer ISO | Yes: a fix ships in the next published ISO. Download the new ISO; an ISO does not update itself |
+| Older image digests, sysext revisions and ISOs | No: move to the newest image, sysext revision or ISO by the path of its row above |
 
 ## Reporting a vulnerability
 

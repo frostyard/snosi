@@ -46,8 +46,10 @@ be an unpinned version at the digest-authority boundary
 cross `sudo`, so the packaging step assigns each `SNOSI_BOOTC_*` variable and
 credential path again after `sudo`; `sudo --preserve-env` is not used, so the
 privilege boundary stays visible at the call site. A new `SNOSI_BOOTC_*`
-variable needs both the `env:` line and the `sudo` assignment;
-`check-bootc-publication-guard.sh` fails a declaration that is not forwarded. Registry
+variable needs the `env:` line, the `sudo` assignment and an entry in the
+fixed variable lists of `check-bootc-publication-guard.sh`; the guard checks
+only the variables it lists, and fails a listed variable that is not
+forwarded. Registry
 authentication uses the run-scoped `GITHUB_TOKEN`; PR jobs have no registry
 write permission. `shared/bootc-secure/ci/push-immutable-image.sh` pushes the
 immutable version tag: at most 3 attempts for a transient GHCR blob-upload
