@@ -131,7 +131,7 @@ jobs:
           printf '%s' "$GH_TOKEN" | sudo buildah login -u "$GHCR_USER" --password-stdin ghcr.io
           DIGEST=$(sudo TMPDIR="$TMPDIR" ./shared/bootc-secure/ci/push-immutable-image.sh "$IMAGE" "${{ steps.version.outputs.tag }}")
        - name: Log in to ghcr.io
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           password: ${{ secrets.GITHUB_TOKEN }}
        - name: Sign immutable image digest
@@ -311,7 +311,7 @@ remove_login() { perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses:
 remove_push_helper() { perl -0pi -e 's/^          DIGEST=.*push-immutable-image\.sh.*\n//m' "$1/.github/workflows/build-images.yml"; }
 replace_push_helper_bare() { perl -0pi -e 's/(^          DIGEST=.*push-immutable-image\.sh.*\n)/$1          sudo TMPDIR="\$TMPDIR" buildah push --compression-format=zstd:chunked --digestfile=\/tmp\/image-digest "\$IMAGE:\$TAG" "docker:\/\/\$IMAGE:\$TAG"\n/m' "$1/.github/workflows/build-images.yml"; }
 move_login_after_verification() {
-    perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n//; s/(      - name: Validate policy-copied secure artifact\n)/$1      - name: Log in to ghcr.io\n        uses: docker\/login-action\@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0\n/' "$1/.github/workflows/build-images.yml"
+    perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n//; s/(      - name: Validate policy-copied secure artifact\n)/$1      - name: Log in to ghcr.io\n        uses: docker\/login-action\@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0\n/' "$1/.github/workflows/build-images.yml"
 }
 remove_promotion_src_authfile() { perl -0pi -e 's/ --src-authfile "\$AUTH_FILE"//' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
 remove_promotion_dest_authfile() { perl -0pi -e 's/ --dest-authfile "\$AUTH_FILE"//' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
