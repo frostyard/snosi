@@ -1,5 +1,9 @@
 # Keep SHA-pinned GitHub Actions current (Dependabot updates the pin and the
 # trailing version comment together).
+#
+# Each entry has 1 group with `patterns: ["*"]`, so each entry opens at most 1
+# version-update pull request for each run (ADR-0075). The group has no
+# `applies-to`, so security updates stay 1 pull request each.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -8,6 +12,9 @@ updates:
       interval: weekly
     commit-message:
       prefix: "chore"
+    groups:
+      actions:
+        patterns: ["*"]
     ignore:
       # The publish-to-r2 pin must move together with its repogen-version and
       # repogen-commit inputs (test/build-workflow-permissions-test.py), and
@@ -21,3 +28,6 @@ updates:
       interval: weekly
     commit-message:
       prefix: "chore"
+    groups:
+      npm:
+        patterns: ["*"]
