@@ -77,7 +77,9 @@ Image builds have four phases, in order:
    (for example `jq` in `shared/firn-installer/mkosi.conf`); the script does
    not install it.
    Downloads use `shared/download/verified-download.sh` and pinned SHA-256
-   metadata, not unchecked network content. Frostyard's `bootc` and
+   metadata, not unchecked network content. That helper retries 5 times with a
+   10-second delay on any curl error, including a connection reset, and it
+   never retries a checksum mismatch. Frostyard's `bootc` and
    `libostree-1-1` arrive as debs from the configured APT source, not an
    in-tree source build, and `shared/packages/bootc/mkosi.conf` pins that pair
    to one exact Frostyard build: they are revalidated together, because secure
