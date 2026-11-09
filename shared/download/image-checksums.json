@@ -1,23 +1,23 @@
 {
   "brew-install": {
-    "url": "https://raw.githubusercontent.com/Homebrew/install/8c82c081753d/install.sh",
+    "url": "https://raw.githubusercontent.com/Homebrew/install/7986efac2501/install.sh",
     "sha256": "5f333bbe53bc490e51e7ccb1df8779b3dd6ee73a1a7379efda216edb08ccb148",
-    "version": "8c82c081753d"
+    "version": "7986efac2501"
   },
   "hotedge": {
-    "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/8869f0923582404def36f756c1a19fa8bdd3d7cf",
-    "sha256": "7cd0b86fd9de1008b040ca649316e1c02b0122e772fb089f34c5936b84340ad0",
-    "version": "8869f0923582404def36f756c1a19fa8bdd3d7cf"
+    "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/d65489cc5352d72701a40d7e2dabacc25701ce68",
+    "sha256": "79c060dc0caa0beda05824047cadc6365af4931220b509e737cd94cf56ee3622",
+    "version": "d65489cc5352d72701a40d7e2dabacc25701ce68"
   },
   "logomenu": {
-    "url": "https://codeload.github.com/frostyard/logomenu/tar.gz/b11e1c5fc1d941537387b619515ceaa423e923b5",
-    "sha256": "056eb8915525f10dc3dcb0ec066165a451b9f27dd4d33bc639c3073d8c4c6866",
-    "version": "b11e1c5fc1d941537387b619515ceaa423e923b5"
+    "url": "https://codeload.github.com/frostyard/logomenu/tar.gz/892722440c2afd302bfd15d565c58e7d494994d1",
+    "sha256": "0a69b3a0627dbf423ce972c7a86fffafb7d734e8d872110b7a24a7d8ea91db93",
+    "version": "892722440c2afd302bfd15d565c58e7d494994d1"
   },
   "bazaar": {
-    "url": "https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/551ab812fda96e76fecc29a06f2adc993dd4e041",
-    "sha256": "1c5260b146fdb9175ab1659dec29d8f16b2914df6718c9a85f6d501ab491b743",
-    "version": "551ab812fda96e76fecc29a06f2adc993dd4e041"
+    "url": "https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/0d3af1137b1b2407499c72d1e7aecc528eebccf5",
+    "sha256": "58be76af1bd090d2ee79c4e6de83b8afaf8f0f2897960ae653997e0120066ee3",
+    "version": "0d3af1137b1b2407499c72d1e7aecc528eebccf5"
   },
   "cosign-installer": {
     "url": "https://github.com/sigstore/cosign/releases/download/v2.6.2/cosign-linux-amd64",
