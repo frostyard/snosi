@@ -176,12 +176,16 @@ try:
 except (OSError, json.JSONDecodeError, ValueError) as error:
     fail(f"cannot load .github/risk-paths.json: {error}")
 
-if not isinstance(risk, dict) or set(risk) != {"schema_version", "paths"}:
-    fail("top-level keys must be exactly schema_version and paths")
+LEVELS = ("L1", "L2", "L3", "L4")
+
+if not isinstance(risk, dict) or set(risk) != {"schema_version", "default_level", "paths"}:
+    fail("top-level keys must be exactly schema_version, default_level and paths")
 if isinstance(risk["schema_version"], bool) or not isinstance(risk["schema_version"], int):
-    fail("schema_version must be integer 1")
-if risk["schema_version"] != 1:
-    fail("schema_version must be 1")
+    fail("schema_version must be the integer 2")
+if risk["schema_version"] != 2:
+    fail("schema_version must be 2")
+if not isinstance(risk["default_level"], str) or risk["default_level"] not in LEVELS:
+    fail("default_level must be one of L1, L2, L3, L4")
 
 paths = risk["paths"]
 if not isinstance(paths, list) or not paths:
@@ -190,12 +194,14 @@ if not isinstance(paths, list) or not paths:
 globs = []
 entries = []
 for entry in paths:
-    if not isinstance(entry, dict) or set(entry) != {"glob", "why"}:
-        fail("each risk-path entry must contain exactly glob and why")
+    if not isinstance(entry, dict) or set(entry) != {"glob", "level", "why"}:
+        fail("each risk-path entry must contain exactly glob, level and why")
     glob = entry["glob"]
     why = entry["why"]
     if not isinstance(glob, str) or not glob:
         fail("each glob must be a non-empty string")
+    if not isinstance(entry["level"], str) or entry["level"] not in LEVELS:
+        fail(f"each level must be one of L1, L2, L3, L4: {glob}")
     if not isinstance(why, str) or not why:
         fail("each why must be a non-empty string")
     if len(why) > 200:
@@ -204,7 +210,7 @@ for entry in paths:
     if glob_errors:
         fail(f"invalid glob {glob}: {', '.join(glob_errors)}")
     globs.append(glob)
-    entries.append((glob, why))
+    entries.append((glob, entry["level"], why))
 if len(globs) != len(set(globs)):
     fail("globs must be unique")
 
@@ -216,7 +222,7 @@ boundaries = policy.get("protectedBoundaries") if isinstance(policy, dict) else 
 if not isinstance(boundaries, list) or not all(isinstance(item, str) for item in boundaries):
     fail("protectedBoundaries must be a list of names")
 boundary_set = set(boundaries)
-for glob, why in entries:
+for glob, level, why in entries:
     match = re.fullmatch(r"([^:]+): (.+)", why)
     if not match:
         fail(f"why must use boundary: text form: {glob}")
@@ -229,6 +235,14 @@ for glob, why in entries:
 required_globs = {".github/risk-paths.json", ".github/workflows/risk-paths.yml"}
 if not required_globs.issubset(set(globs)):
     fail("risk list must include the list and caller globs")
+# Rule C of core's risk-paths spec: in a version 2 list, every glob that matches
+# the list or the caller is L1 or L2.
+for glob, level, why in entries:
+    expansions = expand_braces(glob)
+    for required in sorted(required_globs):
+        if any(glob_matches(expansion, required) for expansion in expansions):
+            if level not in ("L1", "L2"):
+                fail(f"{glob} matches the required path {required} at level {level}; it must be L1 or L2")
 
 # Representative tracked paths that must stay covered, with the protected
 # boundary their entry names. Removing or narrowing an entry fails here, not
@@ -266,7 +280,7 @@ required_coverage = {
 for path, boundary in required_coverage.items():
     covering = [
         why.split(":", 1)[0]
-        for glob, why in entries
+        for glob, level, why in entries
         if any(glob_matches(expansion, path) for expansion in expand_braces(glob))
     ]
     if boundary not in covering:
@@ -309,7 +323,7 @@ except OSError as error:
     fail(f"cannot load .github/workflows/risk-paths.yml: {error}")
 if "  pull_request_target:" not in caller:
     fail("caller must contain pull_request_target")
-if "    types: [opened, synchronize, reopened, edited]" not in caller:
+if "    types: [opened, synchronize, reopened, edited, labeled]" not in caller:
     fail("caller types must remain the documented pull_request_target types")
 if re.search(r"^  merge_group:", caller, re.MULTILINE):
     fail("caller must not contain merge_group")
@@ -335,8 +349,8 @@ if set(permission_lines) != {"      contents: read", "      pull-requests: write
 uses_lines = re.findall(r"^[ -]*uses:.*$", caller, re.MULTILINE)
 if len(uses_lines) != 1:
     fail("caller must contain exactly one uses line")
-if not re.fullmatch(r"    uses: frostyard/core/\.github/workflows/risk-paths\.yml@[0-9a-f]{40}( #.*)?", uses_lines[0]):
-    fail("uses line must pin the core risk-paths workflow to a 40-character commit")
+if not re.fullmatch(r"    uses: frostyard/core/\.github/workflows/pr-triage\.yml@[0-9a-f]{40}( #.*)?", uses_lines[0]):
+    fail("uses line must pin the core pr-triage workflow to a 40-character commit")
 
 for workflow_path in (BUILD_PATH, BUILD_IMAGES_PATH):
     try:
@@ -356,4 +370,5 @@ command = "python3 ./test/risk-paths-test.py"
 if validate.count(command) != 1:
     fail("validate.yml must run risk-paths-test.py exactly once")
 
-print(f"risk-paths-test: PASSED ({len(entries)} entries, {len(tracked_files)} tracked files, {self_test_cases} self-test cases, {len(required_coverage)} coverage paths)")
+l1_entries = sum(1 for glob, level, why in entries if level == "L1")
+print(f"risk-paths-test: PASSED ({len(entries)} entries, {l1_entries} at L1, {len(tracked_files)} tracked files, {self_test_cases} self-test cases, {len(required_coverage)} coverage paths)")
