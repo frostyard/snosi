@@ -1,5 +1,6 @@
-<!-- The repository owner reviews risk:high pull requests. Branch from the
-latest main. Reviews apply AGENTS.md, docs/review-rubric.md and the docs rules. -->
+<!-- The repository owner reviews L1 and L2 pull requests, those with the
+risk:high label. Branch from the latest main. Reviews apply AGENTS.md,
+docs/review-rubric.md and the docs rules. -->
 
 ## Summary
 
@@ -19,8 +20,9 @@ Closes #
 
 Declare the highest applicable tier, never lower; the scale is
 [docs/risk-tiers.md](../docs/risk-tiers.md) (1 low, 2 moderate, 3 high,
-4 critical). A `risk:high` label (a path in `.github/risk-paths.json`) means
-tier 3 or higher: name each matched path and why the change is safe.
+4 critical). A `risk:high` label (a path in `.github/risk-paths.json` at L1 or
+L2; the same workflow adds the `level:L1` to `level:L4` label) means tier 3 or
+higher: name each matched path and why the change is safe.
 
 Risk tier: <!-- 1-4 --> — <!-- justification -->
 

@@ -162,7 +162,7 @@ the four-profile bootc image matrix, not the sysext publisher.
 issue automation, fleet marker, labels and supply-chain reporting; they do
 not publish OS artifacts.
 
-`risk-paths.yml` calls frostyard/core's reusable risk-paths workflow (core ADR-0068) on `pull_request_target`, pinned to a core commit. It reads `.github/risk-paths.json` at the base SHA and adds `risk:high` when a PR changes a listed path; it never removes the label and is not a required check. Each `why` names a `protectedBoundaries` entry of `policies/agent-governance.json`; `test/risk-paths-test.py` enforces that and rejects stale entries. `build.yml` and `build-images.yml` ignore both files.
+`risk-paths.yml` calls frostyard/core's reusable `pr-triage` workflow (core ADR-0068, ADR-0077, ADR-0078) on `pull_request_target`, pinned to a core commit. It reads `.github/risk-paths.json` at the base SHA, adds 1 level label, `level:L1` to `level:L4`, adds `risk:high` when the PR is L1 or L2, and removes `ready-for-human` when the head commit moves; it is not a required check. The list is schema version 2 (default L3) with a `level` on each glob: the list, the caller and `policies/**` are L2, every other entry L1. Each `why` names a `protectedBoundaries` entry of `policies/agent-governance.json`; `test/risk-paths-test.py` enforces that, the level of the list and caller globs, and rejects stale entries. `build.yml` and `build-images.yml` ignore both files.
 
 ## Publishing targets
 

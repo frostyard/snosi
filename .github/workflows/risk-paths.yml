@@ -1,24 +1,25 @@
-# Risk paths caller (frostyard/core ADR-0068, docs/specs/risk-paths.md): runs
-# core's reusable workflow on every pull request. It adds the label risk:high
-# when the pull request changes a path in .github/risk-paths.json.
+# PR triage caller (frostyard/core ADR-0068, ADR-0077, ADR-0078,
+# docs/specs/pr-triage.md): runs core's reusable workflow on every pull request.
+# It adds 1 level label, level:L1 to level:L4, from .github/risk-paths.json,
+# adds risk:high when the pull request is L1 or L2, and removes ready-for-human
+# when the head commit moves.
 #
 # pull_request_target runs this file and reads the list from the base branch,
-# so a pull request cannot remove its own label. The job checks out nothing
-# and runs no pull request code. The reusable workflow is pinned to a
-# frostyard/core commit (ADR-0021). No merge_group trigger; not a required
-# check. build.yml and build-images.yml ignore this file and the list, and
-# test/risk-paths-test.py guards both.
-name: Risk paths
+# so a pull request cannot lower its own level. The job checks out nothing and
+# runs no pull request code. The reusable workflow is pinned to a frostyard/core
+# commit (ADR-0021) and is not a required check. build.yml and build-images.yml
+# ignore this file and the list, and test/risk-paths-test.py guards both.
+name: PR triage
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited, labeled]
 
 permissions: {}
 
 jobs:
-  risk-paths:
+  pr-triage:
     permissions:
       contents: read
       pull-requests: write
-    uses: frostyard/core/.github/workflows/risk-paths.yml@1b02a129026329cef2b46d1fbd0465a863c1cd81 # core#194
+    uses: frostyard/core/.github/workflows/pr-triage.yml@c996ea3fb54bcf1a3c621113522213702a7673e2 # frostyard/core main, 2026-11-09 (core#225; core has no release tags)
