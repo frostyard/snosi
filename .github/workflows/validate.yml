@@ -212,8 +212,9 @@ jobs:
 
       - name: Validate verified-download split checksum lookup
         # Fixture test ensures verified_download() resolves keys from both split
-        # metadata files and honors CHECKSUMS_FILE overrides. No root, network,
-        # or image build.
+        # metadata files and honors CHECKSUMS_FILE overrides, and that it retries
+        # a connection reset and a 5xx on a local loopback server. No root,
+        # network beyond 127.0.0.1, or image build.
         run: ./test/verified-download-split-checksums-test.sh
 
       - name: Validate bounded APT package index parsing
