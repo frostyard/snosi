@@ -1,18 +1,18 @@
 {
   "1password": {
-    "url": "https://downloads.1password.com/linux/debian/amd64/pool/main/1/1password/1password-8.12.42.amd64.deb",
-    "sha256": "535205f781a04a4ed350067cf010a9c1b47c3e57ad05db199b6504d7611326a3",
-    "version": "8.12.42"
+    "url": "https://downloads.1password.com/linux/debian/amd64/pool/main/1/1password/1password-8.12.44.amd64.deb",
+    "sha256": "58518f442c589c9bb5c74e4a8604764a6146f8ba9ef9d36b1c2b04665f116f8a",
+    "version": "8.12.44"
   },
   "bitwarden": {
-    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.10.1/Bitwarden-2026.10.1-amd64.deb",
-    "sha256": "02cb6bc6a429d8d0da9fdf9d23739358165cf7b98a245783d6f641526f75b0a7",
-    "version": "2026.10.1"
+    "url": "https://github.com/bitwarden/clients/releases/download/desktop-v2026.10.4/Bitwarden-2026.10.4-amd64.deb",
+    "sha256": "a45a34a20a9d5becbb1c710851717583ad578597d10fbd2bd57fe597f7625f41",
+    "version": "2026.10.4"
   },
   "obsidian": {
-    "url": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.14.5/obsidian_1.14.5_amd64.deb",
-    "sha256": "c37fb46a966f604823337fb36ab23bd1baf8ce912ec35af59d62358a93357bee",
-    "version": "1.14.5"
+    "url": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.15.0/obsidian_1.15.0_amd64.deb",
+    "sha256": "251805fdcb696af32129e8f5e8656f6688802fc38b169822175d23a74c5174b3",
+    "version": "1.15.0"
   },
   "localsend": {
     "url": "https://github.com/localsend/localsend/releases/download/v1.18.2/LocalSend-1.18.2-linux-x86-64.deb",
@@ -20,44 +20,44 @@
     "version": "1.18.2"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_156.0.4314.50-1_amd64.deb",
-    "sha256": "0d0bc6303a8b935424e20afa7116c61dd7e7ccbca249c3cf49803ae343eacf8d",
-    "version": "156.0.4314.50-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_157.0.4341.42-1_amd64.deb",
+    "sha256": "1bd6f4753cf139ec751ca74b47054693c5a6c28128461ec1c3dd80c05640e2b9",
+    "version": "157.0.4341.42-1"
   },
   "code-server": {
-    "url": "https://github.com/coder/code-server/releases/download/v4.144.0/code-server_4.144.0_amd64.deb",
-    "sha256": "45f5533b502edac68b7eb09c5cec44fd281f80264af9a87fde0bfb2c5e190615",
-    "version": "4.144.0"
+    "url": "https://github.com/coder/code-server/releases/download/v4.145.2/code-server_4.145.2_amd64.deb",
+    "sha256": "7eddbdeaab34380bde3ac3bbadce58fe2f5722c4877f331ea593ae797c2517e1",
+    "version": "4.145.2"
   },
   "coder": {
-    "url": "https://github.com/coder/coder/releases/download/v2.37.8/coder_2.37.8_linux_amd64.deb",
-    "sha256": "807a4a59e40a18a0fdbf57963bff70bafdd940b1378439692ce26704be88f3de",
-    "version": "2.37.8"
+    "url": "https://github.com/coder/coder/releases/download/v2.38.6/coder_2.38.6_linux_amd64.deb",
+    "sha256": "adab1428bf1574a124abc449a3db6fe689ed52b7f61b40fad3903e93d509df24",
+    "version": "2.38.6"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.33/GitHub-Copilot-linux-x64.deb",
-    "sha256": "56d51c6eba14e285bff0bd98ae3f7d6538dee544f4b67cf213ade5d3c15805e4",
-    "version": "1.1.33"
+    "url": "https://github.com/github/app/releases/download/v1.1.35/GitHub-Copilot-linux-x64.deb",
+    "sha256": "c2cc6f0389747b342c64be5613b3ffc3f56e3dbe1d11dc82f496e665a613404f",
+    "version": "1.1.35"
   },
   "gitdesktop": {
-    "url": "https://github.com/theBGuy/GitDesktop/releases/download/v0.13.7/GitDesktop_0.13.7_amd64.deb",
-    "sha256": "6033d22bb70ed61907b61b6b08d0a0d5871851aafe5840cb85b5d4afa59f063a",
-    "version": "0.13.7"
+    "url": "https://github.com/theBGuy/GitDesktop/releases/download/v0.14.0/GitDesktop_0.14.0_amd64.deb",
+    "sha256": "d304b36c5834529d9137f08e12b1749c9aeff2e9148caa47a56f1bd7c00f41e8",
+    "version": "0.14.0"
   },
   "k3s": {
-    "url": "https://github.com/k3s-io/k3s/releases/download/v1.36.5%2Bk3s1/k3s",
-    "sha256": "d73847bcd3c5fccef0115b372e2f9a91f3032dc84bbf71518a4617565294d313",
-    "version": "1.36.5+k3s1"
+    "url": "https://github.com/k3s-io/k3s/releases/download/v1.37.2%2Bk3s1/k3s",
+    "sha256": "265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda",
+    "version": "1.37.2+k3s1"
   },
   "lemonade": {
-    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v2026.44.1/lemonade-server_2026.44.1-debian13_amd64.deb",
-    "sha256": "ddeb64d1673cf3d7a228c5353b1ade3f7cb2f2cf1156f414480f4e08a3ec5a6f",
-    "version": "2026.44.1"
+    "url": "https://github.com/lemonade-sdk/lemonade/releases/download/v2026.45.3/lemonade-server_2026.45.3-debian13_amd64.deb",
+    "sha256": "15a07dba1652b2c93f1335cd1864341a741ea47f9c0a202a3a88e5a4a13fb5cb",
+    "version": "2026.45.3"
   },
   "paseo": {
-    "url": "https://github.com/getpaseo/paseo/releases/download/v0.14.0/Paseo-0.14.0-amd64.deb",
-    "sha256": "13fca44a81b5c8a02f967b4790e9677898d9f734682d1b0337d42833cc0fbbbf",
-    "version": "0.14.0"
+    "url": "https://github.com/getpaseo/paseo/releases/download/v0.15.3/Paseo-0.15.3-amd64.deb",
+    "sha256": "b4ce65fd58f52d6f061a9a4d2b2542df8be565eac2ef59f7aa2c1f448c404883",
+    "version": "0.15.3"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.9.1/frostyard-pilothouse_0.9.1_amd64.deb",
@@ -65,27 +65,27 @@
     "version": "0.9.1"
   },
   "notesd": {
-    "url": "https://github.com/frostyard/frostnotes/releases/download/v0.3.2/frostyard-notesd_0.3.2_amd64.deb",
-    "sha256": "60797325e8be342b208d46f8c3738e2009fb8058275ca5a262b9ed53365bf247",
-    "version": "0.3.2",
+    "url": "https://github.com/frostyard/frostnotes/releases/download/v0.4.0/frostyard-notesd_0.4.0_amd64.deb",
+    "sha256": "f4f46f7e10c80aba0d99129b805ab59ddfe8292fef490611635c3ab91b46c09d",
+    "version": "0.4.0",
     "attestation": {
       "repository": "frostyard/frostnotes",
       "signer_workflow": ".github/workflows/release.yml"
     }
   },
   "maild": {
-    "url": "https://github.com/frostyard/frostmail/releases/download/v0.4.1/frostyard-maild_0.4.1_amd64.deb",
-    "sha256": "8d3c8bacdf1734ae00f0df0d8d96a97b45ae0f5ee6142fbeec1fdd845057c38f",
-    "version": "0.4.1",
+    "url": "https://github.com/frostyard/frostmail/releases/download/v0.5.0/frostyard-maild_0.5.0_amd64.deb",
+    "sha256": "c2799028ca20f829413c31224aafa01fffbc22e0ecfc9d0c812934f4de4106b0",
+    "version": "0.5.0",
     "attestation": {
       "repository": "frostyard/frostmail",
       "signer_workflow": ".github/workflows/release.yml"
     }
   },
   "lodge": {
-    "url": "https://github.com/frostyard/lodge/releases/download/v0.1.0/frostyard-lodge_0.1.0_amd64.deb",
-    "sha256": "0841d7376b0fbdc1e0f0f36987c516995bd92d70722118ef38ab850450243a3e",
-    "version": "0.1.0",
+    "url": "https://github.com/frostyard/lodge/releases/download/v0.2.1/frostyard-lodge_0.2.1_amd64.deb",
+    "sha256": "4c0388783ad9b933e20ab5dda6d3f700197cb8d7d6f23c699e6a39d906689b51",
+    "version": "0.2.1",
     "attestation": {
       "repository": "frostyard/lodge",
       "signer_workflow": ".github/workflows/release.yml"
@@ -101,9 +101,9 @@
     }
   },
   "readd": {
-    "url": "https://github.com/frostyard/frostread/releases/download/v0.4.0/frostyard-readd_0.4.0_amd64.deb",
-    "sha256": "99c3adcf057d38ab801fff7f70d5bd9ba89d56894997886f4a5e32383987e36f",
-    "version": "0.4.0",
+    "url": "https://github.com/frostyard/frostread/releases/download/v0.5.0/frostyard-readd_0.5.0_amd64.deb",
+    "sha256": "64974573916e1493efe86f36d72ec550596c78d056cd399da3e9b9a4815a7256",
+    "version": "0.5.0",
     "attestation": {
       "repository": "frostyard/frostread",
       "signer_workflow": ".github/workflows/release.yml"
