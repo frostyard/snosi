@@ -382,6 +382,13 @@ if [[ -e "$WORK_DIR/out/not-found.txt" ]]; then
 else
     record_pass "a permanent 404 leaves no output file"
 fi
+not_found_requests="$(server_request_count "/always404")"
+if [[ "$not_found_requests" == "2" ]]; then
+    record_pass "a permanent 404 is tried exactly 1 + VERIFIED_DOWNLOAD_RETRIES times"
+else
+    record_fail "a permanent 404 is tried exactly 1 + VERIFIED_DOWNLOAD_RETRIES times" \
+        "saw '$not_found_requests' requests, expected 2"
+fi
 
 payload_requests_before="$(server_request_count "/payload")"
 export VERIFIED_DOWNLOAD_RETRIES=abc
