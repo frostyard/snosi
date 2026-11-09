@@ -194,7 +194,7 @@ jobs:
         run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
 
       - name: setup-mkosi
-        uses: systemd/mkosi@a6753e508681aa162cef4e5183f1a728c11c4d78
+        uses: systemd/mkosi@a6753e508681aa162cef4e5183f1a728c11c4d78 # main 2026-11-05
 
       - name: Verify attested sysext downloads
         # First-party debs pinned in shared/download/sysext-checksums.json with
@@ -298,7 +298,7 @@ jobs:
           base-url: https://repository.frostyard.org # required for sysext
       - name: Upload manifests to R2
         if: github.event_name != 'pull_request'
-        uses: ryand56/r2-upload-action@33ebb7a494b3a8a3c5ed2ea6bbdc72e707090317
+        uses: ryand56/r2-upload-action@33ebb7a494b3a8a3c5ed2ea6bbdc72e707090317 # v1.5
         with:
           r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
           r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
