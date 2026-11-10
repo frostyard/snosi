@@ -115,7 +115,8 @@ those tokens; only the alpha may differ. The libadwaita layer may hold only
 one-property `banner` and `toast` rules. The skel `gtk.css` must be the
 single import of that layer. The gschema override must name `Snow` and the
 dark scheme, and its font must have its package in the Snow package list. It
-runs the palette and layer checks on bad fixtures too. It needs no GTK: the
+checks GTK 3 flat-button backdrop transparency and runs the palette, layer
+and cascade checks on bad fixtures too. It needs no GTK: the
 stylesheets were parsed with GTK 3.24 and 4.18 and rendered through Broadway
 when the theme was written, but CI does not repeat that.
 `test/grd-no-tpm-access-test.sh` keeps the gnome-remote-desktop daemons off the

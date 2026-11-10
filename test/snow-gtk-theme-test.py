@@ -20,8 +20,9 @@ This test checks that:
   4. the skel file only imports the shipped libadwaita layer, so the colours
      update with the image;
   5. the gschema override names the shipped theme and a font the image
-     installs.
-Checks 2 and 3 also run on bad fixtures, so the guard is shown to fail.
+     installs;
+  6. GTK 3 flat buttons stay transparent in backdrop and disabled states.
+Checks 2, 3 and 6 also run on bad fixtures, so the guard is shown to fail.
 
 No root, no network, no GTK, no image build.
 """
@@ -140,6 +141,112 @@ def layer_problems(css):
     return problems
 
 
+def split_selectors(text):
+    """Split on commas outside parentheses."""
+    start = depth = 0
+    for i, char in enumerate(text):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif char == "," and depth == 0:
+            yield text[start:i].strip()
+            start = i + 1
+    yield text[start:].strip()
+
+
+def compound(selector):
+    """Parse only element/class/pseudo compounds and simple :not arguments."""
+    if re.search(r"\s|[>+~]", selector):
+        return None
+    element = re.match(r"[a-zA-Z_][\w-]*|\*", selector)
+    name = element.group() if element else None
+    rest = selector[element.end():] if element else selector
+    classes, pseudos, negations = set(), set(), []
+    count = 0
+    while rest:
+        token = re.match(r":not\(([.:])([\w-]+)\)|([.:])([\w-]+)", rest)
+        if not token:
+            return None
+        if token.group(1):
+            negations.append((token.group(1), token.group(2)))
+        else:
+            target = classes if token.group(3) == "." else pseudos
+            target.add(token.group(4))
+        count += 1
+        rest = rest[token.end():]
+    return name, classes, pseudos, negations, (0, count, int(name not in (None, "*")))
+
+
+def resolve(css, element, classes, pseudos, prop):
+    """Resolve one property in Snow's local GTK 3 compound-selector rules.
+
+    Imports are not expanded; combinators and unsupported syntax are ignored.
+    """
+    body = re.sub(r"@(import|define-color)\b[^;]*;", "", strip_comments(css))
+    winner, value = None, None
+    for order, rule in enumerate(re.finditer(r"([^{}]+)\{([^{}]*)\}", body)):
+        declarations = {}
+        for declaration in rule.group(2).split(";"):
+            key, sep, val = declaration.partition(":")
+            if sep:
+                declarations[key.strip()] = val.strip()
+        if prop not in declarations:
+            continue
+        for selector in split_selectors(rule.group(1)):
+            parsed = compound(selector)
+            if parsed is None:
+                continue
+            name, required_classes, required_pseudos, negations, specificity = parsed
+            if name not in (None, "*", element):
+                continue
+            if not required_classes <= classes or not required_pseudos <= pseudos:
+                continue
+            if any(arg in (classes if kind == "." else pseudos)
+                   for kind, arg in negations):
+                continue
+            rank = (specificity, order)
+            if winner is None or rank >= winner:
+                winner, value = rank, declarations[prop]
+    return value
+
+
+def check_flat_buttons(css):
+    """Check 6, also callable against the old CSS for a regression test."""
+    states = [({"flat"}, set())]
+    for classes, pseudos_list in [
+        ({"flat"}, [{"backdrop"}, {"backdrop", "disabled"}, {"disabled"}]),
+        ({"titlebutton"}, [{"backdrop"}, {"backdrop", "disabled"}]),
+        ({"sidebar-button"}, [{"backdrop"}, {"backdrop", "disabled"}]),
+        ({"suggested-action", "flat"}, [{"backdrop"}, {"backdrop", "disabled"}]),
+        ({"destructive-action", "flat"}, [{"backdrop"}, {"backdrop", "disabled"}]),
+    ]:
+        states.extend((classes, pseudos) for pseudos in pseudos_list)
+    for classes, pseudos in states:
+        label = ".".join(["button"] + sorted(classes))
+        label += "".join(":" + p for p in sorted(pseudos))
+        check(f"GTK 3 {label} has no background image",
+              resolve(css, "button", classes, pseudos, "background-image") == "none")
+        if "backdrop" in pseudos:
+            check(f"GTK 3 {label} has a transparent border",
+                  resolve(css, "button", classes, pseudos, "border-color") == "transparent")
+    check(f"GTK 3 flat-button transparency covers {len(states)} widget states", len(states) == 12)
+    plain = resolve(css, "button", set(), {"backdrop"}, "background-image")
+    check("a plain GTK 3 backdrop button retains its fill", plain not in (None, "none"))
+    buggy = ("button:backdrop, button:backdrop.flat { background-image: image(@snow_panel_bright); }"
+             "button.flat { background-image: none; }")
+    check("the resolver detects the old flat backdrop fill",
+          resolve(buggy, "button", {"flat"}, {"backdrop"}, "background-image")
+          == "image(@snow_panel_bright)")
+    fixture = ("button.flat { color: first; } button { color: later; }"
+               "button.flat { border-color: first; } .flat { border-color: less-specific; }"
+               "button.flat { border-color: last; }")
+    check("cascade specificity beats source order",
+          resolve(fixture, "button", {"flat"}, set(), "color") == "first")
+    check("cascade source order breaks a specificity tie",
+          resolve(fixture, "button", {"flat"}, set(), "border-color") == "last")
+
+
 def main():
     # 1. the pinned token copy
     digest = hashlib.sha256(TOKENS.read_bytes()).hexdigest()
@@ -218,6 +325,9 @@ def main():
             check(f"shared/packages/snow installs {package} for {key}",
                   re.search(rf"(^Packages=|^\s+){re.escape(package)}\s*$", packages, re.M)
                   is not None)
+
+    # 6. local GTK 3 rules preserve undecorated backdrop/disabled buttons
+    check_flat_buttons(gtk3)
 
     print(f"# {PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0
