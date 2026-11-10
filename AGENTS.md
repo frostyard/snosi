@@ -93,6 +93,10 @@ condition-gated unit (`check-upholds-guard.sh`; for sysext deltas
 A sysext that ships a system unit must ship `extension-release.<name>` with
 `EXTENSION_RELOAD_MANAGER=1`, or `updex features enable --now` starts nothing
 until a reboot (`shared/sysext/finalize/sysext-reload-manager-guard.sh`, ADR-0026).
+Lodge app sysexts must declare the user `lodge` with lodge's own sysusers line,
+byte for byte, and every account their units name;
+`shared/sysext/finalize/sysext-lodge-accounts-guard.sh` fails the build
+otherwise (ADR-0035, #1245).
 `test/sysext-authoring-contract-test.sh` also rejects a sysext `mkosi.extra/`
 file at a path base ships: mkosi drops it from the delta (#1111).
 Base owns the host VM runtime (`qemu-system-x86`, `qemu-utils`, `ovmf`);

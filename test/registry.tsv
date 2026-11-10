@@ -108,6 +108,7 @@ sunshine-capabilities-test.sh	ci	validate.yml
 sunshine-package-dependencies-test.sh	ci	validate.yml
 sysext-authoring-contract-test.sh	ci	validate.yml
 sysext-divergent-libs-test.sh	ci	validate.yml
+sysext-lodge-accounts-guard-test.sh	ci	validate.yml
 sysext-postoutput-test.sh	ci	validate.yml
 sysext-reload-manager-guard-test.sh	ci	validate.yml
 sysext-required-paths-test.sh	ci	validate.yml
