@@ -23,23 +23,33 @@
 #     usr/lib/sysusers.d/*.conf files. The line is byte-identical to lodge's
 #     own, so the first merge of any suite sysext creates the same account.
 #  3. Every account the delta's system units name is declared by the delta's
-#     sysusers.d files. The units are the *.service and *.socket files under
-#     usr/lib/systemd/system, plus every unit name that has a drop-in
-#     directory <unit>.d there (a drop-in for a unit base ships still names
-#     accounts). The effective settings of a unit are read as systemd reads
-#     them: the unit file, then the drop-ins of <unit>.d/*.conf, and for an
-#     instance a@b.service also those of a@.service.d/*.conf, all sorted by
-#     file name; a line ending with \ joins the next line; a comment starts
-#     with # or ;. Only the keys of their own section count: User=, Group=,
-#     SupplementaryGroups= and DynamicUser= in [Service], SocketUser= and
-#     SocketGroup= in [Socket]. Of the scalar keys the last assignment wins
-#     and an empty value unsets it; SupplementaryGroups= accumulates and an
-#     empty assignment clears the list. A user is declared by a u or u! line
-#     or the first field of an m line, a group by a u, u! or g line or the
-#     second field of an m line. An effective DynamicUser=yes skips the user
-#     and group checks of that unit, but not its socket's SocketUser= and
-#     SocketGroup=. An empty value, root, a numeric id and a value with a %
-#     specifier are skipped.
+#     sysusers.d files, and no drop-in sets an account key.
+#     - Drop-ins: this guard does not emulate systemd's drop-in merging. That
+#       merge takes in <unit>.d, a template's <template>.d, a type-wide
+#       service.d or socket.d, a prefix directory such as frost-.service.d,
+#       and the same file name in several of them in a precedence order. A
+#       delta that sets an account key in any of them fails closed: the key
+#       belongs in the unit file. Every *.conf file in every *.d directory
+#       directly under usr/lib/systemd/system is read, and any of User=,
+#       Group=, SupplementaryGroups=, DynamicUser=, SocketUser= or
+#       SocketGroup= in any section fails the build. A drop-in without those
+#       keys, such as the multi-user.target.d Upholds= drop-ins, passes.
+#     - Units: each regular *.service and *.socket file directly under
+#       usr/lib/systemd/system, templates included. One file is parsed as
+#       systemd.syntax(7) reads it: a line whose first non-blank character is
+#       # or ; is a comment and is dropped, also inside a continued value; a
+#       line that ends with \ joins the next non-comment line, and the \ is
+#       replaced by a space. Keys count only in their own section: User=,
+#       Group=, SupplementaryGroups= and DynamicUser= in [Service], SocketUser=
+#       and SocketGroup= in [Socket]. Of the scalar keys the last assignment
+#       wins and an empty value unsets it; SupplementaryGroups= accumulates and
+#       an empty assignment clears the list. An effective DynamicUser= of yes,
+#       true, 1 or on skips the User= and Group= checks only: systemd creates
+#       no supplementary groups for a dynamic user either, but the socket keys
+#       are independent of it.
+#     A user is declared by a u or u! line or the first field of an m line, a
+#     group by a u, u! or g line or the second field of an m line. An empty
+#     value, root, a numeric id and a value with a % specifier are skipped.
 set -euo pipefail
 
 ID=${IMAGE_ID:?sysext-lodge-accounts-guard: IMAGE_ID not set}
@@ -96,36 +106,89 @@ if ((${#apps[@]} > 0)); then
     fi
 fi
 
-# 3. Every account the system units and their drop-ins name.
-# The unit names: every shipped service and socket, and every name that has a
-# drop-in directory. Other unit types name no account of ours.
-declare -A seen=()
-unit_names=()
-add_unit() { # unit name
-    [[ -z ${seen[$1]:-} ]] || return 0
-    seen[$1]=1
-    unit_names+=("$1")
+# 3. Every account the system units name, and no account key in a drop-in.
+# One parser for both file kinds, because the comment and continuation rules
+# are the same. mode=dropin prints the account keys the file sets, and
+# mode=unit prints the effective settings of the unit file.
+unit_parser() { # mode file
+    awk -v mode="$1" '
+        function trim(text) {
+            sub(/^[[:space:]]+/, "", text)
+            sub(/[[:space:]]+$/, "", text)
+            return text
+        }
+        function handle(line,   text, bracket, eq, key, value) {
+            text = trim(line)
+            if (text == "") return
+            if (text ~ /^\[/) {
+                bracket = index(text, "]")
+                if (bracket > 0) section = substr(text, 2, bracket - 2)
+                return
+            }
+            eq = index(text, "=")
+            if (eq == 0) return
+            key = trim(substr(text, 1, eq - 1))
+            value = trim(substr(text, eq + 1))
+            if (mode == "dropin") {
+                if (key ~ /^(User|Group|SupplementaryGroups|DynamicUser|SocketUser|SocketGroup)$/) print key
+                return
+            }
+            if (section == "Service") {
+                if (key == "User") user = value
+                else if (key == "Group") group = value
+                else if (key == "SupplementaryGroups")
+                    sup = (value == "") ? "" : ((sup == "") ? value : sup " " value)
+                else if (key == "DynamicUser") dynamic = value
+            } else if (section == "Socket") {
+                if (key == "SocketUser") socketuser = value
+                else if (key == "SocketGroup") socketgroup = value
+            }
+        }
+        {
+            line = $0
+            if (trim(line) ~ /^[#;]/) next
+            if (joining) {
+                line = build line
+                joining = 0
+                build = ""
+            }
+            if (line ~ /\\$/) {
+                sub(/\\$/, " ", line)
+                build = line
+                joining = 1
+                next
+            }
+            handle(line)
+        }
+        END {
+            if (joining) handle(build)
+            if (mode == "dropin") exit 0
+            printf "dynamic\t%s\n", dynamic
+            printf "user\t%s\n", user
+            printf "group\t%s\n", group
+            printf "sup\t%s\n", sup
+            printf "socketuser\t%s\n", socketuser
+            printf "socketgroup\t%s\n", socketgroup
+        }
+    ' "$2"
 }
-for entry in "$DELTA/$SYSTEM_UNITS"/*; do
-    name=${entry##*/}
-    if [[ -f $entry ]]; then
-        [[ $name == *.service || $name == *.socket ]] || continue
-        add_unit "$name"
-    elif [[ -d $entry && $name == *.d ]]; then
-        name=${name%.d}
-        [[ $name == *.service || $name == *.socket ]] || continue
-        add_unit "$name"
-    fi
+
+dropins=()
+for dir in "$DELTA/$SYSTEM_UNITS"/*.d; do
+    [[ -d $dir ]] || continue
+    for file in "$dir"/*.conf; do
+        [[ -f $file ]] || continue
+        dropins+=("$file")
+    done
 done
 
-if ((${#unit_names[@]} == 0)); then
-    if ((${#apps[@]} == 0)) && [[ ! -f $DELTA/$LODGE_CONF ]]; then
-        echo "sysext-lodge-accounts-guard: $ID OK (no Lodge app, no lodge.conf, no system units)"
-    else
-        echo "sysext-lodge-accounts-guard: $ID OK (system units: 0, sysusers files: ${#sysusers[@]}, Lodge apps: ${#apps[@]})"
+for file in "${dropins[@]}"; do
+    key=$(unit_parser dropin "$file")
+    if [[ -n $key ]]; then
+        rel=${file#"$DELTA"/}
+        die "/$rel sets $key= in a drop-in; this guard checks accounts only in unit files, so set it in the unit file (snosi#1245; ADR-0035)"
     fi
-    exit 0
-fi
+done
 
 declare -A users=() groups=()
 for file in "${sysusers[@]}"; do
@@ -150,121 +213,32 @@ for file in "${sysusers[@]}"; do
     done < <(grep -Ev '^[[:space:]]*(#|$)' "$file" || true)
 done
 
-# The template of an instance unit: a@b.service -> a@.service. Empty for
-# anything else, and for a template itself.
-unit_template() { # unit name
-    local name=$1
-    if [[ $name =~ ^(.+)@[^@]*\.(service|socket)$ ]]; then
-        printf '%s@.%s\n' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
-    fi
-}
+units=()
+for file in "$DELTA/$SYSTEM_UNITS"/*.service "$DELTA/$SYSTEM_UNITS"/*.socket; do
+    [[ -f $file ]] || continue
+    units+=("$file")
+done
 
-# The files systemd reads for a unit, in its order: the unit file, then the
-# drop-in files of <unit>.d and, for an instance, of <template>.d, sorted by
-# file name.
-unit_files() { # unit name -> one path per line
-    local name=$1 dir=$DELTA/$SYSTEM_UNITS template files=() file
-    [[ -f $dir/$name ]] && printf '%s\n' "$dir/$name"
-    for file in "$dir/$name.d"/*.conf; do
-        [[ -f $file ]] && files+=("$file")
-    done
-    template=$(unit_template "$name")
-    if [[ -n $template && $template != "$name" ]]; then
-        for file in "$dir/$template.d"/*.conf; do
-            [[ -f $file ]] && files+=("$file")
-        done
-    fi
-    ((${#files[@]} > 0)) || return 0
-    while IFS= read -r file; do
-        printf '%s\n' "$file"
-    done < <(for file in "${files[@]}"; do
-        printf '%s\t%s\n' "${file##*/}" "$file"
-    done | sort | cut -f2-)
-}
-
-# The effective settings of one unit, from its files in systemd's order:
-# KIND<TAB>VALUE lines. An empty value means unset.
-unit_settings() { # files...
-    (($# > 0)) || return 0
-    awk '
-        function trim(text) {
-            sub(/^[[:space:]]+/, "", text)
-            sub(/[[:space:]]+$/, "", text)
-            return text
-        }
-        FNR == 1 { section = "" }
-        {
-            line = $0
-            while (line ~ /\\$/) {
-                if ((getline more) > 0) {
-                    sub(/\\$/, " ", line)
-                    line = line more
-                } else {
-                    sub(/\\$/, "", line)
-                }
-            }
-            line = trim(line)
-            if (line == "" || line ~ /^[#;]/) next
-            if (line ~ /^\[/) {
-                bracket = index(line, "]")
-                if (bracket > 0) {
-                    section = substr(line, 2, bracket - 2)
-                    next
-                }
-            }
-            eq = index(line, "=")
-            if (eq == 0) next
-            key = trim(substr(line, 1, eq - 1))
-            value = trim(substr(line, eq + 1))
-            if (section == "Service") {
-                if (key == "User") user = value
-                else if (key == "Group") group = value
-                else if (key == "SupplementaryGroups")
-                    sup = (value == "") ? "" : ((sup == "") ? value : sup " " value)
-                else if (key == "DynamicUser") dynamic = value
-            } else if (section == "Socket") {
-                if (key == "SocketUser") socketuser = value
-                else if (key == "SocketGroup") socketgroup = value
-            }
-        }
-        END {
-            printf "dynamic\t%s\n", dynamic
-            printf "user\t%s\n", user
-            printf "group\t%s\n", group
-            printf "sup\t%s\n", sup
-            printf "socketuser\t%s\n", socketuser
-            printf "socketgroup\t%s\n", socketgroup
-        }
-    ' "$@"
-}
-
-checked=0
-for name in "${unit_names[@]}"; do
-    checked=$((checked + 1))
-    files=()
-    while IFS= read -r file; do
-        files+=("$file")
-    done < <(unit_files "$name")
+for file in "${units[@]}"; do
+    name=${file##*/}
     declare -A setting=()
-    if ((${#files[@]} > 0)); then
-        while IFS=$'\t' read -r key value; do
-            setting[$key]=$value
-        done < <(unit_settings "${files[@]}")
-    fi
-    skip_accounts=0
+    while IFS=$'\t' read -r key value; do
+        setting[$key]=$value
+    done < <(unit_parser unit "$file")
+    skip=0
     dynamic=${setting[dynamic]:-}
     case ${dynamic,,} in
-        yes | true | 1 | on) skip_accounts=1 ;;
+        yes | true | 1 | on) skip=1 ;;
     esac
     accounts=()
-    if ((skip_accounts == 0)); then
+    if ((skip == 0)); then
         if [[ -n ${setting[user]:-} ]]; then accounts+=("user"$'\t'"${setting[user]}"); fi
         if [[ -n ${setting[group]:-} ]]; then accounts+=("group"$'\t'"${setting[group]}"); fi
-        read -ra supplementary <<<"${setting[sup]:-}"
-        for account in "${supplementary[@]}"; do
-            accounts+=("group"$'\t'"$account")
-        done
     fi
+    read -ra supplementary <<<"${setting[sup]:-}"
+    for account in "${supplementary[@]}"; do
+        accounts+=("group"$'\t'"$account")
+    done
     if [[ -n ${setting[socketuser]:-} ]]; then accounts+=("user"$'\t'"${setting[socketuser]}"); fi
     if [[ -n ${setting[socketgroup]:-} ]]; then accounts+=("group"$'\t'"${setting[socketgroup]}"); fi
     for account in "${accounts[@]}"; do
@@ -275,11 +249,11 @@ for name in "${unit_names[@]}"; do
         [[ ! $value =~ ^[0-9]+$ ]] || continue
         [[ $value != *%* ]] || continue
         if [[ $kind == user ]]; then
-            [[ -n ${users[$value]:-} ]] || die "/$SYSTEM_UNITS/$name (with its drop-ins) names user $value, which no /$SYSUSERS/*.conf in the delta declares: add a u line for it (or an m line whose first field is $value)"
+            [[ -n ${users[$value]:-} ]] || die "/$SYSTEM_UNITS/$name names user $value, which no /$SYSUSERS/*.conf in the delta declares: add a u line for it (or an m line whose first field is $value)"
         else
-            [[ -n ${groups[$value]:-} ]] || die "/$SYSTEM_UNITS/$name (with its drop-ins) names group $value, which no /$SYSUSERS/*.conf in the delta declares: add a g or u line for it (or an m line whose second field is $value)"
+            [[ -n ${groups[$value]:-} ]] || die "/$SYSTEM_UNITS/$name names group $value, which no /$SYSUSERS/*.conf in the delta declares: add a g or u line for it (or an m line whose second field is $value)"
         fi
     done
 done
 
-echo "sysext-lodge-accounts-guard: $ID OK (system units: $checked, sysusers files: ${#sysusers[@]}, Lodge apps: ${#apps[@]})"
+echo "sysext-lodge-accounts-guard: $ID OK (system units: ${#units[@]}, drop-ins: ${#dropins[@]}, sysusers files: ${#sysusers[@]}, Lodge apps: ${#apps[@]})"

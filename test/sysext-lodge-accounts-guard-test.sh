@@ -77,12 +77,12 @@ old_shape() { # tree-root [sysusers extra line ...]
 
 new_case empty-delta
 run_guard
-check "empty delta passes" 0 "OK (no Lodge app, no lodge.conf, no system units)"
+check "empty delta passes" 0 "OK (system units: 0, drop-ins: 0, sysusers files: 0"
 
 new_case no-app-no-lodge
 put "$delta" usr/bin/tool '#!/bin/sh'
 run_guard
-check "a delta without a Lodge app, lodge.conf or units passes" 0 "OK (no Lodge app"
+check "a delta without a Lodge app, lodge.conf or units passes" 0 "OK (system units: 0, drop-ins: 0"
 
 new_case old-maild
 old_shape "$delta"
@@ -120,7 +120,7 @@ new_case app-line-in-lodge-conf
 put "$delta" "$APPS/notes/app.json" '{"name": "notes"}'
 put "$delta" "$SYSUSERS/other.conf" "$LODGE_USER_LINE"
 run_guard
-check "the line in any sysusers file counts for an app" 0 "OK (system units: 0, sysusers files: 1, Lodge apps: 1)"
+check "the line in any sysusers file counts for an app" 0 "OK (system units: 0, drop-ins: 0, sysusers files: 1, Lodge apps: 1)"
 
 new_case undeclared-socket-user
 put "$delta" "$UNITS/frostnotes-lodge.socket" \
@@ -151,7 +151,7 @@ new_case dynamic-user
 put "$delta" "$UNITS/app.service" \
     '[Service]' 'DynamicUser=yes' 'User=foo' 'Group=foo' 'ExecStart=/bin/true'
 run_guard
-check "a DynamicUser=yes unit passes without sysusers" 0 "OK (system units: 1, sysusers files: 0"
+check "a DynamicUser=yes unit skips User= and Group=" 0 "OK (system units: 1, drop-ins: 0, sysusers files: 0"
 
 new_case root-and-numeric
 put "$delta" "$UNITS/app.service" \
@@ -179,26 +179,89 @@ put "$delta" "$SYSUSERS/app.conf" '# u app - "App" /var/lib/app' ''
 run_guard
 check "a commented sysusers line declares nothing" 1 "names user app"
 
-# --- rule 3: drop-ins, SupplementaryGroups=, effective DynamicUser= --------
+# --- rule 3: no account key in a drop-in, unit files only -------------------
 new_case dropin-user
 put "$delta" "$UNITS/frostmail.service" '[Service]' 'User=frostmail' 'ExecStart=/bin/true'
 put "$delta" "$UNITS/frostmail.service.d/10-user.conf" '[Service]' 'User=missing'
 put "$delta" "$SYSUSERS/frostmail.conf" 'u frostmail - "Frostmail" /var/lib/frostmail'
 run_guard
-check "a drop-in that sets User= fails when it is undeclared" 1 "names user missing"
+check "a drop-in that sets User= fails closed" 1 \
+    "10-user.conf sets User= in a drop-in" "set it in the unit file"
 
-new_case dropin-of-base-unit
-put "$delta" "$UNITS/coder.service.d/10-x.conf" '[Service]' 'User=ghost'
-put "$delta" "$SYSUSERS/coder.conf" 'u coder - "Coder" /var/lib/coder'
+new_case type-wide-dropin
+put "$delta" "$UNITS/service.d/10.conf" '[Service]' 'User=x'
 run_guard
-check "a drop-in for a unit the delta does not ship is checked" 1 "names user ghost"
+check "a type-wide service.d drop-in that sets User= fails closed" 1 \
+    "service.d/10.conf sets User="
+
+new_case prefix-dropin
+put "$delta" "$UNITS/frost-.service.d/10.conf" '[Service]' 'SupplementaryGroups=x'
+run_guard
+check "a prefix drop-in that sets SupplementaryGroups= fails closed" 1 \
+    "frost-.service.d/10.conf sets SupplementaryGroups="
 
 new_case template-dropin
-put "$delta" "$UNITS/app@one.service" '[Service]' 'User=app' 'ExecStart=/bin/true'
-put "$delta" "$UNITS/app@.service.d/10.conf" '[Service]' 'Group=nogroup2'
+put "$delta" "$UNITS/app@.service" '[Service]' 'ExecStart=/bin/true'
+put "$delta" "$UNITS/app@.service.d/10.conf" '[Service]' 'DynamicUser=no'
+run_guard
+check "a template drop-in that sets DynamicUser= fails closed" 1 \
+    "app@.service.d/10.conf sets DynamicUser="
+
+new_case dropin-other-section
+put "$delta" "$UNITS/app.service" '[Service]' 'User=app' 'ExecStart=/bin/true'
+put "$delta" "$UNITS/app.service.d/10-x.conf" '[Unit]' 'SocketGroup=ghost'
 put "$delta" "$SYSUSERS/app.conf" 'u app - "App" /var/lib/app'
 run_guard
-check "a template drop-in applies to an instance unit" 1 "names group nogroup2"
+check "an account key outside its section in a drop-in still fails closed" 1 \
+    "10-x.conf sets SocketGroup="
+
+new_case target-dropin
+put "$delta" "$UNITS/multi-user.target.d/10-x.conf" '[Unit]' 'Upholds=a.service'
+run_guard
+check "a Upholds= drop-in passes" 0 "OK (system units: 0, drop-ins: 1"
+
+new_case harmless-dropin
+put "$delta" "$UNITS/app.service" '[Service]' 'User=app' 'ExecStart=/bin/true'
+put "$delta" "$UNITS/app.service.d/10-env.conf" '[Service]' 'Environment=A=1'
+put "$delta" "$SYSUSERS/app.conf" 'u app - "App" /var/lib/app'
+run_guard
+check "a drop-in without an account key passes" 0 "OK (system units: 1, drop-ins: 1"
+
+new_case comment-only-dropin
+put "$delta" "$UNITS/app.service" '[Service]' 'User=app' 'ExecStart=/bin/true'
+put "$delta" "$UNITS/app.service.d/10-x.conf" '# User=missing' '[Service]' '; User=missing2'
+put "$delta" "$SYSUSERS/app.conf" 'u app - "App" /var/lib/app'
+run_guard
+check "an account key in a drop-in comment passes" 0 "OK (system units: 1, drop-ins: 1"
+
+new_case dynamic-with-supplementary
+put "$delta" "$UNITS/app.service" \
+    '[Service]' 'DynamicUser=yes' 'SupplementaryGroups=missing' 'ExecStart=/bin/true'
+run_guard
+check "SupplementaryGroups= is checked for a dynamic user" 1 "names group missing"
+
+new_case comment-continuation
+put "$delta" "$UNITS/app.service" '[Service]' 'ExecStart=/bin/true' "# note \\" 'User=missing'
+run_guard
+check "a comment ending with a backslash does not swallow the next line" 1 \
+    "names user missing"
+
+new_case continuation-with-comment
+put "$delta" "$UNITS/app.service" \
+    '[Service]' 'User=app' "SupplementaryGroups=a \\" '# comment' 'b'
+put "$delta" "$SYSUSERS/app.conf" 'u app - "App" /var/lib/app' 'g a -'
+run_guard
+check "a comment inside a continued value is dropped" 1 "names group b"
+
+new_case template-unit
+put "$delta" "$UNITS/app@.service" '[Service]' 'User=missing' 'ExecStart=/bin/true'
+run_guard
+check "a template unit file is checked as a file" 1 "names user missing"
+
+new_case template-specifier
+put "$delta" "$UNITS/app@.service" '[Service]' 'User=%i' 'ExecStart=/bin/true'
+run_guard
+check "a template unit specifier is not checked" 0 "OK (system units: 1"
 
 new_case supplementary-group-missing
 put "$delta" "$UNITS/frostporter.service" \

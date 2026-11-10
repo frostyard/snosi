@@ -58,27 +58,37 @@ delta (`$BUILDROOT`) of a sysext and fails the build:
    its own `usr/lib/sysusers.d/*.conf` files. The line is copied byte for
    byte, so the first merge of any suite sysext creates the one account and
    every later merge is a no-op.
-3. **Every account a unit names:** the guard checks each `*.service` and
-   `*.socket` under `usr/lib/systemd/system`, and also each unit name that has
-   a drop-in directory `<unit>.d/` there, because a drop-in for a unit the
-   base image ships still names accounts. It reads a unit's effective settings
-   as systemd does: the unit file first, then the drop-ins of `<unit>.d/*.conf`
-   and, for an instance name `a@b.service`, those of `a@.service.d/*.conf`,
-   sorted by file name; a line that ends with `\` joins the next line, and a
-   line that starts with `#` or `;` is a comment. Only keys in their own
-   section count: `User=`, `Group=`, `SupplementaryGroups=` and `DynamicUser=`
+3. **Every account a unit names, and no account key in a drop-in:** the
+   guard checks each regular `*.service` and `*.socket` file directly under
+   `usr/lib/systemd/system`, template units `a@.service` included. It parses
+   one file as systemd.syntax(7) reads it: a line whose first non-blank
+   character is `#` or `;` is a comment and is dropped, also when it sits
+   inside a continued value, and a line that ends with `\` joins the next
+   non-comment line with the `\` replaced by a space. Keys count only in their
+   own section: `User=`, `Group=`, `SupplementaryGroups=` and `DynamicUser=`
    in `[Service]`, `SocketUser=` and `SocketGroup=` in `[Socket]`. Of the
    scalar keys the last assignment wins and an empty value unsets it;
    `SupplementaryGroups=` accumulates and an empty assignment clears the list.
-   The effective `User=`, `SocketUser=` and the effective `Group=`,
-   `SocketGroup=` and each `SupplementaryGroups=` entry must be declared by
-   the delta's sysusers.d files. A user is declared by a `u` or `u!` line or by
-   the first field of an `m` line; a group by a `u`, `u!` or `g` line or by the
-   second field of an `m` line. An empty value, `root`, a numeric id and a
-   value with a `%` specifier are skipped. An effective `DynamicUser=yes`
-   (yes, true, 1 or on) skips the user and group checks of that unit, but not
-   its socket's `SocketUser=` and `SocketGroup=`, because DynamicUser does not
-   apply to socket units.
+   The effective `User=`, `SocketUser=`, `Group=`, `SocketGroup=` and each
+   `SupplementaryGroups=` entry must be declared by the delta's sysusers.d
+   files. A user is declared by a `u` or `u!` line or by the first field of an
+   `m` line; a group by a `u`, `u!` or `g` line or by the second field of an
+   `m` line. An empty value, `root`, a numeric id and a value with a `%`
+   specifier are skipped. An effective `DynamicUser=` of yes, true, 1 or on
+   skips only the `User=` and `Group=` checks: systemd creates no
+   supplementary groups for a dynamic user either, but a socket's
+   `SocketUser=` and `SocketGroup=` do not depend on it.
+
+   The guard does not emulate systemd's drop-in merging, which draws on
+   `<unit>.d`, a template's `<template>.d`, a type-wide `service.d` or
+   `socket.d`, a prefix directory such as `frost-.service.d`, and the same
+   file name in several of them in a precedence order. It fails closed
+   instead: every `*.conf` file in every `*.d` directory directly under
+   `usr/lib/systemd/system` is read, and any of `User=`, `Group=`,
+   `SupplementaryGroups=`, `DynamicUser=`, `SocketUser=` or `SocketGroup=` in
+   any section fails the build. An account key belongs in the unit file. A
+   drop-in without those keys, such as the `Upholds=` drop-ins under
+   `multi-user.target.d`, passes.
 
 The five suite sysexts (lodge, notesd, maild, porterd, readd) wire the script
 in `FinalizeScripts=`. `test/sysext-lodge-accounts-guard-test.sh` holds the
@@ -106,6 +116,11 @@ needs `systemctl reset-failed` for the failed units or one reboot.
   suite list of `test/sysext-lodge-accounts-guard-test.sh`. The authoring
   contract does not force it, because a sysext without a Lodge app manifest
   does not need it.
+- An account key in a drop-in fails the build. The suite debs ship none, so
+  nothing fails today. A future need moves the key into the unit file, or
+  extends the guard with the merge it needs.
+- Host drop-ins in `/etc/systemd/system` or `/run/systemd/system` are out of
+  scope: a sysext ships `/usr` only, so the build never sees them.
 
 ## Alternatives considered
 
