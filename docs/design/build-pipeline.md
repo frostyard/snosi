@@ -110,7 +110,11 @@ Image builds have four phases, in order:
    The five Lodge suite sysexts also run `shared/sysext/finalize/sysext-lodge-accounts-guard.sh`,
    which fails a delta that ships a Lodge app manifest without lodge's own
    `u lodge` sysusers line, or a `*.service`/`*.socket` that names a user or
-   group its sysusers.d files do not declare ([ADR-0035](../adr/0035-lodge-app-sysexts-declare-user-lodge.md);
+   group its sysusers.d files do not declare. It reads each unit's effective
+   settings, the unit file and then its drop-ins (sorted by file name), takes
+   the last assignment of `User=`, `Group=`, `SocketUser=`, `SocketGroup=` and
+   `DynamicUser=`, accumulates `SupplementaryGroups=`, and skips a unit whose
+   effective `DynamicUser=` is yes ([ADR-0035](../adr/0035-lodge-app-sysexts-declare-user-lodge.md);
    snosi#1245).
    `shared/composition/var-audit.finalize` audits per-product `/var` outcome
    maps and rejects unclassified or stale entries.

@@ -178,7 +178,14 @@ line byte-identical to lodge's own
 suite sysexts, fails the sysext build when the delta ships a Lodge app manifest
 and no sysusers file holds that exact line, when
 `usr/lib/sysusers.d/lodge.conf` lacks it, or when a `*.service` or `*.socket`
-names a user or group that the delta's sysusers files do not declare
+names a user or group that the delta's sysusers files do not declare. That
+last check reads a unit's effective settings as systemd reads them: the unit
+file, then its `<unit>.d/*.conf` drop-ins (and `a@.service.d/*.conf` for an
+instance `a@b.service`), sorted by file name; `User=`, `Group=`,
+`SupplementaryGroups=` and `DynamicUser=` in `[Service]`, `SocketUser=` and
+`SocketGroup=` in `[Socket]`; the last assignment of a scalar key wins and
+`SupplementaryGroups=` accumulates. An effective `DynamicUser=yes` skips the
+unit's user and group checks, not a socket's `SocketUser=` and `SocketGroup=`
 ([ADR-0035](../adr/0035-lodge-app-sysexts-declare-user-lodge.md)).
 
 Every sysext must also have a `mkosi.images/<name>/required-paths.txt`: one

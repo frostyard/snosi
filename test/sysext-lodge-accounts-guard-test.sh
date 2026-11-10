@@ -151,7 +151,7 @@ new_case dynamic-user
 put "$delta" "$UNITS/app.service" \
     '[Service]' 'DynamicUser=yes' 'User=foo' 'Group=foo' 'ExecStart=/bin/true'
 run_guard
-check "a DynamicUser=yes unit passes without sysusers" 0 "OK (system units: 0"
+check "a DynamicUser=yes unit passes without sysusers" 0 "OK (system units: 1, sysusers files: 0"
 
 new_case root-and-numeric
 put "$delta" "$UNITS/app.service" \
@@ -178,6 +178,83 @@ put "$delta" "$UNITS/app.service" '[Service]' 'User=app' 'ExecStart=/bin/true'
 put "$delta" "$SYSUSERS/app.conf" '# u app - "App" /var/lib/app' ''
 run_guard
 check "a commented sysusers line declares nothing" 1 "names user app"
+
+# --- rule 3: drop-ins, SupplementaryGroups=, effective DynamicUser= --------
+new_case dropin-user
+put "$delta" "$UNITS/frostmail.service" '[Service]' 'User=frostmail' 'ExecStart=/bin/true'
+put "$delta" "$UNITS/frostmail.service.d/10-user.conf" '[Service]' 'User=missing'
+put "$delta" "$SYSUSERS/frostmail.conf" 'u frostmail - "Frostmail" /var/lib/frostmail'
+run_guard
+check "a drop-in that sets User= fails when it is undeclared" 1 "names user missing"
+
+new_case dropin-of-base-unit
+put "$delta" "$UNITS/coder.service.d/10-x.conf" '[Service]' 'User=ghost'
+put "$delta" "$SYSUSERS/coder.conf" 'u coder - "Coder" /var/lib/coder'
+run_guard
+check "a drop-in for a unit the delta does not ship is checked" 1 "names user ghost"
+
+new_case template-dropin
+put "$delta" "$UNITS/app@one.service" '[Service]' 'User=app' 'ExecStart=/bin/true'
+put "$delta" "$UNITS/app@.service.d/10.conf" '[Service]' 'Group=nogroup2'
+put "$delta" "$SYSUSERS/app.conf" 'u app - "App" /var/lib/app'
+run_guard
+check "a template drop-in applies to an instance unit" 1 "names group nogroup2"
+
+new_case supplementary-group-missing
+put "$delta" "$UNITS/frostporter.service" \
+    '[Service]' 'User=frostporter' 'SupplementaryGroups=lodge-apps lodge-agents'
+put "$delta" "$SYSUSERS/frostporter.conf" \
+    'u frostporter - "Porter" /var/lib/frostporter' 'm frostporter lodge-apps'
+run_guard
+check "an undeclared SupplementaryGroups= entry fails" 1 "names group lodge-agents"
+
+new_case supplementary-group-declared
+put "$delta" "$UNITS/frostporter.service" \
+    '[Service]' 'User=frostporter' 'SupplementaryGroups=lodge-apps lodge-agents'
+put "$delta" "$SYSUSERS/frostporter.conf" \
+    'u frostporter - "Porter" /var/lib/frostporter' \
+    'm frostporter lodge-apps' 'g lodge-agents -'
+run_guard
+check "declared SupplementaryGroups= entries pass" 0 "OK (system units: 1"
+
+new_case supplementary-reset
+put "$delta" "$UNITS/app.service" \
+    '[Service]' 'User=app' 'SupplementaryGroups=bad' 'SupplementaryGroups=' 'SupplementaryGroups=good'
+put "$delta" "$SYSUSERS/app.conf" 'u app - "App" /var/lib/app' 'g good -'
+run_guard
+check "an empty SupplementaryGroups= clears the list" 0 "OK (system units: 1"
+
+new_case dynamic-then-static
+put "$delta" "$UNITS/app.service" \
+    '[Service]' 'DynamicUser=yes' 'DynamicUser=no' 'User=missing' 'ExecStart=/bin/true'
+run_guard
+check "DynamicUser=no after yes does not skip the account checks" 1 "names user missing"
+
+new_case last-assignment-wins
+put "$delta" "$UNITS/app.service" \
+    '[Service]' 'User=missing' 'User=ok' 'ExecStart=/bin/true'
+put "$delta" "$SYSUSERS/app.conf" 'u ok - "Ok" /var/lib/ok'
+run_guard
+check "the last User= assignment wins" 0 "OK (system units: 1"
+
+new_case wrong-section
+put "$delta" "$UNITS/app.service" \
+    '[Unit]' 'User=missing1' '[Service]' 'ExecStart=/bin/true' '[Install]' 'User=missing2'
+run_guard
+check "User= outside [Service] is not checked" 0 "OK (system units: 1"
+
+new_case line-continuation
+put "$delta" "$UNITS/app.service" \
+    '[Service]' 'User=app' "SupplementaryGroups=a \\" 'b'
+put "$delta" "$SYSUSERS/app.conf" 'u app - "App" /var/lib/app' 'g a -'
+run_guard
+check "a continued line names its second account" 1 "names group b"
+
+new_case locked-user
+put "$delta" "$UNITS/app.service" '[Service]' 'User=locked' 'ExecStart=/bin/true'
+put "$delta" "$SYSUSERS/app.conf" 'u! locked - "App" /'
+run_guard
+check "a u! line declares its user" 0 "OK (system units: 1"
 
 # --- repository check -------------------------------------------------------
 # The five suite sysexts wire the guard, and no other sysext does.

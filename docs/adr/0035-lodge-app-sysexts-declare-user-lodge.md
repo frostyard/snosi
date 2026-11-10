@@ -58,13 +58,27 @@ delta (`$BUILDROOT`) of a sysext and fails the build:
    its own `usr/lib/sysusers.d/*.conf` files. The line is copied byte for
    byte, so the first merge of any suite sysext creates the one account and
    every later merge is a no-op.
-3. **Every account a unit names:** for each `*.service` and `*.socket` under
-   `usr/lib/systemd/system`, every value of `User=`, `Group=`, `SocketUser=`
-   and `SocketGroup=` is declared by the delta's sysusers.d files. A user is
-   declared by a `u` line or by the first field of an `m` line; a group by a
-   `u` or `g` line or by the second field of an `m` line. An empty value,
-   `root`, a numeric id and a value with a `%` specifier are skipped, and so
-   is a unit with `DynamicUser=yes`.
+3. **Every account a unit names:** the guard checks each `*.service` and
+   `*.socket` under `usr/lib/systemd/system`, and also each unit name that has
+   a drop-in directory `<unit>.d/` there, because a drop-in for a unit the
+   base image ships still names accounts. It reads a unit's effective settings
+   as systemd does: the unit file first, then the drop-ins of `<unit>.d/*.conf`
+   and, for an instance name `a@b.service`, those of `a@.service.d/*.conf`,
+   sorted by file name; a line that ends with `\` joins the next line, and a
+   line that starts with `#` or `;` is a comment. Only keys in their own
+   section count: `User=`, `Group=`, `SupplementaryGroups=` and `DynamicUser=`
+   in `[Service]`, `SocketUser=` and `SocketGroup=` in `[Socket]`. Of the
+   scalar keys the last assignment wins and an empty value unsets it;
+   `SupplementaryGroups=` accumulates and an empty assignment clears the list.
+   The effective `User=`, `SocketUser=` and the effective `Group=`,
+   `SocketGroup=` and each `SupplementaryGroups=` entry must be declared by
+   the delta's sysusers.d files. A user is declared by a `u` or `u!` line or by
+   the first field of an `m` line; a group by a `u`, `u!` or `g` line or by the
+   second field of an `m` line. An empty value, `root`, a numeric id and a
+   value with a `%` specifier are skipped. An effective `DynamicUser=yes`
+   (yes, true, 1 or on) skips the user and group checks of that unit, but not
+   its socket's `SocketUser=` and `SocketGroup=`, because DynamicUser does not
+   apply to socket units.
 
 The five suite sysexts (lodge, notesd, maild, porterd, readd) wire the script
 in `FinalizeScripts=`. `test/sysext-lodge-accounts-guard-test.sh` holds the
