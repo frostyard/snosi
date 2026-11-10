@@ -22,7 +22,8 @@ This test checks that:
   5. the gschema override names the shipped theme and a font the image
      installs;
   6. GTK 3 flat buttons stay transparent in backdrop and disabled states.
-Checks 2, 3 and 6 also run on bad fixtures, so the guard is shown to fail.
+Checks 2 and 3 also run on bad fixtures, and check 6's resolver runs on a
+fixture with the old backdrop rule, so the guard is shown to fail.
 
 No root, no network, no GTK, no image build.
 """
@@ -216,10 +217,10 @@ def check_flat_buttons(css):
     states = [({"flat"}, set())]
     for classes, pseudos_list in [
         ({"flat"}, [{"backdrop"}, {"backdrop", "disabled"}, {"disabled"}]),
-        ({"titlebutton"}, [{"backdrop"}, {"backdrop", "disabled"}]),
-        ({"sidebar-button"}, [{"backdrop"}, {"backdrop", "disabled"}]),
-        ({"suggested-action", "flat"}, [{"backdrop"}, {"backdrop", "disabled"}]),
-        ({"destructive-action", "flat"}, [{"backdrop"}, {"backdrop", "disabled"}]),
+        ({"titlebutton"}, [{"backdrop"}, {"backdrop", "disabled"}, {"disabled"}]),
+        ({"sidebar-button"}, [{"backdrop"}, {"backdrop", "disabled"}, {"disabled"}]),
+        ({"suggested-action", "flat"}, [{"backdrop"}, {"backdrop", "disabled"}, {"disabled"}]),
+        ({"destructive-action", "flat"}, [{"backdrop"}, {"backdrop", "disabled"}, {"disabled"}]),
     ]:
         states.extend((classes, pseudos) for pseudos in pseudos_list)
     for classes, pseudos in states:
@@ -227,10 +228,10 @@ def check_flat_buttons(css):
         label += "".join(":" + p for p in sorted(pseudos))
         check(f"GTK 3 {label} has no background image",
               resolve(css, "button", classes, pseudos, "background-image") == "none")
-        if "backdrop" in pseudos:
+        if pseudos:
             check(f"GTK 3 {label} has a transparent border",
                   resolve(css, "button", classes, pseudos, "border-color") == "transparent")
-    check(f"GTK 3 flat-button transparency covers {len(states)} widget states", len(states) == 12)
+    check(f"GTK 3 flat-button transparency covers {len(states)} widget states", len(states) == 16)
     plain = resolve(css, "button", set(), {"backdrop"}, "background-image")
     check("a plain GTK 3 backdrop button retains its fill", plain not in (None, "none"))
     buggy = ("button:backdrop, button:backdrop.flat { background-image: image(@snow_panel_bright); }"
