@@ -23,7 +23,9 @@ The adapter relies on all of the following observed behavior:
 3. Direct `ukify build` can produce a MOK-signed UKI with the exact command
    line `rw composefs=?<ID> lockdown=integrity`: `rw`, exactly one
    `composefs=?<ID>` argument and `lockdown=integrity`
-   ([ADR-0027](adr/0027-seal-lockdown-into-the-secure-uki-command-line.md)).
+   ([ADR-0027](adr/0027-seal-lockdown-into-the-secure-uki-command-line.md)),
+   with `splash quiet` appended when the rootfs ships `plymouthd`
+   ([ADR-0033](adr/0033-seal-the-plymouth-splash-into-the-secure-uki-command-line.md)).
    The UKI has one kernel/initramfs pair, an RSA-2048 PCR public key, and four
    PCR policies per signer.
 4. `bootc install to-filesystem` consumes the resulting image as a Type #2 UKI

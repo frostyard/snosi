@@ -111,8 +111,10 @@ Snow and Snowfield carry the Snow Plymouth theme at
 `shared/snow/tree/usr/share/plymouth/themes/snow/`. The
 `shared/snow/tree/usr/lib/systemd/system/plymouth-start.service.d/10-wait-drm.conf`
 drop-in waits with bounded timeouts for `/dev/dri/card0` and `/dev/fb0`:
-Plymouth otherwise races DRM discovery or the fbcon handoff. Bootc/Firn
-provides installation kernel arguments. For persistent custom arguments,
+Plymouth otherwise races DRM discovery or the fbcon handoff. The splash
+arguments `splash quiet` are sealed into the UKI command line of every
+product that ships Plymouth (Snow, Snowfield, Sundog;
+[ADR-0033](../adr/0033-seal-the-plymouth-splash-into-the-secure-uki-command-line.md)). For persistent custom arguments,
 [`snosi-kargs`](../snosi-kargs.md) signs a global ESP addon measured into PCR
 12, outside signed-PCR-11 LUKS unlock policy.
 

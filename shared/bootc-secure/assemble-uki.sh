@@ -15,10 +15,31 @@ readonly CANDIDATE_UKIFY_INITRD="$CANDIDATE_UKIFY_WORK/initrd"
 
 die() { echo "Error: $*" >&2; exit 1; }
 valid_digest() { [[ ${1:-} =~ ^[[:xdigit:]]{128}$ ]]; }
-# The one definition of the sealed UKI command line (ADR-0027). The
-# linux-surface kernel does not raise lockdown under Secure Boot, and kargs.d
-# never reaches a Type #2 UKI, so lockdown=integrity must be sealed here.
-sealed_cmdline() { printf 'rw composefs=?%s lockdown=integrity' "$1"; }
+# The one definition of the sealed UKI command line (ADR-0027, ADR-0033).
+# linux-surface needs explicit lockdown in a Type #2 UKI. Only products
+# that ship Plymouth seal splash quiet; kargs.d never reaches this UKI.
+sealed_cmdline() { # digest splash
+    case ${2:-} in
+        0) printf 'rw composefs=?%s lockdown=integrity' "$1" ;;
+        1) printf 'rw composefs=?%s lockdown=integrity splash quiet' "$1" ;;
+        *) die "sealed command line splash selector must be 0 or 1" ;;
+    esac
+}
+
+rootfs_ships_plymouth() { # rootfs
+    local root=$1 path
+    path="$root/usr/sbin/plymouthd"
+    # Reject symlinked parents too: never inspect a host path outside rootfs.
+    [[ ! -L "$root/usr" && ! -L "$root/usr/sbin" && ! -L "$path" ]] ||
+        die "rootfs Plymouth daemon path must not contain symlinks: $path"
+    if [[ ! -e "$path" ]]; then
+        printf '0'
+    elif [[ -f "$path" && -x "$path" ]]; then
+        printf '1'
+    else
+        die "rootfs Plymouth daemon must be an executable regular file: $path"
+    fi
+}
 
 # shellcheck source=shared/bootc-secure/storage-digest-probe.sh
 source "$(dirname "${BASH_SOURCE[0]}")/storage-digest-probe.sh"
@@ -203,8 +224,8 @@ validate_pcrsig() { # json primary-public [previous-public]
     ' "$json" >/dev/null || die "PCR signature set does not match the requested signer mode"
 }
 
-validate_uki() ( # uki kernel initrd MOK-cert primary-pub digest [previous-pub]
-    local uki=$1 kernel=$2 initrd=$3 mok=$4 primary=$5 digest=$6 previous=${7:-} work cmdline section count sections
+validate_uki() ( # uki kernel initrd MOK-cert primary-pub digest splash [previous-pub]
+    local uki=$1 kernel=$2 initrd=$3 mok=$4 primary=$5 digest=$6 splash=$7 previous=${8:-} work cmdline expected_cmdline section count sections
     work=$(mktemp -d)
     trap 'rm -rf -- "$work"' RETURN
     sections=$(objdump -h "$uki") || die "UKI section table is unreadable"
@@ -219,8 +240,9 @@ validate_uki() ( # uki kernel initrd MOK-cert primary-pub digest [previous-pub]
     cmp -s "$initrd" "$work/initrd" || die "UKI initrd section mismatch"
     cmp -s "$primary" "$work/pcrpkey" || die "UKI PCR public-key section mismatch"
     cmdline=$(tr '\0' ' ' <"$work/cmdline")
-    [[ "$cmdline" == "$(sealed_cmdline "$digest")" ]] ||
-        die "UKI command line is not the pinned sealed shape (rw composefs=?<digest> lockdown=integrity)"
+    expected_cmdline=$(sealed_cmdline "$digest" "$splash") || return 1
+    [[ "$cmdline" == "$expected_cmdline" ]] ||
+        die "UKI command line must match the selected sealed shape: rw composefs=?<digest> lockdown=integrity or rw composefs=?<digest> lockdown=integrity splash quiet"
     validate_pcrsig "$work/pcrsig" "$work/pcrpkey" "$previous"
     sbverify --cert "$mok" "$uki" >/dev/null || die "UKI MOK Authenticode signature failed"
 )
@@ -376,13 +398,14 @@ verify_exposed_pcr_public_keys() { # active-public work-directory [previous-publ
         die "candidate changed previous PCR public key"
 }
 
-candidate_ukify_args() { # rootfs kernel initrd digest version previous-key output-array
-    local root=$1 kernel=$2 initrd=$3 digest=$4 version=$5 previous_key=$6 output_name=$7
+candidate_ukify_args() { # rootfs kernel initrd digest version previous-key splash output-array
+    local root=$1 kernel=$2 initrd=$3 digest=$4 version=$5 previous_key=$6 splash=$7 output_name=$8 cmdline
     local -n output="$output_name"
     rootfs_image_path "$root" "$kernel" >/dev/null
     rootfs_image_path "$root" "$initrd" >/dev/null
+    cmdline=$(sealed_cmdline "$digest" "$splash") || return 1
     output=(build --linux "$CANDIDATE_UKIFY_LINUX" --initrd "$CANDIDATE_UKIFY_INITRD"
-        --os-release @/usr/lib/os-release --cmdline "$(sealed_cmdline "$digest")"
+        --os-release @/usr/lib/os-release --cmdline "$cmdline"
         --uname "$version" --pcr-private-key "$CANDIDATE_UKIFY_PCR_KEY"
         --secureboot-private-key "$CANDIDATE_UKIFY_MOK_KEY"
         --secureboot-certificate "$CANDIDATE_UKIFY_MOK_CERT" --measure
@@ -399,7 +422,7 @@ candidate_ukify_args() { # rootfs kernel initrd digest version previous-key outp
 
 assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     local root=$1 mok_key=$2 mok_cert=$3 pcr_key=$4 pcr_cert=$5 previous_cert=${6:-}
-    local previous_key=${SNOSI_BOOTC_PREVIOUS_PCR_KEY:-} digest kernel_info version kernel initrd canonical_kernel canonical_initrd work gate primary_public previous_public uki ukify_status ukify_image
+    local splash sealed_shape previous_key=${SNOSI_BOOTC_PREVIOUS_PCR_KEY:-} digest kernel_info version kernel initrd canonical_kernel canonical_initrd work gate primary_public previous_public uki ukify_status ukify_image
     local -a ukify_args
     [[ -d "$root" ]] || die "rootfs directory is missing"
     validate_keypair "$mok_key" "$mok_cert" "MOK"
@@ -417,6 +440,7 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     digest=${SNOSI_BOOTC_SECURE_COMPOSEFS_DIGEST:-}
     valid_digest "$digest" || die "missing or invalid pre-injection OCI composefs digest"
     validate_root_contract "$root"
+    splash=$(rootfs_ships_plymouth "$root")
     [[ ${SNOSI_BOOTC_SECURE_BOOTC_VERSION:-} == "$BOOTC_SECURE_VERSION" ]] || die "assembly requires pinned bootc $BOOTC_SECURE_VERSION"
     credential_gate_scan_tree "$gate" rootfs "$root"
     refuse_existing_uki "$root"
@@ -436,7 +460,7 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
         install -m 0644 "$previous_public" "$work/previous.pub"
     fi
     stage_public_kernel_inputs "$root" "$kernel" "$initrd" "$work"
-    candidate_ukify_args "$root" "$kernel" "$initrd" "$digest" "$version" "$previous_key" ukify_args
+    candidate_ukify_args "$root" "$kernel" "$initrd" "$digest" "$version" "$previous_key" "$splash" ukify_args
     credential_gate_scan_tree "$gate" "ukify work directory before candidate execution" "$work"
     set +e
     run_candidate_ukify "$ukify_image" "$work" "$work/ukify.log" \
@@ -453,7 +477,9 @@ assemble() { # rootfs mok-key mok-cert pcr-key pcr-cert [previous-pcr-cert]
     mkdir -p "$(dirname "$uki")"
     install -m 0644 "$work/uki.efi" "$uki"
     sign_systemd_boot "$root" "$mok_cert"
-    validate_uki "$uki" "$canonical_kernel" "$canonical_initrd" "$mok_cert" "$primary_public" "$digest" "$previous_public"
+    validate_uki "$uki" "$canonical_kernel" "$canonical_initrd" "$mok_cert" "$primary_public" "$digest" "$splash" "$previous_public"
+    sealed_shape=$(sealed_cmdline "$digest" "$splash")
+    echo "Sealed UKI command line: $sealed_shape"
     credential_gate_scan_tree "$gate" rootfs "$root"
 }
 
@@ -466,7 +492,7 @@ remove_injected() { # rootfs
 }
 
 candidate_ukify_self_test() (
-    local top root work key cert pcr log args mok_mount cert_mount pcr_mount work_mount empty_args status
+    local top root work key cert pcr log args mok_mount cert_mount pcr_mount work_mount empty_args status splash
     local -a fixture_args expected_args
     top=$(mktemp -d); trap 'rm -rf -- "$top"' RETURN
     root="$top/root"; work="$top/work-single"; log="$work/ukify.log"; args="$top/podman.args"
@@ -486,7 +512,7 @@ EOF
         die "candidate unequal credential owners accepted"
     fi
     candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
-        fixture one "" fixture_args
+        fixture one "" 0 fixture_args
     expected_args=(build --linux /run/snosi-ukify-work/linux --initrd /run/snosi-ukify-work/initrd
         --os-release @/usr/lib/os-release --cmdline 'rw composefs=?fixture lockdown=integrity' --uname one
         --pcr-private-key "$CANDIDATE_UKIFY_PCR_KEY" --secureboot-private-key "$CANDIDATE_UKIFY_MOK_KEY"
@@ -496,6 +522,24 @@ EOF
     for index in "${!expected_args[@]}"; do
         [[ ${fixture_args[index]} == "${expected_args[index]}" ]] || die "candidate ukify argument translation is incorrect"
     done
+    mkdir -p "$root/usr/sbin"
+    touch "$root/usr/sbin/plymouthd"
+    chmod +x "$root/usr/sbin/plymouthd"
+    splash=$(rootfs_ships_plymouth "$root")
+    candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
+        fixture one "" "$splash" fixture_args
+    expected_args[8]='rw composefs=?fixture lockdown=integrity splash quiet'
+    for index in "${!expected_args[@]}"; do
+        [[ ${fixture_args[index]} == "${expected_args[index]}" ]] || die "Plymouth candidate ukify argument translation is incorrect"
+    done
+    rm "$root/usr/sbin/plymouthd"
+    ln -s "$root/usr/lib/modules/one/vmlinuz" "$root/usr/sbin/plymouthd"
+    if (rootfs_ships_plymouth "$root") >/dev/null 2>&1; then
+        die "candidate fixture accepted a symlinked Plymouth daemon"
+    fi
+    rm "$root/usr/sbin/plymouthd"
+    candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
+        fixture one "" 0 fixture_args
     cat >"$top/bin/podman" <<'EOF'
 #!/bin/bash
 set -euo pipefail
@@ -729,7 +773,7 @@ EOF
     local -a dual_ukify_args
     mkdir "$dual_work"; openssl pkey -in "$pcr" -pubout -out "$dual_work/pcr.pub" >/dev/null
     candidate_ukify_args "$root" "$root/usr/lib/modules/one/vmlinuz" "$root/usr/lib/modules/one/initramfs.img" \
-        fixture one "$previous" dual_ukify_args
+        fixture one "$previous" 0 dual_ukify_args
     PATH="$top/bin:$PATH" CANDIDATE_UKIFY_TEST_ARGS="$dual_args" CANDIDATE_UKIFY_TEST_PRIVATE_KEY="$pcr" \
         run_candidate_ukify localhost/snosi-bootc-secure-first-fixture "$dual_work" "$dual_work/ukify.log" "$key" "$cert" "$pcr" "$previous" -- \
         "${dual_ukify_args[@]}"
@@ -902,49 +946,113 @@ EOF
 [[ ! -e "${@: -1}.bad-signature" ]]
 EOF
     chmod +x "$work/bin/objcopy" "$work/bin/objdump" "$work/bin/sbverify"
-    PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)"
+    PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)" 0
     for section in cmdline linux initrd pcrpkey pcrsig; do
         cp "$work/uki.$section" "$work/uki.$section.saved"
         printf 'mutated' >"$work/uki.$section"
-        if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+        if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)" 0) >/dev/null 2>&1; then
             die "mutation fixture accepted UKI .$section mutation"
         fi
         mv "$work/uki.$section.saved" "$work/uki.$section"
     done
     touch "$work/uki.duplicate-pcrsig"
-    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)" 0) >/dev/null 2>&1; then
         die "mutation fixture accepted duplicate UKI .pcrsig sections"
     fi
     rm "$work/uki.duplicate-pcrsig"
     touch "$work/uki.bad-signature"
-    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)" 0) >/dev/null 2>&1; then
         die "mutation fixture accepted UKI Authenticode mutation"
     fi
     rm "$work/uki.bad-signature"
     cp "$work/uki.cmdline" "$work/uki.cmdline.saved"
     printf 'rw composefs=?%0128d' 0 >"$work/uki.cmdline"
-    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)" 0) >/dev/null 2>&1; then
         die "mutation fixture accepted the old command line shape without lockdown=integrity"
     fi
     printf 'rw composefs=?%0128d lockdown=none' 0 >"$work/uki.cmdline"
-    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)" 0) >/dev/null 2>&1; then
         die "mutation fixture accepted lockdown=none on the sealed command line"
     fi
     printf 'rw composefs=?%0128d lockdown=integrity lockdown=none' 0 >"$work/uki.cmdline"
-    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)" 0) >/dev/null 2>&1; then
         die "mutation fixture accepted a second lockdown token after lockdown=integrity"
     fi
     printf 'rw composefs=?%0128d lockdown=confidentiality' 0 >"$work/uki.cmdline"
-    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)") >/dev/null 2>&1; then
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)" 0) >/dev/null 2>&1; then
         die "mutation fixture accepted lockdown=confidentiality instead of the exact sealed shape"
     fi
     mv "$work/uki.cmdline.saved" "$work/uki.cmdline"
-    PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)"
+    PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$(printf '%0128d' 0)" 0
+
+    local digest splash_result selector suffix
+    digest=$(printf '%0128d' 0)
+    printf 'rw composefs=?%s lockdown=integrity splash quiet' "$digest" >"$work/uki.cmdline"
+    PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$digest" 1
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$digest" 0) >/dev/null 2>&1; then
+        die "splash fixture accepted splash quiet without Plymouth"
+    fi
+    printf 'rw composefs=?%s lockdown=integrity' "$digest" >"$work/uki.cmdline"
+    if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$digest" 1) >/dev/null 2>&1; then
+        die "splash fixture accepted missing splash quiet for Plymouth"
+    fi
+    for suffix in 'lockdown=integrity splash quiet lockdown=none' \
+        'lockdown=integrity splash quiet plymouth.ignore-serial-consoles' 'splash quiet'; do
+        printf 'rw composefs=?%s %s' "$digest" "$suffix" >"$work/uki.cmdline"
+        if (PATH="$work/bin:$PATH" validate_uki "$work/uki" "$work/kernel" "$work/initrd" "$work/cert" "$work/pub" "$digest" 1) >/dev/null 2>&1; then
+            die "splash fixture accepted invalid sealed suffix: $suffix"
+        fi
+    done
+    for selector in '' 2; do
+        if (sealed_cmdline "$digest" "$selector") >/dev/null 2>&1; then
+            die "sealed command line accepted invalid splash selector: '$selector'"
+        fi
+    done
+    mkdir -p "$work/root/usr/sbin"
+    splash_result=$(rootfs_ships_plymouth "$work/root")
+    [[ $splash_result == 0 ]] || die "absent Plymouth daemon did not select splash 0"
+    touch "$work/root/usr/sbin/plymouthd"
+    chmod +x "$work/root/usr/sbin/plymouthd"
+    splash_result=$(rootfs_ships_plymouth "$work/root")
+    [[ $splash_result == 1 ]] || die "executable Plymouth daemon did not select splash 1"
+    chmod -x "$work/root/usr/sbin/plymouthd"
+    if (rootfs_ships_plymouth "$work/root") >/dev/null 2>&1; then
+        die "Plymouth detection accepted a non-executable regular file"
+    fi
+    rm "$work/root/usr/sbin/plymouthd"
+    ln -s /missing-plymouth-fixture "$work/root/usr/sbin/plymouthd"
+    if (rootfs_ships_plymouth "$work/root") >/dev/null 2>&1; then
+        die "Plymouth detection accepted a dangling symlink"
+    fi
+    rm "$work/root/usr/sbin/plymouthd"
+    mkdir "$work/root/usr/sbin/plymouthd"
+    if (rootfs_ships_plymouth "$work/root") >/dev/null 2>&1; then
+        die "Plymouth detection accepted a directory"
+    fi
+    rmdir "$work/root/usr/sbin/plymouthd"
+    # A symlinked parent must fail even when its target holds an executable
+    # plymouthd outside the rootfs.
+    mkdir -p "$work/outside/sbin"
+    touch "$work/outside/sbin/plymouthd"
+    chmod +x "$work/outside/sbin/plymouthd"
+    rmdir "$work/root/usr/sbin"
+    ln -s "$work/outside/sbin" "$work/root/usr/sbin"
+    if (rootfs_ships_plymouth "$work/root") >/dev/null 2>&1; then
+        die "Plymouth detection followed a symlinked usr/sbin out of the rootfs"
+    fi
+    rm "$work/root/usr/sbin"
+    rmdir "$work/root/usr"
+    ln -s "$work/outside" "$work/root/usr"
+    if (rootfs_ships_plymouth "$work/root") >/dev/null 2>&1; then
+        die "Plymouth detection followed a symlinked usr out of the rootfs"
+    fi
+    rm "$work/root/usr"
 }
 
 validate() { # rootfs image mok-cert pcr-cert [previous-pcr-cert]
-    local root=$1 image=$2 mok=$3 pcr=$4 previous=${5:-} version kernel initrd canonical_kernel canonical_initrd digest uki loader source work
+    local root=$1 image=$2 mok=$3 pcr=$4 previous=${5:-} version kernel initrd canonical_kernel canonical_initrd digest uki loader source work splash
     validate_root_contract "$root"
+    splash=$(rootfs_ships_plymouth "$root")
     kernel_info=$(discover_kernel "$root"); IFS=$'\t' read -r version kernel initrd <<<"$kernel_info"
     canonical_kernel=$(rootfs_source_path "$root" "$kernel")
     canonical_initrd=$(rootfs_source_path "$root" "$initrd")
@@ -959,7 +1067,7 @@ validate() { # rootfs image mok-cert pcr-cert [previous-pcr-cert]
     work=$(mktemp -d); trap 'rm -rf -- "$work"' RETURN
     openssl pkey -pubin -in "$pcr" -pubout -out "$work/pcr.pub"
     [[ -z "$previous" ]] || openssl pkey -pubin -in "$previous" -pubout -out "$work/previous.pub"
-    validate_uki "$uki" "$canonical_kernel" "$canonical_initrd" "$mok" "$work/pcr.pub" "$digest" "${previous:+$work/previous.pub}"
+    validate_uki "$uki" "$canonical_kernel" "$canonical_initrd" "$mok" "$work/pcr.pub" "$digest" "$splash" "${previous:+$work/previous.pub}"
 }
 
 case ${1:-} in

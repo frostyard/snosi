@@ -165,18 +165,51 @@ if grep -q '^KernelCommandLine=' "$secure"; then
     echo "bootc secure fragment must use bootc kargs.d, not mkosi KernelCommandLine=" >&2
     exit 1
 fi
+# The same holds for every product input: a KernelCommandLine= line there
+# reaches no bootc product (the dead Snow splash line, ADR-0033). Kernel
+# arguments of a product come only from sealed_cmdline() in assemble-uki.sh.
+# The Firn installer ISO is not a bootc product and keeps its own.
+# The file list must come from git and must contain the product
+# compositions, so the guard cannot pass on an empty list.
+conf_files=$(git -C "$root" ls-files -- '*.conf') || {
+    echo "KernelCommandLine= guard: git ls-files failed" >&2; exit 1;
+}
+conf_files=$(grep -Ev '^(mkosi\.profiles|shared)/firn-installer/' <<<"$conf_files") || true
+for required in shared/composition/snow/mkosi.conf shared/composition/sundog/mkosi.conf \
+    shared/composition/floe/mkosi.conf; do
+    grep -Fqx "$required" <<<"$conf_files" || {
+        echo "KernelCommandLine= guard: file list lacks $required" >&2; exit 1;
+    }
+done
+mapfile -t conf_list <<<"$conf_files"
+set +e
+kcl_hits=$(cd "$root" && grep -ln '^KernelCommandLine=' -- "${conf_list[@]}")
+kcl_status=$?
+set -e
+if [[ $kcl_status -eq 0 ]]; then
+    echo "mkosi KernelCommandLine= reaches no bootc product; seal arguments in assemble-uki.sh (ADR-0033):" >&2
+    printf '  %s\n' "$kcl_hits" >&2
+    exit 1
+elif [[ $kcl_status -ne 1 ]]; then
+    echo "KernelCommandLine= guard: grep failed (status $kcl_status)" >&2
+    exit 1
+fi
+echo "KernelCommandLine= guard: checked ${#conf_list[@]} .conf files"
 kargs="$tree/usr/lib/bootc/kargs.d/10-lockdown.toml"
 [[ -f "$kargs" ]]
 grep -Fqx 'kargs = ["lockdown=integrity"]' "$kargs"
 
 # kargs.d never reaches a Type #2 UKI, and the linux-surface kernel does not
-# raise lockdown under Secure Boot. The sealed UKI command line carries
-# lockdown=integrity (ADR-0027); its one definition is sealed_cmdline().
+# raise lockdown under Secure Boot. Both shapes seal lockdown=integrity;
+# Plymouth products also seal splash quiet (ADR-0027, ADR-0033).
 assembler="$root/shared/bootc-secure/assemble-uki.sh"
-grep -Fqx "sealed_cmdline() { printf 'rw composefs=?%s lockdown=integrity' \"\$1\"; }" "$assembler" || {
-    echo "assemble-uki.sh must define the sealed shape rw composefs=?<digest> lockdown=integrity" >&2
+sealed_definition=$(awk '/^sealed_cmdline\(\)/ { inside = 1 } inside { print } inside && /^}/ { exit }' "$assembler")
+if ! grep -Fq "printf 'rw composefs=?%s lockdown=integrity'" <<<"$sealed_definition" ||
+    ! grep -Fq "printf 'rw composefs=?%s lockdown=integrity splash quiet'" <<<"$sealed_definition" ||
+    ! grep -q '^rootfs_ships_plymouth() {' "$assembler"; then
+    echo "assemble-uki.sh must define both sealed lockdown shapes and rootfs_ships_plymouth (ADR-0027, ADR-0033)" >&2
     exit 1
-}
+fi
 
 [[ -s "$root/shared/native-ab/keys/mok-2026.crt" ]]
 [[ -s "$root/shared/native-ab/keys/pcr-signing-2026.pub" ]]
