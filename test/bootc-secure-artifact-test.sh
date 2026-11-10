@@ -274,11 +274,117 @@ STUB
     }
 )
 
+# Independent product/Plymouth check of the sealed shape (ADR-0027, ADR-0033).
+validate_sealed_splash() ( # rootfs
+    local root=$1 id uki scratch cmdline token splash=0 quiet=0
+    local -a tokens
+    [[ -f "$root/usr/lib/os-release" ]] || {
+        echo "Error: rootfs os-release is missing" >&2; return 1;
+    }
+    id=$(grep '^ID=' "$root/usr/lib/os-release" | sed -E "s/^ID=//; s/^[\"']//; s/[\"']$//") || id=""
+    case $id in
+        snow|snowfield|sundog|floe) ;;
+        *) echo "Error: unsupported or missing rootfs ID: $id" >&2; return 1 ;;
+    esac
+    uki=$(find "$root/boot/EFI/Linux" -maxdepth 1 -type f -name '*.efi' -print -quit)
+    [[ -n $uki ]] || { echo "Error: assembled UKI is missing" >&2; return 1; }
+    scratch=$(mktemp -d)
+    trap 'rm -rf "$scratch"' EXIT
+    # Always write a disposable output; never modify the signed UKI.
+    objcopy --dump-section ".cmdline=$scratch/cmdline" "$uki" "$scratch/uki.copy" || {
+        echo "Error: failed to dump the UKI .cmdline section" >&2; return 1;
+    }
+    cmdline=$(tr '\0' ' ' <"$scratch/cmdline")
+    read -r -a tokens <<<"$cmdline"
+    for token in "${tokens[@]}"; do
+        case $token in
+            splash) splash=$((splash + 1)) ;;
+            quiet) quiet=$((quiet + 1)) ;;
+            nosplash|plymouth.*)
+                echo "Error: forbidden sealed splash token: $token" >&2; return 1 ;;
+        esac
+    done
+    if [[ $id == floe ]]; then
+        [[ $splash -eq 0 && $quiet -eq 0 ]] || {
+            echo "Error: floe must not seal splash or quiet tokens" >&2; return 1;
+        }
+        [[ ! -e "$root/usr/sbin/plymouthd" && ! -L "$root/usr/sbin/plymouthd" ]] || {
+            echo "Error: floe must not ship plymouthd" >&2; return 1;
+        }
+    else
+        [[ $splash -eq 1 && $quiet -eq 1 ]] || {
+            echo "Error: $id must seal exactly one splash and one quiet token" >&2; return 1;
+        }
+        [[ -e "$root/usr/sbin/plymouthd" ]] || {
+            echo "Error: $id must ship plymouthd" >&2; return 1;
+        }
+    fi
+    echo "bootc secure sealed splash command line matches $id"
+)
+
+sealed_splash_fixture() (
+    local fixture before after digest id case_name cmdline output status expected
+    fixture=$(mktemp -d)
+    trap 'rm -rf "$fixture"' EXIT
+    mkdir -p "$fixture/bin" "$fixture/root/boot/EFI/Linux" "$fixture/root/usr/lib" "$fixture/root/usr/sbin"
+    printf 'signed UKI fixture\n' >"$fixture/root/boot/EFI/Linux/test.efi"
+    before=$(sha256sum "$fixture/root/boot/EFI/Linux/test.efi")
+    digest=$(printf '%0128d' 0)
+    cat >"$fixture/bin/objcopy" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+[[ $# -eq 4 && $1 == --dump-section && $2 == .cmdline=* ]] || {
+    echo "stub objcopy: expected dump section, input, and explicit output arguments" >&2
+    exit 1
+}
+printf '%s\0' "$FIXTURE_CMDLINE" >"${2#.cmdline=}"
+cp -- "$3" "$4"
+STUB
+    chmod +x "$fixture/bin/objcopy"
+    for case_name in snow snowfield sundog floe snow-no-splash floe-splash floe-daemon \
+        snow-no-daemon sundog-duplicate snow-ignore-serial unknown missing-os-release \
+        snow-nosplash snow-no-quiet; do
+        id=snow; expected=1
+        cmdline="rw composefs=?$digest lockdown=integrity splash quiet"
+        touch "$fixture/root/usr/sbin/plymouthd"
+        case $case_name in
+            snow|snowfield|sundog) id=$case_name; expected=0 ;;
+            floe) id=floe; expected=0; cmdline="rw composefs=?$digest lockdown=integrity"; rm "$fixture/root/usr/sbin/plymouthd" ;;
+            snow-no-splash) cmdline="rw composefs=?$digest lockdown=integrity" ;;
+            floe-splash) id=floe; rm "$fixture/root/usr/sbin/plymouthd" ;;
+            floe-daemon) id=floe; cmdline="rw composefs=?$digest lockdown=integrity" ;;
+            snow-no-daemon) rm "$fixture/root/usr/sbin/plymouthd" ;;
+            sundog-duplicate) id=sundog; cmdline="rw composefs=?$digest lockdown=integrity splash splash quiet" ;;
+            snow-ignore-serial) cmdline+=" plymouth.ignore-serial-consoles" ;;
+            unknown) id=debian ;;
+            missing-os-release) ;;
+            snow-nosplash) cmdline+=" nosplash" ;;
+            snow-no-quiet) cmdline="rw composefs=?$digest lockdown=integrity splash" ;;
+        esac
+        printf 'ID="%s"\n' "$id" >"$fixture/root/usr/lib/os-release"
+        [[ $case_name != missing-os-release ]] || rm "$fixture/root/usr/lib/os-release"
+        set +e
+        output=$(PATH="$fixture/bin:$PATH" FIXTURE_CMDLINE="$cmdline" \
+            validate_sealed_splash "$fixture/root" 2>&1)
+        status=$?
+        set -e
+        [[ $status -eq $expected && ( $expected -eq 0 || $output == *"Error: "* ) ]] || {
+            echo "Error: sealed splash fixture failed: $case_name ($output)" >&2; return 1;
+        }
+        after=$(sha256sum "$fixture/root/boot/EFI/Linux/test.efi")
+        [[ $after == "$before" ]] || {
+            echo "Error: sealed splash validation modified the signed UKI: $case_name" >&2; return 1;
+        }
+    done
+    echo "bootc secure sealed splash fixtures passed"
+)
+
 if [[ ${1:-} == --fixtures ]]; then
     "$ASSEMBLER" --self-test
     "$ASSEMBLER" --credential-self-test
     gpt_auto_fixture
     sealed_lockdown_fixture
+    sealed_splash_fixture
     echo "bootc secure artifact fixtures passed"
     exit 0
 fi
@@ -296,5 +402,6 @@ done
 
 "$ASSEMBLER" --validate "$ROOTFS" "$IMAGE" "$MOK_CERT" "$PCR_CERT" "$PREVIOUS_PCR_CERT"
 validate_sealed_lockdown "$ROOTFS"
+validate_sealed_splash "$ROOTFS"
 validate_gpt_auto_cryptsetup
 echo "bootc secure artifact validation passed"

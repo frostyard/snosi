@@ -161,6 +161,10 @@ the secure installation subset. The fragment supplies MOK/PCR public
 identities and the required initramfs tooling. The sealed UKI command line
 carries `lockdown=integrity`
 ([ADR-0027](../adr/0027-seal-lockdown-into-the-secure-uki-command-line.md)).
+When the rootfs ships `usr/sbin/plymouthd` (Snow, Snowfield, Sundog),
+`assemble-uki.sh` appends `splash quiet`; Floe keeps the plain line
+([ADR-0033](../adr/0033-seal-the-plymouth-splash-into-the-secure-uki-command-line.md)).
+mkosi `KernelCommandLine=` reaches no bootc product.
 The fragment's bootc kargs.d file stays, but it does not reach a Type #2 UKI. Private keys
 remain caller-owned. `build-images.yml` checks supplied credentials against
 `shared/native-ab/keys/mok-2026.crt` and
@@ -261,8 +265,11 @@ secure bootc installations. It is measured into PCR 12 and excluded from the
 signed-PCR-11 unlock policy; consult [the operator contract](../snosi-kargs.md).
 The Snow Plymouth theme and bounded DRM/fbcon barrier ship from
 `shared/snow/tree/`, including
-`shared/snow/tree/usr/lib/systemd/system/plymouth-start.service.d/10-wait-drm.conf`.
-Firn supplies the bootc installation kernel arguments.
+`shared/snow/tree/usr/lib/systemd/system/plymouth-start.service.d/10-wait-drm.conf`
+(real root only). `dracut --no-hostonly` puts Plymouth and the configured
+theme in the initramfs of every product that ships it, and the sealed
+`splash` argument selects the graphical theme
+([ADR-0033](../adr/0033-seal-the-plymouth-splash-into-the-secure-uki-command-line.md)).
 
 ## Publication input metadata
 

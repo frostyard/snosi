@@ -1,6 +1,6 @@
 # 0027 — Seal lockdown into the secure UKI command line
 
-- **Status:** Accepted
+- **Status:** Accepted; the sealed shape is amended by [ADR-0033](0033-seal-the-plymouth-splash-into-the-secure-uki-command-line.md) (products that ship Plymouth append `splash quiet`)
 - **Date:** 2026-11-04
 
 ## Context

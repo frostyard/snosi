@@ -108,10 +108,12 @@ removes its SSH host keys, which sshd-keygen regenerates on every boot.
 `docs/bootc-secure-operations.md` governs support claims and lifecycle gates;
 fixture success does not establish production Secure Boot support.
 The sealed UKI command line is `rw composefs=?<digest> lockdown=integrity`
-for all four products (ADR-0027); `validate_uki` and
-`test/bootc-secure-artifact-test.sh` enforce it. Never drop
+(ADR-0027), plus `splash quiet` when the rootfs ships `usr/sbin/plymouthd`
+(Snow, Snowfield, Sundog; ADR-0033). `sealed_cmdline` defines both shapes;
+`validate_uki` and `test/bootc-secure-artifact-test.sh` (per product)
+enforce them. Never drop
 `lockdown=integrity`: linux-surface does not raise lockdown under Secure Boot,
-and kargs.d does not reach a Type #2 UKI.
+and kargs.d and mkosi `KernelCommandLine=` do not reach a Type #2 UKI.
 
 Forky is a compatibility risk with Frostyard bootc/libostree debs, not a
 package-manager guarantee. Repeat that build/root check when either the
@@ -163,8 +165,9 @@ contract. Snow and Snowfield carry the Snow Plymouth theme from
 `shared/snow/tree/usr/share/plymouth/themes/snow/`. The live
 `shared/snow/tree/usr/lib/systemd/system/plymouth-start.service.d/10-wait-drm.conf`
 waits (bounded) for `/dev/dri/card0` and `/dev/fb0` so Plymouth does not
-race DRM discovery or the fbcon handoff. The bootc installer supplies its
-own kernel arguments; no native A/B cmdline mechanism is needed.
+race DRM discovery or the fbcon handoff (real root only: the initramfs
+does not carry it). The splash arguments come only from the sealed UKI
+command line (ADR-0033).
 
 ## Updates and publication
 
