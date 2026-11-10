@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=X-GNOME-Metatheme
+Name=Snow
+Comment=Frostyard design-system colours for GTK applications
+Encoding=UTF-8
+
+[X-GNOME-Metatheme]
+GtkTheme=Snow
+IconTheme=Adwaita
+CursorTheme=Adwaita

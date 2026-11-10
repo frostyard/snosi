@@ -1,0 +1,4 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later
+ * Snow is dark only: an application that asks for the dark variant gets the
+ * same stylesheet. */
+@import url("gtk.css");

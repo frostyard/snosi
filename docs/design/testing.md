@@ -106,6 +106,24 @@ login key (`AutomaticLogin`, `TimedLogin`) on a line that is not a comment,
 with or without an `=`. The retired live-ISO
 `shared/snow/tree/etc/gdm3/daemon.conf` set `AutomaticLogin=snow`; the Firn
 installer creates the only user an installed system has.
+`test/snow-gtk-theme-test.py` guards the Snow GTK theme
+([ADR-0034](../adr/0034-snow-gtk-theme.md)). It checks the sha256 pin of
+`test/fixtures/frostyard-design/colors.css`, the byte copy of core's design
+tokens. Every hex or `rgb()` colour in the theme's stylesheets must be one of
+those tokens; only the alpha may differ. The libadwaita layer may hold only
+`:root` variables, `@define-color` lines equal to their variables, and the
+one-property `banner` and `toast` rules. The skel `gtk.css` must be the
+single import of that layer. The gschema override must name `Snow` and the
+dark scheme, and its font must have its package in the Snow package list.
+It checks GTK 3 flat-button backdrop transparency. The day/night wallpaper
+must be the current output of
+`artwork/wallpaper/generate_snow_wallpaper.py --check`, paint only tokens
+(a named colour such as `white` fails), and be the pair that `snow.xml`,
+`picture-uri` and `picture-uri-dark` name. The palette, layer, cascade and
+wallpaper paint checks also run on bad fixtures. The test needs no GTK. The
+stylesheets were parsed with GTK 3.24 and 4.18 and rendered through
+Broadway, and the wallpapers were loaded through GdkPixbuf, when they were
+written; CI does not repeat any of that.
 `test/grd-no-tpm-access-test.sh` keeps the gnome-remote-desktop daemons off the
 TPM: in any tracked `gnome-remote-desktop*.service.d/` drop-in or
 `gnome-remote-desktop*.service` unit, and in any tracked `sysusers.d/*.conf`,

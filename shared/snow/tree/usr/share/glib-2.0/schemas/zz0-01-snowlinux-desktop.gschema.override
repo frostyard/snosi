@@ -4,6 +4,11 @@ favorite-apps=['microsoft-edge.desktop', 'com.microsoft.VSCode.desktop', 'org.gn
 
 [org.gnome.desktop.interface]
 enable-hot-corners=false
+color-scheme='prefer-dark'
+gtk-theme='Snow'
+accent-color='blue'
+font-name='Inter Variable 11'
+document-font-name='Inter Variable 11'
 
 [org.gnome.desktop.wm.preferences]
 button-layout='appmenu:minimize,maximize,close'
@@ -27,3 +32,10 @@ translate=true
 
 [org.gnome.desktop.app-folders]
 folder-children=['Utilities', 'Containers', 'Microsoft', 'AppStores', 'System']
+
+[org.gnome.desktop.background]
+picture-uri='file:///usr/share/backgrounds/snow/snow-l.svg'
+picture-uri-dark='file:///usr/share/backgrounds/snow/snow-d.svg'
+picture-options='zoom'
+primary-color='#06111d'
+secondary-color='#02131f'

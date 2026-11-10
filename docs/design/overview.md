@@ -118,6 +118,55 @@ product that ships Plymouth (Snow, Snowfield, Sundog;
 [`snosi-kargs`](../snosi-kargs.md) signs a global ESP addon measured into PCR
 12, outside signed-PCR-11 LUKS unlock policy.
 
+## Snow GTK theme
+
+Snow and Snowfield ship the Snow theme, built only from the colour tokens of
+frostyard/core's design system
+([ADR-0034](../adr/0034-snow-gtk-theme.md)). It has three layers under
+`shared/snow/tree/usr/share/themes/Snow/`:
+
+| Layer | File | Reaches |
+|---|---|---|
+| libadwaita colours | `libadwaita/gtk.css` | libadwaita apps, through each user's `~/.config/gtk-4.0/gtk.css` |
+| GTK 3 theme | `gtk-3.0/gtk.css` | GTK 3 apps, through `gtk-theme='Snow'` |
+| GTK 4 theme | `gtk-4.0/gtk.css` | GTK 4 apps without libadwaita (GTK's dark built-in theme) |
+
+libadwaita ignores `gtk-theme`, so a new account gets
+`/etc/skel/.config/gtk-4.0/gtk.css`, a single `@import` of the libadwaita
+layer. GTK loads that file at user priority, where any rule beats the
+application's own. The layer therefore sets only colour variables, their
+named colours and two one-property rules for libadwaita's fixed greys
+(`banner`, `toast`). Existing accounts keep stock colours until the user
+copies the skel file. Flatpak applications are not recoloured; they follow
+the dark scheme and blue accent through the portal. The
+`zz0-01-snowlinux-desktop.gschema.override` defaults are
+`color-scheme='prefer-dark'`, `gtk-theme='Snow'`, `accent-color='blue'` and
+the font `Inter Variable 11` from `fonts-inter-variable`.
+
+The wallpaper is a day/night pair in `shared/snow/tree/usr/share/backgrounds/snow/`:
+`snow-l.svg` for the light style (`picture-uri`) and `snow-d.svg` for the dark
+style (`picture-uri-dark`, so the default). `gnome-background-properties/snow.xml`
+lists the pair as "Snow" in Settings. `artwork/wallpaper/generate_snow_wallpaper.py`
+writes both SVGs from the hero series' ridge geometry
+(`artwork/hero/generate_hero_backgrounds.py`) on a 3:2 canvas, painted
+only with design tokens. Regenerate them with that script; never edit them
+by hand.
+
+`test/fixtures/frostyard-design/colors.css` is the sha256-pinned copy of
+core's tokens. `test/snow-gtk-theme-test.py` rejects:
+
+- a theme colour or wallpaper paint that is not a token;
+- any other rule in the libadwaita layer;
+- a named colour that differs from its variable;
+- a skel file that does more than import the layer;
+- a font setting whose package is missing;
+- a wallpaper SVG that differs from the generator's output, or that
+  `snow.xml` and the gschema defaults do not name.
+
+To change a colour, change the token in core first, copy the file again,
+update the pin and regenerate the wallpaper. Recheck the layer against
+libadwaita's `defaults-dark.css` when libadwaita moves.
+
 ## First login
 
 Snow and Snowfield start chairlift's first run at the first graphical login

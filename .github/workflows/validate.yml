@@ -162,6 +162,18 @@ jobs:
         # image build.
         run: ./test/first-login-trigger-test.sh
 
+      - name: Validate the Snow GTK theme
+        # Static guard (ADR-0034): the vendored copy of core's design tokens
+        # matches its pin; every colour the Snow theme writes is one of
+        # those tokens; the libadwaita layer, loaded at user priority, sets
+        # only colour variables and two allowlisted fixed-grey rules; the
+        # skel gtk.css only imports that layer; the gschema defaults name
+        # the shipped theme, an installed font and the day/night wallpaper,
+        # whose SVGs equal the generator's output and paint only tokens.
+        # GTK 3 flat buttons stay transparent in backdrop. No root, network,
+        # GTK, or image build.
+        run: python3 ./test/snow-gtk-theme-test.py
+
       - name: Validate remote desktop has no TPM access
         # Static guard: gnome-remote-desktop 48.1 seals RDP credentials in TPM
         # contexts that a reboot's TPM Reset invalidates (snosi#1131, PR #1191),
