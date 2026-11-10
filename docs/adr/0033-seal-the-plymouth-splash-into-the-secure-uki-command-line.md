@@ -106,10 +106,13 @@ no product table, and lockdown stays identical in both shapes.
   two DRM cards in one VM, `test/lib/vm.sh`). The bounded DRM and fbcon
   barrier
   `shared/snow/tree/usr/lib/systemd/system/plymouth-start.service.d/10-wait-drm.conf`
-  applies to the real root only; the initramfs does not carry it. A crash
+  applies to the Snow and Snowfield real root only: the initramfs does not
+  carry it, and Sundog does not include `shared/snow/tree`, so Sundog, on the
+  same backports kernel that the barrier's comment ties to #850, has no
+  barrier at all. A crash
   does not stop the boot, but it can degrade the system state. A visible
-  splash on real or VM graphics, and a clean boot state, are post-merge lab
-  checks; no PR job builds or boots the image.
+  splash on real or VM graphics, and a clean boot state, on Snow and on
+  Sundog, are post-merge lab checks; no PR job builds or boots the image.
 - A new product that ships `plymouthd` gets the splash shape without an
   assembler change, but `test/bootc-secure-artifact-test.sh` fails until its
   product list names it.

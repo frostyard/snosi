@@ -169,14 +169,32 @@ fi
 # reaches no bootc product (the dead Snow splash line, ADR-0033). Kernel
 # arguments of a product come only from sealed_cmdline() in assemble-uki.sh.
 # The Firn installer ISO is not a bootc product and keeps its own.
-kcl_hits=$(cd "$root" && git ls-files -- '*.conf' |
-    grep -Ev '^(mkosi\.profiles|shared)/firn-installer/' |
-    xargs -r grep -ln '^KernelCommandLine=' -- || true)
-if [[ -n $kcl_hits ]]; then
+# The file list must come from git and must contain the product
+# compositions, so the guard cannot pass on an empty list.
+conf_files=$(git -C "$root" ls-files -- '*.conf') || {
+    echo "KernelCommandLine= guard: git ls-files failed" >&2; exit 1;
+}
+conf_files=$(grep -Ev '^(mkosi\.profiles|shared)/firn-installer/' <<<"$conf_files") || true
+for required in shared/composition/snow/mkosi.conf shared/composition/sundog/mkosi.conf \
+    shared/composition/floe/mkosi.conf; do
+    grep -Fqx "$required" <<<"$conf_files" || {
+        echo "KernelCommandLine= guard: file list lacks $required" >&2; exit 1;
+    }
+done
+mapfile -t conf_list <<<"$conf_files"
+set +e
+kcl_hits=$(cd "$root" && grep -ln '^KernelCommandLine=' -- "${conf_list[@]}")
+kcl_status=$?
+set -e
+if [[ $kcl_status -eq 0 ]]; then
     echo "mkosi KernelCommandLine= reaches no bootc product; seal arguments in assemble-uki.sh (ADR-0033):" >&2
     printf '  %s\n' "$kcl_hits" >&2
     exit 1
+elif [[ $kcl_status -ne 1 ]]; then
+    echo "KernelCommandLine= guard: grep failed (status $kcl_status)" >&2
+    exit 1
 fi
+echo "KernelCommandLine= guard: checked ${#conf_list[@]} .conf files"
 kargs="$tree/usr/lib/bootc/kargs.d/10-lockdown.toml"
 [[ -f "$kargs" ]]
 grep -Fqx 'kargs = ["lockdown=integrity"]' "$kargs"

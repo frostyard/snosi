@@ -80,8 +80,8 @@ On Snow, Snowfield and Sundog the embedded command line also carries
 `splash quiet`
 ([ADR-0033](adr/0033-seal-the-plymouth-splash-into-the-secure-uki-command-line.md)).
 An addon cannot remove them, but `nosplash` or `plymouth.enable=0` stops
-`plymouth-start.service`, and `loglevel=7` or `systemd.show_status=1` brings
-back the boot text.
+`plymouth-start.service`. With one of those, `loglevel=7` or
+`systemd.show_status=1` also brings back the boot text.
 
 The CLI refuses arguments that can replace the verified root, redirect early
 userspace, or create a persistent root-shell path:

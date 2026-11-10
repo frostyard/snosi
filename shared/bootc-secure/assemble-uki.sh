@@ -1029,6 +1029,24 @@ EOF
     if (rootfs_ships_plymouth "$work/root") >/dev/null 2>&1; then
         die "Plymouth detection accepted a directory"
     fi
+    rmdir "$work/root/usr/sbin/plymouthd"
+    # A symlinked parent must fail even when its target holds an executable
+    # plymouthd outside the rootfs.
+    mkdir -p "$work/outside/sbin"
+    touch "$work/outside/sbin/plymouthd"
+    chmod +x "$work/outside/sbin/plymouthd"
+    rmdir "$work/root/usr/sbin"
+    ln -s "$work/outside/sbin" "$work/root/usr/sbin"
+    if (rootfs_ships_plymouth "$work/root") >/dev/null 2>&1; then
+        die "Plymouth detection followed a symlinked usr/sbin out of the rootfs"
+    fi
+    rm "$work/root/usr/sbin"
+    rmdir "$work/root/usr"
+    ln -s "$work/outside" "$work/root/usr"
+    if (rootfs_ships_plymouth "$work/root") >/dev/null 2>&1; then
+        die "Plymouth detection followed a symlinked usr out of the rootfs"
+    fi
+    rm "$work/root/usr"
 }
 
 validate() { # rootfs image mok-cert pcr-cert [previous-pcr-cert]
