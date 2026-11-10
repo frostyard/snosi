@@ -88,8 +88,9 @@ operation; the bootc path bind-mounts `/` to see below the live `/etc` mount.
 `check-user-tmpfiles-guard.sh` checks tracked source paths and rule contents,
 not target mappings, build output or package files. It rejects paths at or
 under `usr/lib/user-tmpfiles.d` and rules under any `user-tmpfiles.d/` that
-name `.config/containers`. This guards deletion, not relocation, of the
-retired per-user policy that would hide `/etc/containers/policy.json`; see [the policy-scope plan, Phase 3](../plans/2026-10-29-container-policy-scope-plan.md#phase-3--retire-rootless-provisioning-done).
+name `.config/containers`. It keeps the retired per-user policy deleted: it
+also fails if that rule moves to a `user-tmpfiles.d` directory that systemd
+reads, where it would hide `/etc/containers/policy.json`; see [the policy-scope plan, Phase 3](../plans/2026-10-29-container-policy-scope-plan.md#phase-3--retire-rootless-provisioning-done).
 
 All products use base's zram swap policy: LZ4 compression, half of RAM capped
 at 4 GiB. The generator package and configuration have one owner in base.
