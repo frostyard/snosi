@@ -4,6 +4,11 @@ favorite-apps=['microsoft-edge.desktop', 'com.microsoft.VSCode.desktop', 'org.gn
 
 [org.gnome.desktop.interface]
 enable-hot-corners=false
+color-scheme='prefer-dark'
+gtk-theme='Snow'
+accent-color='blue'
+font-name='Inter Variable 11'
+document-font-name='Inter Variable 11'
 
 [org.gnome.desktop.wm.preferences]
 button-layout='appmenu:minimize,maximize,close'

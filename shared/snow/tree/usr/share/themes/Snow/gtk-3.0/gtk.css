@@ -1,0 +1,326 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Snow for GTK 3: GTK's built-in Adwaita dark theme, recoloured with
+ * frostyard/core's design tokens (pinned copy:
+ * test/fixtures/frostyard-design/colors.css). The import supplies every
+ * widget's geometry; the rules below repeat Adwaita's own selectors for the
+ * surfaces, controls and states they recolour, and win because they come
+ * later in the same stylesheet. A widget not listed keeps Adwaita's grey.
+ * See docs/adr/0034-snow-gtk-theme.md.
+ */
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+
+/* Design tokens */
+@define-color snow_ink #06111d;
+@define-color snow_deep #081b2d;
+@define-color snow_panel #0d263b;
+@define-color snow_panel_bright #0d2a41;
+@define-color snow_card #0f3048;
+@define-color snow_card_alt #17445e;
+@define-color snow_code #061826;
+@define-color snow_line alpha(#a2deff, 0.18);
+@define-color snow_line_strong #2c6380;
+@define-color snow_ice #aee9ff;
+@define-color snow_sky #47b8ef;
+@define-color snow_blue #168bd0;
+@define-color snow_link #8eddf9;
+@define-color snow_text #edf8ff;
+@define-color snow_muted #b6d0df;
+@define-color snow_footer #7799ab;
+@define-color snow_on_primary #02131f;
+@define-color snow_ok #7edafa;
+@define-color snow_warn #e0b15c;
+@define-color snow_danger #e07a72;
+@define-color snow_danger_dim #3a181e;
+
+/* Colours GTK 3 applications read by name */
+@define-color theme_fg_color @snow_text;
+@define-color theme_text_color @snow_text;
+@define-color theme_bg_color @snow_deep;
+@define-color theme_base_color @snow_ink;
+@define-color theme_selected_bg_color @snow_sky;
+@define-color theme_selected_fg_color @snow_on_primary;
+@define-color insensitive_bg_color @snow_deep;
+@define-color insensitive_fg_color @snow_footer;
+@define-color insensitive_base_color @snow_ink;
+@define-color theme_unfocused_fg_color @snow_muted;
+@define-color theme_unfocused_text_color @snow_text;
+@define-color theme_unfocused_bg_color @snow_deep;
+@define-color theme_unfocused_base_color @snow_ink;
+@define-color theme_unfocused_selected_bg_color @snow_sky;
+@define-color theme_unfocused_selected_fg_color @snow_on_primary;
+@define-color unfocused_insensitive_color @snow_footer;
+@define-color borders @snow_line;
+@define-color unfocused_borders @snow_line;
+@define-color warning_color @snow_warn;
+@define-color error_color @snow_danger;
+@define-color success_color @snow_ok;
+@define-color content_view_bg @snow_ink;
+@define-color text_view_bg @snow_ink;
+@define-color wm_title @snow_text;
+@define-color wm_unfocused_title @snow_muted;
+@define-color wm_bg_a @snow_panel;
+@define-color wm_bg_b @snow_panel;
+
+/* Surfaces */
+.background { color: @snow_text; background-color: @snow_deep; }
+.background:backdrop { color: @snow_muted; background-color: @snow_deep; }
+
+.view, iconview, .view text, iconview text, textview text { color: @snow_text; caret-color: @snow_ice; background-color: @snow_ink; }
+.view:backdrop, iconview:backdrop, .view text:backdrop, iconview text:backdrop, textview text:backdrop { color: @snow_muted; background-color: @snow_ink; }
+.view:disabled, iconview:disabled, .view text:disabled, iconview text:disabled, textview text:disabled { color: @snow_footer; background-color: @snow_ink; }
+textview border { background-color: @snow_deep; }
+
+list { color: @snow_text; background-color: @snow_ink; border-color: @snow_line; }
+list:backdrop { color: @snow_muted; background-color: @snow_ink; border-color: @snow_line; }
+row:hover, row.activatable:hover { background-color: alpha(@snow_ice, 0.06); }
+
+frame > border, .frame { border-color: @snow_line; }
+separator, .titlebar:not(headerbar) separator { background: @snow_line; }
+
+.sidebar, .sidebar:backdrop { background-color: @snow_panel; border-color: @snow_line; }
+.sidebar:not(separator):dir(ltr), .sidebar:not(separator).left,
+stacksidebar.sidebar:dir(ltr) list, stacksidebar.sidebar.left list { border-right: 1px solid @snow_line; }
+.sidebar:not(separator):dir(rtl), .sidebar:not(separator).right,
+stacksidebar.sidebar:dir(rtl) list, stacksidebar.sidebar.right list { border-left: 1px solid @snow_line; }
+separator.sidebar, separator.sidebar:backdrop { background-color: @snow_line; }
+
+/* Selection */
+.view:selected:focus, .view:selected, .view text:selected:focus,
+textview text:selected:focus, .view text:selected, textview text:selected,
+.view text selection:focus, .view text selection,
+textview text selection:focus, textview text selection,
+iconview:selected:focus, iconview:selected,
+iconview text selection:focus, iconview text selection,
+flowbox flowboxchild:selected, entry selection, modelbutton.flat:selected,
+.menuitem.button.flat:selected, spinbutton:not(.vertical) selection,
+treeview.view:selected:focus, treeview.view:selected, row:selected,
+calendar:selected, row.activatable:selected:backdrop, label selection,
+.content-view .tile:selected, .gtkstyle-fallback:selected {
+  color: @snow_on_primary;
+  background-color: @snow_sky;
+}
+placessidebar row:selected, placessidebar row:backdrop:selected { color: @snow_on_primary; }
+*:link, button:link, button:visited { color: @snow_link; }
+*:link:hover, button:link:hover { color: @snow_ice; }
+
+/* Header bars */
+.titlebar:not(headerbar), headerbar {
+  color: @snow_text;
+  border-color: @snow_line;
+  background: @snow_panel;
+  box-shadow: none;
+}
+.titlebar:backdrop:not(headerbar), headerbar:backdrop {
+  color: @snow_muted;
+  border-color: @snow_line;
+  background: @snow_deep;
+  box-shadow: none;
+}
+
+/* Buttons: flat panel blue, hairline edge, square-ish corners */
+button, notebook > header > tabs > arrow {
+  color: @snow_text;
+  border-color: @snow_line;
+  border-radius: 4px;
+  background-image: image(@snow_panel_bright);
+  box-shadow: none;
+  text-shadow: none;
+  -gtk-icon-shadow: none;
+}
+button:hover, notebook > header > tabs > arrow:hover {
+  color: @snow_ice;
+  border-color: @snow_line_strong;
+  background-image: image(@snow_card);
+  text-shadow: none;
+  -gtk-icon-shadow: none;
+  box-shadow: none;
+}
+button:active, button:checked,
+notebook > header > tabs > arrow:active, notebook > header > tabs > arrow:checked,
+headerbar button.toggle:checked, headerbar stackswitcher button:checked {
+  color: @snow_text;
+  border-color: @snow_line_strong;
+  background-image: image(@snow_card_alt);
+  box-shadow: none;
+}
+button:backdrop, button:backdrop.flat {
+  color: @snow_muted;
+  border-color: @snow_line;
+  background-image: image(@snow_panel_bright);
+}
+button:disabled, button:backdrop:disabled, button:backdrop.flat:disabled {
+  color: @snow_footer;
+  border-color: @snow_line;
+  background-image: image(@snow_deep);
+}
+button.flat, button.sidebar-button, button.titlebutton,
+notebook > header > tabs > arrow.flat {
+  border-color: transparent;
+  background-color: transparent;
+  background-image: none;
+}
+button.flat:hover, button.titlebutton:hover {
+  border-color: transparent;
+  background-image: image(alpha(@snow_ice, 0.08));
+}
+button.circular:not(.flat):not(.osd):not(:checked):not(:active):not(:disabled):not(:backdrop) {
+  border-color: @snow_line;
+  background-image: image(@snow_panel_bright);
+}
+button.circular:hover:not(.osd):not(:checked):not(:active):not(:disabled):not(:backdrop) {
+  border-color: @snow_line_strong;
+  background-image: image(@snow_card);
+}
+
+button.suggested-action {
+  color: @snow_on_primary;
+  border-color: @snow_blue;
+  background-image: linear-gradient(135deg, #5ac9f7, #1584ca);
+}
+button.suggested-action:hover {
+  color: @snow_on_primary;
+  border-color: @snow_sky;
+  background-image: image(@snow_sky);
+}
+button.suggested-action:active, button.suggested-action:checked {
+  color: @snow_on_primary;
+  border-color: @snow_blue;
+  background-image: image(@snow_blue);
+}
+button.suggested-action:backdrop, button.suggested-action.flat:backdrop {
+  color: @snow_on_primary;
+  border-color: @snow_blue;
+  background-image: image(@snow_sky);
+}
+button.suggested-action.flat { color: @snow_sky; }
+
+button.destructive-action {
+  color: @snow_danger;
+  border-color: alpha(@snow_danger, 0.2);
+  background-image: image(@snow_danger_dim);
+}
+button.destructive-action:hover {
+  color: @snow_danger;
+  border-color: alpha(@snow_danger, 0.4);
+  background-image: image(@snow_danger_dim);
+}
+button.destructive-action:active, button.destructive-action:checked {
+  color: @snow_text;
+  border-color: @snow_danger;
+  background-image: image(@snow_danger_dim);
+}
+button.destructive-action:backdrop, button.destructive-action.flat:backdrop {
+  color: @snow_danger;
+  border-color: alpha(@snow_danger, 0.2);
+  background-image: image(@snow_danger_dim);
+}
+button.destructive-action.flat { color: @snow_danger; }
+
+/* Entries */
+spinbutton:not(.vertical), entry {
+  color: @snow_text;
+  border-color: @snow_line;
+  border-radius: 2px;
+  background-color: @snow_code;
+  box-shadow: none;
+}
+spinbutton:focus:not(.vertical), entry:focus {
+  border-color: @snow_sky;
+  box-shadow: inset 0 0 0 1px @snow_sky;
+}
+spinbutton:backdrop:not(.vertical), entry:backdrop {
+  color: @snow_muted;
+  border-color: @snow_line;
+  background-color: @snow_code;
+}
+spinbutton:disabled:not(.vertical), entry:disabled,
+spinbutton:backdrop:disabled:not(.vertical), entry:backdrop:disabled {
+  color: @snow_footer;
+  border-color: @snow_line;
+  background-color: @snow_deep;
+}
+spinbutton.error:not(.vertical), entry.error { color: @snow_danger; border-color: @snow_danger; }
+spinbutton.error:focus:not(.vertical), entry.error:focus { box-shadow: inset 0 0 0 1px @snow_danger; border-color: @snow_danger; }
+spinbutton.warning:not(.vertical), entry.warning { color: @snow_warn; border-color: @snow_warn; }
+spinbutton.warning:focus:not(.vertical), entry.warning:focus { box-shadow: inset 0 0 0 1px @snow_warn; border-color: @snow_warn; }
+spinbutton:not(.vertical) image:active, entry image:active { color: @snow_sky; }
+spinbutton:not(.vertical) progress, entry progress { border-color: @snow_sky; }
+
+/* Menus and popovers */
+menu, .menu, .context-menu { color: @snow_text; background-color: @snow_panel_bright; }
+menu menuitem:hover, .menu menuitem:hover, .context-menu menuitem:hover { color: @snow_on_primary; background-color: @snow_sky; }
+menubar > menuitem:hover, .menubar > menuitem:hover { box-shadow: inset 0 -3px @snow_sky; color: @snow_ice; }
+modelbutton.flat:hover, .menuitem.button.flat:hover { background-color: alpha(@snow_ice, 0.08); }
+popover.background, .csd popover.background { color: @snow_text; background-color: @snow_panel_bright; border-color: @snow_line; }
+popover.background:backdrop { background-color: @snow_panel_bright; }
+tooltip.background { color: @snow_text; background-color: @snow_panel_bright; border: 1px solid @snow_line; }
+
+/* Checks, radios, switches */
+check, radio { border-color: @snow_line_strong; background-image: image(@snow_code); box-shadow: none; }
+check:hover, radio:hover { background-image: image(@snow_panel_bright); }
+check:checked, radio:checked, check:indeterminate, radio:indeterminate {
+  color: @snow_on_primary;
+  border-color: @snow_sky;
+  background-image: image(@snow_sky);
+  box-shadow: none;
+}
+check:checked:hover, radio:checked:hover, check:indeterminate:hover, radio:indeterminate:hover { background-image: image(@snow_ice); }
+check:checked:backdrop, radio:checked:backdrop { color: @snow_on_primary; background-image: image(@snow_sky); }
+
+switch { color: @snow_text; border-color: @snow_line; background-color: @snow_code; text-shadow: none; }
+switch:checked, switch:backdrop:checked { color: @snow_on_primary; border-color: @snow_blue; background-color: @snow_sky; text-shadow: none; }
+switch:backdrop { color: @snow_muted; border-color: @snow_line; background-color: @snow_code; }
+switch:disabled, switch:backdrop:disabled { color: @snow_footer; border-color: @snow_line; background-color: @snow_deep; }
+switch slider { color: @snow_text; border-color: @snow_line_strong; background-image: image(@snow_text); box-shadow: none; }
+switch:hover slider { border-color: @snow_line_strong; background-image: image(@snow_ice); box-shadow: none; }
+switch:checked > slider, switch:backdrop:checked > slider { border-color: @snow_blue; }
+switch:backdrop slider { border-color: @snow_line; background-image: image(@snow_muted); }
+switch:disabled slider, switch:backdrop:disabled slider { border-color: @snow_line; background-image: image(@snow_panel); }
+
+/* Scales, progress and level bars */
+progressbar trough, scale fill, scale trough { border-color: @snow_line; background-color: @snow_code; }
+progressbar trough:backdrop, scale fill:backdrop, scale trough:backdrop { border-color: @snow_line; background-color: @snow_code; }
+progressbar progress, scale highlight, progressbar progress:backdrop, scale highlight:backdrop { border-color: @snow_blue; background-color: @snow_sky; }
+treeview.view.progressbar { background-color: @snow_sky; background-image: image(@snow_sky); }
+levelbar trough { border-color: @snow_line; background-color: @snow_code; }
+levelbar block.high, levelbar block:not(.empty) { border-color: @snow_sky; background-color: @snow_sky; }
+levelbar block.low { border-color: @snow_warn; background-color: @snow_warn; }
+levelbar block.full { border-color: @snow_ok; background-color: @snow_ok; }
+scale slider { border-color: @snow_line_strong; background-image: image(@snow_text); box-shadow: none; }
+scale slider:hover { background-image: image(@snow_ice); }
+
+/* Notebooks, scrollbars, tree headers */
+notebook > header { border-color: @snow_line; background-color: @snow_panel; }
+notebook > header:backdrop { border-color: @snow_line; background-color: @snow_deep; }
+notebook > header tab:hover { background-color: @snow_panel_bright; }
+notebook > header.top > tabs > tab:checked { box-shadow: inset 0 -3px @snow_sky; }
+notebook > header.bottom > tabs > tab:checked { box-shadow: inset 0 3px @snow_sky; }
+notebook > header.left > tabs > tab:checked { box-shadow: inset -3px 0 @snow_sky; }
+notebook > header.right > tabs > tab:checked { box-shadow: inset 3px 0 @snow_sky; }
+notebook > stack:not(:only-child) { background-color: @snow_ink; }
+
+scrollbar { background-color: @snow_ink; border-color: @snow_line; }
+scrollbar slider { background-color: @snow_line_strong; }
+scrollbar slider:hover { background-color: @snow_muted; }
+scrollbar slider:hover:active { background-color: @snow_sky; }
+
+treeview.view header button { color: @snow_muted; background-color: @snow_ink; border-color: @snow_line; }
+treeview.view header button:hover { color: @snow_ice; }
+
+/* Info bars */
+infobar.info > revealer > box, infobar.question > revealer > box { background-color: @snow_card; border-bottom: 1px solid @snow_line; }
+infobar.warning > revealer > box { background-color: @snow_panel; border-bottom: 1px solid @snow_warn; }
+infobar.error > revealer > box { background-color: @snow_danger_dim; border-bottom: 1px solid @snow_danger; }
+infobar.info button, infobar.question button, infobar.warning button, infobar.error button {
+  color: @snow_text;
+  border-color: @snow_line;
+  background-image: image(@snow_panel_bright);
+  box-shadow: none;
+  text-shadow: none;
+}
+infobar.info button:hover, infobar.question button:hover, infobar.warning button:hover, infobar.error button:hover {
+  color: @snow_ice;
+  border-color: @snow_line_strong;
+  background-image: image(@snow_card_alt);
+}

@@ -56,6 +56,13 @@ from APT, so a revert needs a republication first, ADR-0031).
 `shared/composition/first-login.finalize` and
 `test/first-login-trigger-test.sh` enforce this; base's
 `/etc/profile.d/snosi-brew.sh` must stay guarded and skip root.
+Snow and Snowfield ship the Snow GTK theme
+(`shared/snow/tree/usr/share/themes/Snow/`, ADR-0034), whose colours are
+only core's design tokens (sha256-pinned copy
+`test/fixtures/frostyard-design/colors.css`). Its libadwaita layer reaches
+users through `/etc/skel/.config/gtk-4.0/gtk.css` at user priority, so it may
+set only colour variables, never a widget rule
+(`test/snow-gtk-theme-test.py`).
 No image may give the gnome-remote-desktop daemons TPM access (no `tss` group):
 48.1 seals credentials in saved TPM contexts that a reboot invalidates;
 `test/grd-no-tpm-access-test.sh` enforces this.

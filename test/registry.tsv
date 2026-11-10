@@ -100,6 +100,7 @@ snosi-health-report-test.sh	ci	validate.yml
 snosi-health-test.sh	ci	validate.yml
 snosi-health-timer-guard-test.sh	ci	validate.yml
 snosi-kargs-test.sh	ci	validate.yml
+snow-gtk-theme-test.py	ci	validate.yml
 socat-package-test.sh	ci	validate.yml
 suite-sysexts-test.sh	ci	validate.yml
 sundog-profile-test.sh	ci	validate.yml

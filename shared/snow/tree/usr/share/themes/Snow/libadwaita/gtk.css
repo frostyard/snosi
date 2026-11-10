@@ -1,0 +1,144 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Snow: Frostyard design-system colours for libadwaita (GTK 4) apps.
+ *
+ * libadwaita ignores the GTK theme setting, so this file reaches apps only
+ * through the user stylesheet ~/.config/gtk-4.0/gtk.css, which GTK loads at
+ * user priority. New accounts get a one-line import of this file from
+ * /etc/skel/.config/gtk-4.0/gtk.css, so the colours update with the image.
+ *
+ * A user-priority rule beats every theme and app rule regardless of
+ * selector specificity, so this file only redefines libadwaita's colour
+ * variables and the named colours behind them: libadwaita's own rules and
+ * the apps' rules still decide where each colour goes. The two exceptions
+ * at the end recolour the only surfaces libadwaita 1.7 paints with a fixed
+ * grey instead of a variable. test/snow-gtk-theme-test.sh rejects any other
+ * selector, and checks that every colour below is a token of
+ * frostyard/core's design system (pinned copy:
+ * test/fixtures/frostyard-design/colors.css). Snow is dark only: GTK 4.18
+ * has no prefers-color-scheme media query, so these values apply under the
+ * light style too. See docs/adr/0034-snow-gtk-theme.md.
+ */
+
+:root {
+  /* Accent: the cyan primary button, near-black text on it, link text. */
+  --accent-bg-color: #47b8ef;       /* --sky */
+  --accent-fg-color: #02131f;       /* --on-primary */
+  --accent-color: #8eddf9;          /* --link */
+
+  /* State colours, cold-shifted (the design system's admin additions). */
+  --destructive-bg-color: #3a181e;  /* --state-danger-dim */
+  --destructive-fg-color: #e07a72;  /* --state-danger */
+  --destructive-color: #e07a72;     /* --state-danger */
+  --success-bg-color: #7edafa;      /* --state-ok */
+  --success-fg-color: #02131f;      /* --on-primary */
+  --success-color: #7edafa;         /* --state-ok */
+  --warning-bg-color: #e0b15c;      /* --state-warn */
+  --warning-fg-color: #02131f;      /* --on-primary */
+  --warning-color: #e0b15c;         /* --state-warn */
+  --error-bg-color: #e07a72;        /* --state-danger */
+  --error-fg-color: #02131f;        /* --on-primary */
+  --error-color: #e07a72;           /* --state-danger */
+
+  /* Surfaces: content on ink, chrome on deep and panel blues. */
+  --window-bg-color: #081b2d;       /* --deep */
+  --window-fg-color: #edf8ff;       /* --text-body */
+  --view-bg-color: #06111d;         /* --ink */
+  --view-fg-color: #edf8ff;         /* --text-body */
+  --headerbar-bg-color: #0d263b;    /* --panel */
+  --headerbar-fg-color: #edf8ff;    /* --text-body */
+  --headerbar-border-color: #edf8ff;           /* --text-body */
+  --headerbar-backdrop-color: #081b2d;         /* --deep */
+  --headerbar-shade-color: rgb(162 222 255 / 18%);  /* --line */
+  --headerbar-darker-shade-color: #2c6380;     /* --line-strong */
+  --sidebar-bg-color: #0d263b;      /* --panel */
+  --sidebar-fg-color: #edf8ff;      /* --text-body */
+  --sidebar-backdrop-color: #0b2034;           /* --gradient-signal end */
+  --sidebar-border-color: rgb(162 222 255 / 18%);   /* --line */
+  --sidebar-shade-color: rgb(2 19 31 / 25%);   /* --on-primary */
+  --secondary-sidebar-bg-color: #0b2034;       /* --gradient-signal end */
+  --secondary-sidebar-fg-color: #edf8ff;       /* --text-body */
+  --secondary-sidebar-backdrop-color: #0a1f31; /* --gradient-card-alt end */
+  --secondary-sidebar-border-color: rgb(162 222 255 / 18%);  /* --line */
+  --secondary-sidebar-shade-color: rgb(2 19 31 / 25%);       /* --on-primary */
+  --card-bg-color: rgb(174 233 255 / 7%);      /* --ice */
+  --card-fg-color: #edf8ff;         /* --text-body */
+  --card-shade-color: rgb(162 222 255 / 18%);  /* --line: boxed-list rules */
+  --dialog-bg-color: #0d263b;       /* --panel */
+  --dialog-fg-color: #edf8ff;       /* --text-body */
+  --popover-bg-color: #0d2a41;      /* --panel-bright */
+  --popover-fg-color: #edf8ff;      /* --text-body */
+  --popover-shade-color: rgb(2 19 31 / 25%);   /* --on-primary */
+  --thumbnail-bg-color: #0f3048;    /* --gradient-card start */
+  --thumbnail-fg-color: #edf8ff;    /* --text-body */
+  --shade-color: rgb(2 19 31 / 25%);           /* --on-primary */
+  --scrollbar-outline-color: rgb(2 19 31 / 95%);  /* --on-primary */
+  --active-toggle-bg-color: rgb(174 233 255 / 16%);  /* --ice */
+  --active-toggle-fg-color: #edf8ff;           /* --text-body */
+  --overview-bg-color: #06111d;     /* --ink */
+  --overview-fg-color: #edf8ff;     /* --text-body */
+
+  /* Nearly square, as the design system asks; libadwaita's is 15px. */
+  --window-radius: 8px;
+}
+
+/* The same values as GTK named colours, for app stylesheets that still use
+ * @name instead of var(--name). Each must equal its variable above. */
+@define-color accent_bg_color #47b8ef;
+@define-color accent_fg_color #02131f;
+@define-color accent_color #8eddf9;
+@define-color destructive_bg_color #3a181e;
+@define-color destructive_fg_color #e07a72;
+@define-color destructive_color #e07a72;
+@define-color success_bg_color #7edafa;
+@define-color success_fg_color #02131f;
+@define-color success_color #7edafa;
+@define-color warning_bg_color #e0b15c;
+@define-color warning_fg_color #02131f;
+@define-color warning_color #e0b15c;
+@define-color error_bg_color #e07a72;
+@define-color error_fg_color #02131f;
+@define-color error_color #e07a72;
+@define-color window_bg_color #081b2d;
+@define-color window_fg_color #edf8ff;
+@define-color view_bg_color #06111d;
+@define-color view_fg_color #edf8ff;
+@define-color headerbar_bg_color #0d263b;
+@define-color headerbar_fg_color #edf8ff;
+@define-color headerbar_border_color #edf8ff;
+@define-color headerbar_backdrop_color #081b2d;
+@define-color headerbar_shade_color rgb(162 222 255 / 18%);
+@define-color headerbar_darker_shade_color #2c6380;
+@define-color sidebar_bg_color #0d263b;
+@define-color sidebar_fg_color #edf8ff;
+@define-color sidebar_backdrop_color #0b2034;
+@define-color sidebar_border_color rgb(162 222 255 / 18%);
+@define-color sidebar_shade_color rgb(2 19 31 / 25%);
+@define-color secondary_sidebar_bg_color #0b2034;
+@define-color secondary_sidebar_fg_color #edf8ff;
+@define-color secondary_sidebar_backdrop_color #0a1f31;
+@define-color secondary_sidebar_border_color rgb(162 222 255 / 18%);
+@define-color secondary_sidebar_shade_color rgb(2 19 31 / 25%);
+@define-color card_bg_color rgb(174 233 255 / 7%);
+@define-color card_fg_color #edf8ff;
+@define-color card_shade_color rgb(162 222 255 / 18%);
+@define-color dialog_bg_color #0d263b;
+@define-color dialog_fg_color #edf8ff;
+@define-color popover_bg_color #0d2a41;
+@define-color popover_fg_color #edf8ff;
+@define-color popover_shade_color rgb(2 19 31 / 25%);
+@define-color thumbnail_bg_color #0f3048;
+@define-color thumbnail_fg_color #edf8ff;
+@define-color shade_color rgb(2 19 31 / 25%);
+@define-color scrollbar_outline_color rgb(2 19 31 / 95%);
+
+/* libadwaita 1.7 fixes these two greys in its own rules (banner sets
+ * --banner-color to #7d7d83; toast sets background to #505053). Each rule
+ * sets that one property and nothing else. */
+banner {
+  --banner-color: #b6d0df;          /* --mist */
+}
+
+toast {
+  background: #17445e;              /* --gradient-card-alt start */
+}

@@ -1,0 +1,25 @@
+:root{
+/* Base inks — darker blue backgrounds */
+--ink:#06111d;--deep:#081b2d;--panel:#0d263b;--panel-bright:#0d2a41;
+/* Cool/cold blue accents */
+--ice:#aee9ff;--sky:#47b8ef;--blue:#168bd0;--mist:#b6d0df;--mist-bright:#c7dce8;
+/* Text */
+--text-body:#edf8ff;--text-muted:#b6d0df;--text-dim:#a6c1d0;--text-eyebrow:#82b6d0;--text-footer:#7799ab;--text-mono-accent:#8ddbf8;
+/* Lines + borders */
+--line:rgba(162,222,255,.18);--line-strong:#2c6380;--line-tag:#a6dffa38;
+/* Semantic surfaces */
+--surface-page:var(--ink);--surface-panel:var(--panel);--surface-code:#061826;
+--gradient-page:radial-gradient(circle at 82% 2%,#10416455,transparent 27rem),linear-gradient(180deg,#071a2a 0%,#06111d 38%,#06111d 100%);/* @kind color */
+--gradient-card:linear-gradient(160deg,#0f3048,#091c2d 62%);/* @kind color */
+--gradient-card-alt:linear-gradient(160deg,#17445e,#0a1f31 64%);/* @kind color */
+--gradient-card-deep:linear-gradient(160deg,#12364c,#081827 64%);/* @kind color */
+--gradient-panel:linear-gradient(135deg,#0d2d45,#071827);/* @kind color */
+--gradient-signal:linear-gradient(135deg,#0f3b58,#0b2034);/* @kind color */
+--gradient-primary:linear-gradient(135deg,#5ac9f7,#1584ca);/* @kind color */
+--gradient-ice-line:linear-gradient(90deg,#7edafa,transparent);/* @kind color */
+--on-primary:#02131f;
+/* Interactive */
+--link:#8eddf9;--link-hover:var(--ice);--tag-text:#b9e9fb;
+/* State (intentional additions for admin surfaces — cold-shifted) */
+--state-ok:#7edafa;--state-ok-dim:#0e3247;--state-warn:#e0b15c;--state-warn-dim:#33291433;--state-danger:#e07a72;--state-danger-dim:#3a181e;
+}

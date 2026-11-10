@@ -1,0 +1,9 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ * Snow for GTK 4 applications that do not use libadwaita (libadwaita
+ * replaces the GTK theme with its own stylesheet, which
+ * ../libadwaita/gtk.css recolours). GTK 4.18 does not follow the desktop
+ * colour scheme without libadwaita, so this selects GTK's dark built-in
+ * theme to sit beside the dark Snow apps. See docs/adr/0034-snow-gtk-theme.md.
+ */
+@import url("resource:///org/gtk/libgtk/theme/Default/Default-dark.css");

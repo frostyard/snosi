@@ -1,0 +1,4 @@
+/* Snow: Frostyard colours for libadwaita apps (frostyard/snosi ADR-0034).
+ * The theme itself is in /usr and updates with the image. Remove the import
+ * to return to stock Adwaita colours; add your own rules below it. */
+@import url("file:///usr/share/themes/Snow/libadwaita/gtk.css");
