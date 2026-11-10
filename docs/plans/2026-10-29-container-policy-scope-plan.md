@@ -209,10 +209,13 @@ overlapping stagers are proven by the fixtures in
   workaround above and the manual remedy for older hosts in #1265.
 - **Done:** `test/bootc-container-policy-test.sh` drops the two provisioning
   assertions and keeps the workaround-policy content checks.
-  `check-user-tmpfiles-guard.sh` rejects every tracked path under
-  `usr/lib/user-tmpfiles.d/`, in payloads or elsewhere.
-  `test/user-tmpfiles-guard-test.sh` includes the exact retired rule as a
-  revert fixture. Both run in `validate.yml`.
+  `check-user-tmpfiles-guard.sh` rejects tracked paths at or under
+  `usr/lib/user-tmpfiles.d`, in payloads or elsewhere, and tracked rules
+  under any `user-tmpfiles.d/` that name `.config/containers`. It checks
+  source paths and rule contents, not target mappings, build output or
+  package files. `test/user-tmpfiles-guard-test.sh` includes the exact
+  retired rule restored and moved, directory symlinks, and Git failures.
+  Both run in `validate.yml`.
 
 ## Phase 4 — Prove the T3 claim before ADR-0025 is Accepted
 

@@ -42,11 +42,13 @@ image references, and `dps-luks-cleanup-test.sh`, which needs root. The
 `validate.yml` shell-lint job discovers scripts by extension and shebang.
 Runtime `/etc` deletion, `RequiredBy=`, `Upholds=`, publication, sysext and profile
 dependency guards have fixture suites.
-`check-user-tmpfiles-guard.sh` rejects every tracked path under
-`usr/lib/user-tmpfiles.d/`, which `systemd-tmpfiles --user` never reads.
-`test/user-tmpfiles-guard-test.sh` covers valid user and system directories,
-invalid paths inside and outside payloads, the exact retired container-policy
-rule as a revert, and the real repository without an override. Both run in
+`check-user-tmpfiles-guard.sh` rejects tracked paths at or under
+`usr/lib/user-tmpfiles.d`, which `systemd-tmpfiles --user` never reads, and
+tracked rules under any `user-tmpfiles.d/` that name `.config/containers`.
+It checks source paths and rule contents, not target mappings, build output
+or package files. `test/user-tmpfiles-guard-test.sh` covers valid directories,
+invalid paths and symlinks, the exact retired rule restored or moved, Git
+failures, and the real repository without an override. Both run in
 `validate.yml`; the retired rule must not move to a valid user directory,
 because a per-user policy would hide the system policy's signature checks
 and future changes ([#1265](https://github.com/frostyard/snosi/issues/1265),
