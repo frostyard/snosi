@@ -111,7 +111,7 @@ else
     status=$?
 fi
 test_number=$((test_number + 1))
-if [[ $status -eq 0 && $output == "check-user-tmpfiles-guard: OK" ]]; then
+if [[ $status -eq 0 && $output =~ ^check-user-tmpfiles-guard:\ OK\ \(([1-9][0-9]*)\ tracked\ paths\ checked\)$ ]]; then
     printf 'ok %d - real repository passes without an override\n' "$test_number"
 else
     printf 'not ok %d - real repository passes without an override\n' "$test_number"

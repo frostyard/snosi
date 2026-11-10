@@ -18,8 +18,10 @@ guard_root=${SNOSI_USER_TMPFILES_GUARD_ROOT:-$script_dir}
 cd "$guard_root"
 
 fail=0
+checked=0
 
 while IFS= read -r -d '' f; do
+    checked=$((checked + 1))
     case "$f" in
         usr/lib/user-tmpfiles.d/*|*/usr/lib/user-tmpfiles.d/*)
             printf '%s: systemd-tmpfiles --user never reads /usr/lib/user-tmpfiles.d; user scope reads only XDG config and data dirs such as /usr/share/user-tmpfiles.d; snosi#1265\n' "$f"
@@ -33,4 +35,4 @@ if [ "$fail" -ne 0 ]; then
     echo "check-user-tmpfiles-guard: violations found. See https://github.com/frostyard/snosi/issues/1265."
     exit 1
 fi
-echo "check-user-tmpfiles-guard: OK"
+echo "check-user-tmpfiles-guard: OK ($checked tracked paths checked)"
