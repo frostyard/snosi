@@ -114,11 +114,16 @@ those tokens; only the alpha may differ. The libadwaita layer may hold only
 `:root` variables, `@define-color` lines equal to their variables, and the
 one-property `banner` and `toast` rules. The skel `gtk.css` must be the
 single import of that layer. The gschema override must name `Snow` and the
-dark scheme, and its font must have its package in the Snow package list. It
-checks GTK 3 flat-button backdrop transparency and runs the palette, layer
-and cascade checks on bad fixtures too. It needs no GTK: the
-stylesheets were parsed with GTK 3.24 and 4.18 and rendered through Broadway
-when the theme was written, but CI does not repeat that.
+dark scheme, and its font must have its package in the Snow package list.
+It checks GTK 3 flat-button backdrop transparency. The day/night wallpaper
+must be the current output of
+`artwork/wallpaper/generate_snow_wallpaper.py --check`, paint only tokens
+(a named colour such as `white` fails), and be the pair that `snow.xml`,
+`picture-uri` and `picture-uri-dark` name. The palette, layer, cascade and
+wallpaper paint checks also run on bad fixtures. The test needs no GTK. The
+stylesheets were parsed with GTK 3.24 and 4.18 and rendered through
+Broadway, and the wallpapers were loaded through GdkPixbuf, when they were
+written; CI does not repeat any of that.
 `test/grd-no-tpm-access-test.sh` keeps the gnome-remote-desktop daemons off the
 TPM: in any tracked `gnome-remote-desktop*.service.d/` drop-in or
 `gnome-remote-desktop*.service` unit, and in any tracked `sysusers.d/*.conf`,

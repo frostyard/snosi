@@ -1,4 +1,4 @@
-# 0034 — Theme Snow's GTK applications from the Frostyard design system
+# 0034 — Theme Snow's GTK applications and wallpaper from the Frostyard design system
 
 - **Status:** Proposed
 - **Date:** 2026-11-09
@@ -39,6 +39,17 @@ and Snowfield ship stock GNOME 48 colours with Cantarell.
   `useradd --create-home`, which copies the image's `/etc/skel`.
 - Debian Trixie packages Inter as `fonts-inter-variable` (family
   `Inter Variable`), not `adw-gtk3` or Adwaita Sans.
+- Snow's wallpaper defaults come from Debian: `desktop-base` for the light
+  style and `adwaita-d.jpg` for the dark one. GNOME 48 pairs a wallpaper's
+  light and dark variants through `picture-uri` and `picture-uri-dark` and
+  a `gnome-background-properties` entry, and switches with the colour
+  scheme. mutter loads the file once, off the main thread, at the image's
+  intrinsic size. Snow always has the SVG pixbuf loader:
+  `libgtk-4-1` depends on `librsvg2-common`.
+- `artwork/hero/generate_hero_backgrounds.py` generates the four alpine hero
+  scenes from one seeded ridge geometry. The design system says to crop or
+  reuse those ridgelines, never to redraw them, and to keep the light upper
+  right and the upper-left quadrant empty.
 
 ## Decision
 
@@ -69,12 +80,24 @@ only from core's colour tokens.
   (the fixed accent nearest sky, which GNOME Shell and Flatpak apps use),
   and `font-name` and `document-font-name` to `'Inter Variable 11'`.
   `shared/packages/snow/mkosi.conf` installs `fonts-inter-variable`.
+- **Wallpaper:** `/usr/share/backgrounds/snow/snow-l.svg` (day) and
+  `snow-d.svg` (night) are the `picture-uri` and `picture-uri-dark`
+  defaults, with `picture-options='zoom'`, and
+  `/usr/share/gnome-background-properties/snow.xml` lists them as the pair
+  "Snow". Because the default scheme is dark, a new session shows the
+  night scene. `artwork/wallpaper/generate_snow_wallpaper.py` writes both
+  SVGs. It reuses the hero series' ridge geometry verbatim, places it on a
+  3:2 canvas (intrinsic 3840x2560) whose middle band survives the zoom crop
+  to 16:10, 16:9 and 21:9, and paints only design tokens, varying only
+  opacity. The SVGs are generated files; nobody edits them by hand.
 - **Guard:** `test/fixtures/frostyard-design/colors.css` is a sha256-pinned
   byte copy of core's tokens. `test/snow-gtk-theme-test.py`, run in
   `validate.yml`, requires every colour the theme writes to be one of those
   tokens. It also requires the libadwaita layer to keep the shape above,
   each named colour to equal its variable, the skel file to be the single
-  import, and the gschema font to have its package.
+  import, and the gschema font to have its package. For the wallpaper it
+  requires the SVGs to equal the generator's output, to paint only tokens,
+  and to be the pair that `snow.xml` and the gschema defaults name.
 
 ## Consequences
 
@@ -102,6 +125,16 @@ only from core's colour tokens.
   `/usr/share/themes/Snow/libadwaita/gtk.css` therefore needs a migration.
 - When core's tokens change, the copy and its pin move together, and the
   theme follows only through a reviewed change.
+- The wallpaper follows the colour scheme, not the clock: the day scene
+  appears only under the light style.
+- On the development host the SVGs load in about 0.8 s (night) and 0.4 s
+  (day) at 3840x2560. GNOME's own SVG wallpapers take 0.05–0.3 s. Until the
+  load finishes, mutter shows the primary colour, ink. A change that adds
+  blurred or masked elements should recheck that time.
+- A change to the hero ridge geometry changes the wallpaper too. The guard
+  fails until the SVGs are regenerated.
+- Debian's `desktop-base` wallpaper stays installed but is no longer the
+  default.
 
 ## Alternatives considered
 
@@ -120,10 +153,21 @@ only from core's colour tokens.
   hand-written layer is reviewable, and Snow ships few GTK 3 applications.
 - **A GNOME Shell theme:** it needs the user-themes extension. It is left for
   a later decision.
+- **The hero PNGs as the wallpaper pair (Alpine Morning, Moonlit Summit):**
+  they are 3440x1440, so a 16:9 4K screen upscales them 1.5 times and a 3:2
+  Surface panel loses over a third of their width. Their colours also
+  predate the tokens.
+- **Raster wallpapers (PNG or JPEG XL):** a 4K PNG of these gradients is
+  megabytes per variant and fixed to one resolution. The SVGs are about 22 KiB
+  (day) and 89 KiB (night).
+- **A time-of-day slideshow XML:** GNOME 48's Appearance panel pairs
+  wallpapers by style, and Snow defaults to dark, so a clock-driven
+  transition would fight the style.
 
 ## References
 
 - Shapes: [design/overview.md](../design/overview.md#snow-gtk-theme),
   [design/testing.md](../design/testing.md)
 - Builds on: frostyard/core
-  [`frostyard-design` tokens](https://github.com/frostyard/core/blob/67fc05436bb7b58be1781ed1a55bef765607da7f/.agents/skills/frostyard-design/tokens/colors.css)
+  [`frostyard-design` tokens](https://github.com/frostyard/core/blob/67fc05436bb7b58be1781ed1a55bef765607da7f/.agents/skills/frostyard-design/tokens/colors.css),
+  the hero series in `artwork/hero/`

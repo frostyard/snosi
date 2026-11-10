@@ -143,13 +143,29 @@ the dark scheme and blue accent through the portal. The
 `color-scheme='prefer-dark'`, `gtk-theme='Snow'`, `accent-color='blue'` and
 the font `Inter Variable 11` from `fonts-inter-variable`.
 
+The wallpaper is a day/night pair in `shared/snow/tree/usr/share/backgrounds/snow/`:
+`snow-l.svg` for the light style (`picture-uri`) and `snow-d.svg` for the dark
+style (`picture-uri-dark`, so the default). `gnome-background-properties/snow.xml`
+lists the pair as "Snow" in Settings. `artwork/wallpaper/generate_snow_wallpaper.py`
+writes both SVGs from the hero series' ridge geometry
+(`artwork/hero/generate_hero_backgrounds.py`) on a 3:2 canvas, painted
+only with design tokens. Regenerate them with that script; never edit them
+by hand.
+
 `test/fixtures/frostyard-design/colors.css` is the sha256-pinned copy of
-core's tokens. `test/snow-gtk-theme-test.py` rejects a theme colour that is
-not a token, any other rule in the libadwaita layer, a named colour that
-differs from its variable, a skel file that does more than import the layer,
-and a font setting whose package is missing. To change a colour, change the
-token in core first, copy the file again and update the pin. Recheck the
-layer against libadwaita's `defaults-dark.css` when libadwaita moves.
+core's tokens. `test/snow-gtk-theme-test.py` rejects:
+
+- a theme colour or wallpaper paint that is not a token;
+- any other rule in the libadwaita layer;
+- a named colour that differs from its variable;
+- a skel file that does more than import the layer;
+- a font setting whose package is missing;
+- a wallpaper SVG that differs from the generator's output, or that
+  `snow.xml` and the gschema defaults do not name.
+
+To change a colour, change the token in core first, copy the file again,
+update the pin and regenerate the wallpaper. Recheck the layer against
+libadwaita's `defaults-dark.css` when libadwaita moves.
 
 ## First login
 

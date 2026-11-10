@@ -167,9 +167,11 @@ jobs:
         # matches its pin; every colour the Snow theme writes is one of
         # those tokens; the libadwaita layer, loaded at user priority, sets
         # only colour variables and two allowlisted fixed-grey rules; the
-        # skel gtk.css only imports that layer; and the gschema defaults
-        # name the shipped theme and an installed font. GTK 3 flat buttons
-        # stay transparent in backdrop. No root, network, GTK, or image build.
+        # skel gtk.css only imports that layer; the gschema defaults name
+        # the shipped theme, an installed font and the day/night wallpaper,
+        # whose SVGs equal the generator's output and paint only tokens.
+        # GTK 3 flat buttons stay transparent in backdrop. No root, network,
+        # GTK, or image build.
         run: python3 ./test/snow-gtk-theme-test.py
 
       - name: Validate remote desktop has no TPM access

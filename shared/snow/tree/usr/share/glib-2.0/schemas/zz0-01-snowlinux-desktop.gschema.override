@@ -32,3 +32,10 @@ translate=true
 
 [org.gnome.desktop.app-folders]
 folder-children=['Utilities', 'Containers', 'Microsoft', 'AppStores', 'System']
+
+[org.gnome.desktop.background]
+picture-uri='file:///usr/share/backgrounds/snow/snow-l.svg'
+picture-uri-dark='file:///usr/share/backgrounds/snow/snow-d.svg'
+picture-options='zoom'
+primary-color='#06111d'
+secondary-color='#02131f'

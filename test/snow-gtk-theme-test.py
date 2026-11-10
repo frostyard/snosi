@@ -21,8 +21,12 @@ This test checks that:
      update with the image;
   5. the gschema override names the shipped theme and a font the image
      installs;
-  6. GTK 3 flat buttons stay transparent in backdrop and disabled states.
-Checks 2 and 3 also run on bad fixtures, and check 6's resolver runs on a
+  6. GTK 3 flat buttons stay transparent in backdrop and disabled states;
+  7. the day/night wallpaper (usr/share/backgrounds/snow/snow-{l,d}.svg)
+     is the current output of artwork/wallpaper/generate_snow_wallpaper.py,
+     paints only design-token colours, and is the pair that snow.xml and
+     the gschema override name.
+Checks 2, 3 and 7 also run on bad fixtures, and check 6's resolver runs on a
 fixture with the old backdrop rule, so the guard is shown to fail.
 
 No root, no network, no GTK, no image build.
@@ -30,6 +34,7 @@ No root, no network, no GTK, no image build.
 
 import hashlib
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -41,6 +46,10 @@ SKEL = TREE / "etc/skel/.config/gtk-4.0/gtk.css"
 OVERRIDE = TREE / "usr/share/glib-2.0/schemas/zz0-01-snowlinux-desktop.gschema.override"
 PACKAGES = REPO / "shared/packages/snow/mkosi.conf"
 TOKENS = REPO / "test/fixtures/frostyard-design/colors.css"
+WALLPAPER = {"day": "/usr/share/backgrounds/snow/snow-l.svg",
+             "night": "/usr/share/backgrounds/snow/snow-d.svg"}
+WALLPAPER_XML = TREE / "usr/share/gnome-background-properties/snow.xml"
+WALLPAPER_GENERATOR = REPO / "artwork/wallpaper/generate_snow_wallpaper.py"
 
 # Byte copy of frostyard/core .agents/skills/frostyard-design/tokens/colors.css
 # at its last change, core commit 67fc054 (unchanged at core main 8dc26fa,
@@ -101,6 +110,23 @@ def token_palette(css):
 
 def off_palette(css, palette):
     return sorted({text for rgb, text in colours(css) if rgb not in palette})
+
+
+SVG_PAINT = re.compile(r'\b(fill|stroke|stop-color|flood-color|lighting-color|color)="([^"]*)"')
+SVG_NOT_A_COLOUR = re.compile(r"^(none|currentColor|url\(#[^)]+\))$")
+
+
+def svg_off_palette(svg, palette):
+    """Paint values in an SVG that are not design tokens; a named colour
+    such as white counts as off-palette."""
+    bad = set()
+    for _, value in SVG_PAINT.findall(svg):
+        if SVG_NOT_A_COLOUR.match(value):
+            continue
+        found = colours(value)
+        if not found or any(rgb not in palette for rgb, _ in found):
+            bad.add(value)
+    return sorted(bad)
 
 
 def layer_problems(css):
@@ -329,6 +355,38 @@ def main():
 
     # 6. local GTK 3 rules preserve undecorated backdrop/disabled buttons
     check_flat_buttons(gtk3)
+
+    # 7. the day/night wallpaper
+    generated = subprocess.run([sys.executable, "-I", str(WALLPAPER_GENERATOR), "--check"],
+                               capture_output=True, text=True)
+    check("the wallpaper SVGs are the generator's current output", generated.returncode == 0,
+          (generated.stdout + generated.stderr).strip())
+    for variant, path in WALLPAPER.items():
+        svg = TREE / path.lstrip("/")
+        check(f"the {variant} wallpaper {path} ships", svg.is_file())
+        if svg.is_file():
+            bad = svg_off_palette(svg.read_text(), palette)
+            check(f"the {variant} wallpaper paints only design-token colours", not bad,
+                  ", ".join(bad[:5]))
+    check("a named or off-token paint fails the wallpaper palette check",
+          svg_off_palette('<rect fill="white"/><stop stop-color="#3584e4"/>', palette)
+          == ["#3584e4", "white"])
+    check("token paints, gradients and none pass the wallpaper palette check",
+          not svg_off_palette('<rect fill="url(#sky)" stroke="none"/>'
+                              '<circle fill="#edf8ff" fill-opacity="0.4"/>', palette))
+    xml = WALLPAPER_XML.read_text() if WALLPAPER_XML.is_file() else ""
+    check("snow.xml names the day wallpaper",
+          f"<filename>{WALLPAPER['day']}</filename>" in xml)
+    check("snow.xml names the night wallpaper",
+          f"<filename-dark>{WALLPAPER['night']}</filename-dark>" in xml)
+    background = re.search(r"^\[org\.gnome\.desktop\.background\]\n(.*?)(?=^\[|\Z)",
+                           override, re.M | re.S)
+    bkeys = dict(re.findall(r"^([a-z-]+)=(.*)$", background.group(1) if background else "", re.M))
+    check("picture-uri is the day wallpaper",
+          bkeys.get("picture-uri") == f"'file://{WALLPAPER['day']}'", bkeys.get("picture-uri", "unset"))
+    check("picture-uri-dark is the night wallpaper",
+          bkeys.get("picture-uri-dark") == f"'file://{WALLPAPER['night']}'",
+          bkeys.get("picture-uri-dark", "unset"))
 
     print(f"# {PASS} passed, {FAIL} failed")
     return 1 if FAIL else 0

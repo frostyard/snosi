@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!DOCTYPE wallpapers SYSTEM "gnome-wp-list.dtd">
+<wallpapers>
+  <wallpaper deleted="false">
+    <name>Snow</name>
+    <filename>/usr/share/backgrounds/snow/snow-l.svg</filename>
+    <filename-dark>/usr/share/backgrounds/snow/snow-d.svg</filename-dark>
+    <options>zoom</options>
+    <shade_type>solid</shade_type>
+    <pcolor>#06111d</pcolor>
+    <scolor>#02131f</scolor>
+  </wallpaper>
+</wallpapers>
