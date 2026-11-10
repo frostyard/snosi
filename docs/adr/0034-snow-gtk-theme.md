@@ -91,6 +91,9 @@ only from core's colour tokens.
   the window corner follows the nearly-square design.
 - Flatpak applications are not recoloured. They follow the dark scheme and
   the blue accent. The Shell is not themed.
+- A Flatpak application granted `xdg-config/gtk-4.0` reads the skel import,
+  but `/usr/share/themes/Snow/...` resolves to the runtime's `/usr` inside
+  the sandbox, so it logs one import warning and keeps stock colours.
 - Each libadwaita release can add a variable or a fixed grey. Snosi must
   recheck the layer when libadwaita changes, by diffing its
   `defaults-dark.css` and the fixed colours in `base.css`.

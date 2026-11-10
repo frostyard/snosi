@@ -12,7 +12,7 @@
  * variables and the named colours behind them: libadwaita's own rules and
  * the apps' rules still decide where each colour goes. The two exceptions
  * at the end recolour the only surfaces libadwaita 1.7 paints with a fixed
- * grey instead of a variable. test/snow-gtk-theme-test.sh rejects any other
+ * grey instead of a variable. test/snow-gtk-theme-test.py rejects any other
  * selector, and checks that every colour below is a token of
  * frostyard/core's design system (pinned copy:
  * test/fixtures/frostyard-design/colors.css). Snow is dark only: GTK 4.18
