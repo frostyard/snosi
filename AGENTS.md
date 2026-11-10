@@ -80,7 +80,13 @@ FinalizeScripts and PostOutputScripts. Consult
 Sysexts overlay `/usr` only: relocate package `/opt` payloads into `/usr` and
 capture only tmpfiles-referenced factory `/etc` values. Shipped runtime units
 must not delete `/etc` paths or self-disable: use a `/var` run-once marker;
-`check-runtime-etc-guard.sh` enforces this. Do not ship `RequiredBy=` or
+`check-runtime-etc-guard.sh` enforces this. No tracked tree may hold a path
+at or under `usr/lib/user-tmpfiles.d`: `systemd-tmpfiles --user` never reads
+it; user rules go in `usr/share/user-tmpfiles.d/` (tmpfiles.d(5)). No tracked
+`user-tmpfiles.d` rule may name `.config/containers`: a per-user container
+policy hides `/etc/containers/policy.json`. `check-user-tmpfiles-guard.sh`
+checks tracked paths and rule contents, not build output or package files
+([#1265](https://github.com/frostyard/snosi/issues/1265)). Do not ship `RequiredBy=` or
 `.requires/` enablement (`check-required-by-guard.sh`). Do not uphold a
 condition-gated unit (`check-upholds-guard.sh`; for sysext deltas
 `shared/sysext/finalize/sysext-upholds-guard.sh`).

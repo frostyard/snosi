@@ -11,8 +11,9 @@ Steps:
 3. Map the job back to the script it calls. The workflows are thin callers:
    `validate.yml` runs shellcheck and the Firn catalog/ISO publication fixtures
    in `shell-lint`; publication guard fixtures and `test/no-nbc-test.sh` in
-   `publication-guard-tests`; `check-runtime-etc-guard.sh` and
-   `check-required-by-guard.sh` in `runtime-etc-guard`; and
+   `publication-guard-tests`; `check-runtime-etc-guard.sh`,
+   `check-required-by-guard.sh`, and `check-user-tmpfiles-guard.sh` (the unread
+   rule path retired in snosi#1265) in `runtime-etc-guard`; and
    `check-bootc-publication-guard.sh` plus secure bootc fixtures in
    `bootc-secure-contracts`;
    `build-installer-iso.yml` calls the retained ISO scripts in

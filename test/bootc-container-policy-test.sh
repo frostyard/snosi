@@ -12,7 +12,6 @@ BOOTC_POLICY_PATH=/usr/lib/snosi/containers/bootc-policy.json
 SECURE_CONFIG="$PROJECT_ROOT/shared/bootc-secure/mkosi.conf"
 REGISTRIES_CONFIG="$PROJECT_ROOT/shared/bootc-secure/tree/etc/containers/registries.d/frostyard.yaml"
 USER_POLICY="$PROJECT_ROOT/shared/bootc-secure/tree/usr/share/snosi/containers/user-policy.json"
-USER_TMPFILES="$PROJECT_ROOT/shared/bootc-secure/tree/usr/lib/user-tmpfiles.d/snosi-containers-policy.conf"
 VM_LIB="$PROJECT_ROOT/test/lib/vm.sh"
 UPDATER="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage"
 UPDATER_UNIT="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/lib/systemd/system/bootc-update-stage.service"
@@ -41,8 +40,7 @@ require_file() {
 require_file "$POLICY" "secure bootc policy is shipped"
 require_file "$UPDATE_POLICY" "strict bootc update policy is shipped in /usr"
 require_file "$PROJECT_ROOT/cosign.pub" "committed Cosign public key exists"
-require_file "$USER_POLICY" "rootless container policy is shipped"
-require_file "$USER_TMPFILES" "rootless container policy provisioning is shipped"
+require_file "$USER_POLICY" "permissive workaround policy is shipped"
 
 # verify_strict_policy FILE LABEL -- the strict update-policy contract. The
 # same assertions run against the /usr update policy, which the stager
@@ -201,17 +199,9 @@ fi
 if [[ -f "$USER_POLICY" ]] && jq -e '
     . == {"default": [{"type": "insecureAcceptAnything"}]}
 ' "$USER_POLICY" >/dev/null; then
-    pass "rootless users may pull arbitrary workload images"
+    pass "workaround policy accepts arbitrary workload images"
 else
-    fail "rootless users may pull arbitrary workload images"
-fi
-
-if [[ -f "$USER_TMPFILES" ]] && \
-        grep -Fqx 'd %h/.config/containers 0700 - - -' "$USER_TMPFILES" && \
-        grep -Fqx 'C %h/.config/containers/policy.json 0600 - - - /usr/share/snosi/containers/user-policy.json' "$USER_TMPFILES"; then
-    pass "rootless policy is provisioned without replacing user configuration"
-else
-    fail "rootless policy is provisioned without replacing user configuration"
+    fail "workaround policy accepts arbitrary workload images"
 fi
 
 if grep -Fqx 'ExtraTrees=%D/cosign.pub:/usr/lib/snosi/cosign.pub' "$SECURE_CONFIG"; then

@@ -259,6 +259,11 @@ first-boot presets to recreate them. `check-runtime-etc-guard.sh` and
 `snosi-etc-diff` compares live `/etc` with the booted image's pristine tree;
 `preset-reconcile.service` applies newly added enablement policy without
 re-enabling units an administrator disabled.
+`check-user-tmpfiles-guard.sh` checks tracked source paths and rule contents,
+not target mappings, build output or package files. It rejects paths at or
+under the unread `usr/lib/user-tmpfiles.d` directory and rules under any
+`user-tmpfiles.d/` that name `.config/containers`. The retired rule was
+deleted, not moved: per-user policy would hide the system policy ([policy-scope plan, Phase 3](../plans/2026-10-29-container-policy-scope-plan.md#phase-3--retire-rootless-provisioning-done)).
 
 `snosi-kargs` builds one MOK-signed, append-only global ESP cmdline addon for
 secure bootc installations. It is measured into PCR 12 and excluded from the
