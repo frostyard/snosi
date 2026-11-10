@@ -107,6 +107,17 @@ Image builds have four phases, in order:
    without `extension-release.<ImageId>` carrying `EXTENSION_RELOAD_MANAGER=1`,
    so PID 1 loads the units in the same boot (snosi#1189;
    [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)).
+   The five Lodge suite sysexts also run `shared/sysext/finalize/sysext-lodge-accounts-guard.sh`,
+   which fails a delta that ships a Lodge app manifest without lodge's own
+   `u lodge` sysusers line, or a `*.service`/`*.socket` that names a user or
+   group its sysusers.d files do not declare. It parses the unit files only
+   (comments and `\` continuations handled as systemd does, the last scalar
+   assignment wins, `SupplementaryGroups=` accumulates, `DynamicUser=` skips
+   only `User=` and `Group=`), and it does not emulate drop-in merging: a
+   drop-in that sets `User=`, `Group=`, `SupplementaryGroups=`, `DynamicUser=`,
+   `SocketUser=` or `SocketGroup=` fails the build, so the key belongs in the
+   unit file ([ADR-0035](../adr/0035-lodge-app-sysexts-declare-user-lodge.md);
+   snosi#1245).
    `shared/composition/var-audit.finalize` audits per-product `/var` outcome
    maps and rejects unclassified or stale entries.
    `shared/composition/core-flatpaks.finalize` ships the product's

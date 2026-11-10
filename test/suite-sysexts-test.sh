@@ -89,6 +89,8 @@ check_sysext() {
         lacks_text frostmail-secrets-key "$dropin" "$preset"
     check "$name: extension-release sets EXTENSION_RELOAD_MANAGER=1" \
         has_line "$release" 'EXTENSION_RELOAD_MANAGER=1'
+    check "$name: FinalizeScripts= wires the Lodge accounts guard" \
+        contains "$dir/mkosi.conf" 'sysext-lodge-accounts-guard.sh'
 
     for unit in "${units[@]}"; do
         check "$name: required-paths lists $unit" has_line "$required" "/usr/lib/systemd/system/$unit"

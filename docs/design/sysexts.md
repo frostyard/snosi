@@ -168,6 +168,32 @@ The check runs at two points ([ADR-0024](../adr/0024-verify-attestations-of-firs
 `test/verify-attestations-test.sh` fixtures the script with a stub `gh`;
 `test/suite-sysexts-test.sh` checks the suite sysexts and their pins.
 
+**Account contract of the Lodge suite.** The Lodge app daemons resolve the
+system user `lodge` at start
+([#1245](https://github.com/frostyard/snosi/issues/1245)). Each of these five
+debs declares that user in its own `usr/lib/sysusers.d/<name>.conf`, with the
+line byte-identical to lodge's own
+`u lodge - "lodge, the tailnet web shell for frostyard's apps" /var/lib/lodge`.
+`shared/sysext/finalize/sysext-lodge-accounts-guard.sh`, wired in the five
+suite sysexts, fails the sysext build when the delta ships a Lodge app manifest
+and no sysusers file holds that exact line, when
+`usr/lib/sysusers.d/lodge.conf` lacks it, or when a `*.service` or `*.socket`
+names a user or group that the delta's sysusers files do not declare. That
+last check reads only unit files, the regular `*.service` and `*.socket` files
+under `usr/lib/systemd/system`, template units included. It drops a comment
+line (first non-blank character `#` or `;`) even inside a continued value and
+joins a line that ends with `\` with the next non-comment line; `User=`,
+`Group=`, `SupplementaryGroups=` and `DynamicUser=` count in `[Service]`,
+`SocketUser=` and `SocketGroup=` in `[Socket]`; the last assignment of a
+scalar key wins, and `SupplementaryGroups=` accumulates. An effective
+`DynamicUser=` of yes skips only `User=` and `Group=`; the socket keys and the
+supplementary groups are always checked. The guard does not emulate systemd's
+drop-in merging (`<unit>.d`, a template's directory, a type-wide `service.d`,
+a prefix directory, and their precedence). It fails closed: a `*.conf` file in
+any `*.d` directory under `usr/lib/systemd/system` that sets one of those six
+keys fails the build, so an account key belongs in the unit file
+([ADR-0035](../adr/0035-lodge-app-sysexts-declare-user-lodge.md)).
+
 Every sysext must also have a `mkosi.images/<name>/required-paths.txt`: one
 absolute path per line (comments with `#`) that must exist in the finished
 buildroot. The shared finalize script
@@ -410,7 +436,7 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 
 ### notesd
 - `mkosi.postinst.chroot` — Downloads the frostyard-notesd .deb (frostyard/frostnotes GitHub release, no apt repo) via `verified_download()`, checks its `Depends: systemd` against the merged buildroot with `shared/download/deb-dependencies.sh`, then `dpkg -i`. The pin carries attestation metadata, checked at pin time and at every build (see [Attested downloads](#attested-downloads-lodge-notesd-maild-porterd-readd)). No maintainer scripts, no `/etc` file and no tmpfiles (the units use `StateDirectory=`/`RuntimeDirectory=`), so there is no `mkosi.finalize`
-- The deb ships `notesd`, `notesctl`, `frostnotes.service`, `frostnotes-lodge.socket`, `usr/lib/sysusers.d/frostnotes.conf` (user `frostnotes` and the groups `lodge` and `lodge-apps`, so the socket starts without Lodge's own sysext) and the Lodge app under `/usr/share/lodge/apps/notes/` (`app.json`, `web/`). Lodge itself is a separate component and is not part of this sysext
+- The deb ships `notesd`, `notesctl`, `frostnotes.service`, `frostnotes-lodge.socket`, `usr/lib/sysusers.d/frostnotes.conf` (user `frostnotes`, the groups `lodge` and `lodge-apps` so the socket starts without Lodge's own sysext, and user `lodge` with lodge's own line byte for byte, because the daemon resolves that user at start) and the Lodge app under `/usr/share/lodge/apps/notes/` (`app.json`, `web/`). Lodge itself is a separate component and is not part of this sysext
 - `usr/lib/systemd/system-preset/40-notesd.preset` — Enables `frostnotes-lodge.socket` and `frostnotes.service`
 - `usr/lib/systemd/system/multi-user.target.d/10-notesd.conf` — `Upholds=frostnotes-lodge.socket frostnotes.service` (core ADR-0063). Neither unit has a `Condition*=`
 - `usr/lib/extension-release.d/extension-release.notesd` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext refresh` reloads PID 1 and PID 1 sees the new and changed unit files. When an update takes effect depends on the refresh: see [When a sysext update takes effect](#when-a-sysext-update-takes-effect). mkosi keeps the keys of a shipped file and only adds the missing ones (`ID`, `SYSEXT_ID`, `SYSEXT_SCOPE`, `ARCHITECTURE`, ...) after the extra trees and the postinst
@@ -418,7 +444,7 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 
 ### maild
 - `mkosi.postinst.chroot` — Same as notesd, for frostyard-maild from frostyard/frostmail (core ADR-0058). No `mkosi.finalize`: the sealed secrets key lives in `/etc/credstore.encrypted/`, which the sysext never ships, and `frostmail-secrets-key.service` creates it at first start
-- The deb ships `maild`, `mailctl`, `frostmail.service`, `frostmail.socket`, `frostmail-secrets-key.service`, `/usr/libexec/frostmail/make-secrets-key`, `usr/lib/sysusers.d/frostmail.conf` and the Lodge app under `/usr/share/lodge/apps/mail/`
+- The deb ships `maild`, `mailctl`, `frostmail.service`, `frostmail.socket`, `frostmail-secrets-key.service`, `/usr/libexec/frostmail/make-secrets-key`, `usr/lib/sysusers.d/frostmail.conf` (user `frostmail`, group `lodge` for the socket, and user `lodge` with lodge's own line byte for byte, because the daemon resolves that user at start) and the Lodge app under `/usr/share/lodge/apps/mail/`
 - `frostmail-secrets-key.service` is a oneshot with `ConditionPathExists=!` and no `[Install]` section. `frostmail.service` pulls it with `Requires=`/`After=`. It is **not** upheld and **not** in the preset, because an upheld unit with a failing condition is retried forever (see [Service Activation Pattern](#service-activation-pattern-upholds)). `test/suite-sysexts-test.sh` enforces this
 - `usr/lib/systemd/system-preset/40-maild.preset` — Enables `frostmail.socket` and `frostmail.service`
 - `usr/lib/systemd/system/multi-user.target.d/10-maild.conf` — `Upholds=frostmail.socket frostmail.service` (core ADR-0058)
@@ -427,7 +453,7 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 
 ### lodge
 - `mkosi.postinst.chroot` — Downloads the frostyard-lodge .deb (frostyard/lodge GitHub release, no apt repo) via `verified_download()`, checks its `Depends: systemd` against the merged buildroot with `shared/download/deb-dependencies.sh`, then `dpkg -i`. The pin carries attestation metadata, checked at pin time and at every build (see [Attested downloads](#attested-downloads-lodge-notesd-maild-porterd-readd)). The deb ships its own `sysusers.d` and `tmpfiles.d` fragments and no `/etc` file, so there is no `mkosi.finalize`
-- The deb ships `lodge`, `lodgectl`, `lodge.service`, `usr/lib/sysusers.d/lodge.conf` (user `lodge`, groups `lodge-apps` and `lodge-agents`), `usr/lib/tmpfiles.d/lodge.conf` (`/run/lodge` owned by `lodge`, `/run/lodge/apps` owned by root, and `/var/lib/lodge`), the web shell under `/usr/share/lodge/shell/` and `/usr/share/lodge/config.example.json`. It ships no socket and no app manifest: every app sysext adds its own manifest under `/usr/share/lodge/apps/`
+- The deb ships `lodge`, `lodgectl`, `lodge.service`, `usr/lib/sysusers.d/lodge.conf` (user `lodge`, groups `lodge-apps` and `lodge-agents`; the app sysexts repeat the `u lodge` line unchanged), `usr/lib/tmpfiles.d/lodge.conf` (`/run/lodge` owned by `lodge`, `/run/lodge/apps` owned by root, and `/var/lib/lodge`), the web shell under `/usr/share/lodge/shell/` and `/usr/share/lodge/config.example.json`. It ships no socket and no app manifest: every app sysext adds its own manifest under `/usr/share/lodge/apps/`
 - `/etc/lodge/config.json` and `/etc/lodge/lodge.env` belong to the administrator. The sysext ships neither and the daemon starts with its defaults; `lodge.service` reads `lodge.env` with `EnvironmentFile=-`, so a missing file does not fail the start
 - `lodge.service` has no `RuntimeDirectory=`: systemd would remove `/run/lodge` and the apps' sockets with it, so the deb's `tmpfiles.d` fragment creates the directory instead
 - `usr/lib/systemd/system-preset/40-lodge.preset` — Enables `lodge.service`
@@ -437,7 +463,7 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 
 ### porterd
 - `mkosi.postinst.chroot` — Same as notesd, for frostyard-porterd from frostyard/porter (core ADR-0058). No `mkosi.finalize`: the service uses `StateDirectory=` only, the deb ships its own `sysusers.d` fragment and no tmpfiles are needed, and nothing is captured from `/etc`
-- The deb ships `porterd` (no CLI), `frostporter.socket`, `frostporter.service`, `usr/lib/sysusers.d/frostporter.conf` (user `frostporter`, group `lodge`, member of `lodge-apps` and `lodge-agents`) and the Lodge porter app under `/usr/share/lodge/apps/porter/`. It ships no `/etc` file
+- The deb ships `porterd` (no CLI), `frostporter.socket`, `frostporter.service`, `usr/lib/sysusers.d/frostporter.conf` (user `frostporter`, group `lodge`, member of `lodge-apps` and `lodge-agents`, and user `lodge` with lodge's own line byte for byte) and the Lodge porter app under `/usr/share/lodge/apps/porter/`. It ships no `/etc` file
 - `usr/lib/systemd/system-preset/40-porterd.preset` — Enables `frostporter.socket` and `frostporter.service`
 - `usr/lib/systemd/system/multi-user.target.d/10-porterd.conf` — `Upholds=frostporter.socket frostporter.service` (core ADR-0058)
 - `usr/lib/extension-release.d/extension-release.porterd` — `EXTENSION_RELOAD_MANAGER=1`, as for notesd
@@ -445,7 +471,7 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 
 ### readd
 - `mkosi.postinst.chroot` — Same as notesd, for frostyard-readd from frostyard/frostread (core ADR-0058). No `mkosi.finalize`: the units use `StateDirectory=`/`RuntimeDirectory=`, the deb ships its own `sysusers.d` fragment and no tmpfiles are needed, and nothing is captured from `/etc`
-- The deb ships `readd`, `readctl`, `frostread.socket`, `frostread.service`, `usr/lib/sysusers.d/frostread.conf` (user `frostread`, group `lodge`, member of `lodge-apps` and `lodge-agents`) and the Lodge read app under `/usr/share/lodge/apps/read/`. It ships no `/etc` file
+- The deb ships `readd`, `readctl`, `frostread.socket`, `frostread.service`, `usr/lib/sysusers.d/frostread.conf` (user `frostread`, group `lodge`, member of `lodge-apps` and `lodge-agents`, and user `lodge` with lodge's own line byte for byte) and the Lodge read app under `/usr/share/lodge/apps/read/`. It ships no `/etc` file
 - `usr/lib/systemd/system-preset/40-readd.preset` — Enables `frostread.socket` and `frostread.service`
 - `usr/lib/systemd/system/multi-user.target.d/10-readd.conf` — `Upholds=frostread.socket frostread.service` (core ADR-0058)
 - `usr/lib/extension-release.d/extension-release.readd` — `EXTENSION_RELOAD_MANAGER=1`, as for notesd
