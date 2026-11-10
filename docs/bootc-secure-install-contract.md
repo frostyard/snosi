@@ -114,9 +114,11 @@ RUN_LIVE=1` exercises unsigned, wrong-key, and wrong-repository rejection
 through Podman against real published images. The system
 `/etc/containers/policy.json` accepts ordinary workload images and keeps the
 five Frostyard scopes signature-checked; automatic updates do not depend on
-it. Rootless users still receive a permissive
-`$HOME/.config/containers/policy.json` on first login. User tmpfiles creates
-it only when absent, preserving any policy the user already configured.
+it. No image provisions a user policy. Rootless Podman reads the system
+`/etc/containers/policy.json` (permissive default, Frostyard scopes signed)
+unless the user writes their own `$HOME/.config/containers/policy.json`.
+The retired rule never ran; see [Phase 3 of the policy-scope plan](plans/2026-10-29-container-policy-scope-plan.md#phase-3--retire-rootless-provisioning-done)
+and [#1265](https://github.com/frostyard/snosi/issues/1265).
 What is NOT covered by that, and is currently unproven, is refusal at
 install time by this path: a deliberately-broken image reaching the installer.
 

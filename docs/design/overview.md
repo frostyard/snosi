@@ -85,6 +85,9 @@ image-shipped `/etc` paths or self-disable: use a `/var` run-once marker.
 runtime mutation and `.requires/` bans. `snosi-etc-diff` reports drift
 against the booted deployment's pristine `/etc`, with an optional restore
 operation; the bootc path bind-mounts `/` to see below the live `/etc` mount.
+`check-user-tmpfiles-guard.sh` rejects the unread path of the retired
+container-policy rule. No image provisions a user policy that would hide
+`/etc/containers/policy.json`; see [the policy-scope plan, Phase 3](../plans/2026-10-29-container-policy-scope-plan.md#phase-3--retire-rootless-provisioning-done).
 
 All products use base's zram swap policy: LZ4 compression, half of RAM capped
 at 4 GiB. The generator package and configuration have one owner in base.

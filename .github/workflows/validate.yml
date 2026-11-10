@@ -441,6 +441,9 @@ jobs:
       - name: Test RequiredBy guard
         run: ./test/required-by-guard-test.sh
 
+      - name: Test user tmpfiles path guard
+        run: ./test/user-tmpfiles-guard-test.sh
+
       - name: Test Upholds guard
         run: ./test/upholds-guard-test.sh
 
@@ -516,6 +519,10 @@ jobs:
         # target" (2026-08-12, snow-linux-live-setup.service). See
         # docs/adr/0013 and frostyard/core ADR-0030.
         run: ./check-required-by-guard.sh
+
+      - name: Forbid unread user tmpfiles paths
+        # User scope reads XDG paths, never /usr/lib/user-tmpfiles.d (snosi#1265).
+        run: ./check-user-tmpfiles-guard.sh
 
       - name: Forbid Upholds= of condition-gated units
         # systemd retries an upheld unit whose Condition fails, forever

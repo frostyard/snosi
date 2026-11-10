@@ -1,11 +1,15 @@
 # Plan: Scope the strict container policy to bootc updates
 
-**Status:** Phases 1-2 implemented — Brian chose option A on 2026-10-29 (desk
+**Status:** Phases 1-3 implemented — Brian chose option A on 2026-10-29 (desk
 T478b); see [ADR-0025](../adr/0025-scope-strict-container-policy-to-bootc-updates.md).
-Both phases landed in one change. One image ships both, and the previous
+Phase 3 removed the unread rootless provisioning rule
+([#1265](https://github.com/frostyard/snosi/issues/1265)).
+Phases 1-2 landed in one change. One image ships both, and the previous
 image's stager stages the update under its own strict policy, so no window
-exists between them.  
-**Last verified:** 2026-10-29 (lab proof)
+exists between them. Phase 4 remains unproven.
+
+**Last verified:** 2026-11-10 (Phase 3 path diagnosis and regression guards);
+2026-10-29 (Phases 1-2 lab proof)
 
 Before this plan, the system `/etc/containers/policy.json` rejected every
 registry image except five signed Frostyard repositories. That protected bootc
@@ -184,16 +188,31 @@ secure runs prove the PR's stager and policies on signed images with bootc
 overlapping stagers are proven by the fixtures in
 `test/bootc-container-policy-test.sh`, not in the lab.
 
-## Phase 3 — Retire rootless provisioning (optional)
+## Phase 3 — Retire rootless provisioning (done)
 
-- With a permissive system default, `user-tmpfiles.d/snosi-containers-policy.conf`
-  is redundant. Remove the `C`/`d` lines; keep
-  `/usr/share/snosi/containers/user-policy.json` for the workaround above.
-  Existing user copies stay. For those users the copy still replaces the
-  system file, so their manual pulls of Frostyard repositories stay
-  unverified, as today; the stager does not depend on them.
-- **Done when:** the test drops the two provisioning checks and nothing else
-  references the tmpfiles file.
+- The rule `usr/lib/user-tmpfiles.d/snosi-containers-policy.conf` never ran,
+  since its introduction in #872. `systemd-tmpfiles --user` never reads
+  `/usr/lib/user-tmpfiles.d`; it searches XDG config and data directories,
+  including `/usr/share/user-tmpfiles.d`. No user ever got a copy from this
+  rule. See [#1265](https://github.com/frostyard/snosi/issues/1265) and
+  [tmpfiles.d(5) v262](https://www.freedesktop.org/software/systemd/man/262/tmpfiles.d.html).
+- ADR-0025's Context statement that the rootless copy "arrives only when
+  user tmpfiles runs" is wrong: the copy never arrived. The ADR stays
+  unchanged; this living plan records the correction.
+- The rule is deleted, not moved. A per-user copy would hide
+  `/etc/containers/policy.json`, removing Frostyard signature checks on manual
+  pulls and preventing later system-policy changes from reaching that user.
+  No image provisions a user policy. A manually created user policy still
+  takes precedence; this change does not remove it. The stager does not
+  depend on user policies.
+- `/usr/share/snosi/containers/user-policy.json` stays for the per-command
+  workaround above and the manual remedy for older hosts in #1265.
+- **Done:** `test/bootc-container-policy-test.sh` drops the two provisioning
+  assertions and keeps the workaround-policy content checks.
+  `check-user-tmpfiles-guard.sh` rejects every tracked path under
+  `usr/lib/user-tmpfiles.d/`, in payloads or elsewhere.
+  `test/user-tmpfiles-guard-test.sh` includes the exact retired rule as a
+  revert fixture. Both run in `validate.yml`.
 
 ## Phase 4 — Prove the T3 claim before ADR-0025 is Accepted
 

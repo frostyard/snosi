@@ -42,6 +42,15 @@ image references, and `dps-luks-cleanup-test.sh`, which needs root. The
 `validate.yml` shell-lint job discovers scripts by extension and shebang.
 Runtime `/etc` deletion, `RequiredBy=`, `Upholds=`, publication, sysext and profile
 dependency guards have fixture suites.
+`check-user-tmpfiles-guard.sh` rejects every tracked path under
+`usr/lib/user-tmpfiles.d/`, which `systemd-tmpfiles --user` never reads.
+`test/user-tmpfiles-guard-test.sh` covers valid user and system directories,
+invalid paths inside and outside payloads, the exact retired container-policy
+rule as a revert, and the real repository without an override. Both run in
+`validate.yml`; the retired rule must not move to a valid user directory,
+because a per-user policy would hide the system policy's signature checks
+and future changes ([#1265](https://github.com/frostyard/snosi/issues/1265),
+[policy-scope plan, Phase 3](../plans/2026-10-29-container-policy-scope-plan.md#phase-3--retire-rootless-provisioning-done)).
 
 `test/no-nbc-test.sh` rejects `frostyard-nbc` in tracked mkosi configs and
 base `nbc-update-download` units; installed-image tier 2 checks the package

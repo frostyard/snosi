@@ -77,7 +77,10 @@ The system policy `/etc/containers/policy.json` accepts ordinary workload
 images by default. It keeps the five Frostyard scopes `sigstoreSigned`. A
 caller that pulls a Frostyard product repository by name still verifies its
 signature. Any process with a `$HOME/.config/containers/policy.json` reads that
-file instead, as on stock Debian.
+file instead, as on stock Debian. No image creates such a user file; the
+retired provisioning rule never ran
+([#1265](https://github.com/frostyard/snosi/issues/1265),
+[policy-scope plan, Phase 3](plans/2026-10-29-container-policy-scope-plan.md#phase-3--retire-rootless-provisioning-done)).
 
 The system policy does not protect manual operations. A manual `bootc switch` to
 a foreign registry image is no longer refused by policy. Protection there is
