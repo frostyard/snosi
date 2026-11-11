@@ -87,7 +87,13 @@ Image builds have four phases, in order:
    ([compatibility contract](../bootc-secure-assembly-compatibility.md)).
 2. **PostInstallationScripts:** kernel dracut postinstall, shared
    `shared/scripts/common-postinst.sh`, and the product's setup prepare
-   os-release, package inventory and service state. Package `/opt` payloads
+   os-release, package inventory and service state. The kernel postinstall
+   builds the initramfs through `shared/kernel/scripts/build-initramfs.sh`:
+   dracut 106 can exit 0 with no libc and no dynamic loader in the
+   initramfs when its temporary directory is named `dracut.ko*`
+   ([dracut-ng 5c53a810](https://github.com/dracut-ng/dracut-ng/commit/5c53a810bbc983efeaec17d88ac06a697059a201),
+   fixed in 109), so the helper checks the listing for `libc.so.6` and runs
+   dracut again, at most 3 times (`test/kernel-initramfs-retry-test.sh`). Package `/opt` payloads
    destined for immutable images or sysexts must be relocated under `/usr`.
 3. **FinalizeScripts:** `shared/outformat/image/finalize/mkosi.finalize.chroot`
    normalizes the image, writes `/etc/machine-id` as `uninitialized`, removes
