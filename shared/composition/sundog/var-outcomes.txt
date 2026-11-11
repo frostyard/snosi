@@ -31,6 +31,7 @@ lib/apache2	tmpfiles
 lib/dbus*	tmpfiles
 lib/emacsen-common/state/flavor/installed	tmpfiles
 lib/emacsen-common/state/flavor/pending	tmpfiles
+lib/fprint	tmpfiles
 # ghostscript ships ~250 individual CMap symlinks via a generated tmpfiles.d
 # rule (pulled by cups-filters); every one is an exact L-type target.
 lib/ghostscript/CMap/**	tmpfiles
