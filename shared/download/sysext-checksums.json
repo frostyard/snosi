@@ -20,9 +20,9 @@
     "version": "1.18.2"
   },
   "microsoft-edge-stable": {
-    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_157.0.4341.42-1_amd64.deb",
-    "sha256": "1bd6f4753cf139ec751ca74b47054693c5a6c28128461ec1c3dd80c05640e2b9",
-    "version": "157.0.4341.42-1"
+    "url": "https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/microsoft-edge-stable_157.0.4341.46-1_amd64.deb",
+    "sha256": "b22585500e6d0366d959cc10cf5864fc1a28524ba2b1eb97ead3eb7ee351b61a",
+    "version": "157.0.4341.46-1"
   },
   "code-server": {
     "url": "https://github.com/coder/code-server/releases/download/v4.145.2/code-server_4.145.2_amd64.deb",
@@ -30,14 +30,14 @@
     "version": "4.145.2"
   },
   "coder": {
-    "url": "https://github.com/coder/coder/releases/download/v2.38.6/coder_2.38.6_linux_amd64.deb",
-    "sha256": "adab1428bf1574a124abc449a3db6fe689ed52b7f61b40fad3903e93d509df24",
-    "version": "2.38.6"
+    "url": "https://github.com/coder/coder/releases/download/v2.38.7/coder_2.38.7_linux_amd64.deb",
+    "sha256": "f4d6ebcf83440a431c275a4549ed4e9afd3c7b63e29766b175b9b73a0abb2441",
+    "version": "2.38.7"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.1.35/GitHub-Copilot-linux-x64.deb",
-    "sha256": "c2cc6f0389747b342c64be5613b3ffc3f56e3dbe1d11dc82f496e665a613404f",
-    "version": "1.1.35"
+    "url": "https://github.com/github/app/releases/download/v1.2.0/GitHub-Copilot-linux-x64.deb",
+    "sha256": "7a1cb472b67e19ddcd7dbe5d4e025db42938d098f81fb90b05441e19440b84e3",
+    "version": "1.2.0"
   },
   "gitdesktop": {
     "url": "https://github.com/theBGuy/GitDesktop/releases/download/v0.14.0/GitDesktop_0.14.0_amd64.deb",
@@ -55,9 +55,9 @@
     "version": "2026.45.3"
   },
   "paseo": {
-    "url": "https://github.com/getpaseo/paseo/releases/download/v0.15.3/Paseo-0.15.3-amd64.deb",
-    "sha256": "b4ce65fd58f52d6f061a9a4d2b2542df8be565eac2ef59f7aa2c1f448c404883",
-    "version": "0.15.3"
+    "url": "https://github.com/getpaseo/paseo/releases/download/v0.15.4/Paseo-0.15.4-amd64.deb",
+    "sha256": "bb639b523056cebf204b2e00c63c47bc3eae61efc22d1cfb2dad8c69cacd194d",
+    "version": "0.15.4"
   },
   "pilothouse": {
     "url": "https://github.com/frostyard/pilothouse/releases/download/v0.9.1/frostyard-pilothouse_0.9.1_amd64.deb",
