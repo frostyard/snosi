@@ -61,6 +61,13 @@ kernel. Include order controls mkosi list-valued settings (`Packages=`,
 profile. mkosi's `ToolsTree=default` uses `mkosi.tools.sandbox/`; target APT
 settings use `mkosi.sandbox/`. Network retry/timeouts need both trees.
 
+Snow, Snowfield and Sundog install `fprintd` and `libpam-fprintd` for desktop
+fingerprint authentication. The shared desktop tmpfiles rule creates
+`/var/lib/fprint` with mode 0700; fprintd also declares it as a systemd state
+directory. Its D-Bus service starts on demand. Debian's fprintd PAM profile
+remains disabled in `common-auth`; enrollment and broader PAM use are optional
+([user guidance](../installing.md#fingerprint-readers)).
+
 A file that replaces a package's dpkg conffile (for example
 `etc/plymouth/plymouthd.conf`) ships through `ExtraTrees=`, which lands after
 dpkg runs. Never ship it through `SkeletonTrees=`: dpkg then finds a

@@ -203,3 +203,24 @@ For bootc migration-specific backup and failure guidance, see the
 [nbc to bootc migration runbook](nbc-to-bootc-migration.md). The native image,
 partition, update, and boot contracts are retained as history in
 [Native A/B Contracts](native-ab-contracts.md).
+
+### Fingerprint readers
+
+Snow, Snowfield and Sundog include fprintd and libfprint for supported readers.
+Enroll a fingerprint in the desktop's user settings or with `fprintd-enroll`.
+The GNOME login and lock screen and the Plasma lock screen have fingerprint
+PAM configurations. Reader support depends on the device; check the
+[libfprint supported devices list](https://fprint.freedesktop.org/supported-devices.html)
+against the installed library version.
+
+The Debian fingerprint profile is not enabled in `common-auth` by default.
+Administrators may opt in with `sudo pam-auth-update --enable fprintd` and
+remove that profile with `sudo pam-auth-update --remove fprintd`. This changes
+authentication for services that use `common-auth`, including sudo, polkit,
+TTY and SDDM login. Keep a password available. Fingerprints do not unlock
+encrypted disks, and a fingerprint login may not unlock the desktop keyring
+or wallet.
+
+Enrollment data is stored on the device or in `/var/lib/fprint`, depending on
+the reader, and is not part of the image. Check the device's behavior before
+disposing of it or transferring it to another user.
