@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Static guard: the Snow system monitor launcher must name a shipped program.
 #
-# Logomenu's "System Monitor" item runs /usr/libexec/missioncenter-helper (the
-# default of its menu-button-system-monitor key). Snow and Snowfield ship the
+# Logomenu's "System Monitor" item runs gnome-system-monitor (the default of
+# its menu-button-system-monitor key since frostyard/logomenu c194ee6; before
+# it, /usr/libexec/missioncenter-helper, which stays as a compatibility path
+# for a user value that names it). Snow and Snowfield ship the
 # Debian gnome-system-monitor package; the Mission Center Flatpak left the
 # core Flatpak sets. This test fails when:
 #  - shared/packages/snow/mkosi.conf does not install gnome-system-monitor,

@@ -164,7 +164,7 @@ jobs:
 
       - name: Validate the system monitor launcher
         # Static guard: Snow's package list installs gnome-system-monitor,
-        # /usr/libexec/missioncenter-helper (the Logomenu System Monitor
+        # /usr/libexec/missioncenter-helper (the old Logomenu System Monitor
         # target) execs it, and no shipped file names the removed Mission
         # Center Flatpak. No root, network, or image build.
         run: ./test/system-monitor-launcher-test.sh

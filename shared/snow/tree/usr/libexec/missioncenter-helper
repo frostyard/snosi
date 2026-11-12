@@ -1,10 +1,11 @@
 #!/usr/bin/bash
 set -euo pipefail
 
-# Compatibility path for the Logomenu "System Monitor" item. The pinned
-# Logomenu defaults menu-button-system-monitor to this path, so it must
-# keep launching a program the image ships. Snow and Snowfield ship the
-# Debian gnome-system-monitor package (shared/packages/snow/mkosi.conf);
-# the Mission Center Flatpak is no longer installed or launched from here.
-# Remove this file only after the pinned Logomenu no longer names it.
+# Compatibility path for the Logomenu "System Monitor" item. Logomenu up to
+# 8927224 defaulted menu-button-system-monitor to this path; the pinned
+# Logomenu now defaults to gnome-system-monitor. A user value that still
+# names this path must keep launching a program the image ships. Snow and
+# Snowfield ship the Debian gnome-system-monitor package
+# (shared/packages/snow/mkosi.conf); the Mission Center Flatpak is no
+# longer installed or launched from here.
 exec /usr/bin/gnome-system-monitor "$@"
