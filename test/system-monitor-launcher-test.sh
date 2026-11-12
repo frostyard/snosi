@@ -30,6 +30,7 @@ fail() { printf 'not ok - %s\n' "$1" >&2; FAIL=$((FAIL + 1)); }
 settings() {
     awk '
         /^[[:space:]]*#/ { next }
+        /^\[/ { key = ""; next }
         /^[A-Za-z]+=/ {
             split($0, kv, "=")
             key = kv[1]
@@ -68,19 +69,22 @@ else
     pass "missioncenter-helper does not call flatpak"
 fi
 
-mapfile -t named < <(
+mapfile -t scanned < <(
     git -C "$root" ls-files -z |
         tr '\0' '\n' |
-        grep -Ev '^(docs/|\.memory/|test/)|\.md$' |
-        while IFS= read -r path; do
-            [[ -f "$root/$path" ]] || continue
-            if grep -q 'io\.missioncenter\.MissionCenter' "$root/$path"; then
-                printf '%s\n' "$path"
-            fi
-        done
+        grep -Ev '^(docs/|\.memory/|test/)|\.md$'
 )
-if ((${#named[@]} == 0)); then
-    pass "no shipped file names io.missioncenter.MissionCenter"
+named=()
+for path in "${scanned[@]}"; do
+    [[ -f "$root/$path" ]] || continue
+    if grep -q 'io\.missioncenter\.MissionCenter' "$root/$path"; then
+        named+=("$path")
+    fi
+done
+if ((${#scanned[@]} == 0)); then
+    fail "the Mission Center scan found tracked files to read"
+elif ((${#named[@]} == 0)); then
+    pass "no shipped file names io.missioncenter.MissionCenter (${#scanned[@]} files)"
 else
     fail "no shipped file names io.missioncenter.MissionCenter: ${named[*]}"
 fi
