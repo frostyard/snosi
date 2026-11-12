@@ -20,6 +20,7 @@
 #
 # The guard intentionally does NOT require that every file under test/ appear
 # here, so that in-flight branches adding tests do not break on merge.
+1password-links-test.sh	ci	validate.yml
 base-hardware-utils-test.sh	ci	validate.yml
 bootc-bootloader-reconcile-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
 bootc-container-policy-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml

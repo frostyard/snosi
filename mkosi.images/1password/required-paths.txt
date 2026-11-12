@@ -2,8 +2,10 @@
 /usr/lib/1Password/1password
 /usr/lib/1Password/chrome-sandbox
 /usr/lib/1Password/1Password-BrowserSupport
+/usr/lib/1Password/1password-mcp
 /usr/bin/1password
 /usr/bin/op-ssh-sign
+/usr/bin/1password-mcp
 # Desktop integration: launcher entry and hicolor icons (see docs/design/sysexts.md
 # "Desktop Applications in Sysexts")
 /usr/share/applications/1password.desktop
