@@ -194,7 +194,7 @@ jobs:
         run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
 
       - name: setup-mkosi
-        uses: systemd/mkosi@a6753e508681aa162cef4e5183f1a728c11c4d78 # main 2026-11-05
+        uses: systemd/mkosi@904357aa12013e3adbb4857cc4bf8840c6c83682 # main 2026-11-05
 
       - name: Verify attested sysext downloads
         # First-party debs pinned in shared/download/sysext-checksums.json with
