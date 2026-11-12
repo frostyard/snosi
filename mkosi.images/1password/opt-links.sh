@@ -47,8 +47,9 @@ resolves_in_root() {
 }
 
 do_check() {
-    local link target bad=0
+    local link target bad=0 scanned=0 resolved=0
     while IFS= read -r -d '' link; do
+        scanned=$((scanned + 1))
         target=$(readlink -- "$link") || continue
         if [[ "$target" == "$old" || "$target" == "$old"/* ]]; then
             echo "1password: ${link#"$root"} still points at $old" >&2
@@ -57,6 +58,7 @@ do_check() {
     done < <(find_links)
 
     while IFS= read -r -d '' link; do
+        resolved=$((resolved + 1))
         if ! resolves_in_root "$link"; then
             echo "1password: ${link#"$root"} does not resolve inside the image" >&2
             bad=1
@@ -66,12 +68,20 @@ do_check() {
     while IFS= read -r -d '' link; do
         target=$(readlink -- "$link") || continue
         [[ "$target" == *1Password/* ]] || continue
+        resolved=$((resolved + 1))
         if ! resolves_in_root "$link"; then
             echo "1password: ${link#"$root"} does not resolve inside the image (target $target)" >&2
             bad=1
         fi
     done < <( [[ -d "$root/usr/bin" ]] && find "$root/usr/bin" -maxdepth 1 -type l -print0 )
 
+    echo "1password: opt-links $mode: $scanned links under /usr scanned for $old, $resolved 1Password links resolved"
+    # /usr/bin/1password always exists: no link at all means a wrong ROOT,
+    # and a check over nothing proves nothing.
+    if (( resolved == 0 )); then
+        echo "1password: no 1Password link found under $root/usr" >&2
+        bad=1
+    fi
     (( bad == 0 ))
 }
 

@@ -53,6 +53,12 @@ fi
 rm "$lib/foo"
 "$script" check "$work"
 
+# A root with no 1Password link (a wrong ROOT) must fail, not pass vacuously.
+mkdir -p "$work/empty/usr/bin"
+if "$script" check "$work/empty"; then
+    echo 'FAIL: a root with no 1Password link passed validation' >&2; exit 1
+fi
+
 # Static wiring: the rewrite runs in the postinst after the /opt move and the
 # check runs in the finalize script.
 mv_line="$(grep -n '^mv /opt/1Password /usr/lib/1Password$' "$postinst" | head -1 | cut -d: -f1)" || true
