@@ -7,7 +7,12 @@ postinst="$ROOT_DIR/mkosi.images/1password/mkosi.postinst.chroot"
 finalize="$ROOT_DIR/mkosi.images/1password/mkosi.finalize"
 required="$ROOT_DIR/mkosi.images/1password/required-paths.txt"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+cleanup() {
+    # A case below makes a directory unreadable; restore before removing.
+    chmod -R u+rwx "$work" 2>/dev/null || true
+    rm -rf "$work"
+}
+trap cleanup EXIT
 lib="$work/usr/lib/1Password"
 bin="$work/usr/bin"
 mkdir -p "$lib" "$bin"
@@ -51,6 +56,52 @@ if "$script" check "$work"; then
     echo 'FAIL: dangling relative link passed validation' >&2; exit 1
 fi
 rm "$lib/foo"
+"$script" check "$work"
+
+# The host resolves an intermediate absolute directory symlink and ".."; the
+# resolver must not, or a check can escape the fixture root.
+ln -s /etc "$lib/etc"
+ln -s etc/passwd "$lib/bad"
+if "$script" check "$work"; then
+    echo 'FAIL: intermediate absolute directory symlink escaped the root' >&2; exit 1
+fi
+rm "$lib/bad" "$lib/etc"
+ln -s ../../../../../../../../etc/passwd "$lib/up"
+if "$script" check "$work"; then
+    echo 'FAIL: relative target climbed above the root' >&2; exit 1
+fi
+rm "$lib/up"
+
+# Several hops, and a hop through an in-root directory symlink, still resolve.
+ln -s hop2 "$lib/hop1"
+ln -s /usr/lib/1Password/1password-mcp "$lib/hop2"
+ln -s /usr/lib/1Password "$lib/libdir"
+ln -s libdir/1password-mcp "$lib/via"
+"$script" check "$work"
+rm "$lib/hop1" "$lib/hop2" "$lib/via" "$lib/libdir"
+
+# A loop must fail instead of spinning.
+ln -s loopb "$lib/loopa"
+ln -s loopa "$lib/loopb"
+if "$script" check "$work"; then
+    echo 'FAIL: symlink loop passed validation' >&2; exit 1
+fi
+rm "$lib/loopa" "$lib/loopb"
+
+# A find that cannot read a subdirectory must fail the scan, not shorten it.
+if [[ "$(id -u)" == 0 ]]; then
+    echo 'SKIP: traversal-failure case needs a non-root user'
+else
+    mkdir -p "$lib/locked"
+    touch "$lib/locked/file"
+    chmod 000 "$lib/locked"
+    if "$script" check "$work"; then
+        chmod 755 "$lib/locked"
+        echo 'FAIL: an unreadable subdirectory did not fail the scan' >&2; exit 1
+    fi
+    chmod 755 "$lib/locked"
+    rm -rf "$lib/locked"
+fi
 "$script" check "$work"
 
 # A root with no 1Password link (a wrong ROOT) must fail, not pass vacuously.
