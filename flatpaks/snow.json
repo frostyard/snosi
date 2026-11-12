@@ -6,10 +6,6 @@
       "name": "Bazaar App Store"
     },
     {
-      "id": "io.missioncenter.MissionCenter",
-      "name": "MissionCenter System Monitor"
-    },
-    {
       "id": "com.mattjakeman.ExtensionManager",
       "name": "Extension Manager"
     },

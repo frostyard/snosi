@@ -47,6 +47,11 @@ erases disks; `test/firn-gui-scope-test.sh` rejects it in every other
 package list and build script. No image may enable GDM automatic or timed
 login, because no image creates the user it would name;
 `test/gdm-autologin-scope-test.sh` enforces this.
+Snow and Snowfield ship the Debian `gnome-system-monitor` (Flathub has no
+GNOME System Monitor); the pinned Logomenu System Monitor item runs it, and
+the compatibility path `/usr/libexec/missioncenter-helper` (the default of
+Logomenu up to 8927224) execs it. A menu item or launcher must never name a
+program the image does not ship (`test/system-monitor-launcher-test.sh`).
 Snow and Snowfield ship exactly one first-login trigger,
 `shared/snow/tree/etc/xdg/autostart/org.frostyard.ChairLift.FirstRun.desktop`
 (`Exec=/usr/bin/chairlift-first-run`), and the app list

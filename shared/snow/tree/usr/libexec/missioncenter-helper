@@ -1,8 +1,11 @@
 #!/usr/bin/bash
 set -euo pipefail
 
-if ! flatpak list --system --columns=application | grep -q '^io\.missioncenter\.MissionCenter$'; then
-    flatpak install --system -y io.missioncenter.MissionCenter
-fi
-
-/usr/bin/flatpak run io.missioncenter.MissionCenter "$@"
+# Compatibility path for the Logomenu "System Monitor" item. Logomenu up to
+# 8927224 defaulted menu-button-system-monitor to this path; the pinned
+# Logomenu now defaults to gnome-system-monitor. A user value that still
+# names this path must keep launching a program the image ships. Snow and
+# Snowfield ship the Debian gnome-system-monitor package
+# (shared/packages/snow/mkosi.conf); the Mission Center Flatpak is no
+# longer installed or launched from here.
+exec /usr/bin/gnome-system-monitor "$@"

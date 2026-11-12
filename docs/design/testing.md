@@ -117,6 +117,12 @@ login key (`AutomaticLogin`, `TimedLogin`) on a line that is not a comment,
 with or without an `=`. The retired live-ISO
 `shared/snow/tree/etc/gdm3/daemon.conf` set `AutomaticLogin=snow`; the Firn
 installer creates the only user an installed system has.
+`test/system-monitor-launcher-test.sh` keeps the Logomenu System Monitor
+item on a shipped program: `shared/packages/snow/mkosi.conf` must install
+`gnome-system-monitor` (no `RemovePackages=` may name it),
+`/usr/libexec/missioncenter-helper` must exec `/usr/bin/gnome-system-monitor`
+and call no Flatpak, and outside `docs/`, `.memory/`, `test/` and `*.md` no
+tracked file may name the removed `io.missioncenter.MissionCenter` Flatpak.
 `test/snow-gtk-theme-test.py` guards the Snow GTK theme
 ([ADR-0034](../adr/0034-snow-gtk-theme.md)). It checks the sha256 pin of
 `test/fixtures/frostyard-design/colors.css`, the byte copy of core's design

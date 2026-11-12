@@ -5,10 +5,6 @@
             "id": "io.github.kolunmi.Bazaar"
         },
         {
-            "name": "MissionCenter System Monitor",
-            "id": "io.missioncenter.MissionCenter"
-        },
-        {
             "name": "Extension Manager",
             "id": "com.mattjakeman.ExtensionManager"
         },
