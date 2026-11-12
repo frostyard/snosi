@@ -37,6 +37,22 @@ scan_links() {
     fi
 }
 
+# Split a path into components. A trailing "/" becomes an explicit "."
+# component: `read -a` drops the trailing empty field, and the directory
+# requirement of "dir/" would be lost with it.
+split_path() {
+    local path="$1" trailing=0
+    local -n comps=$2
+    comps=()
+    if [[ "$path" == */ ]]; then
+        trailing=1
+    fi
+    IFS=/ read -r -a comps <<< "$path" || true
+    if (( trailing )); then
+        comps+=('.')
+    fi
+}
+
 # Succeed only when LINK resolves to an existing path inside ROOT. Resolution
 # stays inside ROOT, never on the host: walk the components one at a time from
 # ROOT, follow any symlink met on the way (an absolute target restarts at ROOT,
@@ -46,10 +62,8 @@ scan_links() {
 resolves_in_root() {
     local link="$1" cur="" comp target hops=0
     local -a pending=() add=()
-    local rest remaining p
 
-    rest=${link#"$root"}
-    IFS=/ read -r -a pending <<< "$rest"
+    split_path "${link#"$root"}" pending
 
     while (( ${#pending[@]} > 0 )); do
         comp=${pending[0]}
@@ -70,7 +84,7 @@ resolves_in_root() {
                 return 1
             fi
             target=$(readlink -- "$root$cur/$comp") || return 1
-            IFS=/ read -r -a add <<< "$target"
+            split_path "$target" add
             pending=("${add[@]}" "${pending[@]}")
             if [[ "$target" == /* ]]; then
                 cur=""
@@ -79,20 +93,15 @@ resolves_in_root() {
             continue
         fi
 
-        # A component that is followed by another one must be a directory.
-        remaining=0
-        for p in "${pending[@]}"; do
-            case "$p" in ''|.) continue ;; esac
-            remaining=1
-            break
-        done
-        if (( remaining )) && [[ -e "$root$cur/$comp" && ! -d "$root$cur/$comp" ]]; then
+        cur="$cur/$comp"
+        # Any component still pending needs CUR to be a directory. The kernel
+        # fails "file/", "file/." and "missing/.." the same way.
+        if (( ${#pending[@]} > 0 )) && [[ ! -d "$root${cur:-/}" ]]; then
             return 1
         fi
-        cur="$cur/$comp"
     done
 
-    [[ -e "$root$cur" ]]
+    [[ -e "$root${cur:-/}" ]]
 }
 
 do_check() {

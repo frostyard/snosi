@@ -59,18 +59,47 @@ rm "$lib/foo"
 "$script" check "$work"
 
 # The host resolves an intermediate absolute directory symlink and ".."; the
-# resolver must not, or a check can escape the fixture root.
+# resolver must not, or a check can escape the fixture root. $work/etc exists
+# as an empty directory, so $lib/etc itself resolves and only the "etc/passwd"
+# step can fail.
+mkdir -p "$work/etc"
 ln -s /etc "$lib/etc"
 ln -s etc/passwd "$lib/bad"
 if "$script" check "$work"; then
     echo 'FAIL: intermediate absolute directory symlink escaped the root' >&2; exit 1
 fi
 rm "$lib/bad" "$lib/etc"
+rmdir "$work/etc"
 ln -s ../../../../../../../../etc/passwd "$lib/up"
 if "$script" check "$work"; then
     echo 'FAIL: relative target climbed above the root' >&2; exit 1
 fi
 rm "$lib/up"
+
+# A non-final component must be a directory that exists: the kernel fails
+# "missing/..", "file/." and "file/" the same way.
+ln -s missing/../1password-mcp "$lib/m1"
+if "$script" check "$work"; then
+    echo 'FAIL: missing/../ resolution passed validation' >&2; exit 1
+fi
+rm "$lib/m1"
+ln -s 1password-mcp/. "$lib/m2"
+if "$script" check "$work"; then
+    echo 'FAIL: file/. resolution passed validation' >&2; exit 1
+fi
+rm "$lib/m2"
+ln -s 1password-mcp/ "$lib/m3"
+if "$script" check "$work"; then
+    echo 'FAIL: file/ resolution passed validation' >&2; exit 1
+fi
+rm "$lib/m3"
+
+# A link that resolves to the root itself, or through "." and "..", resolves.
+ln -s / "$lib/rootlink"
+ln -s ../1Password/./ "$lib/dotdir"
+ln -s ../../../ "$lib/toroot"
+"$script" check "$work"
+rm "$lib/rootlink" "$lib/dotdir" "$lib/toroot"
 
 # Several hops, and a hop through an in-root directory symlink, still resolve.
 ln -s hop2 "$lib/hop1"
