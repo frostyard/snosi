@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 set -euo pipefail
 
+"$SRCDIR/mkosi.images/1password/desktop-entries.sh" check "$BUILDROOT"
+
 # Capture only /etc/1password (custom_allowed_browsers, written by the deb
 # postinst) into the factory tree; the tmpfiles.d fragment copies it to /etc
 # at boot — sysexts cannot ship /etc directly.
