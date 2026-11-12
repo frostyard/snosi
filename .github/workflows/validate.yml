@@ -325,6 +325,9 @@ jobs:
         # required-paths.txt entries. No root, network, or image build.
         run: ./test/sysext-required-paths-test.sh
 
+      - name: Validate 1Password desktop entries
+        run: ./test/1password-desktop-test.sh
+
       - name: Validate sysext postoutput artifact naming
         # Fixture suite for the mkosi postoutput hook: versioned filenames,
         # compression extensions and manifest key/version propagation.
