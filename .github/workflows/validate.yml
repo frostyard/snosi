@@ -195,6 +195,12 @@ jobs:
         # and partial-tree cleanup.
         run: ./test/brew-installer-retry-test.sh
 
+      - name: Validate initramfs build retry logic
+        # Root-free fixture with stubbed dracut and lsinitrd: an initramfs
+        # without libc.so.6 (dracut 106 skipped dependency resolution) is
+        # rebuilt, at most 3 times.
+        run: ./test/kernel-initramfs-retry-test.sh
+
       - name: Validate snosi-etc-diff drift tooling
         # Static, non-root regression test driving the real script against
         # fixture trees via its SNOSI_ETC_DIFF_LIVE_ETC/PRISTINE_ETC test

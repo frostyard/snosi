@@ -18,8 +18,11 @@ if [[ -z "$KERNEL_VERSION" ]]; then
   exit 1
 fi
 
-dracut --force --no-hostonly --reproducible --zstd --verbose \
-  --kver "$KERNEL_VERSION" "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
+# build_initramfs runs dracut and retries when dracut 106 skips dependency
+# resolution (see the helper).
+# shellcheck source=shared/kernel/scripts/build-initramfs.sh
+source "$SRCDIR/shared/kernel/scripts/build-initramfs.sh"
+build_initramfs "$KERNEL_VERSION" "/usr/lib/modules/$KERNEL_VERSION/initramfs.img"
 
 # bootc and assemble-uki.sh read the kernel from /usr/lib/modules/<version>.
 # Older Debian kernel packages install it only as /boot/vmlinuz-<version>.
