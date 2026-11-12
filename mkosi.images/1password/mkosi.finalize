@@ -3,6 +3,7 @@
 set -euo pipefail
 
 "$SRCDIR/mkosi.images/1password/desktop-entries.sh" check "$BUILDROOT"
+"$SRCDIR/mkosi.images/1password/opt-links.sh" check "$BUILDROOT"
 
 # Capture only /etc/1password (custom_allowed_browsers, written by the deb
 # postinst) into the factory tree; the tmpfiles.d fragment copies it to /etc
