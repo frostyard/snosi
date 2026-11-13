@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "shared/bootc-secure/ci/push-immutable-image.sh (#1220)",
+  "correction": "A retry of the immutable version-tag push was believed safe with a tag-existence check only before a retry. The first push can also replace a tag that exists at entry, and a later digest comparison accepts the replacement; the check now runs before every push and stops with 0 pushes when the tag exists.",
+  "evidence": "Cross-review of #1220 at 6bfdfd8 (openai/gpt-6.1-sol), blocking finding 1; revert at ade24fd fails 'existing tag at entry is rejected without pushing' in test/bootc-secure-push-test.sh",
+  "promoted_to": "test/bootc-secure-push-test.sh; docs/design/ci-cd.md; runbooks/image-publication-failure.md"
+}

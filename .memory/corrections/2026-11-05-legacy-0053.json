@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "shared/snosi-report/tree/usr/libexec/snosi-health-report curl call (T857 t20, ADR-0030)",
+  "correction": "The post used plain `curl`, so a user's ~/.curlrc could add a header, follow a redirect or set a proxy on a report. curl now runs with `-q` (--disable) as its first argument, the only position where curl honors it.",
+  "evidence": "Cross-review (openai/gpt-6.1-sol) of c69cb30, blocking point 3. test/snosi-health-report-test.sh sets HOME, CURL_HOME and XDG_CONFIG_HOME to a .curlrc with `header = \"X-Leak: 1\"` and `location`: \"a .curlrc header never reaches the intake\" fails without -q.",
+  "promoted_to": "ADR-0030 decision (posting); docs/integration-contracts.md \"Problem reports from Floe\""
+}

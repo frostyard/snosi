@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-21",
+  "scope": "shared/bootc-secure/mkosi.conf",
+  "correction": "The base ExtraTrees copy of the Frostyard key at /usr/lib/systemd/import-pubring.pgp was believed to reach the bootc images. The profile layer installs systemd-container/forky after the base tree, and that package overwrites .pgp with the upstream distro keyring; systemd 262 has no /usr/lib .gpg fallback, so every sysext transfer failed with 'No public key'. The secure composition now restores both names after package installation.",
+  "evidence": "selfie (floe 20261016135149, systemd 262-1): dpkg -S /usr/lib/systemd/import-pubring.pgp -> systemd-container, Fedora/Ubuntu/openSUSE keys only; systemd-sysupdate-update.service failing since at least 2026-10-01; test/sysext-signature-verification-test.sh --rootfs",
+  "promoted_to": "AGENTS.md 'Build and layout'; shared/sysext/keys/README.md; docs/integration-contracts.md"
+}

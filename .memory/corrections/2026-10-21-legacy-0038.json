@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-21",
+  "scope": "mkosi.sandbox/etc/apt/sources.list.d/himmelblau.sources",
+  "correction": "A per-sysext APT source was believed to be harmless in the shared mkosi.sandbox. mkosi's SandboxTrees= is universal, so every image of one invocation shares the sandbox and one repository metadata sync; one broken third-party repo therefore failed every build. The himmelblau source now lives in shared/himmelblau/sandbox and only the second mkosi invocation receives it.",
+  "evidence": "PR #1092 CI runs 39616337275 and 39616337317 failed at apt-get update: the himmelblau Release file returned 404 for about 4 hours on 2026-10-21; mkosi 3c3a08fb SandboxTrees= SettingScope.universal",
+  "promoted_to": "docs/adr/0020-scope-third-party-apt-sources.md; AGENTS.md 'Build and layout'"
+}

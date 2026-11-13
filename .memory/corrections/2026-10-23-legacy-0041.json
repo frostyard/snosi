@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-23",
+  "scope": "shared/native-ab/publish/publish-lib.sh",
+  "correction": "Believed `curl --retry 3` protected the published-ISO full GET. curl --retry does not retry error 56 (Recv failure: Connection reset by peer) or 18 (partial body), so a mid-body reset failed the job on the first attempt. The whole-object HEAD/GET helpers now use --retry-all-errors with --retry (PUBLISH_HTTP_GET_RETRIES, default 5) and --retry-max-time (PUBLISH_HTTP_GET_RETRY_MAX_TIME, default 300), keep --connect-timeout and --max-time, and still fail closed after the last attempt.",
+  "evidence": "3 of the last 60 build-installer-iso.yml runs failed with curl: (56) mid-body: 2 in test/native-iso-boot-smoke-test.sh's ISO download, 1 in verify-remote.sh via http_get_to_file; local runs of test/iso-publication-pipeline-test.sh with test/lib/range-http-server.py --reset-first-gets show rc=18 without --retry-all-errors and success on the retry with it",
+  "promoted_to": "docs/design/ci-cd.md; docs/native-ab-publication.md 'HTTP retry limits'"
+}

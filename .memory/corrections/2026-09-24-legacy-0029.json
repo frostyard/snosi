@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-24",
+  "scope": "ROADMAP.md native A/B and nbc artifact retention",
+  "correction": "The end-of-support cutoff was believed to impose an unconditional requirement to preserve all NBC/native-A/B history and recovery artifacts after 2026-09-30. Support retirement and artifact retention are separate: Accepted core ADR-0050 currently gates outside-stable retention on completion conditions, while Proposed core ADR-0052 would remove that NBC-specific obligation if accepted; core ADR-0048 still protects signed stable and its referenced bytes.",
+  "evidence": "frostyard/core ADR-0047, ADR-0048, ADR-0050 (Accepted) and ADR-0052 (Proposed); ROADMAP.md prior preserve-history-and-recovery requirement",
+  "promoted_to": "ROADMAP.md; docs/adr/0017-gate-native-ab-and-nbc-disposal.md"
+}

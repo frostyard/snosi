@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-13",
+  "scope": "shared/native-ab/publish/retention.sh (ADR-0036, frostyard/snosi#1287)",
+  "correction": "A `.history/<v>/` index pair in `isos/native/v1/` does not always belong to a `snosi-installer` ISO: promote.sh archived every outgoing index of the earlier `snosi-native-installer` channel into the same namespace. Retention must delete a pair only together with the installer ISO of the same version in the same run, never because the version is merely outside the keep window.",
+  "evidence": "Owner review of PR #1287 at 7a7b7f7: a dry run listed `.history/20260801000000/SHA256SUMS{,.gpg}` for deletion beside kept `snosi-native-installer_20260801000000_x86-64.iso`. With the fixture added and the fix reverted, test/iso-retention-test.sh fails ('dry run counts 10 deletions', 'execute exits 0'); with the fix it passes.",
+  "promoted_to": "shared/native-ab/publish/retention.sh (iso_deleted); test/iso-retention-test.sh (native-era .history fixture); docs/adr/0036-prune-installer-isos-after-promotion.md"
+}

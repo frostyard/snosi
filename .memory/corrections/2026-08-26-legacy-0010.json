@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-26",
+  "scope": "build-images.yml cosign pin",
+  "correction": "Believed the pinned stable-v2 cosign plus CI's verify step guaranteed downstream key-verification of published images. Two corrections: (1) cosign v2.6.3-v2.6.5 regress `verify --key` on digests carrying GitHub provenance-attestation referrers (error: no matching attestations: expected key signature, not certificate); v2.6.2 is the last good v2 (bisected against ghcr.io/frostyard/cayo). (2) CI's verify step runs BEFORE the attest-build-provenance step attaches that referrer, so it structurally cannot catch a cosign version that only breaks on attested images - which is the state every downstream verifier (firn installer preflight, manual cosign verify) actually sees.",
+  "evidence": "firn 0.4.2 preflight failed on the 20260826004248 ISO against published cayo; reproduced on the host with the same v2.6.5 binary on both :latest and the immutable digest; v2.6.1/v2.6.2 verify the identical digest successfully; CI job order in build-images.yml shows Verify pushed secure image before Attest build provenance.",
+  "promoted_to": "build-images.yml cosign-release comment + Re-verify key signature after attestation step + check-dependencies.yml blocklist"
+}

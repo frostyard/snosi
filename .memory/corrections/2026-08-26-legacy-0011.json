@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-26",
+  "scope": "update-notify units",
+  "correction": "StartLimitIntervalSec=0 did NOT fix the staged-update notify watcher failures -- it unmasked a second limiter. PathExists= is level-triggered and re-arms on every triggered-service exit; with a semaphore that persists until reboot by design this retrigger-loops until systemd's path TriggerLimit (200/2s) fails the .path unit with 'trigger-limit-hit'. Fix: PathModified= only (edge-triggered), plus a static wants link on the condition-gated service for login-while-pending.",
+  "evidence": "Reproduced in QEMU flurry VM 2026-08-26: writing /run/snosi/update-staged mid-session failed bootc-update-notify.path with Result=trigger-limit-hit in <3s, ~200 service starts in the journal; first seen live as a fumon 'Failed unit detected' toast on the snosi-firn-test incus VM.",
+  "promoted_to": "AGENTS.md (OS Update Staging) + test/update-notify-units-test.sh"
+}

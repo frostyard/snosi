@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-29",
+  "scope": "sysext /usr-only guard (PR #843, issue #718)",
+  "correction": "Issue #718 and the first draft of shared/sysext/finalize/sysext-usr-only.sh assumed buildroot /var content ships in a sysext, so the guard rejected /var entries and grew a per-package residue allowlist (dpkg.log, dictionaries-common, emacsen-common, coder preinst home) one CI failure at a time. It never ships: mkosi's sysext.repart.d/10-root.conf copies exactly CopyFiles=/usr/ and CopyFiles=/opt/ into the erofs. The guard now inspects /opt only (the one non-/usr tree that ships and is shadowed at runtime), and test/sysext-usr-only-test.sh pins the CopyFiles= set against the .mkosi checkout.",
+  "evidence": ".mkosi/mkosi/resources/repart/definitions/sysext.repart.d/10-root.conf; build run 33270420384 failing on dev's /var/lib/emacsen-common/state/... after three prior residue allowlist commits",
+  "promoted_to": "docs/design/sysexts.md 'Why only /opt'; docs/adr/0004-sysext-authoring-rules.md rule 5; AGENTS.md sysext paragraph"
+}

@@ -6,8 +6,8 @@ new session can pick up context quickly instead of starting cold.
 
 Related learning artifacts:
 
-- `.memory/corrections.jsonl` — append-only log of corrections learned during
-  past sessions (see `.memory/README.md` for conventions).
+- `.memory/corrections/` — 1 file for each correction learned during past
+  sessions (see `.memory/README.md` for conventions).
 - `docs/design/` (formerly `yeti/`) — AI-oriented architecture and
   decision-rationale documentation; start at `docs/design/overview.md`.
 - `AGENTS.md` — the canonical agent instructions for this repository;
@@ -19,7 +19,7 @@ Related learning artifacts:
 - Keep entries short: date, scope, what changed, and any follow-up.
 - Prefer promoting durable facts to `AGENTS.md` or `docs/` and note that here
   rather than duplicating long-form detail in this file.
-- This file complements, but does not replace, `.memory/corrections.jsonl`.
+- This file complements, but does not replace, `.memory/corrections/`.
 
 ## Log
 

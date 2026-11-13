@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-29",
+  "scope": "shared/bootc-secure/tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf (issue 517)",
+  "correction": "AGENTS.md said upstream dracut-ng 'as of 2026-08' still lacked 90-image-dissect.rules in 01systemd-udevd, and that systemd 261 moved the gpt-auto symlink rules. Both were wrong. Upstream renumbered the module to 11systemd-udevd on 2025-06-30. dracut-ng 108 (2025-08-04) has installed 90-image-dissect.rules there since commit fa17b6fb0e. That commit attributes the rule split to systemd v258; snosi first saw it on the Trixie 257 -> Forky 261 jump. The drop-in is still required only because the images use Trixie's dracut 106.",
+  "evidence": "gh api repos/dracut-ng/dracut-ng/commits/fa17b6fb0e ('fix(systemd-udevd): handle root=gpt-auto for systemd-v258'); release 108 published 2025-08-04; modules.d/11systemd-udevd/module-setup.sh on main (5d55d1c, 2026-09-18) lists 90-image-dissect.rules; local floe build 2026-09-29 installed dracut 106-6",
+  "promoted_to": "AGENTS.md Issue 517 section; docs/design/testing.md; 35-gpt-auto-udev-rules.conf comment"
+}

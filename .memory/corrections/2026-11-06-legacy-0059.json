@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "scope": "docs/adr/0030-floe-sends-problem-reports-with-admin-consent.md sent.jsonl paragraph and docs/integration-contracts.md",
+  "correction": "The sent.jsonl paragraph said every run rewrites entries older than 90 days. `prune_sent` runs only once, after the post loop of `send_reporting`; reporting commands, dry-run, reporting off, a lock held by another send, no valid problems.json, no selected report, and every early-stop path exit before it. `prune_sent` keeps JSON lines with a string sent_at at or after the cutoff, drops other lines, and leaves the file unchanged when jq fails.",
+  "evidence": "shared/snosi-report/tree/usr/libexec/snosi-health-report:529-535 (`prune_sent`) and :716 (the single call after the post loop); test/snosi-health-report-test.sh section 8b (`:650` onward) checks 90-day pruning and malformed-line removal.",
+  "promoted_to": "ADR-0032; docs/integration-contracts.md sent.jsonl row"
+}

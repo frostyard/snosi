@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "scope": "docs/adr/0032-sent-jsonl-pruning-and-core-file-override.md Decision 2 (frostyard/snosi#1248)",
+  "correction": "The fix of 9add100 added that a core above ExternalSizeMax is not kept. systemd-coredump compares the stored file size, which is the compressed size when it compresses, and it keeps the cores of PID 1 and journald whatever their size while storage is on. ADR-0032 now states only the capture limit and the stack text gate, and no retention rule.",
+  "evidence": "Cross-review (openai/gpt-6.1-sol) of 9add100, blocking point 1: systemd v262 src/coredump/coredump-submit.c lines 452-459 (maybe_remove_external_coredump: PID 1 and journald exception, size <= external_size_max) and 653-659 (compressed size passed when the core is compressed).",
+  "promoted_to": "ADR-0032; AGENTS.md (ADR-0032 states no core retention rule)"
+}

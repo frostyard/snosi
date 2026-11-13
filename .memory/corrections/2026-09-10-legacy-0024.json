@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-10",
+  "scope": "ROADMAP.md native A/B and nbc lifecycle",
+  "correction": "The roadmap's 60-day phase-out ending 2026-10-28 and three-product description were stale. Accepted Snosi ADR-0015 and core ADR-0047 set 2026-09-30 as the native A/B and nbc support/publication cutoff, isolate best-effort migration help through 2026-10-31 from product support, and the current bootc surface has four products including bootc-only Sundog.",
+  "evidence": "docs/adr/0015-retire-native-ab-images-and-nbc-installs.md; frostyard/core ADR-0047; README.md product table; docs/adr/0016-name-kde-bootc-product-sundog.md",
+  "promoted_to": "ROADMAP.md; docs/org-adrs.md; test/eol-notice-test.sh"
+}
