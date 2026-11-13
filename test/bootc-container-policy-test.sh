@@ -15,7 +15,7 @@ USER_POLICY="$PROJECT_ROOT/shared/bootc-secure/tree/usr/share/snosi/containers/u
 VM_LIB="$PROJECT_ROOT/test/lib/vm.sh"
 UPDATER="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage"
 UPDATER_UNIT="$PROJECT_ROOT/mkosi.images/base/mkosi.extra/usr/lib/systemd/system/bootc-update-stage.service"
-SECURE_IMAGES=(cayo floe snow snowfield sundog)
+SECURE_IMAGES=(floe snow snowfield sundog)
 
 failures=0
 
@@ -121,7 +121,7 @@ if [[ -f "$POLICY" && -f "$UPDATE_POLICY" ]] && command -v jq >/dev/null; then
 
     # Then the system policy. Its default now accepts ordinary workload
     # images (ADR-0025), so the checks that remain are the ones that keep the
-    # five Frostyard product repositories signature-checked.
+    # four Frostyard product repositories signature-checked.
     if jq -e '.default == [{"type":"insecureAcceptAnything"}]' "$POLICY" >/dev/null; then
         pass "the system default accepts workload images"
     else
@@ -836,10 +836,8 @@ run_live_policy_proof() {
 
     IFS=, read -r -a live_images <<<"${LIVE_IMAGES:-floe}"
     for image in "${live_images[@]}"; do
-        # Cayo remains covered while its exact policy scope is retained for
-        # late Phase 2 migrations. Phase 5 removes both together.
         case "$image" in
-            cayo|floe|snow|snowfield|sundog) ;;
+            floe|snow|snowfield|sundog) ;;
             *) printf 'BLOCKED: LIVE_IMAGES contains unsupported product %s\n' "$image" >&2; return 2 ;;
         esac
     done
