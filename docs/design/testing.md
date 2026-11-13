@@ -15,7 +15,7 @@ B4 of core's repository baseline, ADR-0071). It needs no root and no
 credentials; `mise install` provides the Node release that `mise.toml` and
 `mise.lock` pin. `make verify` runs `scripts/check-template.mjs` (the agent
 symlinks, the `docs/README.md` index, the risk-path list and caller, the
-`.memory/corrections.jsonl` schema and the two hash-pinned copies of core
+record files in `.memory/corrections/` and the two hash-pinned copies of core
 scripts), `node --test test/*.test.mjs`, and the policy tests
 `policy-as-code-test.py`, `risk-paths-test.py`,
 `build-workflow-permissions-test.py` and `workflow-pins-test.py`. It does not
