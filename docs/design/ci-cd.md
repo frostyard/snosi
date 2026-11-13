@@ -15,6 +15,7 @@ workflows are documented only in
 | `.github/workflows/build.yml` | Builds base and sysexts in two mkosi invocations (himmelblau has its own scoped sandbox tree and `continue-on-error`), then moves artifacts and manifests into publish layout | R2 upload by repogen v0.7.2 (payloads before metadata, retried) outside pull requests; `skip-published-identities` skips every identity the signature-verified `SHA256SUMS` already lists and uploads nothing when nothing is new; main push runs are never cancelled by a newer push. PR build has only `contents: read`. This is the canonical mkosi action pin for the Justfile and retained ISO helpers. |
 | `.github/workflows/build-images.yml` | Four bootc OCI profiles (`snow`, `snowfield`, `floe`, `sundog`) | PR mechanics builds use no secrets and do not publish. Protected main-branch builds sign and verify each immutable digest before copying it to `latest`. |
 | `.github/workflows/build-mechanics.yml` | Nightly at 03:30 UTC (`30 3 * * *`) and manual builds of the four mechanics images (`floe`, `snow`, `snowfield`, `sundog`) | Never from a pull request. The job holds `contents: read` and `packages: write` and publishes with the scoped `GITHUB_TOKEN`; it pushes only `ghcr.io/frostyard/<profile>:mechanics-<version>` and the moving `:mechanics` alias, labelled `io.snosi.qa.mechanics-only=true`, and never touches `latest`. It fails rather than publish a secure-capable image under a mechanics tag. QA fixtures for frostyard/lab; no security evidence. |
+| `.github/workflows/forky-mechanics.yml` | Forky Floe build (`mkosi --release forky`, [ADR-0037](../adr/0037-build-forky-as-a-second-suite.md)) on pull requests that touch a forky input, nightly at 05:45 UTC and on dispatch | Publishes nothing: `contents: read`, no secret, no registry login. The build step is `continue-on-error`; `shared/suite/forky/classify-build.sh` passes a failed build only when every apt error matches a row of `shared/suite/forky/known-gaps.tsv`, and fails a passing build while a row remains. |
 | `.github/workflows/build-installer-iso.yml` | Firn ISO from the bootc-only catalog | Positive main-push paths, manual or `build` repository dispatch; no PR trigger. Candidate upload, independent public-origin byte and ISO boot checks (the default entry's serial smoke test, then both GRUB entries and the no-display fallback, [ADR-0022](../adr/0022-installer-graphical-and-console-boot-entries.md)), protected index promotion and stable-redirect verification. |
 | `.github/workflows/deploy-native-installer-redirect.yml` | Cloudflare Worker for the stable ISO URL | Validates worker/bucket identity and deploys separately from ISO publication. The Worker resolves the signed-index target through its read-only R2 binding; it does not sign the index. |
 
@@ -142,7 +143,8 @@ hold a job open indefinitely. Range GETs keep their own attempt loop.
 `.github/workflows/validate.yml` runs on PRs, main pushes and manual
 dispatch. Its shell-lint job discovers tracked shell scripts by extension
 and shebang and runs ShellCheck plus static and non-root fixtures. It checks
-the Firn catalog, the ISO publisher, Forky sentinel, policy as code, build
+the Firn catalog, the ISO publisher, Forky sentinel, the forky known-gap
+classifier, policy as code, build
 permissions, sysext behavior, retirement documentation, and other contracts.
 The publication-guard job exercises BATS guard fixtures, no-NBC checks,
 RequiredBy and runtime `/etc` guards, service and sysext tests, and

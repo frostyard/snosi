@@ -198,6 +198,19 @@ command-line check (ADR-0027) and the per-product `splash quiet` check
 (ADR-0033). `test/check-forky-systemd-test.sh`
 exercises the Forky sentinel and its four systemd recheck obligations.
 
+### Suite isolation
+
+`test/suite-isolation-test.sh` runs in the `mkosi-config-sanity` job of
+`validate.yml` with the pinned mkosi and no root
+([ADR-0037](../adr/0037-build-forky-as-a-second-suite.md)). It checks that
+every suite fragment starts with `[Match]` and matches only its own
+`Release=`, that the resolved trixie summary of every profile and of the
+default build is identical when every forky fragment is cut down to its
+`[Match]` section, and that the forky Floe summary carries the forky sandbox
+and extra trees after the trixie ones. `test/forky-known-gaps-test.sh`
+exercises `shared/suite/forky/classify-build.sh` with fixture logs, including
+a known gap beside an unknown apt error, which must fail.
+
 ## Bootc installation and update tests
 
 `just test-install` runs `test/bootc-install-test.sh` against a selected

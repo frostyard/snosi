@@ -508,7 +508,11 @@ The shared postoutput script (`shared/sysext/postoutput/sysext-postoutput.sh`) h
 3. Handles Debian epoch notation: `5:1.2.3` → `5+1.2.3`
 4. Appends `+r{SYSEXT_REVISION}` when `SYSEXT_REVISION` is set in the image's
    `[Build] Environment` (see below)
-5. Maps Debian release to VERSION_ID: forky → 14, trixie → 13, bookworm → 12, bullseye → 11, buster → 10
+5. Maps Debian release to VERSION_ID: forky → 14, trixie → 13, bookworm → 12, bullseye → 11, buster → 10.
+   Debian testing ships no `VERSION_ID`; on a forky build
+   `shared/suite/forky/version-id.postinst.chroot` writes `VERSION_ID="14"`
+   into base, so the filename, the `%w` of each transfer and the sysext's
+   `extension-release` agree ([ADR-0037](../adr/0037-build-forky-as-a-second-suite.md))
 6. Renames the output image: `{IMAGE_ID}_{KEYVERSION}_{OS_VERSION}_{ARCH}.{ext}`,
    preserving whatever compression suffix mkosi produced (`raw.zst` for every
    tracked sysext, see below; `raw`, `raw.gz`, `raw.xz` are also discovered)

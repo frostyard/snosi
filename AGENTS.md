@@ -121,6 +121,20 @@ one top-level `permissions:` of `{}` or read-only grants, and every
 `test/workflow-pins-test.py` enforces all three and runs in `make verify`,
 `validate.yml` and `nightly-compliance.yml` (core ADR-0021, #1274).
 
+**Second suite (ADR-0037):** the Debian release is a build input.
+Trixie is the default and stays unchanged; `mkosi --release forky` builds the
+same composition on forky (Floe today). mkosi cannot remove a list item, so
+suite-specific packages and trees live in files whose only `[Match]` is
+`Release=trixie` or `Release=forky` (`mkosi.images/base/mkosi.conf.d/`,
+`shared/kernel/backports/{trixie,forky}.conf`, `shared/suite/forky/`); a
+shared file holds only suite-neutral content.
+`test/suite-isolation-test.sh` requires every trixie summary to stay the same
+with the forky fragments cut out. `shared/suite/forky/version-id.postinst.chroot`
+gives Debian testing `VERSION_ID="14"`. `forky-mechanics.yml` builds forky
+Floe with no publication; a failed build passes only when every apt error
+matches a row of `shared/suite/forky/known-gaps.tsv` (id, log string,
+tracking URL), and a passing build fails while a row remains.
+
 ## Secure bootc and Forky systemd
 
 **Bootc secure composition (Task 4):** all four OCI profiles include
@@ -302,9 +316,10 @@ update path: `bootc-update-stage.timer` for images (next reboot),
 A row of core's repository baseline (ADR-0071) is done only when its whole
 rule holds, not only its check; a known gap is a follow-up issue, named in
 the PR's row table.
-`README.md` names no kernel suite: `shared/kernel/backports/mkosi.conf`
-selects it (Forky while trixie-backports kernels are uninstallable), and a
-suite named in the README goes stale when that selection moves.
+`README.md` names no kernel suite: `shared/kernel/backports/trixie.conf`
+selects it for trixie (Forky while trixie-backports kernels are
+uninstallable) and `forky.conf` for forky, and a suite named in the README
+goes stale when that selection moves.
 A snosi ADR links another repository's gate or schedule (a lab gate, a soak,
 an APT withdrawal) and never states it as snosi's; when a plan changes an
 accepted ADR's consequence, a new ADR amends it (ADR-0031).
