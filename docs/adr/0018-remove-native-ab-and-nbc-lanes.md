@@ -1,6 +1,6 @@
 # 0018 — Remove native A/B and nbc build and runtime lanes
 
-- **Status:** Accepted
+- **Status:** Accepted; its ISO-retention consequence is amended by [ADR-0036](0036-prune-installer-isos-after-promotion.md)
 - **Date:** 2026-09-30
 
 ## Context

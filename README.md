@@ -38,6 +38,8 @@ get no new images: reinstall with Firn as the
 [migration guide](docs/nbc-to-bootc-migration.md) says.
 Repository cleanup deletes no published artifacts; any disposal needs the
 exact-object gate of [ADR-0018](docs/adr/0018-remove-native-ab-and-nbc-lanes.md).
+Old installer ISOs are the exception: each ISO publication prunes them
+([ADR-0036](docs/adr/0036-prune-installer-isos-after-promotion.md)).
 
 ## How it works
 

@@ -474,7 +474,9 @@ dest_list_objects() { # prefix
     rclone)
         # lsf prints the modtime as RFC3339 in the local zone; convert to
         # epoch with date(1) so the caller compares plain integers.
-        rclone lsf -R --files-only --format tsp --separator $'\t' "$DEST_RCLONE_TARGET/$prefix" 2>/dev/null |
+        # --use-server-modtime: the time R2 stored the object, not the
+        # uploader's file mtime, and no per-object HEAD request.
+        rclone lsf -R --files-only --use-server-modtime --format tsp --separator $'\t' "$DEST_RCLONE_TARGET/$prefix" 2>/dev/null |
             while IFS=$'\t' read -r t s p; do
                 printf '%s\t%s\t%s\n' "$(date -d "$t" +%s)" "$s" "$prefix/$p"
             done
@@ -484,6 +486,18 @@ dest_list_objects() { # prefix
         exit 1
         ;;
     esac
+}
+
+# retention_check_relpath relpath -- true iff relpath is a plain relative key:
+# no leading slash, and no empty, "." or ".." segment. A bucket key is
+# arbitrary text; a deleter must not act on one that is not a plain path.
+retention_check_relpath() { # relpath
+    local rel="$1" seg
+    [[ -n "$rel" && "$rel" != /* && "$rel" != */ && "$rel" != *$'\n'* ]] || return 1
+    local IFS=/
+    for seg in $rel; do
+        [[ -n "$seg" && "$seg" != . && "$seg" != .. ]] || return 1
+    done
 }
 
 # dest_delete_listed listfile -- delete every object named in listfile (one
