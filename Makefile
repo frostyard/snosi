@@ -25,6 +25,7 @@ verify:
 	python3 ./test/policy-as-code-test.py
 	python3 ./test/risk-paths-test.py
 	python3 ./test/build-workflow-permissions-test.py
+	python3 ./test/workflow-pins-test.py
 
 check: verify
 

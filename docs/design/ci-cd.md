@@ -14,8 +14,18 @@ workflows are documented only in
 | --- | --- | --- |
 | `.github/workflows/build.yml` | Builds base and sysexts in two mkosi invocations (himmelblau has its own scoped sandbox tree and `continue-on-error`), then moves artifacts and manifests into publish layout | R2 upload by repogen v0.7.2 (payloads before metadata, retried) outside pull requests; `skip-published-identities` skips every identity the signature-verified `SHA256SUMS` already lists and uploads nothing when nothing is new; main push runs are never cancelled by a newer push. PR build has only `contents: read`. This is the canonical mkosi action pin for the Justfile and retained ISO helpers. |
 | `.github/workflows/build-images.yml` | Four bootc OCI profiles (`snow`, `snowfield`, `floe`, `sundog`) | PR mechanics builds use no secrets and do not publish. Protected main-branch builds sign and verify each immutable digest before copying it to `latest`. |
+| `.github/workflows/build-mechanics.yml` | Nightly at 03:30 UTC (`30 3 * * *`) and manual builds of the four mechanics images (`floe`, `snow`, `snowfield`, `sundog`) | Never from a pull request. The job holds `contents: read` and `packages: write` and publishes with the scoped `GITHUB_TOKEN`; it pushes only `ghcr.io/frostyard/<profile>:mechanics-<version>` and the moving `:mechanics` alias, labelled `io.snosi.qa.mechanics-only=true`, and never touches `latest`. It fails rather than publish a secure-capable image under a mechanics tag. QA fixtures for frostyard/lab; no security evidence. |
 | `.github/workflows/build-installer-iso.yml` | Firn ISO from the bootc-only catalog | Positive main-push paths, manual or `build` repository dispatch; no PR trigger. Candidate upload, independent public-origin byte and ISO boot checks (the default entry's serial smoke test, then both GRUB entries and the no-display fallback, [ADR-0022](../adr/0022-installer-graphical-and-console-boot-entries.md)), protected index promotion and stable-redirect verification. |
 | `.github/workflows/deploy-native-installer-redirect.yml` | Cloudflare Worker for the stable ISO URL | Validates worker/bucket identity and deploys separately from ISO publication. The Worker resolves the signed-index target through its read-only R2 binding; it does not sign the index. |
+
+Every workflow pins its remote actions the way core ADR-0021 asks, and
+`test/workflow-pins-test.py` enforces it for every file in
+`.github/workflows/`: a 40-character commit SHA with a trailing release
+comment, one top-level `permissions:` of `{}` or read-only grants, and
+`persist-credentials: false` on each `actions/checkout` step. The test holds
+the 2 allow lists: `BRANCH_PIN_ALLOW` for the untagged repositories whose
+pins name a dated default-branch commit, and `READ_ALL_ALLOW` for
+`scorecard.yml`, whose job replaces the top-level `read-all` grant.
 
 `build-images.yml` resets mkosi dependencies to `base` in each matrix job.
 Neither OCI workflow passes `--sandbox-tree=shared/himmelblau/sandbox`, so

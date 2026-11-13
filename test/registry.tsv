@@ -134,5 +134,6 @@ verify-installer-redirect-test.sh	ci	validate.yml
 wifi-backend-test.sh	ci	validate.yml
 workflow-failure-masking-test.sh	ci	validate.yml
 workflow-path-filter-test.sh	ci	validate.yml
+workflow-pins-test.py	ci	nightly-compliance.yml,validate.yml
 wsdd-provider-test.sh	ci	validate.yml
 zram-policy-test.py	ci	validate.yml
