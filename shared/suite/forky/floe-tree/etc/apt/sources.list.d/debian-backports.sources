@@ -1,0 +1,8 @@
+# Forky builds only: overrides shared/floe/tree/etc/apt/sources.list.d/debian-backports.sources
+# (trixie-backports) through an ExtraTree that comes after shared/floe/tree (ADR-0037).
+Types: deb deb-src
+URIs: https://deb.debian.org/debian
+Suites: forky-backports
+Components: main non-free-firmware
+Enabled: yes
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg

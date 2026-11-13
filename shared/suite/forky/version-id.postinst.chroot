@@ -1,0 +1,43 @@
+#!/bin/bash
+# Forky builds only (ADR-0037): give Debian testing a VERSION_ID.
+#
+# Debian testing's base-files ships no VERSION_ID line in
+# /usr/lib/os-release, and three consumers key off that value:
+#   - the sysext output filename carries it (`_14_`); the shared postoutput
+#     script shared/sysext/postoutput/sysext-postoutput.sh already maps the
+#     forky codename to 14,
+#   - the `%w` specifier of a systemd-sysupdate MatchPattern on the running
+#     system expands to it, and
+#   - every sysext's extension-release file carries the same VERSION_ID.
+# Without this script shared/scripts/common-postinst.sh's VERSION_ID="1.0"
+# fallback would apply to a forky image instead.
+# Adapted from frostyard/snosi#924.
+set -euo pipefail
+
+os_release=/usr/lib/os-release
+
+if grep -q '^VERSION_ID=' "$os_release"; then
+    # The Debian release happened: base-files owns the value now.
+    echo "VERSION_ID is already present in $os_release; nothing to do"
+    exit 0
+fi
+
+codename=$(sed -n 's/^VERSION_CODENAME=//p' "$os_release" | head -n 1)
+codename=${codename//\"/}
+
+case "$codename" in
+forky)
+    echo 'VERSION_ID="14"' >>"$os_release"
+    if grep -q '^VERSION=' "$os_release"; then
+        # One VERSION= line only: testing ships its own ("forky/sid").
+        sed -i 's|^VERSION=.*|VERSION="14 (forky)"|' "$os_release"
+    else
+        echo 'VERSION="14 (forky)"' >>"$os_release"
+    fi
+    echo "Set VERSION_ID=14 for VERSION_CODENAME=$codename"
+    ;;
+*)
+    echo "Error: $os_release has no VERSION_ID and VERSION_CODENAME is '${codename:-unset}'" >&2
+    exit 1
+    ;;
+esac

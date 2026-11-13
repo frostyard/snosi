@@ -1,0 +1,100 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Fixture test for shared/suite/forky/classify-build.sh (ADR-0037).
+#
+# The forky mechanics workflow passes only when a failed build stops at a known
+# gap, and fails when a passing build still lists one. A classifier that cannot
+# say "no" is not a gate, so every branch is exercised here with a fixture log.
+#
+# No root, no network, no build.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+classify=$root/shared/suite/forky/classify-build.sh
+
+PASS=0
+FAIL=0
+pass() { printf 'ok - %s\n' "$1"; PASS=$((PASS + 1)); }
+fail() { printf 'not ok - %s\n' "$1" >&2; FAIL=$((FAIL + 1)); }
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+gaps=$tmp/known-gaps.tsv
+cat >"$gaps" <<'TSV'
+# a comment line
+G1	for 'bootc' was not found	https://example.invalid/1
+G1b	Unable to locate package libgpgme11t64	https://example.invalid/1
+G1c	'libgpgme11t64' has no installation candidate	https://example.invalid/1
+TSV
+
+empty_gaps=$tmp/empty-gaps.tsv
+printf '# no gaps are known\n' >"$empty_gaps"
+
+broken_gaps=$tmp/broken-gaps.tsv
+printf 'G9\n' >"$broken_gaps"
+
+expect() { # description pass|reject outcome log gaps [text the output must name]
+    local description=$1 want=$2 outcome=$3 log=$4 gapfile=$5 named=${6:-}
+    local status=0 out
+    out=$("$classify" --outcome "$outcome" --log "$log" --known-gaps "$gapfile" 2>&1) || status=$?
+    if [[ $want == pass && $status -eq 0 ]]; then
+        pass "$description"
+    elif [[ $want == pass ]]; then
+        fail "$description (expected a pass, got exit $status: $out)"
+    elif [[ $status -eq 0 ]]; then
+        fail "$description (expected a failure, got a pass: $out)"
+    elif [[ -z $named || $out == *"$named"* ]]; then
+        pass "$description"
+    else
+        fail "$description (the failure does not name '$named': $out)"
+    fi
+}
+
+# The gap file is read, not the log: each row explains its own line.
+printf 'E: %s\n' "for 'bootc' was not found" >"$tmp/gap-g1.log"
+expect "gap G1 explains its own failure" pass failure "$tmp/gap-g1.log" "$gaps" G1
+printf 'E: %s\n' "Unable to locate package libgpgme11t64" >"$tmp/gap-g1b.log"
+expect "gap G1b explains its own failure" pass failure "$tmp/gap-g1b.log" "$gaps" G1b
+printf "E: %s\n" "'libgpgme11t64' has no installation candidate" >"$tmp/gap-g1c.log"
+expect "gap G1c explains its own failure" pass failure "$tmp/gap-g1c.log" "$gaps" G1c
+
+# A failure no row explains fails the workflow.
+printf 'E: something nobody wrote down\n' >"$tmp/unknown.log"
+expect "an unexplained failure fails" reject failure "$tmp/unknown.log" "$gaps" "no known gap explains"
+
+# No known gap at all, and a failure: fail.
+expect "a failure with no known gap fails" reject failure "$tmp/unknown.log" "$empty_gaps" "lists no known gap"
+
+# A missing build log fails closed.
+expect "a missing build log fails" reject failure "$tmp/absent.log" "$gaps" "does not exist"
+
+# A malformed row fails closed rather than being skipped.
+expect "a malformed gap row fails" reject failure "$tmp/unknown.log" "$broken_gaps" "has no fixed string"
+
+# A clean build with a gap still listed fails: the row is stale.
+expect "a clean build with a stale gap fails" reject success "$tmp/unused.log" "$gaps" "remove them"
+
+# A clean build with no gap passes.
+expect "a clean build with no known gap passes" pass success "$tmp/unused.log" "$empty_gaps"
+
+# The checked-in file is what the workflow reads: it must parse and explain the
+# two gaps it ships.
+checked_in=$root/shared/suite/forky/known-gaps.tsv
+if [[ ! -f $checked_in ]]; then
+    fail "$checked_in is missing"
+else
+    printf 'E: %s\n' "for 'bootc' was not found" >"$tmp/shipped.log"
+    if out=$("$classify" --outcome failure --log "$tmp/shipped.log" --known-gaps "$checked_in" 2>&1); then
+        if [[ $out == *G1* ]]; then
+            pass "the checked-in known-gaps.tsv explains the bootc gap as G1"
+        else
+            fail "the checked-in known-gaps.tsv did not report gap G1: $out"
+        fi
+    else
+        fail "the checked-in known-gaps.tsv does not explain the bootc gap: $out"
+    fi
+fi
+
+printf '# Results: %d passed, %d failed, %d total\n' "$PASS" "$FAIL" "$((PASS + FAIL))"
+[[ $FAIL -eq 0 ]]

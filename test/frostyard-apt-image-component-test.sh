@@ -110,6 +110,7 @@ echo "ok - the image build source lists \`main image\` and apt-get update passed
 
 scan() { # root -> "ok - "/"not ok - " lines; status 1 on any not ok
     python3 - "$1" "$sources_rel" <<'PY'
+import glob
 import os
 import subprocess
 import sys
@@ -119,6 +120,9 @@ sandbox_rel = sys.argv[2]
 HOST = "repository.frostyard.org"
 SKIP_DIRS = ("docs/", ".memory/", "test/")
 SKIP_SUFFIXES = (".md",)
+# A second suite (ADR-0037) overrides the same file, unchanged except Suites, in
+# its own sandbox tree.
+SUITE_PATTERN = "shared/suite/*/sandbox/etc/apt/sources.list.d/frostyard.sources"
 
 failed = False
 
@@ -129,15 +133,14 @@ def bad(message):
     print(f"not ok - {message}")
 
 
-# (i) The sandbox source: one stanza, exact URIs, Suites and Components.
-try:
-    with open(os.path.join(root, sandbox_rel), encoding="utf-8") as f:
-        text = f.read()
-except OSError as err:
-    text = None
-    bad(f"cannot read {sandbox_rel}: {err}")
-
-if text is not None:
+def read_stanza(rel):
+    """The single deb822 stanza of one source file, or None after reporting."""
+    try:
+        with open(os.path.join(root, rel), encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError as err:
+        bad(f"cannot read {rel}: {err}")
+        return None
     stanzas, current, last = [], {}, None
     for line in text.splitlines():
         if not line.strip():
@@ -149,7 +152,7 @@ if text is not None:
         elif line[0].isspace():
             # deb822 continuation: APT folds it into the previous field.
             if last is None:
-                bad(f"{sandbox_rel}: continuation line with no field: {line!r}")
+                bad(f"{rel}: continuation line with no field: {line!r}")
             else:
                 current[last] = f"{current[last]} {line.strip()}".strip()
         elif ":" in line:
@@ -157,24 +160,40 @@ if text is not None:
             last = key.strip()
             current[last] = value.strip()
         else:
-            bad(f"{sandbox_rel}: line is not a deb822 field: {line!r}")
+            bad(f"{rel}: line is not a deb822 field: {line!r}")
     if current:
         stanzas.append(current)
     if len(stanzas) != 1:
-        bad(f"{sandbox_rel} has {len(stanzas)} stanzas; it must have 1")
-    else:
-        stanza = stanzas[0]
-        if stanza.get("URIs") != f"https://{HOST}/debian/":
-            bad(f"{sandbox_rel}: URIs is {stanza.get('URIs')!r}, not "
-                f"'https://{HOST}/debian/'")
-        if stanza.get("Suites") != "trixie":
-            bad(f"{sandbox_rel}: Suites is {stanza.get('Suites')!r}, not 'trixie'")
-        tokens = stanza.get("Components", "").split()
-        if sorted(tokens) != ["image", "main"]:
-            bad(f"{sandbox_rel}: Components is {' '.join(tokens)!r}; it must "
-                "list exactly 'main image' (core ADR-0059)")
-        if not failed:
-            print(f"ok - {sandbox_rel} has one stanza with Components: main image")
+        bad(f"{rel} has {len(stanzas)} stanzas; it must have 1")
+        return None
+    return stanzas[0]
+
+
+# (i) Every build sandbox source: one stanza, exact URIs, Suites and Components.
+# The shared sandbox serves trixie; a suite sandbox serves its own suite.
+suite_sources = sorted(
+    os.path.relpath(path, root) for path in glob.glob(os.path.join(root, SUITE_PATTERN))
+)
+for rel in [sandbox_rel] + suite_sources:
+    want_suite = "trixie"
+    parts = rel.split(os.sep)
+    if parts[:2] == ["shared", "suite"]:
+        want_suite = parts[2]
+    before = failed
+    stanza = read_stanza(rel)
+    if stanza is None:
+        continue
+    if stanza.get("URIs") != f"https://{HOST}/debian/":
+        bad(f"{rel}: URIs is {stanza.get('URIs')!r}, not "
+            f"'https://{HOST}/debian/'")
+    if stanza.get("Suites") != want_suite:
+        bad(f"{rel}: Suites is {stanza.get('Suites')!r}, not {want_suite!r}")
+    tokens = stanza.get("Components", "").split()
+    if sorted(tokens) != ["image", "main"]:
+        bad(f"{rel}: Components is {' '.join(tokens)!r}; it must "
+            "list exactly 'main image' (core ADR-0059)")
+    if not failed and not before:
+        print(f"ok - {rel} has one stanza with Components: main image")
 
 # (ii) No other tracked APT source names the Frostyard repository.
 listed = subprocess.run(
@@ -194,6 +213,7 @@ leaks = []
 for rel in sorted(p for p in listed.split("\0") if p):
     if (
         rel == sandbox_rel
+        or rel in suite_sources
         or rel.startswith(SKIP_DIRS)
         or rel.endswith(SKIP_SUFFIXES)
         or not is_apt_source(rel)
@@ -270,6 +290,24 @@ FIX
     mkdir -p "$dir/shared/x/tree/etc/apt/sources.list.d"
     cp "$dir/$sources_rel" "$dir/shared/x/tree/etc/apt/sources.list.d/frostyard.sources"
     expect "a shipped tree frostyard.sources" reject "$dir" "shared/x/tree/etc/apt/sources.list.d/frostyard.sources: an APT source"
+
+    # A second suite's sandbox (ADR-0037) must serve its own suite and keep the
+    # trixie URI and components.
+    dir=$(mkfixture suite-good 'main image')
+    mkdir -p "$dir/shared/suite/forky/sandbox/etc/apt/sources.list.d"
+    sed 's/^Suites: trixie$/Suites: forky/' "$dir/$sources_rel" \
+        >"$dir/shared/suite/forky/sandbox/etc/apt/sources.list.d/frostyard.sources"
+    expect "a forky sandbox frostyard.sources" pass "$dir"
+    dir=$(mkfixture suite-wrong-suite 'main image')
+    mkdir -p "$dir/shared/suite/forky/sandbox/etc/apt/sources.list.d"
+    cp "$dir/$sources_rel" \
+        "$dir/shared/suite/forky/sandbox/etc/apt/sources.list.d/frostyard.sources"
+    expect "a forky sandbox frostyard.sources still on trixie" reject "$dir" "Suites is 'trixie'"
+    dir=$(mkfixture suite-wrong-components 'main')
+    mkdir -p "$dir/shared/suite/forky/sandbox/etc/apt/sources.list.d"
+    sed 's/^Suites: trixie$/Suites: forky/' "$dir/$sources_rel" \
+        >"$dir/shared/suite/forky/sandbox/etc/apt/sources.list.d/frostyard.sources"
+    expect "a forky sandbox frostyard.sources without the image component" reject "$dir" "Components is 'main'"
 }
 
 case ${1:-} in

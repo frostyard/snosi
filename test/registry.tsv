@@ -64,6 +64,7 @@ firn-gui-scope-test.sh	ci	validate.yml
 firn-installer-iso-test.sh	ci	validate.yml
 firn-installer-ui-boot-test.sh	ci	build-installer-iso.yml
 first-login-trigger-test.sh	ci	validate.yml
+forky-known-gaps-test.sh	ci	validate.yml
 frostyard-apt-image-component-test.sh	ci	build-images.yml,validate.yml
 gdm-autologin-scope-test.sh	ci	validate.yml
 grd-no-tpm-access-test.sh	ci	validate.yml
@@ -104,6 +105,7 @@ snosi-health-timer-guard-test.sh	ci	validate.yml
 snosi-kargs-test.sh	ci	validate.yml
 snow-gtk-theme-test.py	ci	validate.yml
 socat-package-test.sh	ci	validate.yml
+suite-isolation-test.sh	ci	validate.yml
 suite-sysexts-test.sh	ci	validate.yml
 sundog-profile-test.sh	ci	validate.yml
 sunshine-capabilities-test.sh	ci	validate.yml
