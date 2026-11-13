@@ -7,8 +7,9 @@
 //   risk-paths      .github/risk-paths.json passes core's validator, and rule C:
 //                   the list and the caller match a glob, L1 or L2 in a version
 //                   2 list (frostyard/core docs/specs/risk-paths.md).
-//   corrections     .memory/corrections.jsonl passes core's line rules
-//                   (frostyard/core ADR-0018 schema), via scripts/check-corrections.mjs.
+//   corrections     .memory/corrections/ passes core's record rules
+//                   (frostyard/core ADR-0018, ADR-0081), via
+//                   scripts/check-corrections.mjs.
 //   vendored        the 2 files copied from frostyard/core match their sha256 pins.
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -245,13 +246,13 @@ function checkCorrections() {
     if (output) {
       for (const line of output.split("\n")) {
         if (line.startsWith("FAIL corrections:")) {
-          failCheck("corrections", ".memory/corrections.jsonl", line.replace(/^FAIL corrections:\s*/, ""));
+          failCheck("corrections", ".memory/corrections/", line.replace(/^FAIL corrections:\s*/, ""));
         } else {
-          failCheck("corrections", ".memory/corrections.jsonl", line);
+          failCheck("corrections", ".memory/corrections/", line);
         }
       }
     } else {
-      failCheck("corrections", ".memory/corrections.jsonl", `child process exited ${error.status ?? 1}`);
+      failCheck("corrections", ".memory/corrections/", `child process exited ${error.status ?? 1}`);
     }
   }
 }
@@ -266,8 +267,8 @@ function checkVendored() {
     },
     {
       path: "scripts/check-corrections.mjs",
-      source: "frostyard/core@c996ea3fb54bcf1a3c621113522213702a7673e2:scripts/check-corrections.mjs",
-      sha256: "1894791a1945289c681a9f109d147e50dc342840bf9774b8349a5d63597725d6",
+      source: "frostyard/core@c8962829f1f34d900e0632e63f690f81630702f1:scripts/check-corrections.mjs",
+      sha256: "5c7a3a44a09d8c9d79efc919b42bb78b62b283616ffec16c211fe3e2b100008a",
     },
   ];
   for (const item of vendored) {

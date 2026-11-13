@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-12",
+  "scope": "mkosi.images/1password (frostyard/snosi#1279)",
+  "correction": "Relocating /opt/1Password to /usr/lib/1Password moves the directory but re-creates only the links the script names (/usr/bin/1password, /usr/bin/op-ssh-sign), so the deb postinst's own absolute /opt/1Password links (/usr/bin/1password-mcp, /usr/lib/1Password/onepassword-mcp) dangled in the shipped sysext. opt-links.sh now re-points every link under /usr that names /opt/1Password, and the finalize check fails a link that still names /opt/1Password or does not resolve inside the buildroot.",
+  "evidence": "test/1password-links-test.sh fixtures: before rewrite both mcp links read /opt/1Password/1password-mcp and opt-links.sh check exits 1; after rewrite both read /usr/lib/1Password/1password-mcp; a dangling usr/bin link naming 1Password/ and a dangling relative link in usr/lib/1Password both fail the check.",
+  "promoted_to": "mkosi.images/1password/opt-links.sh; the check in mkosi.images/1password/mkosi.finalize; test/1password-links-test.sh; docs/design/sysexts.md \"### 1password\""
+}

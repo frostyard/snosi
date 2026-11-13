@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "test/bootc-publication-guard-test.sh negative fixtures (#1220)",
+  "correction": "A negative guard fixture that breaks 2 rules at once was believed to prove a new guard rule; another rule rejected it, and assert_guard checks only the exit status. A fixture must break only the rule under test and require that rule's diagnostic (assert_guard_message).",
+  "evidence": "Cross-review of #1220 at 6bfdfd8, blocking finding 2; with only the bare-push block removed, 'bare buildah push in workflow fails' fails at ade24fd",
+  "promoted_to": "test/bootc-publication-guard-test.sh assert_guard_message"
+}

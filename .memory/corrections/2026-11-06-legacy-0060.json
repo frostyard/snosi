@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "scope": "docs/adr/0029-snosi-health-records-problems.md consequences",
+  "correction": "The core-file consequence did not state systemd v262 drop-in precedence or ProcessSizeMax behavior. All coredump.conf.d drop-ins sort by file name, the last file wins a single-value option, and /etc masking replaces a same-name /usr/lib file. `50-snosi.conf` keeps Storage=none and ProcessSizeMax=1G; ProcessSizeMax limits stack text and truncated cores can have incomplete stack text, while external storage does not raise ProcessSizeMax.",
+  "evidence": "systemd v262 man/standard-conf.xml and man/coredump.conf.xml define drop-in sorting and file precedence; src/coredump/coredump-submit.c makes no stack text above ProcessSizeMax. shared/bootc-secure/tree/usr/lib/systemd/coredump.conf.d/50-snosi.conf sets Storage=none and ProcessSizeMax=1G; shared/bootc-secure/finalize/coredump.finalize checks only image files at build time.",
+  "promoted_to": "ADR-0032"
+}

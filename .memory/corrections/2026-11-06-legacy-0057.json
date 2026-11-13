@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "scope": "README.md image table (frostyard/snosi#1243, ADR-0072 B17)",
+  "correction": "The README said Snow, Floe and Sundog use a backports kernel; shared/kernel/backports/mkosi.conf selects linux-image-amd64/forky until trixie-backports kernels install again. The old README had the same error. The table now says 'newer Debian kernel' and points to shared/kernel/ for the suite.",
+  "evidence": "Cross-review (openai/gpt-6.1-sol) of 01f96a6, blocking point 1: shared/kernel/backports/mkosi.conf line 11 (Packages=linux-image-amd64/forky); mkosi.profiles/{snow,floe,sundog}/mkosi.conf include it.",
+  "promoted_to": "AGENTS.md Documentation section (README.md names no kernel suite)"
+}

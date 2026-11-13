@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-14",
+  "scope": "mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage",
+  "correction": "A bootc status containing spec.bootOrder=rollback and status.rollbackQueued=true alongside a new staged deployment looked like broken update ordering. Those fields are separate bootloader-ordering state and may correctly coexist with a valid .status.staged deployment; do not clear or repair them merely because an update was staged. Judge updater success by registry-manifest-digest continuity between Podman .Digest and bootc's booted/staged imageDigest, never by rollbackQueued or Podman .Id.",
+  "evidence": "Live bootc 1.16.8 validation on 2026-08-14: before and after `bootc upgrade`, bootOrder=rollback and rollbackQueued=true; the new image nevertheless staged as sha256:9d73493be78155328673743382d6d3f9ae86630860827565556943ba8f1ef7c9, exactly matching `podman image inspect` .Digest while .Id was c81306c74d6e95614bf04ebb804366717f588d36a350cbef28b35a73c4046145.",
+  "promoted_to": "docs/design/build-pipeline.md Base update services; docs/design/overview.md Bootc Update Staging"
+}

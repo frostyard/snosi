@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-23",
+  "scope": "mkosi.images/coder",
+  "correction": "Believed a non-empty CODER_ACCESS_URL was enough to run coder.service (the r2 gate). systemd EnvironmentFile= exports the template's empty CODER_HTTP_ADDRESS= as an empty string, which replaces coder's default 127.0.0.1:3000, so coder server exits 1 ('TLS is disabled. Enable with --tls-enable or specify a HTTP address'); the deb's RestartSec=5 never trips its StartLimitIntervalSec=10/StartLimitBurst=3, so the unit restarted every 5 s. coder-configured now also requires a bind address, the factory coder.env sets CODER_HTTP_ADDRESS=127.0.0.1:3000, and the drop-in sets StartLimitIntervalSec=60.",
+  "evidence": "snosi#1120; coder 2.37.4 cli/server.go line 444 and serpent v0.15.0 ParseEnv; local runs of the coder_2.37.4 binary under systemd-run EnvironmentFile=; systemd-run --user false with RestartSec=5: StartLimitIntervalSec=10 kept restarting, 60 ended in start-limit-hit",
+  "promoted_to": "docs/design/sysexts.md"
+}

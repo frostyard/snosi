@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-29",
+  "scope": "shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json installer.minimum_versions",
+  "correction": "Believed Firn consumes the Task 8a installer contract, including minimum_versions, and treats minimum_versions.systemd as a floor. AGENTS.md said the contract was 'now consumed by Firn'. Firn never reads installer.minimum_versions. Per firn ADR-0014 its parser checks only schema == 1, the installer.oci capability label and value, the installer.secure_boot shim/second-stage/MokManager shape, and mok_certificate. The floor-plus-warning version policy in docs/bootc-secure-install-contract.md belonged to the retired Fisherman adapter. In snosi, only minimum_versions.bootc has a machine consumer: compatibility.sh and assemble-uki.sh require it to equal assembly.bootc_version.",
+  "evidence": "frostyard/firn origin/main 019c7fc internal/secureboot/contract.go (Contract struct has no minimum_versions field); firn docs/adr/0014-port-secure-install-schema-1-for-bootc.md ('Do not re-pin bootc_version / minimum_versions'); git grep minimum_versions in snosi",
+  "promoted_to": "AGENTS.md Task 8a paragraph; docs/bootc-secure-install-contract.md"
+}

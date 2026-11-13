@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-29",
+  "scope": "Forky systemd family (shared/bootc-secure, shared/native-ab-secure, shared/firn-installer, shared/native-installer)",
+  "correction": "AGENTS.md attached recheck obligations to 'when the Forky systemd family changes' (Task 4 bwrap build/root check, Issue 517 dracut drop-in, NvPCR masks) as if that event were observable, but the <pkg>/forky selections are unpinned and nothing detected a change; Forky's 261.2-1 -> 262-1 migration surfaced only as unrelated native CI breakage. Separately, latest-apt-version.sh's 50 MiB decompressed default fits third-party repos but not Debian's own main indices (Forky Sources.gz decompresses to ~60 MiB).",
+  "evidence": "main run 36479923888 (floe secure-build installed and published 262-1; snow/snowfield/sundog installed 261.2-1 in the same run); PR 1017; curl of https://deb.debian.org/debian/dists/forky/main/source/Sources.gz on 2026-09-29: 15184859 bytes compressed, 62606224 decompressed, systemd Version 262-1",
+  "promoted_to": "AGENTS.md 'Forky systemd family sentinel'; docs/design/build-pipeline.md 'forky-versions.json'"
+}

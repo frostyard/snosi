@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-24",
+  "scope": "docs/nbc-to-bootc-migration.md installer media",
+  "correction": "The migration runbook identified Dakota/Fisherman bootc-installer media as the current reinstall route, but that adapter is retired. Firn is the supported installer ISO; its catalog is a wholesale override and secure bootc lifecycle evidence remains separately gated.",
+  "evidence": "core ADR-0031; shared/firn-installer/mkosi.conf; .github/workflows/build-installer-iso.yml; docs/installing.md",
+  "promoted_to": "docs/nbc-to-bootc-migration.md; docs/adr/0017-gate-native-ab-and-nbc-disposal.md"
+}

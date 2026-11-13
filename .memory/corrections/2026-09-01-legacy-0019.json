@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-01",
+  "scope": "GdkPixbuf caches in base-built graphical sysexts",
+  "correction": "The live Snow icon loss was not a missing librsvg2-common package and not an icon-theme.cache regression. Snow's manifest contained librsvg2-common, its SVG loader module existed, and hicolor correctly had no icon cache. The newly rebuilt dev r2 and incus r2 sysexts plus Paseo 0.7.0 each shipped a 2,582-byte /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache generated from their recommends-off base-built GTK closure. Every cache omitted libpixbufloader_svg.so; the highest-precedence sysext copy shadowed Snow's complete base loader cache for all of merged /usr, so GNOME could not use the SVG module that was physically present.",
+  "evidence": "Live Snow: /usr/share/frostyard/snow.packages.txt lists librsvg2-common 2.60.0+dfsg-1; dpkg-query -L shows libpixbufloader_svg.so; merged loaders.cache is 2582 bytes and has no SVG entry; journalctl _COMM=gnome-shell logs 'Could not load a pixbuf from icon theme'; dump.erofs --offset=1048576 showed the identical incomplete cache inside active dev_12.12+r2, incus_...+r2, and paseo_0.7.0 raw images. gdk-pixbuf-query-loaders over the merged module directory does register SVG, proving the module itself is valid.",
+  "promoted_to": "AGENTS.md GdkPixbuf loader caches in sysexts; docs/design/sysexts.md Desktop Applications in Sysexts; shared/sysext/finalize/sysext-strip-icon-cache.sh; test/sysext-authoring-contract-test.sh"
+}

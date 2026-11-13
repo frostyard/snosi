@@ -1,0 +1,7 @@
+{
+  "date": "2026-07-15",
+  "scope": "mkosi.profiles/snowfield-ab",
+  "correction": "Enforced Secure Boot was assumed to raise kernel lockdown automatically; the linux-surface kernel is built with CONFIG_LOCK_DOWN_KERNEL_FORCE_NONE=y and carries no Secure-Boot-to-lockdown wiring, so lockdown must be requested explicitly with the lockdown=integrity kernel command line.",
+  "evidence": "grep 'LOCK_DOWN' on boot/config-*-surface-* in linux-image-surface; KernelCommandLine=lockdown=integrity in shared/native-ab-secure/mkosi.conf",
+  "promoted_to": "docs/native-ab-contracts.md §7"
+}

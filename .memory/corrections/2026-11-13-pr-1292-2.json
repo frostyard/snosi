@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-13",
+  "scope": ".github/workflows/forky-mechanics.yml pull_request trigger (ADR-0037, PR #1292)",
+  "correction": "The forky mechanics workflow first used a positive path list of the forky fragments. A forky build reads every Floe image input, so a PR that changed only shared/packages/bootc, the Floe profile, shared/bootc-secure or shared/outformat/image built no forky image. The trigger now ignores only what build-images.yml ignores.",
+  "evidence": "Cross-review (openai/gpt-6.1-sol) of b99d50a, finding 2. test/workflow-path-filter-test.sh: with the old trigger, 'uses paths-ignore, not a positive path list' and 'paths-ignore lists entries' fail; an added shared/packages/** ignore fails 3 cases.",
+  "promoted_to": "forky-mechanics.yml paths-ignore; test/workflow-path-filter-test.sh forky cases"
+}

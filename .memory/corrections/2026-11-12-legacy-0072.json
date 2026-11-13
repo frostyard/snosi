@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-12",
+  "scope": ".github/workflows scan (test/workflow-pins-test.py, frostyard/snosi#1274)",
+  "correction": "The key-syntax check must skip a YAML anchor prefix (`&name`) before it reads the node or the flow value after it; else an anchored flow collection hides an escaped `uses` key.",
+  "evidence": "Re-review 3 of PR #1286 at 119f62d: `- &checkout {\"us\\u0065s\": actions/checkout@v4}` and `steps: &steps [{\"us\\u0065s\": actions/checkout@v4}]` returned []. The fixtures anchored-flow-node, anchored-flow-value and anchored-quoted-key fail them now.",
+  "promoted_to": "test/workflow-pins-test.py (ANCHOR_PREFIX, FLOW_VALUE; fixtures anchored-flow-node, anchored-flow-value, anchored-quoted-key)"
+}

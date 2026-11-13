@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-31",
+  "scope": "mkosi.profiles/, shared/composition/, shared/packages/",
+  "correction": "The flurry image (Hyprland/Omarchy replica) has been removed entirely. Its 2026-08-25 backports-resolution correction in this log remains generally valid -- apt never auto-selects a priority-100 backports version for a TRANSITIVE dependency, and a backports package's deps resolve preferring same-archive versions -- but its promoted_to target (shared/packages/flurry/mkosi.conf comments) no longer exists; the surviving in-tree example of the same pattern is the mesa closure in shared/kernel/surface/mkosi.conf. gui-base, shared/sysext/divergent-lib-families.txt, and the no-divergent-libs tripwire are KEPT: snowfield still pins mesa from trixie-backports, so the shadow-downgrade class the tripwire guards is live independently of flurry.",
+  "evidence": "PR removing the flurry profile, composition, package set, vendored omarchy tree, skill, plan doc, CI matrix entries, GHCR policy scope, Firn catalog entry, and the four flurry-only image-checksums.json pins (omarchy, jetbrains-mono-nerd, mise, xdg-terminal-exec).",
+  "promoted_to": "AGENTS.md Outputs line; docs/design/sysexts.md gui-base section"
+}

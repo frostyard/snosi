@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-13",
+  "scope": "shared/outformat/image/buildah-package.sh secure digest probe / GitHub hosted runners",
+  "correction": "A per-profile secure-build failure pattern (cayo/snow failing, snowfield passing, same commit) was believed to be image- or dependency-related. It was a runner-image lottery: GitHub rolls runner images out gradually, so matrix jobs in ONE run land on different images. ubuntu24/20260810.271 (podman 4.9.3 -> 5.8.4) sets mount_program = fuse-overlayfs in storage.conf, making every container rootfs fuse-overlayfs even rootful; bootc 1.16.7 hardcodes its temp composefs repo at /var/tmp INSIDE the container (tempfile::tempdir_in, TMPDIR ignored), and composefs object writes use O_TMPFILE, which fuse-overlayfs does not support -> 'os error 95' in every storage-digest probe. Also learned: reverting mount_program mid-job does NOT restore kernel overlayfs (already-initialized graphroot keeps fuse-overlayfs), so the fix must live in our probe invocation: bind a host scratch dir over the container's /var/tmp.",
+  "evidence": "run 31721199554 attempts 1+2: all failures on 20260810.271, all passes on 20260720.247; debug run 31730148778 on 20260810.271: bare probe fails os error 95, probe with -v host-dir:/var/tmp returns a clean digest, storage.conf edit still mounts fuse.fuse-overlayfs; bootc v1.16.7 crates/lib/src/bootc_composefs/digest.rs:28 tempdir_in(\"/var/tmp\")",
+  "promoted_to": "shared/bootc-secure/storage-digest-probe.sh; CLAUDE.md Task 5 section; docs/bootc-secure-assembly-compatibility.md"
+}

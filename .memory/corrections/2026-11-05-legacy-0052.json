@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "shared/snosi-report/tree/usr/libexec/snosi-health-report clock (T857 t20, ADR-0030)",
+  "correction": "The run fixed its UTC day, ISO week and sent_at at start, so a run that crossed midnight kept posting the reports of the old day under the old daily limit. Day and week are now read before each post through clock_now, a run stops at the boundary it would cross, and sent_at is the clock of that post.",
+  "evidence": "Cross-review (openai/gpt-6.1-sol) of c69cb30, blocking point 2. test/snosi-health-report-test.sh with SNOSI_HEALTH_TEST_CLOCK_STEP=20: \"a run that would cross midnight posts only the report of its own day\", \"the weekly count does not post with the old week\" and \"the second sent line carries the stepped clock of its post\" fail without the fix.",
+  "promoted_to": "ADR-0030 decision (clock and test hooks); docs/integration-contracts.md \"Problem reports from Floe\""
+}

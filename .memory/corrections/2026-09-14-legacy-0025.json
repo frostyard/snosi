@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-14",
+  "scope": "native A/B R2 retention (docs/native-ab-contracts.md §13)",
+  "correction": "The R2 storage growth was attributed to never-pruned, never-compressed sysexts (135 GiB, snosi#965). The bucket was actually 2.48 TB because nothing ever applied §13 to os/native/v1 and isos/native/v1: every promoted build since July stayed at its top-level name (~4 GiB per product per build) and promote.sh's best-effort candidate purge left ~20 failed-run .candidate/ dirs per product. Sysexts were 141 GiB, fully indexed. Retention is now shared/native-ab/publish/retention.sh, run nightly by native-retention.yml.",
+  "evidence": "R2 bucket listing 2026-09-14: os/native/v1 2013 GiB in 5458 objects vs 9.5 GiB indexed; shared/native-ab/publish/promote.sh candidate purge is '2>/dev/null || true'; docs/native-ab-publication.md 'Retention policy application' said 'not yet automated'",
+  "promoted_to": "docs/native-ab-publication.md 'Retention policy application', docs/design/ci-cd.md native-retention.yml"
+}

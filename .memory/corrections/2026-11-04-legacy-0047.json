@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "docs/bootc-secure-assembly-compatibility.md pin evidence for bootc 1.17.3 / libostree 2026.6 (PR #1223)",
+  "correction": "The first draft presented a post-merge main secure build as the remaining check, as if that met Mandatory revalidation, and said the composefs digest algorithm did not change. Mandatory revalidation requires the full secure rootfs and artifact proof before the pair changes, and the native-build environment allows only main, so a PR cannot run it; that is an exception only Brian can grant. Equal digests on one fixed tree show agreement for that tree, not an unchanged algorithm.",
+  "evidence": "Cross-review (openai/gpt-6.1-sol) of b7055e0, findings 2 and 4; gh api repos/frostyard/snosi/environments/native-build/deployment-branch-policies lists only main; build-images.yml secure-build if: github.ref == refs/heads/main.",
+  "promoted_to": "docs/bootc-secure-assembly-compatibility.md exception paragraph and digest wording; desk ask to Brian on #1223"
+}

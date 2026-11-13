@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-12",
+  "scope": ".github/workflows scan (test/workflow-pins-test.py, frostyard/snosi#1274)",
+  "correction": "A fail-closed key-syntax check must look only where YAML keys can be: the start of a node and the inside of a single-line flow collection, after quote-aware comment removal. A comma, `!` or `?` in a plain scalar value or an inline comment is not key syntax, and treating it as such fails valid workflows.",
+  "evidence": "Re-review 2 of PR #1286 at 7f8a5df: `- run: printf '%s\\n' Hello, !` and `- run: echo done # completed, !important` failed with 'tagged mapping key'. The fixture good-scalar-and-comment-punctuation covers both and passes now; escaped-quoted-key-in-flow-value and multi-line-flow keep the flow cases closed.",
+  "promoted_to": "test/workflow-pins-test.py (key_syntax_error, strip_comment; fixtures good-scalar-and-comment-punctuation, escaped-quoted-key-in-flow-value, multi-line-flow)"
+}

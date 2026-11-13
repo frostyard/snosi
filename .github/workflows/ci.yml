@@ -1,7 +1,7 @@
 # CI entry (frostyard/core ADR-0071 row B12): runs `make ci`, the make gate
 # of ADR-0043 and ADR-0044. validate.yml stays the full static suite; this
 # workflow adds the baseline gate (template gate, its Node tests, the policy
-# tests) and the append-only corrections check against the base commit.
+# tests) and the corrections records check against the base commit.
 # ADR-0021: SHA-pinned actions, top-level permissions {}, contents: read only,
 # and checkout does not persist credentials. No secrets.
 name: CI

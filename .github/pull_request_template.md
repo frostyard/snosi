@@ -57,4 +57,4 @@ Commands run:
 - [ ] Changes are as small and focused as possible
 - [ ] No secrets, keys, or credentials are committed
 - [ ] New external downloads are pinned and go through `verified_download()`
-- [ ] Blocking review point fixed: guard added and 1 `.memory/corrections.jsonl` line added
+- [ ] Blocking review point fixed: guard added and 1 file added under `.memory/corrections/`

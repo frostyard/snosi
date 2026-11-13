@@ -7,7 +7,7 @@
 #                its Node tests, and the repository policy tests. It does not
 #                change the checkout.
 #   make check   the developer gate; the same as verify.
-#   make ci      verify, plus the append-only corrections check against BASE
+#   make ci      verify, plus the corrections records check against BASE
 #                when BASE is set (CI passes the pull request base commit).
 #
 # validate.yml still runs the full static suite (shellcheck and the fixture
