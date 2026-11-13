@@ -166,14 +166,15 @@ package-manager guarantee. Repeat that build/root check when either the
 Frostyard debs or the selected systemd family changes: build a secure OCI
 profile and run `bootc --version` and `bootc container --help` inside a
 build-root-only bwrap sandbox, then validate the assembled artifact.
-`shared/packages/bootc/mkosi.conf` pins that pair exactly.
+Each suite pins its own pair exactly, in
+`shared/packages/bootc/{trixie,forky}.conf` (ADR-0037).
 `test/bootc-secure-static-test.sh` checks only the selector values, that the
 upstream part of the bootc package version matches
-`.assembly.bootc_version` (the full Debian version does not equal that field),
-and that all four profiles consume the fragment. It cannot show that
+`.assembly.bootc_version` of its suite's contract (the full Debian version
+does not equal that field), and that all four profiles consume the fragment. It cannot show that
 revalidation happened: do that work when either package or the systemd family
 changes. See `docs/bootc-secure-assembly-compatibility.md`.
-**Last repeated 2026-11-04:** bootc 1.17.3 / libostree 2026.6 (the
+**Last repeated 2026-11-04 (trixie):** bootc 1.17.3 / libostree 2026.6 (the
 ostree#3681 static-delta Flatpak fix). A clean Trixie rootfs with exactly that
 pair ran `bootc --version`, `bootc container --help` and the hidden
 `compute-composefs-digest-from-storage --help` (help unchanged from 1.17.1),

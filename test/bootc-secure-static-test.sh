@@ -278,24 +278,34 @@ grep -Fq '/usr/lib/snosi/bootc/systemd-bootx64.efi' "$root/shared/bootc-secure/a
 grep -Fq 'snosi_esp_resolve "$RUN_DIR" root' "$reconciler"
 grep -Fq '/usr/lib/snosi/esp.sh' "$reconciler"
 
-# Secure assembly uses bootc's hidden storage-digest command, so one validated
-# Frostyard bootc/libostree package pair stays under the signed contract: a
-# floating entry lets an APT index advance change the package without review.
-# Run 40245723511 built all four rootfs products and then failed with
-# `expected bootc 1.16.8, observed bootc 1.17.1`; run 40229646374 built the
-# 1.16.8/2026.3 pair in all four products. Those two runs are the history of
-# the first pin; the 1.17.1/2026.5 pair (runs 40315411491 and 40370164077, lab
-# run-snow-bootc-lifecycle-l6596) is history too. The current 1.17.3/2026.6
-# pair carries ostree 2026.6's ostree#3681 static-delta Flatpak fix; its
-# evidence is in docs/bootc-secure-assembly-compatibility.md, and the first
-# main build is its secure revalidation. Revalidate the complete pair
-# whenever either package changes.
+# Secure assembly uses bootc's hidden storage-digest command, so each suite
+# keeps one validated Frostyard bootc/libostree package pair under its signed
+# contract: a floating entry lets an APT index advance change the package
+# without review. Each suite pins its pair in its own fragment (ADR-0037).
+# Trixie pins 1.17.3/2026.6 in shared/packages/bootc/trixie.conf, with the
+# contract in shared/bootc-secure/tree. Forky pins 1.17.4/2026.6 in
+# shared/packages/bootc/forky.conf, with its own contract copy in
+# shared/bootc-secure/suite/forky/tree. The evidence of each pair is in
+# docs/bootc-secure-assembly-compatibility.md.
+# History of the trixie pin: run 40245723511 built all four rootfs products
+# and then failed with `expected bootc 1.16.8, observed bootc 1.17.1`; run
+# 40229646374 built the 1.16.8/2026.3 pair in all four products. The
+# 1.17.1/2026.5 pair (runs 40315411491 and 40370164077, lab run
+# run-snow-bootc-lifecycle-l6596) is history too. The 1.17.3/2026.6 pair
+# carries ostree 2026.6's ostree#3681 static-delta Flatpak fix, and main run
+# 41939252558 was its secure revalidation. Revalidate the complete pair of a
+# suite whenever either package of that suite changes.
 #
 # These checks enforce selector values and agreement with
 # assembly.bootc_version only; they cannot show that revalidation happened.
 bootc_packages="$root/shared/packages/bootc/mkosi.conf"
-bootc_pin=1.17.3-frostyard202611042030~deb13
-libostree_pin=2026.6-frostyard202611042030~deb13
+bootc_trixie="$root/shared/packages/bootc/trixie.conf"
+bootc_forky="$root/shared/packages/bootc/forky.conf"
+forky_contract="$root/shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json"
+trixie_bootc_pin=1.17.3-frostyard202611042030~deb13
+trixie_libostree_pin=2026.6-frostyard202611042030~deb13
+forky_bootc_pin=1.17.4-frostyard202611132023~deb14
+forky_libostree_pin=2026.6-frostyard202611132023~deb14
 
 bootc_package_entries() { # mkosi-conf
     # Entries of the fragment's Packages= list, one per line. Indented comments
@@ -310,10 +320,10 @@ bootc_package_entries() { # mkosi-conf
     ' "$1"
 }
 
-check_bootc_pair_pins() { # mkosi-conf
+check_bootc_pair_pins() { # mkosi-conf bootc-pin libostree-pin
     local file=$1 entries entry package pinned
     entries=$(bootc_package_entries "$file")
-    for entry in "bootc=$bootc_pin" "libostree-1-1=$libostree_pin"; do
+    for entry in "bootc=$2" "libostree-1-1=$3"; do
         package=${entry%%=*}
         pinned=$(grep -E "^${package}(=.*)?$" <<<"$entries" || true)
         if [[ $pinned != "$entry" ]]; then
@@ -335,27 +345,184 @@ check_bootc_contract_version() { # mkosi-conf contract
     fi
 }
 
-check_bootc_pair_pins "$bootc_packages"
-check_bootc_contract_version "$bootc_packages" \
-    "$root/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
+# A suite fragment applies to its own suite only: its first section is its one
+# [Match] section, and that section holds exactly Release=<suite>.
+check_suite_fragment_match() { # mkosi-conf suite
+    local found
+    found=$(awk '
+        /^[[:space:]]*(#|$)/ { next }
+        /^\[/ {
+            sections++
+            if (sections == 1 && $0 != "[Match]") { print "first section " $0; exit }
+            if (sections > 1 && $0 == "[Match]") { print "second [Match]"; exit }
+            in_match = ($0 == "[Match]")
+            next
+        }
+        in_match { print }
+    ' "$1")
+    if [[ $found != "Release=$2" ]]; then
+        echo "${1#"$root"/} must have one [Match] section with only Release=$2 (found: ${found:-none})" >&2
+        return 1
+    fi
+}
 
-# Negative cases: a removed or floating pin, and a pin that disagrees with the
-# assembly contract, must each be rejected by the check that owns them.
-sed '/^[[:space:]]*libostree-1-1=/d' "$bootc_packages" >"$pin_fixture"
-if check_bootc_pair_pins "$pin_fixture" 2>/dev/null; then
+# The shared fragment holds no suite-specific selector: no bootc or
+# libostree-1-1 entry and no libgpgme. mkosi cannot remove a list item, so an
+# entry there would reach both suites.
+check_shared_bootc_fragment() { # mkosi-conf
+    local leaked
+    leaked=$(bootc_package_entries "$1" | grep -E '^(bootc|libostree-1-1|libgpgme)' || true)
+    if [[ -n $leaked ]]; then
+        echo "${1#"$root"/} must not select a suite-specific package: $(paste -sd' ' - <<<"$leaked")" >&2
+        return 1
+    fi
+}
+
+# Each suite installs the libgpgme of its own suite and not the other one.
+check_suite_libgpgme() { # mkosi-conf wanted unwanted
+    local entries
+    entries=$(bootc_package_entries "$1")
+    if ! grep -Fqx "$2" <<<"$entries" || grep -Eq "^$3([=/].*)?$" <<<"$entries"; then
+        echo "${1#"$root"/} must select $2 and not $3" >&2
+        return 1
+    fi
+}
+
+# The forky contract is the trixie contract with the forky bootc version: only
+# the three fields that move with bootc may differ.
+check_contract_twin() { # trixie-contract forky-contract
+    local filter='del(.assembly.bootc_version, .assembly.compatibility, .installer.minimum_versions.bootc)'
+    if [[ "$(jq -S "$filter" "$1")" != "$(jq -S "$filter" "$2")" ]]; then
+        echo "${2#"$root"/} must equal ${1#"$root"/} except the three bootc version fields" >&2
+        return 1
+    fi
+}
+
+grep -Fqx 'Include=%D/shared/packages/bootc/trixie.conf' "$bootc_packages" || {
+    echo "shared/packages/bootc/mkosi.conf must include trixie.conf" >&2
+    exit 1
+}
+grep -Fqx 'Include=%D/shared/packages/bootc/forky.conf' "$bootc_packages" || {
+    echo "shared/packages/bootc/mkosi.conf must include forky.conf" >&2
+    exit 1
+}
+check_suite_fragment_match "$bootc_trixie" trixie
+check_suite_fragment_match "$bootc_forky" forky
+check_shared_bootc_fragment "$bootc_packages"
+check_suite_libgpgme "$bootc_trixie" libgpgme11t64 libgpgme45
+check_suite_libgpgme "$bootc_forky" libgpgme45 libgpgme11t64
+check_bootc_pair_pins "$bootc_trixie" "$trixie_bootc_pin" "$trixie_libostree_pin"
+check_bootc_pair_pins "$bootc_forky" "$forky_bootc_pin" "$forky_libostree_pin"
+check_bootc_contract_version "$bootc_trixie" "$contract"
+check_bootc_contract_version "$bootc_forky" "$forky_contract"
+snosi_bootc_secure_load_compatibility "$forky_contract"
+[[ $BOOTC_SECURE_VERSION == "${forky_bootc_pin%%-*}" ]]
+check_contract_twin "$contract" "$forky_contract"
+
+# bootc 1.17.4 (upstream commit cbd34248659c3c95de03032de3d2c5f6a1f92e1b,
+# "sd-boot: Pick loader.conf from the image") no longer writes `timeout 5` to
+# the ESP loader/loader.conf at install. It copies this image file verbatim
+# after `bootctl install`. Without the file, the commented bootctl template
+# stays and the systemd-boot menu is hidden. bootc 1.17.3 (trixie) writes
+# `timeout 5` itself, so only the forky tree ships the file, and a forky
+# install shows the same 5-second menu as a trixie install.
+loader_conf_path=usr/lib/bootc/install/systemd-boot/loader.conf
+forky_loader_conf="$root/shared/bootc-secure/suite/forky/tree/$loader_conf_path"
+if [[ ! -f $forky_loader_conf || "$(cat "$forky_loader_conf")" != "timeout 5" ]] ||
+        [[ $(wc -l <"$forky_loader_conf") -ne 1 ]]; then
+    echo "the forky secure tree must ship $loader_conf_path with exactly 'timeout 5'" >&2
+    exit 1
+fi
+if [[ -e $tree/$loader_conf_path || -L $tree/$loader_conf_path ]]; then
+    echo "the trixie secure tree must not ship $loader_conf_path; bootc 1.17.3 writes the timeout" >&2
+    exit 1
+fi
+
+# The forky contract tree is a forky-only fragment that comes after
+# shared/bootc-secure/tree, so its bootc-secure.json wins on forky. The
+# isolation pin (the low-priority forky source) applies to trixie builds only.
+# test/suite-isolation-test.sh checks the resolved order.
+bootc_secure_trixie="$root/shared/bootc-secure/trixie.conf"
+bootc_secure_forky="$root/shared/bootc-secure/forky.conf"
+check_suite_fragment_match "$bootc_secure_trixie" trixie
+check_suite_fragment_match "$bootc_secure_forky" forky
+grep -Fqx 'SandboxTrees=%D/shared/bootc-secure/package-manager' "$bootc_secure_trixie"
+grep -Fqx 'ExtraTrees=%D/shared/bootc-secure/suite/forky/tree' "$bootc_secure_forky"
+if grep -Eq '^SandboxTrees=' "$secure"; then
+    echo "shared/bootc-secure/mkosi.conf must not set SandboxTrees=; the isolation pin is trixie-only" >&2
+    exit 1
+fi
+tree_line=$(grep -nFx 'ExtraTrees=%D/shared/bootc-secure/tree' "$secure" | cut -d: -f1)
+forky_line=$(grep -nFx 'Include=%D/shared/bootc-secure/forky.conf' "$secure" | cut -d: -f1)
+if [[ -z $tree_line || -z $forky_line ]] || ((forky_line < tree_line)); then
+    echo "shared/bootc-secure/mkosi.conf must include forky.conf after ExtraTrees=%D/shared/bootc-secure/tree" >&2
+    exit 1
+fi
+grep -Fqx 'Include=%D/shared/bootc-secure/trixie.conf' "$secure"
+
+# Negative cases: a removed or floating pin, a pin that disagrees with the
+# assembly contract, a fragment that matches the wrong suite, a suite selector
+# in the shared fragment, the wrong libgpgme, and a forky contract that drifts
+# from the trixie contract must each be rejected by the check that owns them.
+sed '/^[[:space:]]*libostree-1-1=/d' "$bootc_trixie" >"$pin_fixture"
+if check_bootc_pair_pins "$pin_fixture" "$trixie_bootc_pin" "$trixie_libostree_pin" 2>/dev/null; then
     echo "a removed libostree pin was accepted" >&2
     exit 1
 fi
-sed 's/^Packages=bootc=.*$/Packages=bootc/' "$bootc_packages" >"$pin_fixture"
-if check_bootc_pair_pins "$pin_fixture" 2>/dev/null; then
+sed 's/^Packages=bootc=.*$/Packages=bootc/' "$bootc_trixie" >"$pin_fixture"
+if check_bootc_pair_pins "$pin_fixture" "$trixie_bootc_pin" "$trixie_libostree_pin" 2>/dev/null; then
     echo "a floating bootc entry was accepted" >&2
     exit 1
 fi
+if check_bootc_pair_pins "$bootc_trixie" "$forky_bootc_pin" "$forky_libostree_pin" 2>/dev/null; then
+    echo "the trixie pair was accepted as the forky pair" >&2
+    exit 1
+fi
 sed 's/^Packages=bootc=.*$/Packages=bootc=1.18.0-frostyard202610252315~deb13/' \
-    "$bootc_packages" >"$pin_fixture"
-if check_bootc_contract_version "$pin_fixture" \
-    "$root/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json" 2>/dev/null; then
+    "$bootc_trixie" >"$pin_fixture"
+if check_bootc_contract_version "$pin_fixture" "$contract" 2>/dev/null; then
     echo "a bootc pin that disagrees with the assembly contract was accepted" >&2
+    exit 1
+fi
+if check_bootc_contract_version "$bootc_forky" "$contract" 2>/dev/null; then
+    echo "the forky bootc pin was accepted against the trixie contract" >&2
+    exit 1
+fi
+sed 's/^Release=forky$/Release=trixie/' "$bootc_forky" >"$pin_fixture"
+if check_suite_fragment_match "$pin_fixture" forky 2>/dev/null; then
+    echo "a forky fragment that matches trixie was accepted" >&2
+    exit 1
+fi
+sed 's/^Release=forky$/Release=forky\nDistribution=debian/' "$bootc_forky" >"$pin_fixture"
+if check_suite_fragment_match "$pin_fixture" forky 2>/dev/null; then
+    echo "a fragment with a second [Match] line was accepted" >&2
+    exit 1
+fi
+sed 's/^Packages=bubblewrap$/Packages=bubblewrap\n          libgpgme11t64/' \
+    "$bootc_packages" >"$pin_fixture"
+if check_shared_bootc_fragment "$pin_fixture" 2>/dev/null; then
+    echo "a libgpgme entry in the shared bootc fragment was accepted" >&2
+    exit 1
+fi
+sed 's/^Packages=bubblewrap$/Packages=bootc=1.17.3-frostyard202611042030~deb13\n          bubblewrap/' \
+    "$bootc_packages" >"$pin_fixture"
+if check_shared_bootc_fragment "$pin_fixture" 2>/dev/null; then
+    echo "a bootc pin in the shared bootc fragment was accepted" >&2
+    exit 1
+fi
+sed 's/^\([[:space:]]*\)libgpgme45$/\1libgpgme11t64/' "$bootc_forky" >"$pin_fixture"
+if check_suite_libgpgme "$pin_fixture" libgpgme45 libgpgme11t64 2>/dev/null; then
+    echo "the trixie libgpgme in the forky fragment was accepted" >&2
+    exit 1
+fi
+jq '.installer.minimum_versions.cosign = "9.9.9"' "$forky_contract" >"$pin_fixture"
+if check_contract_twin "$contract" "$pin_fixture" 2>/dev/null; then
+    echo "a forky contract that drifts from the trixie contract was accepted" >&2
+    exit 1
+fi
+jq '.installer.minimum_versions.bootc = "1.17.3"' "$forky_contract" >"$pin_fixture"
+if snosi_bootc_secure_load_compatibility "$pin_fixture" 2>/dev/null; then
+    echo "an inconsistent forky contract was accepted" >&2
     exit 1
 fi
 
@@ -363,7 +530,7 @@ fi
 # secure builds). It shows that the shipped bootc matches the contract, that
 # the hidden storage-digest command exists, and that libostree-1-1 is at least
 # the ostree#3681 floor: with libostree 2026.5 a system Flatpak update that
-# applies a static delta fails. The pinned libostree must meet that floor.
+# applies a static delta fails. Each pinned libostree must meet that floor.
 pair_guard="$root/shared/packages/bootc/finalize/bootc-pair.chroot"
 [[ -x $pair_guard ]] || {
     echo "the bootc fragment must ship an executable bootc-pair finalize script" >&2
@@ -376,10 +543,12 @@ grep -Fqx 'FinalizeScripts=%D/shared/packages/bootc/finalize/bootc-pair.chroot' 
 }
 ostree_floor=$(sed -n 's/^readonly OSTREE_FLOOR=\([0-9.]*\)$/\1/p' "$pair_guard")
 [[ -n $ostree_floor ]] || { echo "bootc-pair must name OSTREE_FLOOR" >&2; exit 1; }
-dpkg --compare-versions "$libostree_pin" ge "$ostree_floor" || {
-    echo "libostree pin $libostree_pin is older than the ostree#3681 floor $ostree_floor" >&2
-    exit 1
-}
+for libostree_pin in "$trixie_libostree_pin" "$forky_libostree_pin"; do
+    dpkg --compare-versions "$libostree_pin" ge "$ostree_floor" || {
+        echo "libostree pin $libostree_pin is older than the ostree#3681 floor $ostree_floor" >&2
+        exit 1
+    }
+done
 
 pair_stub=$(mktemp -d)
 trap 'rm -rf "${compatibility_fixture:-}" "${pin_fixture:-}" "${pair_stub:-}"' EXIT
@@ -400,25 +569,35 @@ printf '%s' "${STUB_OSTREE:?}"
 STUB
 chmod +x "$pair_stub/bootc" "$pair_stub/dpkg-query"
 contract_bootc=$(jq -er '.assembly.bootc_version' "$contract")
-run_pair_guard() { # bootc-version libostree-version hidden(0|1)
-    PATH="$pair_stub:$PATH" SNOSI_BOOTC_PAIR_CONTRACT="$contract" \
+run_pair_guard() { # bootc-version libostree-version hidden(0|1) [contract]
+    PATH="$pair_stub:$PATH" SNOSI_BOOTC_PAIR_CONTRACT="${4:-$contract}" \
         STUB_BOOTC_VERSION=$1 STUB_OSTREE=$2 STUB_HIDDEN=$3 "$pair_guard"
 }
-run_pair_guard "$contract_bootc" "$libostree_pin" 1 >/dev/null || {
+run_pair_guard "$contract_bootc" "$trixie_libostree_pin" 1 >/dev/null || {
     echo "bootc-pair rejected the pinned pair" >&2
     exit 1
 }
-if run_pair_guard 1.17.1 "$libostree_pin" 1 >/dev/null 2>&1 &&
+if run_pair_guard 1.17.1 "$trixie_libostree_pin" 1 >/dev/null 2>&1 &&
         [[ $contract_bootc != 1.17.1 ]]; then
     echo "bootc-pair accepted a bootc that disagrees with the contract" >&2
     exit 1
 fi
-if run_pair_guard "$contract_bootc" "$libostree_pin" 0 >/dev/null 2>&1; then
+if run_pair_guard "$contract_bootc" "$trixie_libostree_pin" 0 >/dev/null 2>&1; then
     echo "bootc-pair accepted a bootc without the hidden storage-digest command" >&2
     exit 1
 fi
 if run_pair_guard "$contract_bootc" 2026.5-frostyard202610252315~deb13 1 >/dev/null 2>&1; then
     echo "bootc-pair accepted libostree 2026.5 (ostree#3681)" >&2
+    exit 1
+fi
+# The forky image ships the forky contract: the forky bootc passes against it,
+# and the trixie bootc does not.
+run_pair_guard 1.17.4 "$forky_libostree_pin" 1 "$forky_contract" >/dev/null || {
+    echo "bootc-pair rejected the pinned forky pair with the forky contract" >&2
+    exit 1
+}
+if run_pair_guard 1.17.3 "$forky_libostree_pin" 1 "$forky_contract" >/dev/null 2>&1; then
+    echo "bootc-pair accepted bootc 1.17.3 with the forky contract" >&2
     exit 1
 fi
 

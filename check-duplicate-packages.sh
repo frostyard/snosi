@@ -21,6 +21,9 @@ patterns = [
     "shared/suite/*.conf",
     "shared/suite/*/*.conf",
     "shared/kernel/backports/*.conf",
+    # every other suite fragment that a shared mkosi.conf includes
+    "**/trixie.conf",
+    "**/forky.conf",
 ]
 # -co: an untracked fragment is checked before it is committed.
 found = subprocess.check_output(

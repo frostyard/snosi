@@ -17,8 +17,9 @@
 #                  every profile (and of the default build) equals the summary
 #                  of the real tree.
 #   (c) smoke      the resolved forky Floe summary has Release=forky in every
-#                  image, no trixie-backports pin, no trixie-only package, and
-#                  the forky sandbox and extra trees in last position.
+#                  image, no trixie-backports pin, no trixie-only package, no
+#                  trixie isolation pin, and the forky sandbox and extra trees
+#                  (the secure contract copy too) after the trees they replace.
 #
 # MKOSI selects the binary (validate.yml sets MKOSI=mkosi).
 set -euo pipefail
@@ -50,11 +51,10 @@ suite_files() { # suite -> matching fragment paths, relative to the root
     {
         # shared/suite/<suite>/*.conf
         find shared/suite -mindepth 2 -maxdepth 2 -path "shared/suite/$1/*.conf" -print
-        # any mkosi.conf.d/ fragment named after the suite
-        find . -path ./.git -prune -o -type f -name "$1.conf" \
-            -path '*/mkosi.conf.d/*' -print
-        # the kernel selection fragments
-        find shared/kernel/backports -maxdepth 1 -name "$1.conf" -print
+        # any fragment named after the suite: mkosi.conf.d/<suite>.conf and
+        # the <suite>.conf files that a shared mkosi.conf includes (the kernel
+        # selection, the bootc pair, the secure composition)
+        find . -path ./.git -prune -o -type f -name "$1.conf" -print
     } | sed 's|^\./||' | sort -u
 }
 
@@ -342,6 +342,38 @@ else:
         not_ok(f"main: {ours} comes before shared/floe/tree")
     else:
         ok("main: the forky Floe tree comes after shared/floe/tree")
+    # The forky secure contract must replace the trixie contract.
+    secure = f"{root}/shared/bootc-secure/tree"
+    ours = f"{root}/shared/bootc-secure/suite/forky/tree"
+    if ours not in extra or secure not in extra:
+        not_ok(f"main: ExtraTrees needs both {secure} and {ours}")
+    elif extra.index(ours) < extra.index(secure):
+        not_ok(f"main: {ours} comes before {secure}")
+    else:
+        ok("main: the forky secure contract tree comes after shared/bootc-secure/tree")
+
+# The trixie isolation pin (a low-priority forky source) is trixie-only: the
+# forky sandbox gives a forky build its sources.
+isolation = f"{root}/shared/bootc-secure/package-manager"
+leaked = sorted(
+    image.get("Image") or "<root>"
+    for image in images
+    if isolation in trees(image, "SandboxTrees")
+)
+if leaked:
+    not_ok(f"the trixie isolation pin {isolation} reaches a forky build: {leaked}")
+else:
+    ok("the trixie isolation pin of shared/bootc-secure is absent")
+
+trixie_libgpgme = sorted(
+    image.get("Image") or "<root>"
+    for image in images
+    if "libgpgme11t64" in (image.get("Packages") or [])
+)
+if trixie_libgpgme:
+    not_ok(f"libgpgme11t64 is trixie-only but is installed for: {trixie_libgpgme}")
+else:
+    ok("libgpgme11t64 is absent")
 
 sys.exit(1 if bad else 0)
 PY

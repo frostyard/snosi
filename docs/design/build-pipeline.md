@@ -88,9 +88,9 @@ Image builds have four phases, in order:
    10-second delay on any curl error, including a connection reset, and it
    never retries a checksum mismatch. Frostyard's `bootc` and
    `libostree-1-1` arrive as debs from the configured APT source, not an
-   in-tree source build, and `shared/packages/bootc/mkosi.conf` pins that pair
-   to one exact Frostyard build: they are revalidated together, because secure
-   assembly depends on both
+   in-tree source build. Each suite pins that pair to one exact Frostyard
+   build in `shared/packages/bootc/{trixie,forky}.conf` (ADR-0037). They are
+   revalidated together, because secure assembly depends on both
    ([compatibility contract](../bootc-secure-assembly-compatibility.md)).
 2. **PostInstallationScripts:** kernel dracut postinstall, shared
    `shared/scripts/common-postinst.sh`, and the product's setup prepare
@@ -207,7 +207,8 @@ private material. See the
 [compatibility contract](../bootc-secure-assembly-compatibility.md) for
 revalidation triggers and [secure operations](../bootc-secure-operations.md)
 for support/evidence limits. The Frostyard bootc/libostree package pair that
-this adapter binds is pinned exactly in `shared/packages/bootc/mkosi.conf` and
+this adapter binds is pinned exactly per suite in
+`shared/packages/bootc/{trixie,forky}.conf` and
 guarded by `test/bootc-secure-static-test.sh`; a change to either version is a
 revalidation trigger, not a routine bump.
 

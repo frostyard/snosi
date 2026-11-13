@@ -247,6 +247,9 @@ for path in "${forky_ignored[@]}"; do
 done
 forky_inputs=(
     'shared/packages/bootc/mkosi.conf'
+    'shared/packages/bootc/forky.conf'
+    'shared/bootc-secure/forky.conf'
+    'shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json'
     'shared/packages/floe/mkosi.conf'
     'mkosi.profiles/floe/mkosi.conf'
     'shared/bootc-secure/mkosi.conf'
