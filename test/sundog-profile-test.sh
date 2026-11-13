@@ -46,6 +46,7 @@ declare -a required_packages=(
     xdg-desktop-portal-kde qt6-wayland dolphin konsole
     plasma-discover-backend-flatpak kde-config-flatpak fcitx5 kde-config-fcitx5
     plymouth-theme-breeze flatpak print-manager tuned tuned-ppd podman distrobox
+    at-spi2-core
 )
 for package in "${required_packages[@]}"; do
     require_line "$packages" "^[[:space:]]*(Packages=)?${package}$" "required package is missing: $package"
