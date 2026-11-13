@@ -92,20 +92,25 @@ expect "a clean build with a stale gap fails" reject success "$tmp/unused.log" "
 expect "a clean build with no known gap passes" pass success "$tmp/unused.log" "$empty_gaps"
 
 # The checked-in file is what the workflow reads: it must parse and explain the
-# two gaps it ships.
+# apt errors of the last forky build (run 43505892957: the forky bootc pair is
+# published, and the trixie pin of shared/packages/bootc does not match it).
 checked_in=$root/shared/suite/forky/known-gaps.tsv
 if [[ ! -f $checked_in ]]; then
     fail "$checked_in is missing"
 else
-    printf 'E: %s\n' "Unable to locate package bootc" >"$tmp/shipped.log"
+    printf 'E: %s\n' \
+        "Version '1.17.3-frostyard202611042030~deb13' for 'bootc' was not found" \
+        "Unable to locate package libgpgme11t64" \
+        "Version '2026.6-frostyard202611042030~deb13' for 'libostree-1-1' was not found" \
+        >"$tmp/shipped.log"
     if out=$("$classify" --outcome failure --log "$tmp/shipped.log" --known-gaps "$checked_in" 2>&1); then
-        if [[ $out == *G1* ]]; then
-            pass "the checked-in known-gaps.tsv explains the bootc gap as G1"
+        if [[ $out == *"gap \`G1\`"* && $out == *"gap \`G1b\`"* && $out == *"gap \`G1c\`"* ]]; then
+            pass "the checked-in known-gaps.tsv explains the bootc pin gaps as G1, G1b and G1c"
         else
-            fail "the checked-in known-gaps.tsv did not report gap G1: $out"
+            fail "the checked-in known-gaps.tsv did not report G1, G1b and G1c: $out"
         fi
     else
-        fail "the checked-in known-gaps.tsv does not explain the bootc gap: $out"
+        fail "the checked-in known-gaps.tsv does not explain the bootc pin gaps: $out"
     fi
 fi
 
