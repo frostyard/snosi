@@ -538,7 +538,7 @@ because they are absent from this snapshot.
 - [x] snosi PR: remove the `ghcr.io/frostyard/cayo` scope from
       `policy.json` and remove cayo from the policy test's `SECURE_IMAGES`
       array (floe/snow/snowfield remain). Done 2026-11-13 in
-      [#PR_NUMBER](https://github.com/frostyard/snosi/pull/PR_NUMBER), not
+      [#1299](https://github.com/frostyard/snosi/pull/1299), not
       merged yet. Since ADR-0025 the scope lives in 2 files with equal
       `transports.docker` blocks: the strict update policy
       `shared/bootc-secure/tree/usr/lib/snosi/containers/bootc-policy.json`
