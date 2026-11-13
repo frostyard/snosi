@@ -556,16 +556,18 @@ because they are absent from this snapshot.
       fixed set that included cayo, so an image without the cayo scope
       failed `policy`. lab #234 requires the 4 product scopes and allows
       only cayo as an extra, so images on both sides of this change pass.
-- [ ] After every image that lab tests carries no cayo scope (R or later),
-      remove lab's retired-scope allowance (`RETIRED_SCOPE` in
-      `argo/workflow-templates/snow-bootc-lifecycle-scripts.yaml`).
-- [ ] Merge that PR and let the protected `secure-build` publish the signed
+- [ ] Merge [#1299](https://github.com/frostyard/snosi/pull/1299) (after lab
+      #234) and let the protected `secure-build` publish the signed
       **retirement release** (call it R) before changing either host's
       persistent `/etc`. Record R's 14-digit image version and immutable
       digest from the successful run; verify `floe:latest` resolves to that
       digest. A merged source change or a published artifact alone is not
       enough — the running deployment supplies `snosi-etc-diff`'s pristine
       policy source.
+- [ ] Later follow-up, after R is published and every image that lab tests
+      is R or later (no cayo scope): remove lab's retired-scope allowance
+      (`RETIRED_SCOPE` in
+      `argo/workflow-templates/snow-bootc-lifecycle-scripts.yaml`).
 - [ ] Stage and boot R on **both** migrated hosts through the normal floe
       update path. On each host require `outcome=staged`,
       `remote_version=<R>`, and R's host-local containers-storage digest in
