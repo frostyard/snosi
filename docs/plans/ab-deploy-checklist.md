@@ -1,7 +1,7 @@
 # Native A/B Production Deployment Checklist
 
-**Status:** In progress — this checklist is the live gate list for native A/B production readiness; boxes are ticked here as gates clear.  
-**Last verified:** 2026-08-29
+**Status:** Superseded by [ADR-0018](../adr/0018-remove-native-ab-and-nbc-lanes.md) — 2026-11-13. [#1028](https://github.com/frostyard/snosi/pull/1028) (merged 2026-10-01) removed the native A/B lanes that this checklist gated, after [ADR-0015](../adr/0015-retire-native-ab-images-and-nbc-installs.md) ended native A/B support on 2026-09-30. The boxes below are history, not open gates.  
+**Last verified:** 2026-11-13
 
 **Purpose:** the exact, ordered steps required to take the native A/B deployment
 path from "code-complete on `feat/mkosi-ab-root`" to "safe for real users."
