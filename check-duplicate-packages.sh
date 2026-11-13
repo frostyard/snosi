@@ -11,10 +11,28 @@ from pathlib import Path
 import subprocess
 import sys
 
-files = subprocess.check_output(
-    ["git", "ls-files", "**/mkosi.conf"], text=True
-).splitlines()
-files = [f for f in files if not f.startswith("saved-unused/")]
+# mkosi accumulates list settings, so a package named twice in one file is a
+# mistake. The suite-matched fragments (ADR-0037) are separate files, and the
+# same package may legitimately appear in the trixie one and the forky one, so
+# each file is still checked on its own.
+patterns = [
+    "**/mkosi.conf",
+    "**/mkosi.conf.d/*.conf",
+    "shared/suite/*.conf",
+    "shared/suite/*/*.conf",
+    "shared/kernel/backports/*.conf",
+]
+# -co: an untracked fragment is checked before it is committed.
+found = subprocess.check_output(
+    ["git", "ls-files", "-co", "--exclude-standard", "--", *patterns], text=True
+)
+files = sorted(
+    {
+        f
+        for f in found.splitlines()
+        if not f.startswith("saved-unused/") and Path(f).is_file()
+    }
+)
 
 has_duplicates = False
 
@@ -58,5 +76,5 @@ for rel_path in files:
 if has_duplicates:
     sys.exit(1)
 
-print("No duplicate package entries found in mkosi.conf files.")
+print(f"No duplicate package entries found in {len(files)} mkosi package files.")
 PY

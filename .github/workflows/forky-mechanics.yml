@@ -1,0 +1,181 @@
+# Forky mechanics build (no publish).
+#
+# The Debian release is a build input (ADR-0037): `mkosi --release forky` builds
+# the same Floe composition on Debian testing, beside the unchanged trixie
+# default. Nothing here publishes, tags or logs in to a registry: the job holds
+# contents: read and no secret, so a fork PR cannot reach anything that writes.
+#
+# While Debian testing is incomplete the build may stop at a known gap. The
+# classifier step passes only for a gap listed in
+# shared/suite/forky/known-gaps.tsv, and fails for any other failure.
+name: Forky mechanics build (no publish)
+
+on:
+  pull_request:
+    branches: [main]
+    # A forky build reads the same inputs as a trixie image build, plus the
+    # forky fragments. Ignore only what build-images.yml ignores (files that
+    # are not image inputs), so a change of any input, the bootc pin
+    # (shared/packages/bootc) included, rebuilds forky Floe.
+    # test/workflow-path-filter-test.sh holds this list to that of
+    # build-images.yml.
+    paths-ignore:
+      - "shared/download/package-versions.json"
+      - "latest-versions.txt"
+      - "shared/download/sysext-checksums.json"
+      - "**/*.md"
+      - ".agents/**"
+      - ".claude/**"
+      - ".knowledge/**"
+      - ".memory/**"
+      - "docs/**"
+      - "skills/**"
+      - "workers/**"
+      - ".github/workflows/build-installer-iso.yml"
+      - ".github/workflows/deploy-native-installer-redirect.yml"
+      - ".github/workflows/ai-fix-requested.yml"
+      - ".github/workflows/bootc-secure-nightly.yml"
+      - ".github/workflows/build-mechanics.yml"
+      - ".github/workflows/check-dependencies.yml"
+      - ".github/workflows/check-packages.yml"
+      - ".github/workflows/claude.yml"
+      - ".github/workflows/nightly-compliance.yml"
+      - ".github/workflows/scorecard.yml"
+      - ".github/workflows/test-install.yml"
+      - ".github/workflows/triage.yml"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/prompts/**"
+      - ".github/actionlint.yaml"
+      - ".github/auto-qa-tuning.json"
+      - ".github/dependabot.yml"
+      - ".github/renovate.json5"
+      - ".github/risk-paths.json"
+      - ".github/workflows/risk-paths.yml"
+      - ".github/workflows/test-bootc-secure.yml"
+      - ".github/workflows/validate.yml"
+  workflow_dispatch:
+  schedule:
+    # 05:45 UTC — clear of build-mechanics (03:30), nightly-compliance (04:30),
+    # bootc-secure-nightly (06:00) and the 08:00/09:00 dependency checks.
+    - cron: "45 5 * * *"
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  forky-mechanics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: floe
+    steps:
+      - name: Show disk space (before)
+        run: sudo df -h
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
+        with:
+          # We don't use the runner's preinstalled language toolchains; reclaim
+          # the tool cache (~8-12GB) on / for extra headroom on large builds.
+          tool-cache: true
+
+      - name: Mount BTRFS for podman storage
+        uses: ublue-os/container-storage-action@dc1f4c8f17b672069e921f001132f7cf98a423a6 # main 2026-02-11
+        with:
+          target-dir: /var/lib/containers
+
+      - name: Configure Podman OCI runtime
+        # GitHub runner 20260726 upgraded Podman 4.9.3 -> 5.8.4; its default
+        # crun path rejects the generated OCI version. The matched bundled
+        # runc works for direct and script-nested podman invocations.
+        run: |
+          sudo install -d -m 0755 /etc/containers/containers.conf.d
+          printf '%s\n' '[engine]' 'runtime = "runc"' \
+            | sudo tee /etc/containers/containers.conf.d/99-snosi-ci-runtime.conf >/dev/null
+          runtime=$(sudo podman info --format '{{.Host.OCIRuntime.Name}}')
+          [[ $runtime == runc ]] || {
+            echo "::error::Podman selected OCI runtime '$runtime', expected 'runc'" >&2
+            exit 1
+          }
+
+      - name: Redirect temp to /mnt
+        # / (/dev/root) has ~45G free after cleanup; /mnt has ~70G free. mkosi's
+        # build workspace and podman/buildah tar staging default to TMPDIR
+        # (/var/tmp on /), which overflows / on the larger variants and
+        # crashes the runner with "No space left on device". Point TMPDIR at the
+        # roomy /mnt volume for all subsequent steps.
+        run: |
+          sudo mkdir -p /mnt/tmp
+          sudo chmod 1777 /mnt/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
+      - name: Show disk space (after)
+        run: sudo df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check mkosi package duplicates
+        run: ./check-duplicate-packages.sh
+
+      - name: Generate version tag
+        id: version
+        run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
+
+      - name: setup-mkosi
+        uses: systemd/mkosi@904357aa12013e3adbb4857cc4bf8840c6c83682 # main 2026-11-09
+
+      - name: Build forky image
+        # continue-on-error so the next step can tell a known forky gap from a
+        # wiring regression. Nothing is published on either path.
+        id: build
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          sudo TMPDIR="$TMPDIR" mkosi --release forky --profile ${{ matrix.profile }} \
+            --dependency= \
+            --dependency=base \
+            --image-version "${{ steps.version.outputs.tag }}" \
+            build 2>&1 | tee "$RUNNER_TEMP/build.log"
+
+      - name: Classify against known forky gaps
+        env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          set -euo pipefail
+          ./shared/suite/forky/classify-build.sh \
+            --outcome "$BUILD_OUTCOME" \
+            --log "$RUNNER_TEMP/build.log" \
+            --known-gaps shared/suite/forky/known-gaps.tsv \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Check the forky image when the build passed
+        # Only a complete forky tree reaches this step: it must be a forky image
+        # with the VERSION_ID the sysext and sysupdate contracts key off, and it
+        # must still trust the sysupdate vendor keyring.
+        if: steps.build.outcome == 'success'
+        run: |
+          set -euo pipefail
+          sudo ./test/sysext-signature-verification-test.sh --rootfs "output/${{ matrix.profile }}"
+          grep -qx 'VERSION_CODENAME=forky' "output/${{ matrix.profile }}/usr/lib/os-release" || {
+            echo "::error::the forky image does not name VERSION_CODENAME=forky" >&2
+            exit 1
+          }
+          grep -qx 'VERSION_ID="14"' "output/${{ matrix.profile }}/usr/lib/os-release" || {
+            echo "::error::the forky image does not carry VERSION_ID=\"14\" (shared/suite/forky/version-id.postinst.chroot)" >&2
+            exit 1
+          }
+
+      - name: cleanup build output
+        if: always()
+        run: sudo -E mkosi clean

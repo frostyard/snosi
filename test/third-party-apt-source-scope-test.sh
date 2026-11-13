@@ -70,6 +70,40 @@ check_shared_sandbox_allowlist() { # root
     return "$status"
 }
 
+check_suite_sandbox_allowlist() { # root
+    # A second suite (ADR-0037) gets its own sandbox tree, which replaces some
+    # mkosi.sandbox sources for that suite only. It may name only sources that
+    # the shared sandbox already allows: a suite must not smuggle in a new
+    # third-party repository without its own scoping decision.
+    local root_dir=$1 tree name name_ok known status=0 found=0
+    for tree in "$root_dir"/shared/suite/*/sandbox/etc/apt/sources.list.d; do
+        [[ -d $tree ]] || continue
+        found=1
+        while IFS= read -r name; do
+            [[ -n $name ]] || continue
+            name_ok=0
+            for known in "${third_party_allowlist[@]}"; do
+                if [[ $name == "$known.sources" ]]; then
+                    name_ok=1
+                    break
+                fi
+            done
+            if ((name_ok == 0)); then
+                fail "${tree#"$root_dir"/} holds $name, which the shared sandbox allowlist does not name"
+                status=1
+            fi
+        done < <(find "$tree" -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)
+    done
+    if ((status == 0)); then
+        if ((found)); then
+            pass "every suite sandbox holds only allowlisted third-party APT sources"
+        else
+            pass "no suite sandbox tree exists yet"
+        fi
+    fi
+    return "$status"
+}
+
 check_sandbox_has_no_himmelblau() { # root
     local status=0
     if [[ ! -d $1/mkosi.sandbox ]]; then
@@ -264,6 +298,7 @@ check_justfile() { # root
 check_all() { # root
     local status=0
     check_shared_sandbox_allowlist "$1" || status=1
+    check_suite_sandbox_allowlist "$1" || status=1
     check_sandbox_has_no_himmelblau "$1" || status=1
     check_scoped_tree_complete "$1" || status=1
     check_root_dependencies "$1" || status=1
@@ -284,10 +319,15 @@ fixture_root() { # name
         "$dir/mkosi.sandbox/etc/apt/keyrings" \
         "$dir/$scoped_tree/etc/apt/sources.list.d" \
         "$dir/$scoped_tree/etc/apt/keyrings" \
+        "$dir/shared/suite/forky/sandbox/etc/apt/sources.list.d" \
         "$dir/.github/workflows"
     local name
     for name in "${third_party_allowlist[@]}"; do
         : >"$dir/mkosi.sandbox/etc/apt/sources.list.d/$name.sources"
+    done
+    # The forky sandbox overrides exactly the files the shared sandbox has.
+    for name in frostyard debian-backports tailscale; do
+        : >"$dir/shared/suite/forky/sandbox/etc/apt/sources.list.d/$name.sources"
     done
     : >"$dir/$scoped_tree/etc/apt/sources.list.d/himmelblau.sources"
     : >"$dir/$scoped_tree/etc/apt/keyrings/himmelblau.gpg"
@@ -322,6 +362,11 @@ expect_failure "unallowlisted shared APT source" check_shared_sandbox_allowlist 
 dir=$(fixture_root apt-list-source)
 : >"$dir/mkosi.sandbox/etc/apt/sources.list.d/extra.list"
 expect_failure "*.list source in the shared sandbox" check_shared_sandbox_allowlist "$dir"
+
+# A third-party source that only the forky sandbox adds (ADR-0037).
+dir=$(fixture_root suite-source)
+: >"$dir/shared/suite/forky/sandbox/etc/apt/sources.list.d/example.sources"
+expect_failure "unallowlisted suite sandbox APT source" check_suite_sandbox_allowlist "$dir"
 
 # A monolithic sources.list in the shared sandbox.
 dir=$(fixture_root sources-list-file)

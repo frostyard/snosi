@@ -641,3 +641,14 @@ jobs:
         run: |
           sudo mkosi summary > /dev/null
           ./check-profile-dependencies.sh
+
+      - name: Validate suite isolation and the forky resolution
+        # The Debian release is a build input (ADR-0037): every trixie summary
+        # must be unchanged, and the forky Floe summary must be the one the
+        # forky mechanics build needs. mkosi summary needs no root here.
+        env:
+          MKOSI: mkosi
+        run: ./test/suite-isolation-test.sh
+
+      - name: Validate the forky known-gap classifier
+        run: ./test/forky-known-gaps-test.sh

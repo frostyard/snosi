@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-13",
+  "scope": "shared/suite/forky/classify-build.sh known-gaps.tsv parser (ADR-0037, PR #1292)",
+  "correction": "The first parser read gap rows with a tab IFS and checked only the fixed string. A tab IFS merges empty fields, so `id<TAB><TAB>url` took the URL as the fixed string; a blank fixed string matched every apt error; rows without a tracking URL, with a non-https URL or with a 4th field were accepted. Every row must have exactly 3 nonempty tab-separated fields and an https URL, validated before any classification.",
+  "evidence": "Cross-review (openai/gpt-6.1-sol) of b99d50a, finding 1. test/forky-known-gaps-test.sh: with the old parser 7 of 21 cases fail (malformed row on failure and success, no URL, empty and blank fixed string, non-https URL, 4th field). The last-row-without-newline cases passed already: grep -v added the newline.",
+  "promoted_to": "classify-build.sh row validation; test/forky-known-gaps-test.sh parser fixtures"
+}

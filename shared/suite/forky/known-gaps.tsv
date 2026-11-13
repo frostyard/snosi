@@ -1,0 +1,16 @@
+# Known forky build gaps (ADR-0037).
+#
+# The Debian testing suite does not yet satisfy this repository's package set.
+# A forky mechanics build may fail only for a gap listed here; a failure that no
+# row explains fails the workflow.
+#
+# Columns, tab separated: id <TAB> fixed string to find in the build log <TAB>
+# tracking URL. Comment lines start with #.
+#
+# A row leaves this file as soon as the build no longer needs it: the mechanics
+# workflow fails while any row is still listed and the forky build passes.
+# Every apt error line ("E: ...") of a failed build must contain the fixed
+# string of one row.
+G1	for 'bootc' was not found	https://github.com/frostyard/snosi/issues/1300
+G1b	Unable to locate package libgpgme11t64	https://github.com/frostyard/snosi/issues/1300
+G1c	for 'libostree-1-1' was not found	https://github.com/frostyard/snosi/issues/1300

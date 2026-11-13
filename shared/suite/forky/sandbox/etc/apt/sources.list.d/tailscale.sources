@@ -1,0 +1,9 @@
+# Forky builds only: overrides mkosi.sandbox/etc/apt/sources.list.d/tailscale.sources
+# (trixie) through the later shared/suite/forky/sandbox tree (ADR-0037).
+Types: deb
+URIs: https://pkgs.tailscale.com/stable/debian
+Suites: forky
+Components: main
+Architectures: amd64
+Enabled: yes
+Signed-By: /etc/apt/keyrings/tailscale-archive-keyring.gpg
