@@ -66,7 +66,7 @@ READ_ALL_ALLOW = {
 }
 
 USES_KEY = re.compile(r"^([ ]*)(-[ ]+)?(\"uses\"|'uses'|uses)\s*:\s*(.*)$")
-USES_ANY = re.compile(r"(^|[\s{,])(?:\"uses\"|'uses'|uses)\s*:")
+USES_ANY = re.compile(r"(^|[\s{\[,])(?:\"uses\"|'uses'|uses)\s*:")
 SEQUENCE_PREFIX = re.compile(r"^([ ]*)((?:-[ ]+)*)(.*)$")
 BLOCK_INDICATOR = re.compile(r"[|>](?:[0-9][+-]?|[+-][0-9]?)?\s*(?:#.*)?")
 BLOCK_KEY = re.compile(
@@ -90,6 +90,33 @@ def fail(message: str) -> None:
 
 def indent_of(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
+
+
+def key_syntax_error(rest: str) -> str | None:
+    r"""Message for key syntax a line scan cannot decode, or None.
+
+    YAML decodes escapes in a double-quoted key, so `"us\u0065s"` is the key
+    `uses`; a complex key (`? use`) and a tagged key (`!!str uses:`) also hide
+    the real key name. Do not decode these shapes: fail closed instead.
+    """
+    # A key can also sit inside a flow collection (`- {"us\u0065s": x}` or
+    # `steps: ["us\u0065s": x]`), so scan every double-quoted string on the
+    # line, not only the first token. GitHub expressions (`${{ !x }}`) are
+    # values, not keys, and so is quoted text: blank both before the flow-key
+    # checks.
+    for quoted in re.finditer(r'"((?:[^"\\]|\\.)*)"(\s*:)?', rest):
+        if quoted.group(2) and "\\" in quoted.group(1):
+            return (
+                "escaped quoted key; write the key plain (a backslash escape "
+                "hides the real key name)"
+            )
+    plain = re.sub(r"\$\{\{.*?\}\}", "EXPR", rest)
+    plain = re.sub(r"'(?:[^']|'')*'|\"(?:[^\"\\]|\\.)*\"", "STR", plain)
+    if plain == "?" or plain.startswith("? ") or re.search(r"[{\[,]\s*\?(\s|$)", plain):
+        return "complex mapping key (`?`) is not supported"
+    if plain.startswith("!") or re.search(r"[{\[,]\s*!", plain):
+        return "tagged mapping key (`!`) is not supported"
+    return None
 
 
 def block_scalar_parent(line: str) -> int | None:
@@ -208,6 +235,14 @@ def check_workflow(name: str, text: str) -> list[str]:
             continue
         if line.strip().startswith("#"):
             continue
+        # A key this scan cannot read would hide an unpinned action, so any
+        # such shape is an error before the `uses:` check runs.
+        rest = line.lstrip(" ")
+        while rest.startswith("- "):
+            rest = rest[2:].lstrip(" ")
+        message = key_syntax_error(rest)
+        if message is not None:
+            error(index, message)
         match = USES_KEY.match(line)
         if not match:
             if USES_ANY.search(line):
@@ -604,6 +639,47 @@ def self_test() -> int:
             "          persist-credentials: false\n"
             "          persist-credentials: false\n",
             "duplicate",
+        ),
+        # YAML decodes escapes in a double-quoted key, so `"us\u0065s"` is a
+        # real `uses:` key that a plain text match cannot see.
+        "escaped-quoted-uses-key": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            '      - "us\\u0065s": actions/checkout@v4\n',
+            "escaped quoted key",
+        ),
+        "escaped-quoted-uses-key-job-level": (
+            "permissions: {}\njobs:\n  a:\n"
+            '    "us\\x65s": owner/repo/.github/workflows/x.yml@v1\n',
+            "escaped quoted key",
+        ),
+        # A complex key (`? key` + `: value`) and a tagged key also hide the
+        # real key name from a line scan.
+        "complex-key": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            "      - ? uses\n"
+            "        : actions/checkout@v4\n",
+            "complex mapping key",
+        ),
+        # The same key shapes inside a flow collection.
+        "escaped-quoted-key-in-flow": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            '      - {name: x, "us\\u0065s": actions/checkout@v4}\n',
+            "escaped quoted key",
+        ),
+        "flow-sequence-uses": (
+            "permissions: {}\njobs:\n  a:\n"
+            "    steps: [uses: actions/checkout@v4]\n",
+            "unrecognized uses form",
+        ),
+        "tagged-key-in-flow": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            "      - {name: x, !!str uses: actions/checkout@v4}\n",
+            "tagged mapping key",
+        ),
+        "tagged-key": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            "      - !!str uses: actions/checkout@v4\n",
+            "tagged mapping key",
         ),
     }
     for label, (fixture, expected) in fixtures.items():
