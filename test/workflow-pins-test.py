@@ -65,10 +65,13 @@ READ_ALL_ALLOW = {
     ),
 }
 
-USES_KEY = re.compile(r"^([ ]*)(-[ ]+)?uses\s*:\s*(.*)$")
-USES_ANY = re.compile(r"(^|[\s{,])uses\s*:")
-BLOCK_START = re.compile(
-    r"^([ ]*)[^\s#][^:]*:\s*[|>](?:[0-9][+-]?|[+-][0-9]?)?\s*(?:#.*)?$"
+USES_KEY = re.compile(r"^([ ]*)(-[ ]+)?(\"uses\"|'uses'|uses)\s*:\s*(.*)$")
+USES_ANY = re.compile(r"(^|[\s{,])(?:\"uses\"|'uses'|uses)\s*:")
+SEQUENCE_PREFIX = re.compile(r"^([ ]*)((?:-[ ]+)*)(.*)$")
+BLOCK_INDICATOR = re.compile(r"[|>](?:[0-9][+-]?|[+-][0-9]?)?\s*(?:#.*)?")
+BLOCK_KEY = re.compile(
+    r"(?:[^\s#][^:]*|\"[^\"]*\"|'[^']*')\s*:[ ]*"
+    r"[|>](?:[0-9][+-]?|[+-][0-9]?)?\s*(?:#.*)?"
 )
 PERMISSIONS = re.compile(r"^permissions\s*:")
 PERMISSIONS_VALUE = re.compile(r"^permissions\s*:\s*(.*)$")
@@ -76,7 +79,8 @@ PERMISSION_ENTRY = re.compile(r"^[ ]+([A-Za-z0-9_-]+)\s*:\s*(\S+)\s*(?:#.*)?$")
 PIN_COMMENT = re.compile(r"# v\d+(\.\d+){0,2}")
 COMMIT = re.compile(r"[0-9a-f]{40}")
 DOCKER_DIGEST = re.compile(r"docker://[^\s@]+@sha256:[0-9a-f]{64}")
-PERSIST = re.compile(r"[ ]+persist-credentials\s*:\s*false\s*(?:#.*)?")
+PERSIST_KEY = re.compile(r"persist-credentials\s*:")
+PERSIST = re.compile(r"persist-credentials\s*:\s*false\s*(?:#.*)?")
 WITH_KEY = re.compile(r"[ ]*with\s*:")
 
 
@@ -88,19 +92,39 @@ def indent_of(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
 
 
+def block_scalar_parent(line: str) -> int | None:
+    """Column of the key (or of a bare `-` entry) that owns this block scalar.
+
+    The block belongs to the KEY, not to the `-` that may precede it, so
+    `      - name: |` blocks content past column 8, and the `uses:` key at
+    column 8 stays visible to the scan.
+    """
+    match = SEQUENCE_PREFIX.match(line)
+    if match is None:
+        return None
+    prefix = len(match.group(1)) + len(match.group(2))
+    rest = match.group(3)
+    if BLOCK_INDICATOR.fullmatch(rest):
+        # A bare sequence entry, `- |`: the last dash is the parent node.
+        return max(prefix - 2, 0)
+    if BLOCK_KEY.fullmatch(rest):
+        return prefix
+    return None
+
+
 def block_scalar_lines(lines: list[str]) -> set[int]:
     """Indexes of lines that belong to a `key: |` or `key: >` block scalar."""
     inside: set[int] = set()
-    key_indent = -1
+    parent = -1
     for index, line in enumerate(lines):
-        if key_indent >= 0:
-            if line.strip() == "" or indent_of(line) > key_indent:
+        if parent >= 0:
+            if line.strip() == "" or indent_of(line) > parent:
                 inside.add(index)
                 continue
-            key_indent = -1
-        match = BLOCK_START.match(line)
-        if match:
-            key_indent = len(match.group(1))
+            parent = -1
+        column = block_scalar_parent(line)
+        if column is not None:
+            parent = column
     return inside
 
 
@@ -194,7 +218,7 @@ def check_workflow(name: str, text: str) -> list[str]:
                 )
             continue
         column = len(match.group(1)) + len(match.group(2) or "")
-        value = match.group(3).strip()
+        value = match.group(4).strip()
         if not value:
             error(index, "unrecognized uses form: `uses:` has no value")
             continue
@@ -310,18 +334,36 @@ def check_workflow(name: str, text: str) -> list[str]:
             if indent_of(lines[other]) == column and WITH_KEY.match(lines[other]):
                 with_index = other
                 break
-        found = False
+        # Only the DIRECT children of the `with:` block count. A deeper line,
+        # or a line inside a `key: |` scalar (for example a sparse-checkout
+        # pattern list), never sets the credential policy. A flow-form
+        # `with: {...}` has no children and fails closed.
+        entries: list[tuple[int, str]] = []
         if with_index is not None:
+            child_indent = None
             for other in range(with_index + 1, end):
                 candidate = lines[other]
-                if candidate.strip() == "":
+                if candidate.strip() == "" or candidate.strip().startswith("#"):
                     continue
                 if indent_of(candidate) <= column:
                     break
-                if PERSIST.fullmatch(candidate):
-                    found = True
-                    break
-        if not found:
+                if other in in_block:
+                    continue
+                if child_indent is None:
+                    child_indent = indent_of(candidate)
+                if indent_of(candidate) != child_indent:
+                    continue
+                text = candidate[child_indent:]
+                if PERSIST_KEY.match(text):
+                    entries.append((other, text))
+        if len(entries) > 1:
+            error(
+                entries[1][0],
+                "actions/checkout step sets `persist-credentials` more than "
+                "once (duplicate); exactly one `persist-credentials: false` "
+                "is required",
+            )
+        elif len(entries) != 1 or not PERSIST.fullmatch(entries[0][1]):
             error(
                 index,
                 "actions/checkout step must set `persist-credentials: false` "
@@ -393,6 +435,34 @@ def self_test() -> int:
         "    steps:\n"
         "      - uses: systemd/mkosi@"
         "a6753e508681aa162cef4e5183f1a728c11c4d78 # main 2026-11-05\n",
+        None,
+    )
+    # A `- name: |` block scalar must not hide the `uses:` key that follows
+    # it: the block belongs to the key column, not to the `-` column.
+    run(
+        "good-block-scalar-name",
+        "permissions: {}\njobs:\n  a:\n    steps:\n"
+        "      - name: |\n"
+        "          Checkout repository\n"
+        "        uses: actions/checkout@"
+        "3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n"
+        "        with:\n"
+        "          persist-credentials: false\n",
+        None,
+    )
+    # A `run: |` script may mention `uses:` and `persist-credentials:` freely.
+    run(
+        "good-run-scalar",
+        "permissions: {}\njobs:\n  a:\n    steps:\n"
+        "      - name: Script step\n"
+        "        run: |\n"
+        '          echo "uses: actions/checkout@v4"\n'
+        "          persist-credentials: true\n"
+        "      - name: Checkout repository\n"
+        "        uses: actions/checkout@"
+        "3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n"
+        "        with:\n"
+        "          persist-credentials: false\n",
         None,
     )
     # `read-all` is allowed only in scorecard.yml, matched by file name.
@@ -492,6 +562,48 @@ def self_test() -> int:
             "permissions: {}\njobs:\n  a:\n    steps:\n"
             "      - uses: docker://ghcr.io/frostyard/snow:latest\n",
             "must pin a digest",
+        ),
+        # A `- name: |` header records the `-` column in a line-based scan, so
+        # the `uses:` key below it would be skipped as scalar content.
+        "block-scalar-name-hides-uses": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            "      - name: |\n"
+            "          Checkout repository\n"
+            "        uses: actions/checkout@v4\n",
+            "40-character lowercase commit SHA",
+        ),
+        "quoted-uses-key": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            '      - "uses": actions/checkout@v4\n',
+            "40-character lowercase commit SHA",
+        ),
+        "quoted-uses-key-job-level": (
+            "permissions: {}\njobs:\n  a:\n"
+            "    'uses': owner/repo/.github/workflows/x.yml@v1\n",
+            "40-character lowercase commit SHA",
+        ),
+        # A `persist-credentials: false` line inside a block scalar of another
+        # `with:` child must not satisfy the credential check.
+        "persist-in-block-scalar": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            "      - name: Checkout repository\n"
+            "        uses: actions/checkout@"
+            "3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n"
+            "        with:\n"
+            "          persist-credentials: true\n"
+            "          sparse-checkout: |\n"
+            "            persist-credentials: false\n",
+            "persist-credentials: false",
+        ),
+        "persist-duplicate": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            "      - name: Checkout repository\n"
+            "        uses: actions/checkout@"
+            "3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n"
+            "        with:\n"
+            "          persist-credentials: false\n"
+            "          persist-credentials: false\n",
+            "duplicate",
         ),
     }
     for label, (fixture, expected) in fixtures.items():
