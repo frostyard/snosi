@@ -113,7 +113,7 @@ default and accepts only the exact `sigstoreSigned` scopes (see
 RUN_LIVE=1` exercises unsigned, wrong-key, and wrong-repository rejection
 through Podman against real published images. The system
 `/etc/containers/policy.json` accepts ordinary workload images and keeps the
-five Frostyard scopes signature-checked; automatic updates do not depend on
+four Frostyard scopes signature-checked; automatic updates do not depend on
 it. No image provisions a user policy. Rootless Podman reads the system
 `/etc/containers/policy.json` (permissive default, Frostyard scopes signed)
 unless the user writes their own `$HOME/.config/containers/policy.json`.
