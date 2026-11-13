@@ -22,8 +22,8 @@ Declare the highest applicable tier, never lower; the scale is
 [docs/risk-tiers.md](../docs/risk-tiers.md) (1 low, 2 moderate, 3 high,
 4 critical). A `risk:high` label (a path at L1 or L2, from a glob in
 `.github/risk-paths.json` or from core's organization floors; the same
-workflow adds the `level:L1` to `level:L4` label) means tier 3 or higher:
-name each matched path and why the change is safe.
+workflow adds the `level:L1` to `level:L4` label) means tier 4, the highest
+tier: name each matched path and why the change is safe.
 
 Risk tier: <!-- 1-4 --> — <!-- justification -->
 

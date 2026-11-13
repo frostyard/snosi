@@ -20,13 +20,15 @@
 #      a format this repo treats as part of the published image contract,
 #      per the plan's "Treat the mkosi commit as part of the published
 #      image format, not merely a build tool version").
-#   2. build-installer-iso.yml does not carry a
-#      conflicting literal `systemd/mkosi@<sha>` pin. This is the specific
-#      defect this whole mechanism exists to prevent -- e.g. someone later
-#      copy-pastes a `uses: systemd/mkosi@...` step from build-images.yml into
-#      that workflow, pinned to whatever commit build-images.yml happens to
-#      carry at that moment, silently reintroducing a second,
-#      independently-updated pin.
+#   2. No workflow under .github/workflows/ (*.yml and *.yaml, build.yml
+#      included) carries a `systemd/mkosi@<ref>` pin other than build.yml's
+#      pin. This is the specific defect this whole mechanism exists to
+#      prevent -- e.g. a partial Dependabot bump or a hand edit moves the
+#      pin in build-images.yml, build-mechanics.yml or validate.yml but not
+#      in build.yml, so the published OCI images build with a different mkosi
+#      than the sysexts and the installer ISO. Any ref counts, not only hex
+#      SHAs: a tag or branch ref in another workflow is a divergence too.
+#      build-installer-iso.yml, which runs this script, must exist.
 #   3. If a local mkosi checkout is present (i.e. this is running after
 #      shared/native-ab/ci/bootstrap-mkosi.sh, in CI or locally), its
 #      checked-out HEAD commit equals build.yml's pin exactly.
@@ -51,13 +53,14 @@ usage() {
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 mkosi_checkout="${1:-$root_dir/.mkosi}"
 
-build_yml="$root_dir/.github/workflows/build.yml"
-build_workflows=(
-    "$root_dir/.github/workflows/build-installer-iso.yml"
+workflows_dir="$root_dir/.github/workflows"
+build_yml="$workflows_dir/build.yml"
+required_workflows=(
+    "$workflows_dir/build-installer-iso.yml"
 )
 
 [[ -f "$build_yml" ]] || { echo "Error: missing $build_yml" >&2; exit 1; }
-for workflow in "${build_workflows[@]}"; do
+for workflow in "${required_workflows[@]}"; do
     [[ -f "$workflow" ]] || { echo "Error: missing $workflow" >&2; exit 1; }
 done
 
@@ -73,20 +76,26 @@ pin="$(grep -m1 -oE 'systemd/mkosi@[0-9a-f]+' "$build_yml" | cut -d@ -f2 || true
 }
 echo "build.yml mkosi pin: $pin"
 
-# Check 2: build workflows must not carry their own independent pin.
-for workflow in "${build_workflows[@]}"; do
-    workflow_pins="$(grep -oE 'systemd/mkosi@[0-9a-f]+' "$workflow" | cut -d@ -f2 | sort -u || true)"
-    if [[ -n "$workflow_pins" ]]; then
-        while IFS= read -r workflow_pin; do
-            [[ -z "$workflow_pin" ]] && continue
-            if [[ "$workflow_pin" != "$pin" ]]; then
-                echo "Error: $workflow pins systemd/mkosi@$workflow_pin, which does not match build.yml's $pin -- these must never diverge (Mkosi Pin Governance)" >&2
-                exit 1
-            fi
-        done <<<"$workflow_pins"
-    fi
-    echo "ok - $(basename "$workflow") carries no conflicting mkosi pin"
+# Check 2: every workflow that names systemd/mkosi@ must carry build.yml's
+# pin and no other ref.
+shopt -s nullglob
+all_workflows=("$workflows_dir"/*.yml "$workflows_dir"/*.yaml)
+shopt -u nullglob
+checked=0
+for workflow in "${all_workflows[@]}"; do
+    workflow_pins="$(grep -oE 'systemd/mkosi@[^[:space:]"#]+' "$workflow" | cut -d@ -f2 | sort -u || true)"
+    [[ -n "$workflow_pins" ]] || continue
+    while IFS= read -r workflow_pin; do
+        [[ -z "$workflow_pin" ]] && continue
+        if [[ "$workflow_pin" != "$pin" ]]; then
+            echo "Error: $workflow pins systemd/mkosi@$workflow_pin, which does not match build.yml's $pin -- these must never diverge (Mkosi Pin Governance)" >&2
+            exit 1
+        fi
+    done <<<"$workflow_pins"
+    echo "ok - $(basename "$workflow") carries build.yml's mkosi pin"
+    checked=$((checked + 1))
 done
+echo "ok - $checked workflow(s) that name systemd/mkosi@ carry build.yml's pin"
 
 # Check 3: if mkosi has actually been bootstrapped, its HEAD must be the pin.
 if [[ -d "$mkosi_checkout/.git" ]]; then
