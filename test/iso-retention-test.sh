@@ -99,6 +99,10 @@ build_fixture() {
     write_object "$dir/.candidate/${V[5]}/$(iso_name "${V[5]}")" "live candidate"
     # objects this script must never classify as its own payload
     write_object "$dir/snosi-native-installer_20260801000000_x86-64.iso" "historical media"
+    # the archived index pair that attests that media (promote.sh archived
+    # every outgoing index of the old channel into this same namespace)
+    write_object "$dir/.history/20260801000000/SHA256SUMS" "native-era index"
+    write_object "$dir/.history/20260801000000/SHA256SUMS.gpg" "native-era sig"
     write_object "$dir/snosi-installer_${V[0]}_x86-64.iso.sig" "near-miss name"
     write_object "$dir/README.txt" "stray"
     write_object "$dir/.history/notes/README" "non-version history dir"
@@ -153,6 +157,7 @@ run_scenario() {
     assert_true "[$label] fresh (in-flight) candidate kept" test -f "$dir/.candidate/20260907000000/$(iso_name 20260907000000)"
     assert_true "[$label] live version's candidate kept" test -f "$dir/.candidate/${V[5]}/$(iso_name "${V[5]}")"
     assert_true "[$label] historical native-installer media kept" test -f "$dir/snosi-native-installer_20260801000000_x86-64.iso"
+    assert_true "[$label] history of a version with no installer ISO kept" test -f "$dir/.history/20260801000000/SHA256SUMS" -a -f "$dir/.history/20260801000000/SHA256SUMS.gpg"
     assert_true "[$label] near-miss name kept" test -f "$dir/snosi-installer_${V[0]}_x86-64.iso.sig"
     assert_true "[$label] stray kept" test -f "$dir/README.txt"
     assert_true "[$label] non-version history dir kept" test -f "$dir/.history/notes/README"
@@ -221,6 +226,23 @@ run_refusals() {
     out="$("$RETENTION" --pubring "$PUBRING" --execute "$root" 2>&1)" || fail "grace run exits 0" "$out"
     assert_true "fresh old-versioned ISO kept" test -f "$dir/$(iso_name "${V[0]}")"
     assert_false "aged ISO outside the window pruned" test -e "$dir/$(iso_name "${V[1]}")"
+
+    echo "=== history of an ISO that grace protects is kept with it ==="
+    rm -rf "$root"; build_fixture "$root"
+    touch "$dir/$(iso_name "${V[0]}")"
+    out="$("$RETENTION" --pubring "$PUBRING" --execute "$root" 2>&1)" || fail "grace-history run exits 0" "$out"
+    assert_true "history of the grace-protected ISO kept" test -f "$dir/.history/${V[0]}/SHA256SUMS"
+    assert_true "history of a pruned ISO gone" no_objects_under "$dir/.history/${V[1]}"
+
+    echo "=== a listed key with a '..' segment is refused ==="
+    rm -rf "$root"; build_fixture "$root"
+    out="$(bash -c '
+        source "$1"; shift
+        retention_check_relpath "isos/native/v1/../ext/demo/demo_1.raw"' _ "$ROOT_DIR/shared/native-ab/publish/publish-lib.sh" 2>&1)" &&
+        fail "dot-dot key is refused" "$out" || pass "dot-dot key is refused"
+    out="$(bash -c 'source "$1"; retention_check_relpath "isos/native/v1//x.iso"' _ "$ROOT_DIR/shared/native-ab/publish/publish-lib.sh" 2>&1)" &&
+        fail "empty-segment key is refused" "$out" || pass "empty-segment key is refused"
+    assert_true "plain key is accepted" bash -c 'source "$1"; retention_check_relpath "isos/native/v1/.history/20260801000000/SHA256SUMS"' _ "$ROOT_DIR/shared/native-ab/publish/publish-lib.sh"
 
     echo "=== --keep-previous 0 keeps only current ==="
     rm -rf "$root"; build_fixture "$root"

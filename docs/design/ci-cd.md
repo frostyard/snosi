@@ -102,8 +102,9 @@ and never guesses a fallback. After the new index and the redirect verify,
 the promote job runs `shared/native-ab/publish/retention.sh --execute`
 ([ADR-0036](../adr/0036-prune-installer-isos-after-promotion.md)). It keeps
 the live `snosi-installer_<version>_x86-64.iso`, the two versions before it
-and every object younger than 24 hours, and deletes older installer ISOs
-with their `.candidate/` and `.history/` entries. It verifies the live
+and every object younger than 24 hours, and deletes older installer ISOs,
+stale `.candidate/` scratch and the `.history/` index pair of each ISO it
+deletes. The step is the last in the job, and a failed delete fails the job. It verifies the live
 signed index first and deletes nothing when that fails. One run deletes at
 most 30 objects: a larger plan deletes nothing, prints its list and warns,
 and a maintainer clears it by dispatching the workflow with

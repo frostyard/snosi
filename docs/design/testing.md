@@ -187,6 +187,7 @@ ranges, rejects ignored Range and tampered candidates, checks the served
 signed index and tests second-promotion history. It does not write R2.
 `test/iso-retention-test.sh` builds a signed local namespace and checks
 that `retention.sh` deletes only installer ISOs outside the keep window,
+keeps the archived index of every version whose ISO it does not delete,
 honours the grace period and the `--max-delete` cap, and deletes nothing
 when the live index is missing, tampered or ambiguous (ADR-0036). It
 replays the scenario through rclone's local backend when rclone is present.

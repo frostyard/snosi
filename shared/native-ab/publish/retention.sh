@@ -4,7 +4,8 @@
 # Retention for the Firn installer ISO namespace "isos/native/v1/"
 # (ADR-0036). Deletes installer ISOs that fell out of the keep window, the
 # stale ".candidate/<version>/" scratch a failed publication run left behind,
-# and the ".history/<version>/" archived index pairs whose ISO is gone.
+# and the ".history/<version>/" archived index pair of each ISO it deletes in
+# the same run. The archived index of any other version is kept.
 #
 # The only payload it may delete is an object named exactly
 # "snosi-installer_<14-digit version>_x86-64.iso" at the top of the
@@ -210,6 +211,20 @@ echo "Keep versions: $kept_list"
 [[ ${#newer_versions[@]} -eq 0 ]] ||
     echo "NOTE: ${#newer_versions[@]} version(s) newer than the live index are present and kept (a promotion in flight -- operator decision): ${newer_versions[*]}"
 
+# The installer ISOs this run deletes: outside the keep window and older
+# than the grace. A ".history/<v>/" pair is deleted only with the ISO of v,
+# so the archived index of any other version (for example the
+# "snosi-native-installer" era, whose media stays unclassified) is kept.
+declare -A iso_deleted=()
+while IFS=$'\t' read -r mtime _ rel; do
+    name="${rel#"$product_dir"/}"
+    [[ "$name" != */* && -z "${indexed[$name]:-}" ]] || continue
+    v="$(version_of "$name")"
+    [[ -n "$v" && -z "${keep_version[$v]:-}" ]] || continue
+    (( now - mtime >= grace_seconds )) || continue
+    iso_deleted["$v"]=1
+done <"$listing"
+
 plan="$WORK_DIR/plan.tsv" # action \t class \t size \t relpath \t reason
 : >"$plan"
 while IFS=$'\t' read -r mtime size rel; do
@@ -241,6 +256,8 @@ while IFS=$'\t' read -r mtime size rel; do
             class=unclassified reason="history directory is not a version"
         elif [[ -n "${keep_version[$v]:-}" ]]; then
             reason="archived index of kept version $v"
+        elif [[ -z "${iso_deleted[$v]:-}" ]]; then
+            reason="no installer ISO of version $v is deleted in this run"
         elif (( age < grace_seconds )); then
             reason="younger than ${GRACE_HOURS}h grace"
         else
@@ -250,7 +267,7 @@ while IFS=$'\t' read -r mtime size rel; do
         class=published
         if [[ -n "${keep_version[$v]:-}" ]]; then
             reason="version $v inside keep window"
-        elif (( age < grace_seconds )); then
+        elif [[ -z "${iso_deleted[$v]:-}" ]]; then
             reason="younger than ${GRACE_HOURS}h grace"
         else
             action=delete reason="version $v outside keep window"
@@ -259,9 +276,12 @@ while IFS=$'\t' read -r mtime size rel; do
     printf '%s\t%s\t%s\t%s\t%s\n' "$action" "$class" "$size" "$rel" "$reason" >>"$plan"
 done <"$listing"
 
-# Belt and braces: the live index's objects can never be in the delete set.
+# Belt and braces: the live index's objects can never be in the delete set,
+# and every deleted key is a plain path inside the namespace.
 while IFS=$'\t' read -r action _ _ rel _; do
     [[ "$action" == delete ]] || continue
+    retention_check_relpath "$rel" || { echo "Error: refusing to delete an unsafe key: $rel" >&2; exit 1; }
+    [[ "$rel" == "$product_dir"/* ]] || { echo "BUG: plan would delete $rel outside $product_dir/; aborting" >&2; exit 1; }
     name="${rel#"$product_dir"/}"
     [[ -z "${indexed[$name]:-}" ]] || { echo "BUG: plan would delete indexed object $rel; aborting" >&2; exit 1; }
 done <"$plan"

@@ -377,12 +377,33 @@ jobs:
             https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso \
             "$ver"
 
+      - name: Remove OpenPGP update-signing key
+        if: always()
+        run: rm -rf /var/tmp/native-promote-secrets
+
+      - name: Record promoted marker
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        run: |
+          mkdir -p /var/tmp/native-promoted
+          echo "iso promoted $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/tmp/native-promoted/iso
+
+      - name: Upload promoted marker
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-promoted-iso
+          path: /var/tmp/native-promoted/iso
+          retention-days: 90
+          if-no-files-found: error
+
       - name: Prune installer ISOs outside the keep window
         # ADR-0036: keep the live ISO and the two before it; never delete an
         # object younger than 24 hours. Runs only after the new index and the
-        # stable redirect verified. A plan above the cap deletes nothing
-        # (exit 3) and warns: clearing a backlog is a manual dispatch with
-        # retention_max_delete set, after reading the list printed here.
+        # stable redirect verified, and last in the job: the signing key is
+        # off disk and the promoted marker is uploaded even when a delete
+        # fails. A plan above the cap deletes nothing (exit 3) and warns:
+        # clearing a backlog is a manual dispatch with retention_max_delete
+        # set, after reading the list printed here.
         if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
         env:
           RCLONE_CONFIG_R2_TYPE: s3
@@ -406,22 +427,3 @@ jobs:
             exit 0
           fi
           exit "$rc"
-
-      - name: Remove OpenPGP update-signing key
-        if: always()
-        run: rm -rf /var/tmp/native-promote-secrets
-
-      - name: Record promoted marker
-        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
-        run: |
-          mkdir -p /var/tmp/native-promoted
-          echo "iso promoted $(date -u +%Y-%m-%dT%H:%M:%SZ)" > /var/tmp/native-promoted/iso
-
-      - name: Upload promoted marker
-        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: native-promoted-iso
-          path: /var/tmp/native-promoted/iso
-          retention-days: 90
-          if-no-files-found: error
