@@ -11,7 +11,9 @@
 # root_dir resolves to the fixture) across every branch: happy path, matching
 # duplicate pin, divergent pin, short/non-hex/absent pin, missing workflow
 # files, and the check-3 mkosi HEAD comparison (present-and-equal,
-# present-and-stale, absent). No root, no network, no mkosi build.
+# present-and-stale, absent). Check 2 covers every workflow, not only the
+# installer ISO workflow (#1285): a divergent pin or a tag ref in any other
+# workflow must fail. No root, no network, no mkosi build.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -194,6 +196,91 @@ if [[ $RC -eq 2 ]] && grep -Fq 'Usage:' <<<"$OUT"; then
     pass 'a second positional argument is a usage error'
 else
     fail 'a second positional argument is a usage error'
+fi
+
+# 9. A divergent pin in a workflow other than build-installer-iso.yml must
+# fail (#1285: check 2 only read the installer ISO workflow).
+f="$work/divergent-images"
+make_fixture "$f" "$PIN_A" "$PIN_A"
+emit_workflow "$f/.github/workflows/build-images.yml" "$PIN_B"
+run_guard "$f"
+if [[ $RC -ne 0 ]] && grep -Fq 'build-images.yml pins systemd/mkosi@'"$PIN_B" <<<"$OUT"; then
+    pass 'divergent pin in build-images.yml is rejected'
+else
+    fail 'divergent pin in build-images.yml is rejected'
+fi
+
+# 9b. A second, divergent pin in build.yml itself must fail (the pin is read
+# from its first match only).
+f="$work/divergent-build-second"
+make_fixture "$f" "$PIN_A" "-"
+printf '      - uses: systemd/mkosi@%s\n' "$PIN_B" >>"$f/.github/workflows/build.yml"
+run_guard "$f"
+if [[ $RC -ne 0 ]] && grep -Fq 'build.yml pins systemd/mkosi@'"$PIN_B" <<<"$OUT"; then
+    pass 'second divergent pin in build.yml is rejected'
+else
+    fail 'second divergent pin in build.yml is rejected'
+fi
+
+# 9c. A tag or branch ref in another workflow is a divergence too.
+f="$work/tag-validate"
+make_fixture "$f" "$PIN_A" "-"
+emit_workflow "$f/.github/workflows/validate.yml" "v25"
+run_guard "$f"
+if [[ $RC -ne 0 ]] && grep -Fq 'validate.yml pins systemd/mkosi@v25' <<<"$OUT"; then
+    pass 'tag ref in validate.yml is rejected'
+else
+    fail 'tag ref in validate.yml is rejected'
+fi
+
+# 9d. A .yaml workflow is checked as well.
+f="$work/divergent-yaml"
+make_fixture "$f" "$PIN_A" "-"
+emit_workflow "$f/.github/workflows/build-mechanics.yaml" "$PIN_B"
+run_guard "$f"
+if [[ $RC -ne 0 ]] && grep -Fq 'build-mechanics.yaml pins' <<<"$OUT"; then
+    pass 'divergent pin in a .yaml workflow is rejected'
+else
+    fail 'divergent pin in a .yaml workflow is rejected'
+fi
+
+# 9e. Matching pins in several workflows pass, and the guard reports how many
+# workflows it checked (build.yml, the installer ISO workflow and 2 others;
+# a workflow with no mkosi pin is not counted).
+f="$work/matching-many"
+make_fixture "$f" "$PIN_A" "$PIN_A"
+emit_workflow "$f/.github/workflows/build-images.yml" "$PIN_A"
+emit_workflow "$f/.github/workflows/validate.yml" "$PIN_A"
+emit_workflow "$f/.github/workflows/ci.yml" "-"
+run_guard "$f"
+if [[ $RC -eq 0 ]] && grep -Fq 'ok - 4 workflow(s) that name systemd/mkosi@' <<<"$OUT"; then
+    pass 'matching pins in 4 workflows pass and the count is reported'
+else
+    fail 'matching pins in 4 workflows pass and the count is reported'
+fi
+
+# 9f. Quoted refs compare by the ref alone: a matching single- or
+# double-quoted pin passes.
+f="$work/quoted-matching"
+make_fixture "$f" "$PIN_A" "-"
+printf "      - uses: 'systemd/mkosi@%s'\n" "$PIN_A" >"$f/.github/workflows/build-images.yml"
+printf '      - uses: "systemd/mkosi@%s" # main\n' "$PIN_A" >"$f/.github/workflows/validate.yml"
+run_guard "$f"
+if [[ $RC -eq 0 ]] && grep -Fq 'ok - 3 workflow(s) that name systemd/mkosi@' <<<"$OUT"; then
+    pass 'matching single- and double-quoted pins pass'
+else
+    fail 'matching single- and double-quoted pins pass'
+fi
+
+# 9g. A divergent single-quoted ref is still rejected.
+f="$work/quoted-divergent"
+make_fixture "$f" "$PIN_A" "-"
+printf "      - uses: 'systemd/mkosi@%s'\n" "$PIN_B" >"$f/.github/workflows/build-images.yml"
+run_guard "$f"
+if [[ $RC -ne 0 ]] && grep -Fq "build-images.yml pins systemd/mkosi@$PIN_B," <<<"$OUT"; then
+    pass 'divergent single-quoted pin is rejected'
+else
+    fail 'divergent single-quoted pin is rejected'
 fi
 
 printf '# Results: %d passed, %d failed, %d total\n' "$PASS" "$FAIL" "$((PASS + FAIL))"

@@ -20,6 +20,12 @@ the gates in the [PR review rubric](review-rubric.md).
 3. List the validation evidence required by that tier in the pull request.
 4. Reclassify the pull request if its scope changes during review.
 
+A pull request with the `risk:high` label (it touches a path at level L1 or L2
+in `.github/risk-paths.json` or in core's organization floors) is Tier 4, the
+highest tier, whatever the size of its diff
+([core risk-paths spec](https://github.com/frostyard/core/blob/main/docs/specs/risk-paths.md),
+[core ADR-0068](https://github.com/frostyard/core/blob/main/docs/adr/0068-label-pull-requests-that-touch-high-risk-paths.md)).
+
 A documentation-only change is not automatically Tier 1 when it changes a
 security, release, or operational contract. Similarly, a small diff can be
 high-risk when it changes a trust boundary.
