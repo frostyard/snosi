@@ -95,7 +95,10 @@ def indent_of(line: str) -> int:
 QUOTED = re.compile(r"'(?:[^']|'')*'|\"(?:[^\"\\]|\\.)*\"")
 EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
 DOUBLE_QUOTED_KEY = re.compile(r'"((?:[^"\\]|\\.)*)"\s*:')
-FLOW_VALUE = re.compile(r"(?:[^\s#{\[!?\"'][^:]*?|\"x*\"|'x*')\s*:\s+(?=[{\[])")
+ANCHOR_PREFIX = re.compile(r"(?:&\S+\s*)+")
+FLOW_VALUE = re.compile(
+    r"(?:[^\s#{\[!?&\"'][^:]*?|\"x*\"|'x*')\s*:\s+(?:&\S+\s+)*(?=[{\[])"
+)
 
 
 def blank_text(text: str) -> str:
@@ -133,6 +136,11 @@ def key_syntax_error(rest: str) -> str | None:
     (`{...}`, `[...]`); a plain scalar value such as `run: echo Hello, !`
     holds no key and is not checked.
     """
+    # An anchor (`&name`) may prefix the node; the node after it is what
+    # carries the keys, so check that node.
+    anchor = ANCHOR_PREFIX.match(rest)
+    if anchor is not None:
+        rest = rest[anchor.end():]
     blanked = blank_text(rest)
     quoted_key = DOUBLE_QUOTED_KEY.match(rest)
     if quoted_key is not None and "\\" in quoted_key.group(1):
@@ -761,6 +769,21 @@ def self_test() -> int:
             "      - {name: x,\n"
             "         uses: actions/checkout@v4}\n",
             "multi-line flow collection",
+        ),
+        "anchored-flow-node": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            '      - &checkout {"us\\u0065s": actions/checkout@v4}\n',
+            "escaped quoted key",
+        ),
+        "anchored-flow-value": (
+            "permissions: {}\njobs:\n  a:\n"
+            '    steps: &steps [{"us\\u0065s": actions/checkout@v4}]\n',
+            "escaped quoted key",
+        ),
+        "anchored-quoted-key": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            '      - &a "us\\u0065s": actions/checkout@v4\n',
+            "escaped quoted key",
         ),
         "tagged-key": (
             "permissions: {}\njobs:\n  a:\n    steps:\n"
