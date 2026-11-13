@@ -1,10 +1,18 @@
 # Plan: Provision Sundog-specific Flatpak application defaults
 
-**Status:** In progress — Firn v0.7.0 carries the label reader (firn#111)
-and the default-on toggle (firn#112, ADR-0019); the snosi change for
-Phases 3, 4 and 6 is ready. Post-merge evidence (published images, an
-out-of-band ISO install) remains
-**Last verified:** 2026-10-07
+**Status:** Done — 2026-11-13. Firn v0.7.0 shipped
+[firn#111](https://github.com/frostyard/firn/pull/111) and
+[firn#112](https://github.com/frostyard/firn/pull/112); snosi
+[#1054](https://github.com/frostyard/snosi/pull/1054),
+[#1055](https://github.com/frostyard/snosi/pull/1055) and
+[#1058](https://github.com/frostyard/snosi/pull/1058) (merged 2026-10-07)
+did Phases 2, 3, 4 and 6. The published ISO
+`snosi-installer_20261113193003_x86-64.iso` carries Firn 0.12.0
+([run 43491794246](https://github.com/frostyard/snosi/actions/runs/43491794246)),
+and published `sundog:latest` (`20261113191753`) carries Sundog's set
+label. Note: no out-of-band install from the published ISO that checks
+Sundog's core set is recorded; that check stays deferred.
+**Last verified:** 2026-11-13
 
 This follows the
 [native desktop-completeness plan](2026-10-05-sundog-desktop-completeness-plan.md).

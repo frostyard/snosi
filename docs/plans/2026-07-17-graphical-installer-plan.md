@@ -1,7 +1,7 @@
 # Graphical installer (`snosi-setup`) for the native installer ISO — Phase 2 plan
 
-**Status:** Planned — decisions settled 2026-07-17; implementation not started.  
-**Last verified:** 2026-08-29
+**Status:** Superseded — 2026-11-13. [#424](https://github.com/frostyard/snosi/pull/424) implemented `snosi-setup` on 2026-07-17 (see [native prototype history](../native-ab-prototype-history.md)); [ADR-0018](../adr/0018-remove-native-ab-and-nbc-lanes.md) ([#1028](https://github.com/frostyard/snosi/pull/1028)) removed it with the native installer ISO. Firn's `firn-gui` replaced it ([firn ADR-0021](https://github.com/frostyard/firn/blob/main/docs/adr/0021-graphical-installer-separate-executable.md), [frostyard/firn#122](https://github.com/frostyard/firn/pull/122)), and the Firn ISO boots it per [ADR-0022](../adr/0022-installer-graphical-and-console-boot-entries.md) ([#1155](https://github.com/frostyard/snosi/pull/1155)).  
+**Last verified:** 2026-11-13
 **Prerequisite:** Phase 1 merged (installer-owned system settings + deferred
 first-boot provisioning, PR #419) — the CLI backend is feature-complete for
 everything a graphical frontend needs to drive.

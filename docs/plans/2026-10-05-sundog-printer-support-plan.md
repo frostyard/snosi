@@ -1,7 +1,11 @@
 # Plan: Add Sundog printer-management support
 
-**Status:** Planned — independent package fix ready for immediate implementation
-**Last verified:** 2026-10-05
+**Status:** Done — 2026-11-13. [PR #1052](https://github.com/frostyard/snosi/pull/1052)
+(merged 2026-10-06) selects `system-config-printer-common` and
+`system-config-printer-udev` in the printing block of
+`shared/packages/sundog/mkosi.conf`. The checkboxes below were not ticked
+when it landed.
+**Last verified:** 2026-11-13
 
 Add KDE's missing printer-management backend and automatic printer-setup
 helpers to Sundog. This is a small follow-up to the
