@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "shared/composition/first-login-check.py trigger rules (PR #1224, ADR-0028)",
+  "correction": "The first first-login guard counted an autostart entry as a trigger unless Hidden or X-GNOME-Autostart-enabled=false, and split Exec on whitespace. An entry with OnlyShowIn=KDE or no Type=Application passed as the one trigger although GNOME starts nothing, and Exec=\"/usr/bin/chairlift-first-run\" hid a second trigger. A trigger is an entry GNOME starts, and Exec must be split with desktop-entry quoting.",
+  "evidence": "Cross-review (openai/gpt-6.1-sol) of 32e2bd5, findings 1 and 2. test/first-login-trigger-test.sh fixtures: OnlyShowIn=KDE, NotShowIn=GNOME, Type=Link, no Type, quoted second trigger, quoted Sundog entry, unbalanced quoting.",
+  "promoted_to": "first-login-check.py starts_on_gnome and exec_words; ADR-0028 decision 2; docs/integration-contracts.md"
+}

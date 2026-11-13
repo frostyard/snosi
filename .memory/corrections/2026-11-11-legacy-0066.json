@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "sysext-lodge-accounts-guard rule 3 (frostyard/snosi#1245)",
+  "correction": "The first version of rule 3 read only the top-level unit file and treated every assignment as a name, so a drop-in, a SupplementaryGroups= entry and a DynamicUser= that a later line overrides all escaped it. Emulating systemd's drop-in merging was itself incomplete (type-wide service.d, prefix directories such as frost-.service.d, and same-basename precedence between an instance and its template), so the guard now fails closed on account keys in drop-ins and parses only unit files.",
+  "evidence": "Cross-review of a620b06 and re-review of 5897695 of shared/sysext/finalize/sysext-lodge-accounts-guard.sh rule 3: systemd applies <unit>.d/*.conf and a@.service.d/*.conf, and also service.d/, frost-.service.d/ and precedence by file name; frostporter.service and frostread.service ship SupplementaryGroups=lodge-apps lodge-agents; a later DynamicUser=no overrides yes.",
+  "promoted_to": "the new fixtures in test/sysext-lodge-accounts-guard-test.sh (drop-in fail-closed: unit, type-wide, prefix and template; SupplementaryGroups= with DynamicUser=yes; comment and continuation order; template unit files)"
+}

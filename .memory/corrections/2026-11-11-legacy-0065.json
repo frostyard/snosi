@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-11",
+  "scope": "Lodge app sysexts (frostyard/snosi#1245)",
+  "correction": "The Lodge app daemons resolve the system user lodge at start, so a suite sysext that declares only the GROUP lodge fails at start with 'unknown user lodge' until a reboot. Every suite deb now ships lodge's own u lodge line byte for byte, and a sysext delta must declare every account its system units name.",
+  "evidence": "https://github.com/frostyard/snosi/issues/1245: frostmail.service crash-looped 72 times and the notesd units hit their start limits with 'updex features enable maild notesd --now' and no lodge feature; the maild 0.2.0 and notesd 0.2.0 refresh created the group lodge but no user lodge (lab run dev-snow-bootc-lifecycle-jvzfn). The pinned debs (notesd 0.4.0, maild 0.5.0, porterd, readd) hold 'u lodge - \"lodge, the tailnet web shell for frostyard's apps\" /var/lib/lodge' in usr/lib/sysusers.d/<name>.conf; lab run dev-snow-bootc-lifecycle-scz5p (2026-11-08, notesd 0.3.2, maild 0.4.1) had all 4 units active with 0 restarts.",
+  "promoted_to": "shared/sysext/finalize/sysext-lodge-accounts-guard.sh; test/sysext-lodge-accounts-guard-test.sh; ADR-0035; AGENTS.md"
+}

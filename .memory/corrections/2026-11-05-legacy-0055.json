@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "SECURITY.md supported versions (frostyard/snosi#1243, ADR-0071 B14)",
+  "correction": "The first draft told users to move older images, sysext revisions and ISOs to the newest image through bootc-update-stage.timer. That path stages only the bootc image: sysexts update through updex-update.timer at the next boot, and an ISO needs a new download. The table now has 1 row for each artifact with its own update path.",
+  "evidence": "Cross-review (openai/gpt-6.1-sol) of 6037ac9, blocking point 1; docs/design/sysexts.md 'Automatic sysext updates (updex-update.timer)'.",
+  "promoted_to": "AGENTS.md Documentation section (SECURITY.md names each artifact's update path)"
+}

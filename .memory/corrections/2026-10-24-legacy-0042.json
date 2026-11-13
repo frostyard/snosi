@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-24",
+  "scope": "build.yml / Justfile himmelblau invocation",
+  "correction": "The second invocation was believed to sync metadata for its scoped sandbox tree and to reuse output/base; mkosi 57907f58 skips the sync when the incremental base cache is current, and 5f39f28f rebuilds dependency images, so `--cache-only=never` now forces the sync. The second invocation now passes `--incremental=no --cache-only=never`, because mkosi 5ca453ab check_inputs rejects CacheOnly=never with Incremental=yes (the root mkosi.conf sets Incremental=yes).",
+  "evidence": "PR #1076 build run 39709887085: 'Skipping package manager metadata sync: all incremental image caches are up to date' then apt-get exit 100 'Unable to locate package himmelblau'",
+  "promoted_to": "docs/design/build-pipeline.md; AGENTS.md 'Build and layout'; test/third-party-apt-source-scope-test.sh"
+}

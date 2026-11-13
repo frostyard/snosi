@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-14",
+  "scope": "sysext output compression (CompressOutput= placement)",
+  "correction": "Believed CompressOutput=zstd could be set once in a shared sysext fragment or the root mkosi.conf. No shared sysext fragment exists (sysexts restate their finalize/postoutput wiring inline), and in the pinned mkosi CompressOutput= is SettingScope.local, never inherited from the root mkosi.conf to subimages, so it must be set in each sysext's own [Output]. CompressLevel= by contrast is SettingScope.inherit; setting it in the root would silently change the gzip level of every bootc OCI layer, so it is also kept per sysext.",
+  "evidence": ".mkosi/mkosi/config.py ConfigSetting(dest=\"compress_output\") has no scope= (default SettingScope.local) while dest=\"compress_level\" has scope=SettingScope.inherit; grep -L Include= mkosi.images/*/mkosi.conf; test/sysext-authoring-contract-test.sh now pins CompressOutput=zstd per Overlay=yes image",
+  "promoted_to": "AGENTS.md Sysext Constraints; docs/design/sysexts.md \"Compressed output\"; test/sysext-authoring-contract-test.sh"
+}

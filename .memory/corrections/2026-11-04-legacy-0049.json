@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "shared/composition/first-login-check.py chairlift-first-run mode check (PR #1224)",
+  "correction": "The first guard accepted /usr/bin/chairlift-first-run with any execute bit, so a root-only 0700 program passed although a desktop user cannot run it. The first-login program must be executable by other (S_IXOTH).",
+  "evidence": "Cross-review (openai/gpt-6.1-sol) of 32e2bd5, finding 3. test/first-login-trigger-test.sh rejects modes 0700, 0750 and 0754 and accepts 0711.",
+  "promoted_to": "first-login-check.py check_image; docs/integration-contracts.md"
+}

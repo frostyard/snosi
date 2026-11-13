@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-29",
+  "scope": "test/native-ab-secure-artifact-test.sh systemd private-library check",
+  "correction": "The native A/B artifact contract assumed the Forky systemd family stays at 261 and grepped the UKI initrd for a literal libsystemd-shared-261.so. Forky moved to systemd 262-1 on 2026-09-28, the initrd then carried libsystemd-shared-262.so, and the bare grep -q under set -e failed every native build with exit 1 and no message. The library name tracks the systemd major version, so it must be derived from the manifest's systemd version, not pinned.",
+  "evidence": "main run 36479923827 (build-snow/build-floe installed 261.2-1 and passed; build-snowfield installed 262-1 and failed); PR #1016 run 36601917458 (all three native jobs on 262-1 failed at the same step); local fixture: origin/main script exits 1 silently on a 262 manifest+initrd",
+  "promoted_to": "test/native-ab-secure-artifact-test.sh (comment at the derived check)"
+}

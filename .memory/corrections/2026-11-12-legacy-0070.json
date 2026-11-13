@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-12",
+  "scope": ".github/workflows scan (test/workflow-pins-test.py, frostyard/snosi#1274)",
+  "correction": "A line-based YAML scan must fail closed on key syntax that it cannot decode: an escaped double-quoted key, a `?` complex key and a tagged key. YAML decodes `\"us\\u0065s\"` to `uses`, so a text match sees no uses key at all.",
+  "evidence": "Re-review 1 of PR #1286 at 4007461: check_workflow returned [] for `- \"us\\u0065s\": actions/checkout@v4` and for the job-level `\"us\\x65s\"` form, and [] for the `? uses` complex key. The new fixtures escaped-quoted-uses-key, escaped-quoted-uses-key-job-level, complex-key and tagged-key fail the check.",
+  "promoted_to": "test/workflow-pins-test.py (fixtures escaped-quoted-uses-key, escaped-quoted-uses-key-job-level, complex-key, tagged-key)"
+}

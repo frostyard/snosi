@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-05",
+  "scope": "baseline PR row table (frostyard/snosi#1243, ADR-0071 B5)",
+  "correction": "The PR marked B5 done although 7 SHA pins lack the version comment that ADR-0021 requires; the row check (no tag or branch ref) passing is not the whole rule. A baseline row with a known gap is a follow-up, not done.",
+  "evidence": "Cross-review (openai/gpt-6.1-sol) of 6037ac9, blocking point 2: build-images.yml:208, :553, :651; build-mechanics.yml:109; build.yml:197, :301; validate.yml:580. Follow-up frostyard/snosi#1240.",
+  "promoted_to": "AGENTS.md Documentation section (a baseline row is done only when its whole rule holds); follow-up frostyard/snosi#1240"
+}

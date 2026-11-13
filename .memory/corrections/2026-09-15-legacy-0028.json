@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-15",
+  "scope": "mkosi.images/sunshine/mkosi.postinst.chroot Qt5 Depends workaround",
+  "correction": "Believed Sunshine's Trixie deb would keep listing the bogus 'libqt5widgets5, libqt5svg5' CPack Depends indefinitely (the postinst stripped the pair and rebuilt the deb). v2026.914.233613 changed the pair to 'libqt6widgets6, libqt6svg6' (and bumped libgbm1 to >= 21.3.0~rc1); the fail-closed guard fired exactly as intended on the auto checksum-update PR, and the whole strip-and-rebuild block (including the chmod 0755 of the mode-0644 maintainer scripts, which only dpkg-deb -b needed) is now dead. Replaced with a direct assert_deb_dependencies_satisfied + dpkg -i on the pristine deb plus a tripwire that fails if any libqt5 reference returns. Every remaining Depends name resolves in Trixie and is already in Packages= or base, so the package list did not change.",
+  "evidence": "PR #974 run 35013706519: 'Sunshine control no longer lists the bogus Qt5 Depends pair (...); remove this workaround'. dpkg-deb -e of v2026.906.222525 vs v2026.914.233613: only the Depends (Qt5 pair -> Qt6 pair, libgbm1 floor), Version, and Installed-Size differ in control; maintainer scripts still mode 0644.",
+  "promoted_to": "AGENTS.md (CLAUDE.md symlink) Sunshine sysext; docs/design/sysexts.md sunshine; test/sunshine-capabilities-test.sh"
+}

@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-25",
+  "scope": "shared/packages/flurry/mkosi.conf",
+  "correction": "Believed a package explicitly selected with pkg/trixie-backports would have its dependencies resolved from the normal trixie candidates. Two corrections from the first flurry builds: (1) apt never auto-selects a priority-100 backports version for a TRANSITIVE dependency, so any dep that exists in both suites and needs the backports version (hyprland's libxkbcommon0 >= 1.12.3 vs trixie 1.7.0) must be suffixed by hand, exactly like the kernel fragment's mesa closure; (2) the opposite drag also exists: apt's 3.0 solver resolves a backports package's dependencies PREFERRING same-archive versions, so xdg-desktop-portal-hyprland/trixie-backports pulled libpipewire 1.4.9~bpo and made the strictly same-versioned trixie pipewire family unsatisfiable - the whole pipewire family had to move to backports, each member explicitly.",
+  "evidence": "mkosi flurry builds 2/3 failed with the libspa-0.2-modules (= 1.4.2-1) conflict; podman trixie apt simulation with the base image dpkg status reproduced it, constrained delta-minimization reduced it to {xdg-desktop-portal-hyprland/trixie-backports, pipewire-audio}, and suffixing the 11-package pipewire family resolved 934 packages cleanly.",
+  "promoted_to": "shared/packages/flurry/mkosi.conf comments"
+}

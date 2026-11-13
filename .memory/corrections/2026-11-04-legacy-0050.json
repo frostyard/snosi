@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "scope": "shared/composition/first-login-check.py canonical entry (PR #1224, ADR-0028)",
+  "correction": "After the first fix the guard still modelled only some GNOME launch conditions: an empty OnlyShowIn= or a TryExec to a missing program passed as the one trigger, yet GNOME starts nothing. The canonical entry may carry only keys the guard validates (an allowlist); a present but empty OnlyShowIn allows no desktop.",
+  "evidence": "Cross-review re-review 1 (openai/gpt-6.1-sol) of a140088, finding 1. test/first-login-trigger-test.sh rejects OnlyShowIn=, TryExec, AutostartCondition, X-GNOME-Autostart-Phase/-Delay, OnlyShowIn=GNOME;Unity; and Terminal=true on the canonical entry.",
+  "promoted_to": "first-login-check.py CANONICAL_KEYS and starts_on_gnome; docs/integration-contracts.md"
+}

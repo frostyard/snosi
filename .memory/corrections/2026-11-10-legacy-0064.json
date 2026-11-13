@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-10",
+  "scope": "shared/bootc-secure rootless container policy (frostyard/snosi#1265)",
+  "correction": "The rule shipped at /usr/lib/user-tmpfiles.d never ran: systemd-tmpfiles --user reads only XDG config and data directories. Delete it, not move it: a per-user policy would hide the system policy's Frostyard signature checks and later changes.",
+  "evidence": "https://github.com/frostyard/snosi/issues/1265: tmpfiles.d(5) v262 user paths exclude /usr/lib/user-tmpfiles.d; src/tmpfiles/tmpfiles.c user_config_paths() uses user_search_dirs in v262 and xdg_user_dirs in v245. On a live Snow host, systemd-tmpfiles --user --cat-config lists no /usr/lib path and ~/.config/containers is absent.",
+  "promoted_to": "check-user-tmpfiles-guard.sh; test/user-tmpfiles-guard-test.sh; AGENTS.md"
+}

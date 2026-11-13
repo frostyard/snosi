@@ -1,0 +1,7 @@
+{
+  "date": "2026-10-23",
+  "scope": "mkosi.images/coder",
+  "correction": "Believed coder.service stayed inert because ConditionFileNotEmpty=/etc/coder.d/coder.env fails until an admin configures it. The deb ships that file as a non-empty 291-byte template of empty key assignments, so the condition passes on every host and the server started with no CODER_ACCESS_URL. coder.service.d/10-snosi-configured.conf now gates the unit with ExecCondition=+/usr/lib/coder-sysext/coder-configured, which exits 0 only when CODER_ACCESS_URL has a value.",
+  "evidence": "snosi#1117; /etc/coder.d/coder.env in coder_2.37.4_linux_amd64.deb (291 bytes, every key empty)",
+  "promoted_to": "docs/design/sysexts.md"
+}

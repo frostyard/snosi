@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-08",
+  "scope": "test/bootc-secure-{install,update}-test.sh",
+  "correction": "The install and update secure harnesses were believed to be independent test programs that could each carry their own copy of shared assertion helpers. They cannot: the copies drift silently, and the drift is load-bearing. type2_only diverged to accept only `efi` in the update harness while bootc writes `uki`, and esp_cat was never copied at all, so the update leg could never pass on any composefs install while the install harness asserted the same properties and passed eleven seconds earlier. Three of four duplicated helpers had drifted. Assertions shared by both harnesses belong in test/lib/bootc-secure-assertions.sh, sourced by both, never re-defined locally.",
+  "evidence": "run 31292423836: 'secure_runtime_subset: FAILED -- BLS entries are not Type #2-only' at 03:32:38 vs 'ok - installed BLS entries are Type #2-only' at 03:30:27; PR #614 extracts esp_cat/type2_only/composefs_from_cmdline/signed_pcr11_token/root_backing_device; test/bootc-secure-static-test.sh now fails any harness that redefines them",
+  "promoted_to": "CLAUDE.md \"Task 9 secure install harness\""
+}

@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-27",
+  "scope": "cayo Wi-Fi backend",
+  "correction": "Cayo's shipped etc/NetworkManager/conf.d/iwd.conf (wifi.backend=iwd) did not reflect the image: no snosi product installs iwd, base installs wpasupplicant, so NetworkManager was pointed at an absent backend. The override was an early 'cayo guess' (b8e0647) that was never revisited.",
+  "evidence": "grep across the tree: only mkosi.images/base/mkosi.conf's wpasupplicant and the two installer configs mention a Wi-Fi backend package; no iwd package anywhere. Installed cayo systems show wpa_supplicant running.",
+  "promoted_to": "removed shared/cayo/tree/etc/NetworkManager/conf.d/iwd.conf + test/wifi-backend-test.sh + docs/design/build-pipeline.md + docs/design/ci-cd.md"
+}

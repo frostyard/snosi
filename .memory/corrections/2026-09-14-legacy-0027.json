@@ -1,0 +1,7 @@
+{
+  "date": "2026-09-14",
+  "scope": ".github/workflows/build.yml publish-to-r2 step",
+  "correction": "Believed the commit pin on frostyard/repogen's publish-to-r2 action fixed the repogen version used to publish sysexts. It does not: the action's repogen-version input defaults to 'latest' and downloads whatever GitHub release is newest, so the v0.4.1 action ran the v0.5.0 binary the morning after that release and every publish failed with 'incremental sysext reconciliation: changed or unverifiable bytes for existing logical identity' for all 27 sysexts. v0.5.0 checks sysext digests before and independently of --skip-duplicates, and mkosi rebuilds are not byte-reproducible.",
+  "evidence": "run 34832443034 job 103938646834 ('Installing repogen v0.5.0...' under action @ea8cd1f); repogen v0.5.0 internal/cli/generate.go DetectDigestConflicts branch precedes the SkipDuplicates branch; docs/specs/generators.md 'skip-duplicates skips only an exact logical identity with the same SHA-256'",
+  "promoted_to": "AGENTS.md CI/CD build.yml; test/build-workflow-permissions-test.py repogen-version assertion"
+}

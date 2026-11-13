@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "scope": "docs/adr/0028-first-login-runs-chairlift-first-run.md consequences (frostyard/snosi#1224)",
+  "correction": "ADR-0028 stated a 14-day soak before first-setup retired, a revert that restores first-setup from APT, and a lab first-login probe that gates its lane after 3 green main runs. The soak was dropped, the deb was withdrawn (apt-publisher#32), and the probe is still report-only (lab ADR-0016). ADR-0031 amends ADR-0028; snosi ADRs link another repository's gate instead of stating it.",
+  "evidence": "Whole-plan verification of the first-login swap, 2026-11-06: ADR-0028 lines 93-99 against lab ADR-0016 and argo/workflow-templates/snow-bootc-lifecycle-scripts.yaml (report-only manifest mode, no main-lane run) and apt-publisher withdrawals/2026-11-05-snow-first-setup.txt.",
+  "promoted_to": "ADR-0031; AGENTS.md Documentation section (a snosi ADR links another repository's gate); test/first-login-trigger-test.sh section 7"
+}

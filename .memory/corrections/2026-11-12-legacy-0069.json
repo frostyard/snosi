@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-12",
+  "scope": ".github/workflows scan (test/workflow-pins-test.py, frostyard/snosi#1274)",
+  "correction": "A line-based workflow scan must track the YAML key column of a block scalar (not the `-` column), accept quoted `uses` keys, and read only the direct children of a checkout's `with:` block, or a valid workflow hides an unpinned action or keeps persisted credentials.",
+  "evidence": "The cross-review of PR #1286 at 3e92ea6 showed the 3 bypass shapes (`- name: |` before `uses:`, `\"uses\":`, `persist-credentials: false` inside a `sparse-checkout: |` scalar), and the old check_workflow returns no error for each of them; the new fixtures block-scalar-name-hides-uses, quoted-uses-key, quoted-uses-key-job-level, persist-in-block-scalar and persist-duplicate fail it.",
+  "promoted_to": "test/workflow-pins-test.py (self-test fixtures block-scalar-name-hides-uses, quoted-uses-key, quoted-uses-key-job-level, persist-in-block-scalar, persist-duplicate)"
+}

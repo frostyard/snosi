@@ -1,0 +1,7 @@
+{
+  "date": "2026-08-28",
+  "scope": "sysext udev rules and kernel modules",
+  "correction": "The repeated claim that a sysext's udev rules and modules-load entries 'take effect on the next boot unless manually applied' (CLAUDE.md Sunshine paragraph, docs/design/sysexts.md sunshine entry, voxtype mkosi.conf comment) was wrong: they take effect on NO boot. systemd-sysext.service declares only Before=sysinit.target with no ordering against systemd-udevd.service, udev wins in practice, and udev parses its rules once at daemon start and is never told to look again. OPTIONS+=\"static_node=\" does not rescue it, because udev applies static-node permissions only at daemon startup -- exactly when the rule does not yet exist.",
+  "evidence": "Live snow install (voxtype merged, rebooted): journalctl -b -o short-monotonic shows systemd-udevd.service started at 8.36s and systemd-sysext.service began merging at 9.24s; /dev/uinput was root:root 0600 despite the merged /usr/lib/udev/rules.d/80-uinput.rules; ydotoold exited 'failed to open uinput device: Permission denied' into start-limit-hit; voxtype silently used fallback_to_clipboard (transcribed, typed nothing). `udevadm control --reload` then `modprobe uinput` produced root:input 0660 and a working ydotoold immediately.",
+  "promoted_to": "shared/sysext/tree (snosi-sysext-udev-reload.service + script) + voxtype/sunshine wiring + test/sysext-udev-reload-test.sh + CLAUDE.md + docs/design/sysexts.md 'udev Rules and Kernel Modules in Sysexts'"
+}
