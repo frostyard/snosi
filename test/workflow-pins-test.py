@@ -92,29 +92,86 @@ def indent_of(line: str) -> int:
     return len(line) - len(line.lstrip(" "))
 
 
+QUOTED = re.compile(r"'(?:[^']|'')*'|\"(?:[^\"\\]|\\.)*\"")
+EXPRESSION = re.compile(r"\$\{\{.*?\}\}")
+DOUBLE_QUOTED_KEY = re.compile(r'"((?:[^"\\]|\\.)*)"\s*:')
+FLOW_VALUE = re.compile(r"(?:[^\s#{\[!?\"'][^:]*?|\"x*\"|'x*')\s*:\s+(?=[{\[])")
+
+
+def blank_text(text: str) -> str:
+    """The same line, with GitHub expressions and quoted text masked.
+
+    The result has the same length, so an index found in it (a comment start,
+    a flow collection start) is valid in the original line.
+    """
+    text = EXPRESSION.sub(lambda match: "x" * len(match.group()), text)
+    return QUOTED.sub(
+        lambda match: match.group()[0]
+        + "x" * (len(match.group()) - 2)
+        + match.group()[-1],
+        text,
+    )
+
+
+def strip_comment(text: str) -> str:
+    """The line without its YAML comment: a `#` outside quotes, after a space."""
+    blanked = blank_text(text)
+    for index, char in enumerate(blanked):
+        if char == "#" and (index == 0 or blanked[index - 1] in " \t"):
+            return text[:index]
+    return text
+
+
 def key_syntax_error(rest: str) -> str | None:
     r"""Message for key syntax a line scan cannot decode, or None.
 
+    `rest` is the line without its indentation, `- ` prefixes and comment.
     YAML decodes escapes in a double-quoted key, so `"us\u0065s"` is the key
-    `uses`; a complex key (`? use`) and a tagged key (`!!str uses:`) also hide
-    the real key name. Do not decode these shapes: fail closed instead.
+    `uses`; a complex key (`? uses`) and a tagged key (`!!str uses:`) also
+    hide the real key name. Do not decode these shapes: fail closed instead.
+    Keys appear only at the start of the node or inside a flow collection
+    (`{...}`, `[...]`); a plain scalar value such as `run: echo Hello, !`
+    holds no key and is not checked.
     """
-    # A key can also sit inside a flow collection (`- {"us\u0065s": x}` or
-    # `steps: ["us\u0065s": x]`), so scan every double-quoted string on the
-    # line, not only the first token. GitHub expressions (`${{ !x }}`) are
-    # values, not keys, and so is quoted text: blank both before the flow-key
-    # checks.
-    for quoted in re.finditer(r'"((?:[^"\\]|\\.)*)"(\s*:)?', rest):
+    blanked = blank_text(rest)
+    quoted_key = DOUBLE_QUOTED_KEY.match(rest)
+    if quoted_key is not None and "\\" in quoted_key.group(1):
+        return (
+            "escaped quoted key; write the key plain (a backslash escape "
+            "hides the real key name)"
+        )
+    if blanked == "?" or blanked.startswith("? "):
+        return "complex mapping key (`?`) is not supported"
+    if blanked.startswith("!"):
+        return "tagged mapping key (`!`) is not supported"
+    if blanked[:1] in ("{", "["):
+        flow_start = 0
+    else:
+        flow_value = FLOW_VALUE.match(blanked)
+        if flow_value is None:
+            return None
+        flow_start = flow_value.end()
+    flow = rest[flow_start:]
+    flow_blanked = blanked[flow_start:]
+    # A flow collection that spans lines would put keys on continuation
+    # lines that this scan does not read as flow content.
+    depth = 0
+    for char in flow_blanked:
+        if char in "{[":
+            depth += 1
+        elif char in "}]":
+            depth -= 1
+    if depth != 0:
+        return "multi-line flow collection is not supported; close it on one line"
+    for quoted in re.finditer(r'"((?:[^"\\]|\\.)*)"(\s*:)?', flow):
         if quoted.group(2) and "\\" in quoted.group(1):
             return (
                 "escaped quoted key; write the key plain (a backslash escape "
                 "hides the real key name)"
             )
-    plain = re.sub(r"\$\{\{.*?\}\}", "EXPR", rest)
-    plain = re.sub(r"'(?:[^']|'')*'|\"(?:[^\"\\]|\\.)*\"", "STR", plain)
-    if plain == "?" or plain.startswith("? ") or re.search(r"[{\[,]\s*\?(\s|$)", plain):
+    if re.search(r"[{\[,]\s*\?(\s|$)", flow_blanked):
         return "complex mapping key (`?`) is not supported"
-    if plain.startswith("!") or re.search(r"[{\[,]\s*!", plain):
+    if re.search(r"[{\[,]\s*!", flow_blanked):
         return "tagged mapping key (`!`) is not supported"
     return None
 
@@ -237,15 +294,15 @@ def check_workflow(name: str, text: str) -> list[str]:
             continue
         # A key this scan cannot read would hide an unpinned action, so any
         # such shape is an error before the `uses:` check runs.
-        rest = line.lstrip(" ")
+        rest = strip_comment(line).lstrip(" ")
         while rest.startswith("- "):
             rest = rest[2:].lstrip(" ")
-        message = key_syntax_error(rest)
+        message = key_syntax_error(rest.rstrip())
         if message is not None:
             error(index, message)
         match = USES_KEY.match(line)
         if not match:
-            if USES_ANY.search(line):
+            if USES_ANY.search(strip_comment(line)):
                 error(
                     index,
                     "unrecognized uses form; write `uses:` as a plain key on "
@@ -500,6 +557,24 @@ def self_test() -> int:
         "          persist-credentials: false\n",
         None,
     )
+    # A plain scalar value and an inline comment hold no key: commas, `!`,
+    # `?` and escaped quotes there are not key syntax.
+    run(
+        "good-scalar-and-comment-punctuation",
+        "on:\n  push:\n    branches: [main, 'a, !b']\n"
+        "permissions: {}\njobs:\n  a:\n    steps:\n"
+        "      - run: printf '%s\\n' Hello, !\n"
+        "      - run: echo done # completed, !important, ? x, \"a\\u0065\": y\n"
+        "      - run: make # uses: nothing\n"
+        "      - name: x\n"
+        "        if: ${{ !cancelled() }}\n"
+        "        uses: actions/checkout@"
+        "3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n"
+        "        with:\n"
+        "          persist-credentials: false\n"
+        "          sparse-checkout: [a, b] # c, !d\n",
+        None,
+    )
     # `read-all` is allowed only in scorecard.yml, matched by file name.
     run(
         "read-all-scorecard",
@@ -675,6 +750,17 @@ def self_test() -> int:
             "permissions: {}\njobs:\n  a:\n    steps:\n"
             "      - {name: x, !!str uses: actions/checkout@v4}\n",
             "tagged mapping key",
+        ),
+        "escaped-quoted-key-in-flow-value": (
+            "permissions: {}\njobs:\n  a:\n"
+            '    steps: [{"us\\u0065s": actions/checkout@v4}]\n',
+            "escaped quoted key",
+        ),
+        "multi-line-flow": (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            "      - {name: x,\n"
+            "         uses: actions/checkout@v4}\n",
+            "multi-line flow collection",
         ),
         "tagged-key": (
             "permissions: {}\njobs:\n  a:\n    steps:\n"
