@@ -1,8 +1,11 @@
 # Plan: Complete Sundog's native Plasma desktop
 
-**Status:** In progress — composition and VM package validation complete;
-manual laptop/hardware validation deferred
-**Last verified:** 2026-10-05
+**Status:** Done — 2026-11-13. [PR #1050](https://github.com/frostyard/snosi/pull/1050)
+(merged 2026-10-05) composed the payload in `shared/packages/sundog/mkosi.conf`,
+with the VM results in [Retained validation](#retained-validation--2026-10-05).
+Note: the manual laptop and Thunderbolt authorization checks stay deferred;
+no hardware result is recorded.
+**Last verified:** 2026-11-13
 
 This is the immediate Sundog work: fix missing desktop helpers and provide
 the settings, previews, hardware controls, and offline documentation
