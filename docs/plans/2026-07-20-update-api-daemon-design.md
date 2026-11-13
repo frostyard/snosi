@@ -2,8 +2,8 @@
 
 Date: 2026-07-20
 
-**Status:** Proposed — design only; not scheduled.  
-**Last verified:** 2026-08-29
+**Status:** Closed — 2026-11-13. Design only; it was never scheduled, and no work followed [#450](https://github.com/frostyard/snosi/pull/450). The question stays open as the Mid term "Update/sysext API" item in [ROADMAP.md](../../ROADMAP.md); a future proposal starts from the current contracts, not from this text (for example, `snosi-firstboot` no longer exists).  
+**Last verified:** 2026-11-13
 Related: `docs/integration-contracts.md` (the contract map this design reasons from)
 
 ## Problem
