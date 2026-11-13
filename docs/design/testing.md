@@ -17,8 +17,13 @@ credentials; `mise install` provides the Node release that `mise.toml` and
 symlinks, the `docs/README.md` index, the risk-path list and caller, the
 `.memory/corrections.jsonl` schema and the two hash-pinned copies of core
 scripts), `node --test test/*.test.mjs`, and the policy tests
-`policy-as-code-test.py`, `risk-paths-test.py` and
-`build-workflow-permissions-test.py`. It does not change the checkout.
+`policy-as-code-test.py`, `risk-paths-test.py`,
+`build-workflow-permissions-test.py` and `workflow-pins-test.py`. It does not
+change the checkout. `workflow-pins-test.py` enforces core ADR-0021 for every
+workflow in `.github/workflows/`: a 40-character commit SHA with a release
+comment on each remote action, one top-level `permissions:` of `{}` or
+read-only grants, and `persist-credentials: false` on each `actions/checkout`
+step. `validate.yml` and `nightly-compliance.yml` also run it.
 `make check` is the same gate. `make ci` adds
 `scripts/check-corrections.mjs --base BASE`, which fails when a pull request
 edits or removes an existing corrections line. `.github/workflows/ci.yml`

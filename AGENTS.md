@@ -113,6 +113,13 @@ The Frostyard repository key must be the content of
 the base copy, so `shared/bootc-secure/mkosi.conf` restores it. Build-time enablement
 is normalized into `/usr/share/snosi/enablement-manifest.txt`; presets
 recreate links on true first boot (`/etc/machine-id` is `uninitialized`).
+Every remote `uses:` in `.github/workflows/` pins a 40-hex commit SHA with a
+`# vX[.Y[.Z]]` comment; the dated branch-comment form is only for the
+untagged repositories in the test's allow list. Every workflow has exactly
+one top-level `permissions:` of `{}` or read-only grants, and every
+`actions/checkout` step sets `persist-credentials: false`.
+`test/workflow-pins-test.py` enforces all three and runs in `make verify`,
+`validate.yml` and `nightly-compliance.yml` (core ADR-0021, #1274).
 
 ## Secure bootc and Forky systemd
 
