@@ -9,6 +9,8 @@
 #
 # A row leaves this file as soon as the build no longer needs it: the mechanics
 # workflow fails while any row is still listed and the forky build passes.
-G1	for 'bootc' was not found	https://github.com/frostyard/bootc-debian/issues/5
+# Every apt error line ("E: ...") of a failed build must contain the fixed
+# string of one row.
+G1	Unable to locate package bootc	https://github.com/frostyard/bootc-debian/issues/5
 G1b	Unable to locate package libgpgme11t64	https://github.com/frostyard/bootc-debian/issues/5
-G1c	'libgpgme11t64' has no installation candidate	https://github.com/frostyard/bootc-debian/issues/5
+G1c	for 'libostree-1-1' was not found	https://github.com/frostyard/bootc-debian/issues/5

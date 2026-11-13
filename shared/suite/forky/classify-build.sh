@@ -74,21 +74,40 @@ if ((${#gap_id[@]} == 0)); then
     die "the forky build failed (outcome: $outcome) and $gaps lists no known gap"
 fi
 
+# Every apt error in the log must be explained. One known gap must not hide a
+# new one behind it: apt reports all unresolvable packages of one install at
+# once, so a single matched row proves nothing about the other lines.
+mapfile -t errors < <(grep -E '^([^ ]+ )?E: ' "$log" | sed -E 's/^[^ ]+ (E: )/\1/' || true)
+if ((${#errors[@]} == 0)); then
+    die "the forky build failed (outcome: $outcome) without an apt error line; no known gap can explain it, see the build log"
+fi
+
 matched=0
-for index in "${!gap_id[@]}"; do
-    line=$(grep -F -m 1 -e "${gap_needle[index]}" "$log" || true)
-    [[ -n $line ]] || continue
+unexplained=0
+for error in "${errors[@]}"; do
+    hit=""
+    for index in "${!gap_id[@]}"; do
+        if [[ $error == *"${gap_needle[index]}"* ]]; then
+            hit=$index
+            break
+        fi
+    done
+    if [[ -z $hit ]]; then
+        unexplained=$((unexplained + 1))
+        printf 'not ok - no known gap explains: %s\n' "$error"
+        continue
+    fi
     matched=$((matched + 1))
     # shellcheck disable=SC2016 # Markdown backticks, not a command.
-    printf 'ok - known forky gap `%s`: %s\n' "${gap_id[index]}" "${line#"${line%%[![:space:]]*}"}"
-    if [[ -n ${gap_url[index]} ]]; then
-        printf '  tracked at %s\n' "${gap_url[index]}"
+    printf 'ok - known forky gap `%s`: %s\n' "${gap_id[hit]}" "$error"
+    if [[ -n ${gap_url[hit]} ]]; then
+        printf '  tracked at %s\n' "${gap_url[hit]}"
     fi
 done
 
-if ((matched == 0)); then
-    die "the forky build failed (outcome: $outcome) for a reason that no known gap explains; see the build log"
+if ((unexplained > 0)); then
+    die "the forky build failed (outcome: $outcome) with $unexplained apt error(s) that no known gap explains"
 fi
 
-printf 'ok - the forky build stopped at %d known gap(s); the wiring itself is unchanged\n' "$matched"
+printf 'ok - the forky build stopped at %d apt error(s), each a known gap\n' "$matched"
 exit 0

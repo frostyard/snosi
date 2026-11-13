@@ -74,8 +74,10 @@ that touches a forky input, on dispatch, and nightly. A forky build may stop at
 a gap that Debian testing has not closed yet. The build step is
 `continue-on-error`, and `shared/suite/forky/classify-build.sh` reads the
 `known-gaps.tsv` rows (id, fixed string, tracking URL): a failed build passes
-only when a row explains it, and a passing build fails while any row is still
-listed, so the file cannot go stale.
+only when it has at least one apt error line and a row explains every one of
+them, so a known gap cannot hide a new one; a failure without an apt error is
+never a gap. A passing build fails while any row is still listed, so the file
+cannot go stale.
 
 ## Consequences
 

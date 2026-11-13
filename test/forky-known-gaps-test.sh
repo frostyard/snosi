@@ -23,9 +23,9 @@ trap 'rm -rf "$tmp"' EXIT
 gaps=$tmp/known-gaps.tsv
 cat >"$gaps" <<'TSV'
 # a comment line
-G1	for 'bootc' was not found	https://example.invalid/1
+G1	Unable to locate package bootc	https://example.invalid/1
 G1b	Unable to locate package libgpgme11t64	https://example.invalid/1
-G1c	'libgpgme11t64' has no installation candidate	https://example.invalid/1
+G1c	for 'libostree-1-1' was not found	https://example.invalid/1
 TSV
 
 empty_gaps=$tmp/empty-gaps.tsv
@@ -52,12 +52,25 @@ expect() { # description pass|reject outcome log gaps [text the output must name
 }
 
 # The gap file is read, not the log: each row explains its own line.
-printf 'E: %s\n' "for 'bootc' was not found" >"$tmp/gap-g1.log"
+printf 'E: %s\n' "Unable to locate package bootc" >"$tmp/gap-g1.log"
 expect "gap G1 explains its own failure" pass failure "$tmp/gap-g1.log" "$gaps" G1
 printf 'E: %s\n' "Unable to locate package libgpgme11t64" >"$tmp/gap-g1b.log"
 expect "gap G1b explains its own failure" pass failure "$tmp/gap-g1b.log" "$gaps" G1b
-printf "E: %s\n" "'libgpgme11t64' has no installation candidate" >"$tmp/gap-g1c.log"
+printf "E: %s\n" "Version '2026.6-frostyard202611042030~deb13' for 'libostree-1-1' was not found" >"$tmp/gap-g1c.log"
 expect "gap G1c explains its own failure" pass failure "$tmp/gap-g1c.log" "$gaps" G1c
+
+# All three at once, as apt reports them in one install (run 43487370180).
+printf 'E: %s\n' "Unable to locate package bootc" "Unable to locate package libgpgme11t64" \
+    "Version '2026.6-frostyard202611042030~deb13' for 'libostree-1-1' was not found" >"$tmp/gap-all.log"
+expect "every apt error of one install is a known gap" pass failure "$tmp/gap-all.log" "$gaps" G1c
+
+# One known gap must not hide a new one: every apt error needs a row.
+printf 'E: %s\n' "Unable to locate package libgpgme11t64" "Unable to locate package something-new" >"$tmp/mixed.log"
+expect "a known gap beside an unknown apt error fails" reject failure "$tmp/mixed.log" "$gaps" "something-new"
+
+# A failure with no apt error line (a script, a finalize guard) is never a gap.
+printf 'something failed in a finalize script\n' >"$tmp/no-apt.log"
+expect "a failure without an apt error fails" reject failure "$tmp/no-apt.log" "$gaps" "without an apt error line"
 
 # A failure no row explains fails the workflow.
 printf 'E: something nobody wrote down\n' >"$tmp/unknown.log"
@@ -84,7 +97,7 @@ checked_in=$root/shared/suite/forky/known-gaps.tsv
 if [[ ! -f $checked_in ]]; then
     fail "$checked_in is missing"
 else
-    printf 'E: %s\n' "for 'bootc' was not found" >"$tmp/shipped.log"
+    printf 'E: %s\n' "Unable to locate package bootc" >"$tmp/shipped.log"
     if out=$("$classify" --outcome failure --log "$tmp/shipped.log" --known-gaps "$checked_in" 2>&1); then
         if [[ $out == *G1* ]]; then
             pass "the checked-in known-gaps.tsv explains the bootc gap as G1"
