@@ -54,7 +54,7 @@ booted code to the authenticated deployment content.
 Two containers policies ship, and they differ in scope (ADR-0025).
 
 The strict update policy `/usr/lib/snosi/containers/bootc-policy.json` lives in
-immutable `/usr`. It rejects every unlisted image and accepts only the five
+immutable `/usr`. It rejects every unlisted image and accepts only the four
 `sigstoreSigned` Frostyard scopes. `bootc-update-stage` passes it to Podman with
 `--signature-policy`. Root dotfiles and `/etc` drift cannot weaken it. That
 pull is the gate: bootc then stages from local storage only.
@@ -75,7 +75,7 @@ interleave their stage and unlock. An operator who runs `bootc switch` or
 covered by the lock.
 
 The system policy `/etc/containers/policy.json` accepts ordinary workload
-images by default. It keeps the five Frostyard scopes `sigstoreSigned`. A
+images by default. It keeps the four Frostyard scopes `sigstoreSigned`. A
 caller that pulls a Frostyard product repository by name still verifies its
 signature. Any process with a `$HOME/.config/containers/policy.json` reads that
 file instead, as on stock Debian. No image creates such a user file; the

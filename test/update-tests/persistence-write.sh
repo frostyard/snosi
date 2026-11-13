@@ -24,8 +24,9 @@ chown persisttest:persisttest /var/home/persisttest/marker.txt
 
 # Container image in /var/lib/containers, built offline (no registry pull).
 #
-# The shipped policy defaults to reject for registry pulls and permits only the
-# exact cayo, floe, snow, and snowfield GHCR repositories. Local transports are
+# The shipped update policy defaults to reject for registry pulls and permits
+# only the exact floe, snow, snowfield, and sundog GHCR repositories (the
+# system policy accepts workload images, ADR-0025). Local transports are
 # accepted because their bytes are already under operator control. This test
 # still uses `podman build` FROM scratch so it needs no source image and proves
 # directly that a real image in /var/lib/containers survives an update.

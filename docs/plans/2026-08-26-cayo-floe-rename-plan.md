@@ -1,9 +1,11 @@
 # Plan: Rename the cayo server image to floe
 
 **Status:** In progress
-**Last verified:** 2026-09-07
-**Progress:** Phases 0 through 3 are complete. Phase 4 awaits the Floe lab
-runtime runs. Phase 5 has not started.
+**Last verified:** 2026-11-13
+**Progress:** Phases 0 through 4 are complete. In Phase 5 the policy change
+and its lab compatibility change are open as PRs (2026-11-13). The
+retirement release and the operator steps on the two migrated hosts are
+not done.
 
 <!--
 Plans are updated as work lands: check off what shipped, renumber what moved.
@@ -411,13 +413,50 @@ because they are absent from this snapshot.
       `site/src/data/runs.json` unchanged as decision/run history. Run
       `just validate` and `just site-build`. Merged as
       [lab #119](https://github.com/frostyard/lab/pull/119).
-- [ ] **Lab runtime verification:** run the floe image poll, the published
+- [x] **Lab runtime verification:** run the floe image poll, the published
       `floe-ab` disk-boot lane, and the Firn install matrix against the
       published artifacts. The checked-in submit runs all ten active cells;
       record the four Floe cells separately in the result. Keep the procedures
       in the sibling lab repository's `argo/snosi-disk-boot-test.yaml`,
       `argo/firn-install-test.yaml`, and their referenced WorkflowTemplates.
       This is the only remaining Phase 4 item as of 2026-09-07.
+      **Result 2026-11-13: PASS.** The lanes changed after 2026-09-07:
+      - The `floe-ab` disk-boot lane no longer exists. snosi
+        [ADR-0018](../adr/0018-remove-native-ab-and-nbc-lanes.md) removed
+        `floe-ab` and its publication, and lab
+        [ADR-0020](https://github.com/frostyard/lab/blob/main/docs/adr/0020-retire-the-native-ab-and-live-iso-vm-lanes.md)
+        retired the lane. Superseded, not run.
+      - Image poll: the `image-poll-floe-latest` CronWorkflow polls
+        `ghcr.io/frostyard/floe:latest` every 3 hours. Its 18:20Z run
+        `image-poll-floe-latest-1794594000` found a new digest
+        (`sha256:f6bb32f1…`, version `20261113165137`) and its smoke suite
+        gave `15 passed, 12 skipped`. The 2 runs before it (12:20Z, 15:20Z)
+        succeeded with no digest change.
+      - Firn install matrix: the active matrix in lab
+        `argo/firn-install-test.yaml` has 3 Floe cells, all bootc with
+        Secure Boot off (the ab family left the lane). Each ran as a lab dev
+        Workflow (`dev-firn-install-*`, label `snosi.io/trigger=dev`, lab
+        `576736fd`, unchanged main; no publish, no tag move) with ISO
+        `snosi-installer_20261113193003_x86-64.iso` (SHA-256
+        `9712ad49…95d0ba` from the GPG-verified signed index) and Firn
+        0.12.0. Every cell installed, booted with `osrelease=floe`,
+        `fsverity_errors=0` and an active login, and matched the pinned
+        digest:
+
+        | Cell | Run | Floe digest (version) | Result |
+        | --- | --- | --- | --- |
+        | `none` | `dev-firn-install-b745r` | `sha256:d52faed4…` (`20261113191703`) | `PASS: bootc/floe/none/sb=false` |
+        | `tpm2-luks` | `dev-firn-install-r6z6w` | `sha256:d52faed4…` (`20261113191703`) | `PASS: bootc/floe/tpm2-luks/sb=false` |
+        | `luks-passphrase` | `dev-firn-install-xk96c` | `sha256:228a3c0b…` (`20261113200632`) | `PASS: bootc/floe/luks-passphrase/sb=false unlock=serial-passphrase prompts=1` |
+
+        The first `luks-passphrase` run, `dev-firn-install-shgtd`, ended
+        `FAILED: boot:digest_mismatch`: `floe:latest` moved to
+        `20261113200632` during the run and Firn installs `:latest`, so the
+        installed digest was newer than the pinned one. The rerun pinned the
+        new digest and passed. That is a lane race, not a Floe defect.
+      Argo keeps these Workflows for 7 days (success) or 30 days (failure);
+      this table is the durable record. An anonymous `skopeo inspect` of
+      `ghcr.io/frostyard/floe:latest` (empty auth file) also succeeded.
 - [x] **firn**: the content inventory has 19 files and no filename hits.
       Rename all living source and test identities:
       `internal/tui/{catalog.go,catalog_test.go}`,
@@ -477,7 +516,7 @@ because they are absent from this snapshot.
       superseded (confirmed 2026-08-26) — no rename work. Their stale cayo
       references are historical record, like the archived `frostyard/cayo`
       repo.
-- [ ] **Done when:** lab's floe poll + install lanes are green against
+- [x] **Done when:** lab's floe poll + install lanes are green against
       published floe artifacts; every downstream repository's test/build
       gate above passes; all three old website routes redirect to living floe
       destinations that return 200; and both content and filename inventories in
@@ -487,20 +526,48 @@ because they are absent from this snapshot.
       `/docs/images/server/cayo/cayo-loaded/`, and `/cayo`) in their redirect
       definitions. No other live downstream occurrence is allowed.
       Every clause except the lab runtime verification is accepted complete by
-      both maintainers as of 2026-09-07.
+      both maintainers as of 2026-09-07. The lab runtime verification passed
+      on 2026-11-13 (above). Lab's bootc lifecycle lane also names
+      `ghcr.io/frostyard/cayo` as the one retired scope it allows in a
+      tested policy ([lab #234](https://github.com/frostyard/lab/pull/234));
+      that compatibility entry goes away in Phase 5, like snosi's own
+      temporary policy allowlist.
 
 ## Phase 5 — Retirement (small, after Phase 3 sign-off)
 
-- [ ] snosi PR: remove the `ghcr.io/frostyard/cayo` scope from
+- [x] snosi PR: remove the `ghcr.io/frostyard/cayo` scope from
       `policy.json` and remove cayo from the policy test's `SECURE_IMAGES`
-      array (floe/snow/snowfield remain).
-- [ ] Merge that PR and let the protected `secure-build` publish the signed
+      array (floe/snow/snowfield remain). Done 2026-11-13 in
+      [#1299](https://github.com/frostyard/snosi/pull/1299), not
+      merged yet. Since ADR-0025 the scope lives in 2 files with equal
+      `transports.docker` blocks: the strict update policy
+      `shared/bootc-secure/tree/usr/lib/snosi/containers/bootc-policy.json`
+      (`default: reject`) and the system policy
+      `shared/bootc-secure/tree/etc/containers/policy.json`
+      (`default: insecureAcceptAnything`). The PR removes the scope from both.
+      Sundog is now the fourth product: the scopes and `SECURE_IMAGES` are
+      floe, snow, snowfield and sundog. Effect: `bootc-update-stage` refuses
+      every cayo image. A manual pull of `ghcr.io/frostyard/cayo` by a caller
+      that reads the system policy is no longer signature-checked, like any
+      repository outside the Frostyard scopes (ADR-0025, Consequences).
+- [ ] Merge the lab compatibility change first:
+      [lab #234](https://github.com/frostyard/lab/pull/234). Before it, the
+      bootc lifecycle lane required the update policy's scopes to equal a
+      fixed set that included cayo, so an image without the cayo scope
+      failed `policy`. lab #234 requires the 4 product scopes and allows
+      only cayo as an extra, so images on both sides of this change pass.
+- [ ] Merge [#1299](https://github.com/frostyard/snosi/pull/1299) (after lab
+      #234) and let the protected `secure-build` publish the signed
       **retirement release** (call it R) before changing either host's
       persistent `/etc`. Record R's 14-digit image version and immutable
       digest from the successful run; verify `floe:latest` resolves to that
       digest. A merged source change or a published artifact alone is not
       enough — the running deployment supplies `snosi-etc-diff`'s pristine
       policy source.
+- [ ] Later follow-up, after R is published and every image that lab tests
+      is R or later (no cayo scope): remove lab's retired-scope allowance
+      (`RETIRED_SCOPE` in
+      `argo/workflow-templates/snow-bootc-lifecycle-scripts.yaml`).
 - [ ] Stage and boot R on **both** migrated hosts through the normal floe
       update path. On each host require `outcome=staged`,
       `remote_version=<R>`, and R's host-local containers-storage digest in
@@ -517,9 +584,12 @@ because they are absent from this snapshot.
       `sudo snosi-etc-diff --restore /etc/containers/policy.json` rather than
       editing the persistent overlay a second time. Verify the effective
       file with `jq`: `ghcr.io/frostyard/floe` is still
-      `sigstoreSigned`/`matchRepository`, `ghcr.io/frostyard/cayo` is absent,
-      and `default` remains `reject`. Confirm the file no longer appears in
-      `snosi-etc-diff`. This step is required even if neither operator
+      `sigstoreSigned`/`matchRepository` and `ghcr.io/frostyard/cayo` is
+      absent. Since ADR-0025 the system file's `default` is
+      `insecureAcceptAnything`; the strict update policy
+      `/usr/lib/snosi/containers/bootc-policy.json` keeps `default: reject`,
+      sits in immutable `/usr` and must also lack the cayo scope on R.
+      Confirm the file no longer appears in `snosi-etc-diff`. This step is required even if neither operator
       remembers using the escape hatch; persistent `/etc` drift does not
       disappear when the image policy changes.
 - [ ] Edit the GHCR `cayo` package description to "renamed to floe
@@ -528,7 +598,11 @@ because they are absent from this snapshot.
 - [ ] Leave `os/native/v1/cayo/` on R2 as-is (frozen); optionally add a
       `RENAMED-to-floe` marker object. Do not break old signed indexes.
 - [ ] Update the user-memory note (`minisnow` etc.) and close the tracking
-      issue with links to the ADR.
+      issue with links to the ADR. No tracking issue exists in snosi (search
+      of 2026-11-13); only the user-memory note remains.
+- [ ] `AGENTS.md` still says that the system policy keeps "the five"
+      Frostyard scopes. Correct it to four after this PR merges:
+      [#1298](https://github.com/frostyard/snosi/issues/1298).
 - [ ] **Done when:** a fresh floe install and both migrated hosts' effective
       policies no longer trust the cayo repository, the two migrated hosts
       are verified booted on retirement release R with no policy-file drift,
