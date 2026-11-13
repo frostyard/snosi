@@ -60,21 +60,22 @@ installs do not substitute for this proof; see [testing](../design/testing.md),
 - [ ] Run it for Snowfield after #1130 is fixed, or after the lab lists its
   kernel as a known defect.
 - [ ] Run Floe on the current bootc pair (Snow `rj697` already ran N+1 on
-  bootc 1.17.3). Run every product again each time the bootc/libostree pair or
-  the systemd family changes (AGENTS.md, "Secure bootc and Forky systemd",
-  asks for that revalidation).
+  bootc 1.17.3). This plan also proposes a lab lane run for every product
+  each time the bootc/libostree pair or the systemd family changes; the lab
+  decides its runs. The build-root check that AGENTS.md ("Secure bootc and
+  Forky systemd") requires for those changes is a separate obligation.
 - **Done when:** each of the 4 products has a main-lane PASS on a current
   image, or a named open defect issue.
 
 ## Phase 2 — Real-tag multi-hop
 
-- [ ] Hop N → N+1 → N+2 on real published immutable version tags: at least 3
-  consecutive hops, through the shipped stager, with `persistence-verify.sh`
+- [ ] Hop N → N+1 → N+2 → N+3 on real published immutable version tags: at
+  least 3 consecutive hops, through the shipped stager, with `persistence-verify.sh`
   at every hop.
 - [ ] Watch the `state/deploy/` count, the composefs object store size and ESP
   usage across hops. Unbounded growth is a defect.
 - [ ] Run the mutable-tag flow too: `target_ref` follows a moving tag.
-- Run it first with the local harness. Asking lab to extend its lane to N+2 is
+- Run it first with the local harness. Asking lab to extend its lane to multi-hop is
   a lab issue, not a snosi change.
 - **Done when:** 3 consecutive hops pass twice in a row, and deployment and ESP
   growth is bounded and recorded.
