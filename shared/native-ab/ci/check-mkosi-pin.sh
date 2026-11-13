@@ -81,9 +81,12 @@ echo "build.yml mkosi pin: $pin"
 shopt -s nullglob
 all_workflows=("$workflows_dir"/*.yml "$workflows_dir"/*.yaml)
 shopt -u nullglob
+# The ref ends at whitespace, a quote of either kind or a comment, so a
+# quoted `uses:` value compares by its ref alone.
+ref_re="systemd/mkosi@[^[:space:]\"'#]+"
 checked=0
 for workflow in "${all_workflows[@]}"; do
-    workflow_pins="$(grep -oE 'systemd/mkosi@[^[:space:]"#]+' "$workflow" | cut -d@ -f2 | sort -u || true)"
+    workflow_pins="$(grep -oE "$ref_re" "$workflow" | cut -d@ -f2 | sort -u || true)"
     [[ -n "$workflow_pins" ]] || continue
     while IFS= read -r workflow_pin; do
         [[ -z "$workflow_pin" ]] && continue

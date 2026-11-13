@@ -259,5 +259,29 @@ else
     fail 'matching pins in 4 workflows pass and the count is reported'
 fi
 
+# 9f. Quoted refs compare by the ref alone: a matching single- or
+# double-quoted pin passes.
+f="$work/quoted-matching"
+make_fixture "$f" "$PIN_A" "-"
+printf "      - uses: 'systemd/mkosi@%s'\n" "$PIN_A" >"$f/.github/workflows/build-images.yml"
+printf '      - uses: "systemd/mkosi@%s" # main\n' "$PIN_A" >"$f/.github/workflows/validate.yml"
+run_guard "$f"
+if [[ $RC -eq 0 ]] && grep -Fq 'ok - 3 workflow(s) that name systemd/mkosi@' <<<"$OUT"; then
+    pass 'matching single- and double-quoted pins pass'
+else
+    fail 'matching single- and double-quoted pins pass'
+fi
+
+# 9g. A divergent single-quoted ref is still rejected.
+f="$work/quoted-divergent"
+make_fixture "$f" "$PIN_A" "-"
+printf "      - uses: 'systemd/mkosi@%s'\n" "$PIN_B" >"$f/.github/workflows/build-images.yml"
+run_guard "$f"
+if [[ $RC -ne 0 ]] && grep -Fq "build-images.yml pins systemd/mkosi@$PIN_B," <<<"$OUT"; then
+    pass 'divergent single-quoted pin is rejected'
+else
+    fail 'divergent single-quoted pin is rejected'
+fi
+
 printf '# Results: %d passed, %d failed, %d total\n' "$PASS" "$FAIL" "$((PASS + FAIL))"
 [[ $FAIL -eq 0 ]]
