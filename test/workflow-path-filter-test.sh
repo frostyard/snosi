@@ -220,6 +220,61 @@ for event in push pull_request; do
         "$WORKFLOWS/build.yml" "$event" "$forky_sentinel"
 done
 
+# The forky mechanics build (ADR-0037) reads every image input that a trixie
+# Floe build reads. Its pull_request trigger must ignore nothing that
+# build-images.yml treats as an input: a positive path list misses fragments
+# (the bootc pin of #1300 was one), and a missed input lets a PR break forky
+# with no forky build.
+forky=$WORKFLOWS/forky-mechanics.yml
+forky_block=$(trigger_block "$forky" pull_request)
+if [[ $forky_block == *"    paths-ignore:"* && $forky_block != *"    paths:"* ]]; then
+    pass 'forky-mechanics.yml pull_request uses paths-ignore, not a positive path list'
+else
+    fail 'forky-mechanics.yml pull_request uses paths-ignore, not a positive path list'
+fi
+mapfile -t forky_ignored < <(path_filter_block "$forky" pull_request paths-ignore |
+    sed -nE 's/^ +- "(.*)"$/\1/p')
+image_ignored=$(path_filter_block "$WORKFLOWS/build-images.yml" pull_request paths-ignore)
+if ((${#forky_ignored[@]} == 0)); then
+    fail 'forky-mechanics.yml pull_request paths-ignore lists entries'
+fi
+for path in "${forky_ignored[@]}"; do
+    if [[ $image_ignored == *"- \"$path\""* ]]; then
+        pass "forky-mechanics.yml ignores $path only because build-images.yml does"
+    else
+        fail "forky-mechanics.yml ignores $path, an input that build-images.yml builds on"
+    fi
+done
+forky_inputs=(
+    'shared/packages/bootc/mkosi.conf'
+    'shared/packages/floe/mkosi.conf'
+    'mkosi.profiles/floe/mkosi.conf'
+    'shared/bootc-secure/mkosi.conf'
+    'shared/outformat/image/mkosi.conf'
+    'shared/suite/forky/known-gaps.tsv'
+    '.github/workflows/forky-mechanics.yml'
+)
+for path in "${forky_inputs[@]}"; do
+    if [[ ! -e $ROOT_DIR/$path ]]; then
+        fail "forky input $path exists"
+        continue
+    fi
+    if python3 - "$path" "${forky_ignored[@]}" <<'PY'
+import fnmatch
+import sys
+
+path, patterns = sys.argv[1], sys.argv[2:]
+# GitHub globs: ** crosses /, * does not; fnmatch's * crosses / too, so it
+# can only over-match here, which makes this check stricter.
+sys.exit(1 if any(fnmatch.fnmatch(path, p.replace('**', '*')) for p in patterns) else 0)
+PY
+    then
+        pass "forky-mechanics.yml pull_request builds on $path"
+    else
+        fail "forky-mechanics.yml pull_request ignores $path"
+    fi
+done
+
 if [[ -f "$WORKFLOWS/claude.yml" || -f "$WORKFLOWS/claude-code-review.yml" ]]; then
     pass 'ACMM GitHub Actions AI integration workflow exists'
 else

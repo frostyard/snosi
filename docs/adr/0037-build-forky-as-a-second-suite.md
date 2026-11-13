@@ -70,10 +70,12 @@ shape of every matched fragment.
 
 `.github/workflows/forky-mechanics.yml` builds the forky Floe composition with
 no publication, no registry login and `contents: read` only: on a pull request
-that touches a forky input, on dispatch, and nightly. A forky build may stop at
+that changes any image input (it ignores only what `build-images.yml` ignores,
+`test/workflow-path-filter-test.sh`), on dispatch, and nightly. A forky build may stop at
 a gap that Debian testing has not closed yet. The build step is
 `continue-on-error`, and `shared/suite/forky/classify-build.sh` reads the
-`known-gaps.tsv` rows (id, fixed string, tracking URL): a failed build passes
+`known-gaps.tsv` rows (exactly 3 nonempty tab-separated fields: id, fixed
+string, https tracking URL; a malformed row fails every run): a failed build passes
 only when it has at least one apt error line and a row explains every one of
 them, so a known gap cannot hide a new one; a failure without an apt error is
 never a gap. A passing build fails while any row is still listed, so the file

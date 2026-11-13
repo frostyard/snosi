@@ -46,14 +46,30 @@ die() {
 [[ -f $gaps ]] || die "the known-gap file $gaps does not exist"
 
 # Read the file once into three arrays: id, fixed string, tracking URL.
+# Validate every row before any classification, and fail closed: a row has
+# exactly 3 tab-separated fields, none empty or blank, and an https URL.
+# `read` with a tab IFS would merge empty fields, so split by hand; the
+# `|| [[ -n $line ]]` reads a last row that has no newline.
 declare -a gap_id=() gap_needle=() gap_url=()
-while IFS=$'\t' read -r id needle url; do
-    [[ -n ${id:-} && ${id:0:1} != "#" ]] || continue
-    [[ -n ${needle:-} ]] || die "gap $id in $gaps has no fixed string"
+row=0
+while IFS= read -r line || [[ -n $line ]]; do
+    row=$((row + 1))
+    [[ $line =~ ^[[:space:]]*(#|$) ]] && continue
+    tabs=${line//[^$'\t']/}
+    ((${#tabs} == 2)) ||
+        die "row $row of $gaps needs exactly 3 tab-separated fields (id, fixed string, tracking URL), it has $((${#tabs} + 1))"
+    id=${line%%$'\t'*}
+    rest=${line#*$'\t'}
+    needle=${rest%%$'\t'*}
+    url=${rest#*$'\t'}
+    [[ $id =~ [^[:space:]] ]] || die "row $row of $gaps has an empty id"
+    [[ $needle =~ [^[:space:]] ]] || die "gap $id in $gaps (row $row) has no fixed string"
+    [[ $url =~ ^https://[^[:space:]]+$ ]] ||
+        die "gap $id in $gaps (row $row) has no https tracking URL"
     gap_id+=("$id")
     gap_needle+=("$needle")
-    gap_url+=("${url:-}")
-done < <(grep -v '^[[:space:]]*#' "$gaps" || true)
+    gap_url+=("$url")
+done <"$gaps"
 
 if [[ $outcome == success ]]; then
     if ((${#gap_id[@]} > 0)); then
@@ -100,9 +116,7 @@ for error in "${errors[@]}"; do
     matched=$((matched + 1))
     # shellcheck disable=SC2016 # Markdown backticks, not a command.
     printf 'ok - known forky gap `%s`: %s\n' "${gap_id[hit]}" "$error"
-    if [[ -n ${gap_url[hit]} ]]; then
-        printf '  tracked at %s\n' "${gap_url[hit]}"
-    fi
+    printf '  tracked at %s\n' "${gap_url[hit]}"
 done
 
 if ((unexplained > 0)); then

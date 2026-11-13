@@ -82,8 +82,33 @@ expect "a failure with no known gap fails" reject failure "$tmp/unknown.log" "$e
 # A missing build log fails closed.
 expect "a missing build log fails" reject failure "$tmp/absent.log" "$gaps" "does not exist"
 
-# A malformed row fails closed rather than being skipped.
-expect "a malformed gap row fails" reject failure "$tmp/unknown.log" "$broken_gaps" "has no fixed string"
+# A malformed row fails closed rather than being skipped, on a failed and on a
+# passing build alike: the file is validated before any classification.
+expect "a malformed gap row fails" reject failure "$tmp/unknown.log" "$broken_gaps" "exactly 3 tab-separated fields"
+expect "a malformed gap row fails a passing build" reject success "$tmp/unused.log" "$broken_gaps" "exactly 3 tab-separated fields"
+
+printf 'G2\tUnable to locate package bootc\n' >"$tmp/no-url.tsv"
+expect "a row without a tracking URL fails" reject failure "$tmp/gap-g1.log" "$tmp/no-url.tsv" "exactly 3 tab-separated fields"
+
+# Two tabs with nothing between them: a tab IFS would merge the empty field
+# and read the URL as the fixed string.
+printf 'G2\t\thttps://example.invalid/2\n' >"$tmp/empty-needle.tsv"
+expect "a row with an empty fixed string fails" reject failure "$tmp/unknown.log" "$tmp/empty-needle.tsv" "has no fixed string"
+
+printf 'G2\t \thttps://example.invalid/2\n' >"$tmp/blank-needle.tsv"
+expect "a row with a blank fixed string fails" reject failure "$tmp/unknown.log" "$tmp/blank-needle.tsv" "has no fixed string"
+
+printf 'G2\tUnable to locate package bootc\tnot-a-url\n' >"$tmp/bad-url.tsv"
+expect "a row whose tracking URL is not https fails" reject failure "$tmp/gap-g1.log" "$tmp/bad-url.tsv" "no https tracking URL"
+
+printf 'G2\tUnable to locate package bootc\thttps://example.invalid/2\textra\n' >"$tmp/four-fields.tsv"
+expect "a row with a 4th field fails" reject failure "$tmp/gap-g1.log" "$tmp/four-fields.tsv" "exactly 3 tab-separated fields"
+
+# A last row with no newline is still a row: it explains its gap, and a
+# passing build fails while it is listed.
+printf '# comment\nG2\tUnable to locate package bootc\thttps://example.invalid/2' >"$tmp/no-newline.tsv"
+expect "a last row without a newline explains its gap" pass failure "$tmp/gap-g1.log" "$tmp/no-newline.tsv" G2
+expect "a last row without a newline is a stale gap on a clean build" reject success "$tmp/unused.log" "$tmp/no-newline.tsv" "remove them"
 
 # A clean build with a gap still listed fails: the row is stale.
 expect "a clean build with a stale gap fails" reject success "$tmp/unused.log" "$gaps" "remove them"

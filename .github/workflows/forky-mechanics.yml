@@ -13,15 +13,46 @@ name: Forky mechanics build (no publish)
 on:
   pull_request:
     branches: [main]
-    paths:
-      # The forky inputs themselves, and every fragment a forky build reads.
-      - "shared/suite/**"
-      - "mkosi.conf"
-      - "mkosi.images/base/**"
-      - "shared/kernel/backports/**"
-      - "shared/composition/floe/**"
-      - "shared/floe/**"
-      - ".github/workflows/forky-mechanics.yml"
+    # A forky build reads the same inputs as a trixie image build, plus the
+    # forky fragments. Ignore only what build-images.yml ignores (files that
+    # are not image inputs), so a change of any input, the bootc pin
+    # (shared/packages/bootc) included, rebuilds forky Floe.
+    # test/workflow-path-filter-test.sh holds this list to that of
+    # build-images.yml.
+    paths-ignore:
+      - "shared/download/package-versions.json"
+      - "latest-versions.txt"
+      - "shared/download/sysext-checksums.json"
+      - "**/*.md"
+      - ".agents/**"
+      - ".claude/**"
+      - ".knowledge/**"
+      - ".memory/**"
+      - "docs/**"
+      - "skills/**"
+      - "workers/**"
+      - ".github/workflows/build-installer-iso.yml"
+      - ".github/workflows/deploy-native-installer-redirect.yml"
+      - ".github/workflows/ai-fix-requested.yml"
+      - ".github/workflows/bootc-secure-nightly.yml"
+      - ".github/workflows/build-mechanics.yml"
+      - ".github/workflows/check-dependencies.yml"
+      - ".github/workflows/check-packages.yml"
+      - ".github/workflows/claude.yml"
+      - ".github/workflows/nightly-compliance.yml"
+      - ".github/workflows/scorecard.yml"
+      - ".github/workflows/test-install.yml"
+      - ".github/workflows/triage.yml"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/prompts/**"
+      - ".github/actionlint.yaml"
+      - ".github/auto-qa-tuning.json"
+      - ".github/dependabot.yml"
+      - ".github/renovate.json5"
+      - ".github/risk-paths.json"
+      - ".github/workflows/risk-paths.yml"
+      - ".github/workflows/test-bootc-secure.yml"
+      - ".github/workflows/validate.yml"
   workflow_dispatch:
   schedule:
     # 05:45 UTC — clear of build-mechanics (03:30), nightly-compliance (04:30),
