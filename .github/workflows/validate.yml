@@ -197,6 +197,10 @@ jobs:
         # Ephemeral OpenPGP key, local Range-capable HTTP origin, no R2 writes.
         run: ./test/iso-publication-pipeline-test.sh
 
+      - name: Validate installer ISO retention
+        # Ephemeral OpenPGP key and a local directory namespace; no R2 access.
+        run: ./test/iso-retention-test.sh
+
       - name: Validate installer redirect verifier
         # Stubbed curl covers input validation, version ordering and the
         # published SHA256SUMS comparison. No network or R2 writes.

@@ -33,6 +33,14 @@ on:
       - "test/lib/ssh.sh"
       - "test/lib/vm.sh"
   workflow_dispatch:
+    inputs:
+      retention_max_delete:
+        description: >-
+          Most objects the ISO retention step may delete in this run
+          (ADR-0036). Raise it only after reading the delete list a previous
+          run printed.
+        required: false
+        default: "30"
 
 permissions: {}
 
@@ -368,6 +376,36 @@ jobs:
           ./shared/native-ab/publish/verify-installer-redirect.sh \
             https://repository.frostyard.org/isos/native/v1/snosi-installer-latest-x86-64.iso \
             "$ver"
+
+      - name: Prune installer ISOs outside the keep window
+        # ADR-0036: keep the live ISO and the two before it; never delete an
+        # object younger than 24 hours. Runs only after the new index and the
+        # stable redirect verified. A plan above the cap deletes nothing
+        # (exit 3) and warns: clearing a backlog is a manual dispatch with
+        # retention_max_delete set, after reading the list printed here.
+        if: steps.marker.outcome == 'success' && steps.prepared.outcome == 'success'
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.NATIVE_R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.NATIVE_R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.NATIVE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_R2_ACL: private
+          RCLONE_CONFIG_R2_NO_CHECK_BUCKET: "true"
+          NATIVE_R2_BUCKET: ${{ secrets.NATIVE_R2_BUCKET }}
+          RETENTION_MAX_DELETE: ${{ inputs.retention_max_delete || '30' }}
+        run: |
+          set -euo pipefail
+          [[ "$RETENTION_MAX_DELETE" =~ ^[0-9]+$ ]] || { echo "::error::retention_max_delete must be a non-negative integer" >&2; exit 1; }
+          rc=0
+          ./shared/native-ab/publish/retention.sh --execute \
+            --max-delete "$RETENTION_MAX_DELETE" \
+            "rclone:r2:$NATIVE_R2_BUCKET" || rc=$?
+          if [[ "$rc" == 3 ]]; then
+            echo "::warning::ISO retention deleted nothing: the plan exceeds retention_max_delete=$RETENTION_MAX_DELETE. Read the delete list in this step's log, then dispatch this workflow with a higher retention_max_delete."
+            exit 0
+          fi
+          exit "$rc"
 
       - name: Remove OpenPGP update-signing key
         if: always()

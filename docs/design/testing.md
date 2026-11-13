@@ -185,6 +185,11 @@ publisher in a local `isos/native/v1/` namespace with an ephemeral OpenPGP
 key and `test/lib/range-http-server.py`. It verifies two independent HTTP
 ranges, rejects ignored Range and tampered candidates, checks the served
 signed index and tests second-promotion history. It does not write R2.
+`test/iso-retention-test.sh` builds a signed local namespace and checks
+that `retention.sh` deletes only installer ISOs outside the keep window,
+honours the grace period and the `--max-delete` cap, and deletes nothing
+when the live index is missing, tampered or ambiguous (ADR-0036). It
+replays the scenario through rclone's local backend when rclone is present.
 `test/bootc-secure-docs-test.sh` guards the normative secure operations
 runbook; `test/bootc-secure-artifact-test.sh --fixtures` covers the
 Issue 517 GPT-auto udev-rule check, the sealed `lockdown=integrity`

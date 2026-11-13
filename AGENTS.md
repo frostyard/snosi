@@ -275,9 +275,13 @@ annotation.
 retained `workers/native-installer-redirect/` stable-URL Worker. ISO
 publication scripts under `shared/native-ab/publish/` and the public
 `shared/native-ab/keys/import-pubring.gpg` remain live despite their names.
-There is no automatic ISO retention workflow; its predecessor never ran
-successfully for lack of R2 credentials. Repository cleanup deletes no R2
-objects; any future deletion is gated per exact object by ADR-0018.
+The ISO promote job runs `shared/native-ab/publish/retention.sh --execute`
+after the index and redirect verify (ADR-0036): it keeps the live
+`snosi-installer_*` ISO, the two before it and anything younger than 24
+hours, and deletes at most 30 objects a run; a larger backlog deletes
+nothing until a maintainer dispatches with `retention_max_delete`
+(`test/iso-retention-test.sh`). Every other R2 deletion is gated per exact
+object by ADR-0018.
 
 `validate.yml` runs static guards and non-root fixtures, including Firn
 catalog/ISO publication, `test/no-nbc-test.sh` and
