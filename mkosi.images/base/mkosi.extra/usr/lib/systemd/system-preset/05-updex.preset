@@ -4,3 +4,7 @@
 # Opt out on a host with `systemctl mask updex-update.timer`.
 # See updex ADR-0016.
 enable updex-update.timer
+# After a `bootc switch` between Debian suites, link the running suite's
+# sysext images at boot, before updex-update.service runs.
+# See updex ADR-0021.
+enable updex-suite-switch.service
