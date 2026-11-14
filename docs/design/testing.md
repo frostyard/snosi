@@ -206,8 +206,11 @@ exercises the Forky sentinel and its four systemd recheck obligations.
 every suite fragment starts with `[Match]` and matches only its own
 `Release=`, that the resolved trixie summary of every profile and of the
 default build is identical when every forky fragment is cut down to its
-`[Match]` section, and that the forky Floe summary carries the forky sandbox
-and extra trees after the trixie ones. `test/forky-known-gaps-test.sh`
+`[Match]` section, and that the forky summary of each OCI product (Floe,
+Snow, Snowfield, Sundog) carries the forky sandbox and extra trees after the
+trixie ones and no package that a trixie-matched fragment names, and that
+the forky default (sysext) build has no image that `mkosi.conf.d/trixie.conf`
+adds, such as `sunshine`. `test/forky-known-gaps-test.sh`
 exercises `shared/suite/forky/classify-build.sh` with fixture logs, including
 a known gap beside an unknown apt error, which must fail.
 

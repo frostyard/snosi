@@ -192,9 +192,13 @@ when the forky fragments are cut out. The suite-specific content today:
 | Secure assembly contract (`/usr/lib/snosi/bootc-secure.json`) | `shared/bootc-secure/tree` | `shared/bootc-secure/suite/forky/tree`, added after the shared tree by `shared/bootc-secure/forky.conf` |
 | systemd-boot `loader.conf` at install | bootc 1.17.3 writes `timeout 5` itself | the forky tree ships `/usr/lib/bootc/install/systemd-boot/loader.conf` (`timeout 5`); bootc 1.17.4 copies it |
 | Isolation pin (forky source, `n=forky` at 50) | `shared/bootc-secure/trixie.conf` adds `shared/bootc-secure/package-manager` | not read: the forky suite sandbox gives the forky source |
-| dracut TPM module list (`20-tpm-luks.conf`) | `systemd-pcrphase` (dracut 106) | `systemd-pcrextend` (dracut 112), in `shared/suite/forky/{base,floe}-tree` |
+| dracut TPM module list (`20-tpm-luks.conf`) | `systemd-pcrphase` (dracut 106) | `systemd-pcrextend` (dracut 112), in `shared/suite/forky/{base,floe,snow}-tree` |
+| Product APT backports source and pin (`shared/floe/tree`, `shared/snow/tree`) | `trixie-backports` | `forky-backports`, in `shared/suite/forky/floe-tree` (Floe and Sundog, added last by `shared/suite/forky/floe.conf`) and `shared/suite/forky/snow-tree` (Snow and Snowfield, added last by `shared/suite/forky/snow.conf`) |
 | `/var` outcome map | `var-outcomes.txt` plus `var-outcomes.trixie.txt` | `var-outcomes.txt` plus `var-outcomes.forky.txt` |
 | Kernel and backports | `shared/kernel/backports/trixie.conf` | `shared/kernel/backports/forky.conf` |
+| Surface firmware and mesa (Snowfield; the linux-surface packages stay shared) | `shared/kernel/surface/trixie.conf`: `trixie-backports` pins | `shared/kernel/surface/forky.conf`: the same packages from forky, with no suffix |
+| Snow and Snowfield packages | `shared/packages/snow/trixie.conf`: `libpeas-1.0-0`, `libraw23t64`, and 6 packages that forky does not ship (`libvdpau-va-gl1`, `libxatracker2`, `packagekit-tools`, `vdpau-driver-all`, `xserver-xorg-video-qxl`, `xserver-xorg-video-vmware`) | `shared/packages/snow/forky.conf`: `libpeas-1.0-1`, `libraw25`; forky's `packagekit` ships `pkgcli` in place of `pkcon`, and no image calls `pkcon` |
+| Sysext set | `mkosi.conf.d/trixie.conf` adds `sunshine` to the root `Dependencies=` | no `sunshine`: upstream publishes no forky deb, and the pinned `debiantrixie` deb depends on `libminiupnpc18`, which forky does not ship |
 | Host-side contract and tag form (`SNOSI_BOOTC_SECURE_SUITE`, ADR-0038) | unset, empty or `trixie`: the `shared/bootc-secure/tree` contract and `^[0-9]{14}$` tags | `forky`: the forky contract copy and `^forky-[0-9]{14}$` tags; the packager requires rootfs `VERSION_CODENAME=forky`; promotion to `latest` refuses |
 
 `test/bootc-secure-static-test.sh` requires the forky contract to equal the
@@ -204,8 +208,13 @@ trixie contract except the three bootc version fields.
 `shared/composition/var-audit.finalize` reads the suite map
 `shared/composition/<product>/var-outcomes.$RELEASE.txt` after the product
 map when it exists; a path that only one suite ships goes there, and
-`test/var-audit-suite-map-test.sh` covers it. Forky snow, snowfield and
-sundog need the same splits when they gain a forky build.
+`test/var-audit-suite-map-test.sh` covers it. No product has a forky
+suite map yet: one is added when a forky build shows a gap.
+
+A sysext package list names the real package where a trixie name is a virtual
+package: `libasound2t64` and `libcurl3t64-gnutls` (1password, edge). On
+trixie each virtual name has only that provider, so the solve is the same; on
+forky `libasound2` has 2 providers and `libcurl3-gnutls` has none.
 
 The host-side secure scripts (`assemble-uki.sh`, `buildah-package.sh`,
 `ci/push-immutable-image.sh`, `ci/verify-published-image.sh`,

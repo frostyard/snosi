@@ -16,10 +16,15 @@
 #                  down to its [Match] section, the resolved trixie summary of
 #                  every profile (and of the default build) equals the summary
 #                  of the real tree.
-#   (c) smoke      the resolved forky Floe summary has Release=forky in every
-#                  image, no trixie-backports pin, no trixie-only package, no
-#                  trixie isolation pin, and the forky sandbox and extra trees
-#                  (the secure contract copy too) after the trees they replace.
+#   (c) smoke      the resolved forky summary of each OCI product (floe, snow,
+#                  snowfield, sundog) has Release=forky in every image, no
+#                  trixie-backports pin, no package that a trixie-matched
+#                  fragment names, no trixie isolation pin, and the forky
+#                  sandbox and extra trees (the product tree and the secure
+#                  contract copy too) after the trees they replace. The
+#                  forky default (sysext) summary has Release=forky in every
+#                  image and builds no image that the root trixie fragment
+#                  (mkosi.conf.d/trixie.conf) adds to Dependencies=.
 #
 # MKOSI selects the binary (validate.yml sets MKOSI=mkosi).
 set -euo pipefail
@@ -241,34 +246,68 @@ check_isolation() {
 # (c) smoke: the forky resolution is the one the build needs.
 # ---------------------------------------------------------------------------
 
-check_forky_smoke() {
-    local tmp json status=0 out
+# Each forky OCI product, the tree of its own that holds suite-specific files,
+# and the forky copy (shared/suite/forky/<name>) that must come after it.
+smoke_products=(
+    "floe:shared/floe/tree:floe-tree"
+    "snow:shared/snow/tree:snow-tree"
+    "snowfield:shared/snow/tree:snow-tree"
+    "sundog:shared/floe/tree:floe-tree"
+)
+
+check_forky_smoke() { # profile product-tree forky-tree
+    local profile=$1 product_tree=$2 forky_tree=$3 tmp json status=0 out
     tmp=$(mktemp -d)
     # shellcheck disable=SC2064
     trap "rm -rf '$tmp'" RETURN
     json=$tmp/forky.json
-    if ! summary "$root" --release forky --profile floe >"$json" 2>"$tmp/err"; then
-        fail "the forky Floe summary failed: $(tail -n 3 "$tmp/err" | paste -sd' ' -)"
+    if ! summary "$root" --release forky --profile "$profile" >"$json" 2>"$tmp/err"; then
+        fail "the forky $profile summary failed: $(tail -n 3 "$tmp/err" | paste -sd' ' -)"
         return 1
     fi
-    out=$(python3 - "$root" "$json" <<'PY'
+    local -a trixie_fragments=()
+    mapfile -t trixie_fragments < <(suite_files trixie)
+    out=$(python3 - "$root" "$json" "$profile" "$product_tree" "$forky_tree" \
+        ${trixie_fragments[@]+"${trixie_fragments[@]}"} <<'PY'
 import json
+import re
 import sys
 
-root, path = sys.argv[1], sys.argv[2]
+root, path, profile, product_tree, forky_tree = sys.argv[1:6]
+trixie_fragments = sys.argv[6:]
 images = json.load(open(path, encoding="utf-8"))["Images"]
 suite = f"{root}/shared/suite/forky"
 bad = False
 
 
 def ok(message):
-    print(f"ok - {message}")
+    print(f"ok - {profile}: {message}")
 
 
 def not_ok(message):
     global bad
     bad = True
-    print(f"not ok - {message}")
+    print(f"not ok - {profile}: {message}")
+
+
+def fragment_packages(rel):
+    # The Packages= values of one mkosi fragment, continuation lines included.
+    names, inside = set(), False
+    for raw in open(f"{root}/{rel}", encoding="utf-8"):
+        line = raw.rstrip("\n")
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if line[0].isspace():
+            if inside:
+                names.update(stripped.split())
+            continue
+        inside = False
+        match = re.match(r"Packages=(.*)$", stripped)
+        if match:
+            inside = True
+            names.update(match.group(1).split())
+    return names
 
 
 for image in images:
@@ -301,6 +340,25 @@ if low_memory:
 else:
     ok("low-memory-monitor is absent")
 
+# A package that a trixie-matched fragment names is trixie-only by definition.
+trixie_only = set()
+for rel in trixie_fragments:
+    trixie_only |= fragment_packages(rel)
+leaks = sorted(
+    {
+        package
+        for image in images
+        for package in image.get("Packages") or []
+        if package in trixie_only
+    }
+)
+if not trixie_only:
+    not_ok("no package found in the trixie-matched fragments; the parser is stale")
+elif leaks:
+    not_ok(f"packages of trixie-matched fragments reach a forky build: {leaks}")
+else:
+    ok(f"none of the {len(trixie_only)} packages of the trixie-matched fragments is installed")
+
 def trees(image, key):
     return [entry.get("Source") for entry in image.get(key) or []]
 
@@ -319,7 +377,7 @@ for image in images:
 
 base = next((i for i in images if i.get("Image") == "base"), None)
 if base is None:
-    not_ok("no base image in the forky Floe summary")
+    not_ok("no base image in the forky summary")
 else:
     extra = trees(base, "ExtraTrees")
     ours = f"{suite}/base-tree"
@@ -332,16 +390,17 @@ else:
 
 main = next((i for i in images if i.get("Image") == "main"), None)
 if main is None:
-    not_ok("no main image in the forky Floe summary")
+    not_ok("no main image in the forky summary")
 else:
     extra = trees(main, "ExtraTrees")
-    ours = f"{suite}/floe-tree"
-    if ours not in extra:
-        not_ok(f"main: ExtraTrees has no {ours}")
-    elif extra.index(ours) < extra.index(f"{root}/shared/floe/tree"):
-        not_ok(f"main: {ours} comes before shared/floe/tree")
+    ours = f"{suite}/{forky_tree}"
+    theirs = f"{root}/{product_tree}"
+    if ours not in extra or theirs not in extra:
+        not_ok(f"main: ExtraTrees needs both {theirs} and {ours}")
+    elif extra.index(ours) < extra.index(theirs):
+        not_ok(f"main: {ours} comes before {product_tree}")
     else:
-        ok("main: the forky Floe tree comes after shared/floe/tree")
+        ok(f"main: shared/suite/forky/{forky_tree} comes after {product_tree}")
     # The forky secure contract must replace the trixie contract.
     secure = f"{root}/shared/bootc-secure/tree"
     ours = f"{root}/shared/bootc-secure/suite/forky/tree"
@@ -385,14 +444,76 @@ PY
         esac
     done <<<"$out"
     if ((status != 0 && FAIL == 0)); then
-        fail "the forky Floe check exited $status without a verdict"
+        fail "the forky $profile check exited $status without a verdict"
     fi
     ((status == 0))
 }
 
 check_static
 check_isolation || true
-check_forky_smoke || true
+# The sysext set of the default build: an image that only trixie builds must
+# not reach a forky build.
+check_forky_sysexts() {
+    local tmp json out status=0
+    tmp=$(mktemp -d)
+    # shellcheck disable=SC2064
+    trap "rm -rf '$tmp'" RETURN
+    json=$tmp/forky.json
+    if ! summary "$root" --release forky >"$json" 2>"$tmp/err"; then
+        fail "the forky default summary failed: $(tail -n 3 "$tmp/err" | paste -sd' ' -)"
+        return 1
+    fi
+    out=$(python3 - "$root" "$json" <<'PY'
+import json
+import re
+import sys
+
+root, path = sys.argv[1], sys.argv[2]
+images = json.load(open(path, encoding="utf-8"))["Images"]
+names = {image.get("Image") or "<root>" for image in images}
+trixie_only, inside = set(), False
+try:
+    lines = open(f"{root}/mkosi.conf.d/trixie.conf", encoding="utf-8").read().splitlines()
+except FileNotFoundError:
+    lines = []
+for line in lines:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        continue
+    if line[0].isspace():
+        if inside:
+            trixie_only.update(stripped.split())
+        continue
+    match = re.match(r"Dependencies=(.*)$", stripped)
+    inside = bool(match)
+    if match:
+        trixie_only.update(match.group(1).split())
+wrong = sorted(image.get("Image") or "<root>" for image in images if image.get("Release") != "forky")
+if wrong:
+    print(f"not ok - default: images without Release=forky: {wrong}")
+else:
+    print(f"ok - default: every one of the {len(images)} images has Release=forky")
+leaks = sorted(trixie_only & names)
+if leaks:
+    print(f"not ok - default: trixie-only sysexts reach a forky build: {leaks}")
+else:
+    print(f"ok - default: no trixie-only sysext is built on forky ({', '.join(sorted(trixie_only)) or 'none listed'})")
+PY
+) || status=$?
+    while IFS= read -r line; do
+        case $line in
+        "ok - "*) pass "${line#ok - }" ;;
+        "not ok - "*) fail "${line#not ok - }" ;;
+        esac
+    done <<<"$out"
+    ((status == 0))
+}
+
+for entry in "${smoke_products[@]}"; do
+    IFS=: read -r smoke_profile smoke_tree smoke_forky <<<"$entry"
+    check_forky_smoke "$smoke_profile" "$smoke_tree" "$smoke_forky" || true
+done
+check_forky_sysexts || true
 
 printf '# Results: %d passed, %d failed, %d total\n' "$PASS" "$FAIL" "$((PASS + FAIL))"
 [[ $FAIL -eq 0 ]]

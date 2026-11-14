@@ -72,7 +72,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
 | **porterd** | frostyard-porterd | Porter assistant daemon (`porterd`) and Lodge porter app — downloaded via `verified_download()` from frostyard/porter GitHub releases after its build-provenance attestation is checked ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)); useful only behind lodge (porter ADR-0003), so enable `lodge` first |
 | **readd** | frostyard-readd | frostread feed reader and read-later daemon (`readd`, `readctl`) and Lodge read app — downloaded via `verified_download()` from frostyard/frostread GitHub releases after its build-provenance attestation is checked ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)); enable `lodge` first |
-| **sunshine** | sunshine | Sunshine self-hosted game streaming host (official pinned Trixie .deb via verified_download) |
+| **sunshine** | sunshine | Sunshine self-hosted game streaming host (official pinned Trixie .deb via verified_download; trixie builds only) |
 | **tailscale** | tailscale | Tailscale VPN client |
 | **vscode** | code | Visual Studio Code desktop application (from packages.microsoft.com) |
 
@@ -271,6 +271,7 @@ Some sysexts include extra files via their own `mkosi.images/<name>/mkosi.extra/
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in; ships hicolor icons → `sysext-strip-icon-cache.sh` required
 
 ### sunshine
+- Trixie builds only: `mkosi.conf.d/trixie.conf` adds it to the root `Dependencies=`, and a forky build has no `sunshine` image. Upstream publishes only `debiantrixie` and Ubuntu debs, and the `debiantrixie` deb depends on `libminiupnpc18`, which forky does not ship ([ADR-0037](../adr/0037-build-forky-as-a-second-suite.md); `test/suite-isolation-test.sh` checks the forky sysext set)
 - `mkosi.postinst.chroot` downloads Sunshine's official pinned Trixie `.deb` with `verified_download()` and installs it with `dpkg -i`; its payload already uses the native `/usr` layout, so no relocation is needed
 - Release asset naming changed in v2026.906.222525: `sunshine_<VER>-1+debiantrixie_amd64.deb` replaced `sunshine-debian-trixie-amd64.deb` (the old name 404s, which broke `check-dependencies.yml` on 2026-09-08; the workflow's URL template pins the new shape)
 - The same release moved the tray from GTK3/appindicator/libnotify to Qt6 (`readelf -d /usr/bin/sunshine`: libQt6Widgets/Gui/Core + libXtst, no GTK, no Qt5). `Packages=` therefore carries libqt6core6t64/gui6/widgets6/svg6, libxtst6, and `qt6-qpa-plugins` + `qt6-wayland` — those two are libqt6gui6 *Recommends*, which mkosi never installs, but QGuiApplication aborts the whole process when no platform plugin loads, so they are hard requirements of the sysext
