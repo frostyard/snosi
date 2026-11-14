@@ -115,8 +115,10 @@ production identities only for local assembly and validation, verifies an
 immutable version digest before moving `latest`, deletes credentials before any
 registry write, and then advances the tracking tag.
 
-`forky-publish.yml` publishes forky Floe **test images** on manual dispatch
-from main ([ADR-0038](adr/0038-publish-signed-forky-test-images.md)). It runs
+`forky-publish.yml` publishes forky **test images** of Floe, Snow, Snowfield
+or Sundog on manual dispatch from main, 1 product per dispatch
+([ADR-0038](adr/0038-publish-signed-forky-test-images.md),
+[ADR-0039](adr/0039-publish-forky-test-images-of-every-product.md)). It runs
 the same signed path with `SNOSI_BOOTC_SECURE_SUITE=forky`, which selects the
 forky contract
 (`shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json`), and

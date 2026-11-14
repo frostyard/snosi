@@ -267,9 +267,10 @@ of the forky index at repository.frostyard.org on 2026-11-13. Evidence
   pair.
 
 Forky secure assembly path: `.github/workflows/forky-publish.yml` (manual
-dispatch from main) builds forky Floe with `SNOSI_BOOTC_SECURE_SUITE=forky`,
+dispatch from main) builds the 1 forky product that the dispatch selects
+(Floe, Snow, Snowfield or Sundog) with `SNOSI_BOOTC_SECURE_SUITE=forky`,
 assembles and validates the secure artifact against the forky contract, and
-publishes only an immutable `forky-<version>` test tag (ADR-0038).
+publishes only an immutable `forky-<version>` test tag (ADR-0038, ADR-0039).
 
 Not done yet: forky secure-assembly evidence. No dispatch of that workflow has
 run, so nothing yet shows a forky secure assembly (Task 1-3 rootfs proof and

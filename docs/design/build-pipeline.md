@@ -225,7 +225,9 @@ The host-side secure scripts (`assemble-uki.sh`, `buildah-package.sh`,
 `SNOSI_BOOTC_SECURE_SUITE` through the helpers of
 `shared/bootc-secure/compatibility.sh`
 ([ADR-0038](../adr/0038-publish-signed-forky-test-images.md)). An unknown
-value fails. `.github/workflows/forky-publish.yml` sets it to `forky`; no other
+value fails. `.github/workflows/forky-publish.yml` sets it to `forky` for the
+1 product that each dispatch selects
+([ADR-0039](../adr/0039-publish-forky-test-images-of-every-product.md)); no other
 workflow sets it, so every trixie caller keeps the default.
 
 ## Secure bootc assembly

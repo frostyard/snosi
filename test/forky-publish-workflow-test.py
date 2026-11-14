@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
-"""Static gate for .github/workflows/forky-publish.yml (ADR-0038).
+"""Static gate for .github/workflows/forky-publish.yml (ADR-0038, ADR-0039).
 
-The forky publish workflow signs and publishes forky Floe test images. It must:
+The forky publish workflow signs and publishes forky test images of Floe,
+Snow, Snowfield or Sundog, 1 product per dispatch. It must:
 
+  0. take a required choice input `profile` with exactly the 4 products, and
+     map it in a `select` job (main gate, no permissions, no checkout, no
+     secret) to exactly 1 matrix entry from a fixed table equal to the
+     build-images.yml secure-build matrix; the input reaches a script only
+     through env, never by interpolation into a run: script;
   1. run only on workflow_dispatch, only from main, in the native-build
      environment, with SNOSI_BOOTC_SECURE_SUITE=forky for the whole job;
   2. never move latest, upload R2 manifests or record a release tag: no step
@@ -35,6 +41,13 @@ COMMAND = "python3 ./test/forky-publish-workflow-test.py"
 PREFIX = "forky-publish-workflow-test:"
 
 JOB = "forky-publish"
+SELECT_JOB = "select"
+PRODUCTS = ["floe", "snow", "snowfield", "sundog"]
+SELECT_ENV = "          PROFILE: ${{ inputs.profile }}"
+SELECT_JSON = "'[{profile: $profile, description: $description}]')"
+SELECT_FALLBACK = re.compile(r"^\s+\*\) echo \"::error::[^\"]*\" >&2; exit 1 ;;$")
+TABLE_ROW = re.compile(r'^\s+([a-z0-9-]+)\) description="([^"]*)" ;;$')
+MATRIX_INCLUDE = "        include: ${{ fromJSON(needs.select.outputs.matrix) }}"
 OMITTED_STEPS = [
     "Promote validated digest to latest",
     "Move manifests",
@@ -147,6 +160,91 @@ def commands(lines: list[str]) -> list[str]:
     return out
 
 
+def gate_errors(job: list[str], name: str) -> list[str]:
+    errors: list[str] = []
+    condition: list[str] = []
+    for index, line in enumerate(job):
+        if line.startswith("    if:"):
+            condition = [line] + block(job, index, 4)
+            break
+    condition_text = " ".join(part.strip() for part in condition)
+    if "github.ref == 'refs/heads/main'" not in condition_text:
+        errors.append(f"{name} job if must require github.ref == 'refs/heads/main'")
+    if "github.event_name == 'workflow_dispatch'" not in condition_text:
+        errors.append(f"{name} job if must require github.event_name == 'workflow_dispatch'")
+    if "||" in condition_text:
+        errors.append(f"{name} job if must not hold an alternative (||)")
+    return errors
+
+
+def secure_build_matrix(images_job: list[str]) -> list[tuple[str, str]]:
+    entries: list[tuple[str, str]] = []
+    for index, line in enumerate(images_job):
+        match = re.match(r"^          - profile: (\S+)\s*$", line)
+        if match:
+            following = images_job[index + 1] if index + 1 < len(images_job) else ""
+            described = re.match(r'^            description: "([^"]*)"\s*$', following)
+            entries.append((match.group(1), described.group(1) if described else ""))
+    return entries
+
+
+def check_select(lines: list[str], on: list[str], images_job: list[str] | None) -> list[str]:
+    errors: list[str] = []
+    # The choice input: required, default floe, exactly the 4 products.
+    try:
+        start = on.index("    inputs:")
+    except ValueError:
+        return ["workflow_dispatch must declare inputs"]
+    inputs = block(on, start, 4)
+    names = [m.group(1) for line in inputs if (m := re.match(r"^      ([A-Za-z_-]+):\s*$", line))]
+    if names != ["profile"]:
+        errors.append(f"workflow_dispatch must have exactly the input profile; found {names}")
+    profile = block(inputs, inputs.index("      profile:"), 6) if "      profile:" in inputs else []
+    for required in ("        required: true", "        type: choice", "        default: floe"):
+        if required not in profile:
+            errors.append(f"the profile input must set {required.strip()!r}")
+    options = []
+    if "        options:" in profile:
+        options = [line.strip().removeprefix("- ").strip() for line in block(profile, profile.index("        options:"), 8) if line.strip()]
+    if options != PRODUCTS:
+        errors.append(f"the profile input options must be exactly {PRODUCTS}; found {options}")
+
+    select = job_block(lines, SELECT_JOB)
+    if select is None:
+        return errors + [f"workflow has no {SELECT_JOB} job"]
+    errors += gate_errors(select, SELECT_JOB)
+    if "    permissions: {}" not in select:
+        errors.append(f"{SELECT_JOB} job must set permissions: {{}}")
+    if "environment:" in "\n".join(select):
+        errors.append(f"{SELECT_JOB} job must not use an environment")
+    select_code = code(select)
+    if any(line.strip().startswith("uses:") for line in select_code):
+        errors.append(f"{SELECT_JOB} job must run no action (no checkout)")
+    if any("secrets." in line for line in select_code):
+        errors.append(f"{SELECT_JOB} job must use no secret")
+    if "      matrix: ${{ steps.select.outputs.matrix }}" not in select:
+        errors.append(f"{SELECT_JOB} job must output matrix from its select step")
+    table = [(m.group(1), m.group(2)) for line in select_code if (m := TABLE_ROW.match(line))]
+    if images_job is not None:
+        expected = secure_build_matrix(images_job)
+        if table != expected:
+            errors.append(f"the {SELECT_JOB} table must equal the secure-build matrix {expected}; found {table}")
+    if not any(SELECT_FALLBACK.match(line) for line in select_code):
+        errors.append(f"the {SELECT_JOB} table must fail (exit 1) on any other value")
+    if not any(line.strip() == SELECT_JSON for line in select_code):
+        errors.append(f"the {SELECT_JOB} step must output exactly 1 matrix entry: {SELECT_JSON}")
+    if sum("matrix=" in line and "GITHUB_OUTPUT" in line for line in select_code) != 1:
+        errors.append(f"the {SELECT_JOB} step must write the matrix output exactly once")
+
+    # The input reaches a script only through the select step's env.
+    for line in code(lines):
+        if "inputs." in line and line != SELECT_ENV:
+            errors.append(f"inputs may only reach the select step through env ({SELECT_ENV.strip()}); found {line.strip()}")
+    if sum(line == SELECT_ENV for line in select_code) != 1:
+        errors.append(f"the {SELECT_JOB} step must take the input once through env: {SELECT_ENV.strip()}")
+    return errors
+
+
 def check(forky_text: str, images_text: str) -> list[str]:
     errors: list[str] = []
     lines = forky_text.splitlines()
@@ -159,30 +257,24 @@ def check(forky_text: str, images_text: str) -> list[str]:
         events = {m.group(1) for line in on if (m := re.match(r"^  ([A-Za-z_]+):", line))}
         if events != {"workflow_dispatch"}:
             errors.append(f"triggers must be exactly workflow_dispatch; found {sorted(events)}")
+        errors += check_select(lines, on, job_block(images_text.splitlines(), "secure-build"))
     if "permissions: {}" not in lines:
         errors.append("top-level permissions must be {}")
 
     jobs = top_block(lines, "jobs") or []
     names = [m.group(1) for line in jobs if (m := JOB_KEY.match(line))]
-    if names != [JOB]:
-        errors.append(f"the workflow must hold exactly the job {JOB}; found {names}")
+    if names != [SELECT_JOB, JOB]:
+        errors.append(f"the workflow must hold exactly the jobs {[SELECT_JOB, JOB]}; found {names}")
     job = job_block(lines, JOB)
     if job is None:
         errors.append(f"workflow has no {JOB} job")
         return errors
 
-    condition: list[str] = []
-    for index, line in enumerate(job):
-        if line.startswith("    if:"):
-            condition = [line] + block(job, index, 4)
-            break
-    condition_text = " ".join(part.strip() for part in condition)
-    if "github.ref == 'refs/heads/main'" not in condition_text:
-        errors.append("job if must require github.ref == 'refs/heads/main'")
-    if "github.event_name == 'workflow_dispatch'" not in condition_text:
-        errors.append("job if must require github.event_name == 'workflow_dispatch'")
-    if "||" in condition_text:
-        errors.append("job if must not hold an alternative (||)")
+    errors += gate_errors(job, JOB)
+    if "    needs: select" not in job:
+        errors.append(f"{JOB} job must declare needs: select")
+    if MATRIX_INCLUDE not in job or any(re.match(r"^\s+- profile:", line) for line in job):
+        errors.append(f"{JOB} matrix must be only {MATRIX_INCLUDE.strip()}")
     if "    environment: native-build" not in job:
         errors.append("job must run in environment native-build")
 
@@ -289,6 +381,16 @@ def check(forky_text: str, images_text: str) -> list[str]:
     return errors
 
 
+def _replace_nth(text: str, old: str, new: str, nth: int) -> str:
+    """Replace only the nth (1-based) occurrence of old."""
+    index = -1
+    for _ in range(nth):
+        index = text.find(old, index + 1)
+        if index < 0:
+            raise SystemExit(f"{PREFIX} FAIL self-test anchor is missing: {old!r} #{nth}")
+    return text[:index] + new + text[index + len(old):]
+
+
 def self_test(forky_text: str, images_text: str) -> int:
     def sub(old: str, new: str, count: int = 1):
         def mutate(text: str) -> str:
@@ -299,7 +401,28 @@ def self_test(forky_text: str, images_text: str) -> int:
 
     cases = {
         "push trigger": sub("on:\n  workflow_dispatch:\n", "on:\n  workflow_dispatch:\n  push:\n    branches: [main]\n"),
-        "main gate removed": sub("github.ref == 'refs/heads/main'", "true"),
+        "main gate removed": sub("github.ref == 'refs/heads/main'", "true", 2),
+        "publish job main gate removed": lambda t: _replace_nth(t, "github.ref == 'refs/heads/main'", "true", 2),
+        "select job main gate removed": lambda t: _replace_nth(t, "github.ref == 'refs/heads/main'", "true", 1),
+        "an all option": sub("          - sundog\n", "          - sundog\n          - all\n"),
+        "a fifth profile": sub("          - sundog\n", "          - sundog\n          - cayo\n"),
+        "a fifth table row": sub(
+            '            sundog) description="Sundog Linux OS Image" ;;\n',
+            '            sundog) description="Sundog Linux OS Image" ;;\n            cayo) description="Cayo" ;;\n',
+        ),
+        "a description that differs from secure-build": sub('snow) description="Snow Linux OS Image"', 'snow) description="Snow Image"'),
+        "inputs.profile in a run script": sub('case "$PROFILE" in', 'case "${{ inputs.profile }}" in'),
+        "inputs.profile in the build": sub("--profile ${{ matrix.profile }}", "--profile ${{ inputs.profile }}"),
+        "fallback accepts any value": sub("exit 1 ;;\n          esac", "description=x ;;\n          esac"),
+        "all products in one run": sub(SELECT_JSON, "'[{profile: \"floe\"}, {profile: $profile, description: $description}]')"),
+        "static matrix entry": sub(MATRIX_INCLUDE + "\n", "        include:\n          - profile: floe\n            description: \"Floe Linux Server Image\"\n"),
+        "select job with a token": sub("    permissions: {}\n    outputs:", "    permissions:\n      contents: read\n    outputs:"),
+        "select job with a checkout": sub(
+            "      - name: Select the product\n",
+            "      - name: Checkout\n        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n      - name: Select the product\n",
+        ),
+        "publish job without needs": sub("    needs: select\n", ""),
+        "input not required": sub("        required: true\n", "        required: false\n"),
         "environment removed": sub("    environment: native-build\n", ""),
         "suite env removed": sub("      SNOSI_BOOTC_SECURE_SUITE: forky\n", ""),
         "suite env trixie": sub("      SNOSI_BOOTC_SECURE_SUITE: forky\n", "      SNOSI_BOOTC_SECURE_SUITE: trixie\n"),
@@ -351,7 +474,12 @@ def self_test(forky_text: str, images_text: str) -> int:
     if not check(forky_text, images_mutated):
         print(f"{PREFIX} FAIL self-test mutation passed: secure-build step added", file=sys.stderr)
         failures += 1
-    return len(cases) + 2 if failures == 0 else -failures
+    # A product description changed in secure-build must fail the select table.
+    images_mutated = images_text.replace('description: "Sundog Linux OS Image"', 'description: "Sundog OS"', 1)
+    if images_mutated == images_text or not check(forky_text, images_mutated):
+        print(f"{PREFIX} FAIL self-test mutation passed: secure-build description changed", file=sys.stderr)
+        failures += 1
+    return len(cases) + 3 if failures == 0 else -failures
 
 
 def main() -> int:
