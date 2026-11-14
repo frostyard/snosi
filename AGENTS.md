@@ -123,17 +123,20 @@ one top-level `permissions:` of `{}` or read-only grants, and every
 
 **Second suite (ADR-0037):** the Debian release is a build input.
 Trixie is the default and stays unchanged; `mkosi --release forky` builds the
-same composition on forky (Floe today). mkosi cannot remove a list item, so
-suite-specific packages and trees live in files whose only `[Match]` is
-`Release=trixie` or `Release=forky` (`mkosi.images/base/mkosi.conf.d/`,
-`shared/kernel/backports/{trixie,forky}.conf`, `shared/suite/forky/`); a
+same composition on forky (all 4 products and the sysexts; `sunshine` is
+trixie-only, added by `mkosi.conf.d/trixie.conf`: no upstream forky deb).
+mkosi cannot remove a list item, so suite-specific packages and trees live in
+files whose only `[Match]` is `Release=trixie` or `Release=forky`
+(`mkosi.conf.d/`, `mkosi.images/base/mkosi.conf.d/`,
+`shared/kernel/{backports,surface}/{trixie,forky}.conf`,
+`shared/packages/{bootc,snow,sundog}/{trixie,forky}.conf`, `shared/suite/forky/`); a
 shared file holds only suite-neutral content.
 `test/suite-isolation-test.sh` requires every trixie summary to stay the same
 with the forky fragments cut out. `shared/suite/forky/version-id.postinst.chroot`
 gives Debian testing `VERSION_ID="14"`. The suite-specific content (bootc
 pair and contract, dracut module names, `/var` suite maps) is listed in
 [build pipeline](docs/design/build-pipeline.md#suite-specific-content). `forky-mechanics.yml` builds forky
-Floe with no publication; a failed build passes only when every apt error
+Floe, Snow, Snowfield, Sundog and the sysexts with no publication; a failed build passes only when every apt error
 matches a row of `shared/suite/forky/known-gaps.tsv` (id, log string,
 tracking URL), and a passing build fails while a row remains.
 

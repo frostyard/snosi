@@ -1,0 +1,6 @@
+# Forky builds only: overrides shared/snow/tree/etc/apt/preferences.d/backports
+# (trixie-backports) through an ExtraTree that comes after shared/snow/tree (ADR-0037).
+# Pin backports lower than default
+Package: *
+Pin: release n=forky-backports
+Pin-Priority: 100

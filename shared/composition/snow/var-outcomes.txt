@@ -100,7 +100,6 @@ lock	tmpfiles
 log/apt	tmpfiles
 log/journal	tmpfiles
 log/private	tmpfiles
-log/README	tmpfiles
 mail	tmpfiles
 mnt	tmpfiles
 opt	tmpfiles
@@ -189,7 +188,6 @@ lib/os-prober	discard
 # pam-auth-update's own bookkeeping (see the floe map for detail).
 lib/pam/**	discard
 lib/portables	discard
-lib/python/python3.13_installed	discard
 lib/sgml-base/**	discard
 lib/shells.state	discard
 lib/systemd/catalog/database	discard
@@ -225,11 +223,8 @@ lib/xml-core/**	discard
 # either way.
 lib/AccountsService/users*	discard
 log/alternatives.log	discard
-log/btmp	discard
 log/cups	discard
 log/fontconfig.log	discard
-log/lastlog	discard
 log/runit/**	discard
 log/speech-dispatcher	discard
 log/tuned	discard
-log/wtmp	discard

@@ -65,7 +65,6 @@ lock	tmpfiles
 log/apt	tmpfiles
 log/journal	tmpfiles
 log/private	tmpfiles
-log/README	tmpfiles
 mail	tmpfiles
 mnt	tmpfiles
 opt	tmpfiles
@@ -128,7 +127,6 @@ lib/machines	discard
 lib/man-db*	discard
 lib/pam/**	discard
 lib/portables	discard
-lib/python/python3.13_installed	discard
 lib/sgml-base/**	discard
 lib/shells.state	discard
 lib/systemd/catalog/database	discard
@@ -147,10 +145,7 @@ lib/xfonts*	discard
 lib/xkb*	discard
 lib/xml-core/**	discard
 log/alternatives.log	discard
-log/btmp	discard
 # cups-pdf writes its install-time log under log/cups; bare * covers the
 # empty-dir shape and the populated one (same rationale as lib/dpkg*).
 log/cups*	discard
 log/fontconfig.log	discard
-log/lastlog	discard
-log/wtmp	discard

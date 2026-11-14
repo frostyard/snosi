@@ -38,6 +38,7 @@ tpm_confs=(
     "shared/floe/tree/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
     "shared/suite/forky/base-tree/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
     "shared/suite/forky/floe-tree/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
+    "shared/suite/forky/snow-tree/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
 )
 for conf in "${tpm_confs[@]}"; do
     path="$root/$conf"
@@ -57,6 +58,7 @@ done
 forky_pairs=(
     "mkosi.images/base/mkosi.extra:shared/suite/forky/base-tree"
     "shared/floe/tree:shared/suite/forky/floe-tree"
+    "shared/snow/tree:shared/suite/forky/snow-tree"
 )
 rel=usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf
 for pair in "${forky_pairs[@]}"; do

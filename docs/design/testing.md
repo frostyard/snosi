@@ -206,10 +206,25 @@ exercises the Forky sentinel and its four systemd recheck obligations.
 every suite fragment starts with `[Match]` and matches only its own
 `Release=`, that the resolved trixie summary of every profile and of the
 default build is identical when every forky fragment is cut down to its
-`[Match]` section, and that the forky Floe summary carries the forky sandbox
-and extra trees after the trixie ones. `test/forky-known-gaps-test.sh`
+`[Match]` section, and that the forky summary of each OCI product (Floe,
+Snow, Snowfield, Sundog) carries the forky sandbox and extra trees after the
+trixie ones and no package that a trixie-matched fragment names, and that
+the forky default (sysext) build has no image that `mkosi.conf.d/trixie.conf`
+adds, such as `sunshine`. Each of its Python helpers runs through
+`run_verdicts`, which fails closed: a helper that stops early (an exception or
+malformed summary JSON), reports a verdict count that differs from its lines,
+gives fewer verdicts than the minimum, or exits nonzero without a failed
+verdict is a recorded failure, and self-checks prove each case.
+`test/forky-known-gaps-test.sh`
 exercises `shared/suite/forky/classify-build.sh` with fixture logs, including
 a known gap beside an unknown apt error, which must fail.
+`test/forky-sysext-names-test.sh` exercises
+`shared/suite/forky/check-sysext-names.sh`, the forky mechanics sysext name
+check, with fixture output directories: a complete set passes (the
+unversioned copy, the `<id>` symlink and the manifests are not checked), and a
+`_12_` file beside `_14_` files, a `_13_` file, a missing expected sysext, a
+sysext the forky configuration does not build, 2 files for 1 sysext and a
+malformed name each fail.
 
 `test/forky-publish-workflow-test.py` holds `forky-publish.yml` to
 [ADR-0038](../adr/0038-publish-signed-forky-test-images.md): dispatch only from
