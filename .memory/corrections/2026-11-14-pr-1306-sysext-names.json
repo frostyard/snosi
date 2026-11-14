@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-14",
+  "scope": ".github/workflows/forky-mechanics.yml forky sysext name check (ADR-0037, PR #1306)",
+  "correction": "The first check required only 1 or more _14_ files and no _13_ file, so a set with a _12_ file, a missing sysext, a sysext the forky configuration does not build, 2 files for 1 sysext or a malformed name passed. shared/suite/forky/check-sysext-names.sh now requires exactly 1 versioned _14_ file for each Format=sysext image of the forky summary and rejects every other versioned file.",
+  "evidence": "Cross-review of PR #1306 at 6e98a5d, finding 1. test/forky-sysext-names-test.sh run against the old step logic: the mixed _12_, missing, unexpected, duplicate and malformed cases pass (exit 0); only the _13_ case fails. Each removed check of the new script fails exactly its own case.",
+  "promoted_to": "shared/suite/forky/check-sysext-names.sh; test/forky-sysext-names-test.sh"
+}

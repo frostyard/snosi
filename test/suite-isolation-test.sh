@@ -246,6 +246,83 @@ check_isolation() {
 # (c) smoke: the forky resolution is the one the build needs.
 # ---------------------------------------------------------------------------
 
+# Run one Python verdict helper (its arguments follow the label and the minimum
+# count; its source comes on stdin) and record every verdict it prints. The
+# helper prints "ok - ..." and "not ok - ..." lines and, as its last line,
+# "# verdicts N" with the number of verdicts it printed. Fail closed: a helper
+# that stops early (an exception, malformed JSON, a missing file) prints no
+# such line, so its exit status alone never decides; a run with no sentinel,
+# a count that differs from the lines that arrived, fewer verdicts than the
+# minimum, or a nonzero exit without a failed verdict is a recorded failure.
+run_verdicts() { # label minimum python-argument...
+    local label=$1 minimum=$2
+    shift 2
+    local out status=0 line count=0 failed=0 sentinel="" ok=1
+    out=$(python3 "$@" 2>&1) || status=$?
+    while IFS= read -r line; do
+        case $line in
+        "ok - "*) pass "${line#ok - }"; count=$((count + 1)) ;;
+        "not ok - "*) fail "${line#not ok - }"; count=$((count + 1)); failed=1 ;;
+        "# verdicts "*) sentinel=${line#"# verdicts "} ;;
+        esac
+    done <<<"$out"
+    if [[ -z $sentinel ]]; then
+        fail "$label: the helper stopped before its last verdict (exit $status): $(tail -n 2 <<<"$out" | paste -sd' ' -)"
+        ok=0
+    elif [[ $sentinel != "$count" ]]; then
+        fail "$label: the helper reports $sentinel verdicts, but $count arrived"
+        ok=0
+    fi
+    if ((count < minimum)); then
+        fail "$label: $count verdicts arrived, at least $minimum are expected"
+        ok=0
+    fi
+    if ((status != 0 && failed == 0)); then
+        fail "$label: the helper exited $status without a failed verdict"
+        ok=0
+    fi
+    ((ok == 1 && failed == 0 && status == 0))
+}
+
+# Negative self-checks of run_verdicts: each helper below must give a recorded
+# failure, and the well-formed one must pass. Each runs in a subshell that
+# exits with its own failure count.
+self_check_verdicts() {
+    local tmp
+    tmp=$(mktemp -d)
+    # shellcheck disable=SC2064
+    trap "rm -rf '$tmp'" RETURN
+    printf '{"Images": [' >"$tmp/malformed.json"
+    verdict_fails() { # description minimum python-argument... (source on stdin)
+        local description=$1
+        shift
+        if (PASS=0 FAIL=0; run_verdicts self "$@" >/dev/null 2>&1; exit "$FAIL"); then
+            fail "self-check: $description was not detected"
+        else
+            pass "self-check: $description is detected"
+        fi
+    }
+    verdict_fails "a helper exception (malformed summary JSON) in the sysext check" 2 \
+        - "$root" "$tmp/malformed.json" <<<"$SYSEXT_VERDICTS_PY"
+    verdict_fails "a helper exception (malformed summary JSON) in the product smoke" 12 \
+        - "$root" "$tmp/malformed.json" floe shared/floe/tree floe-tree \
+        mkosi.conf.d/trixie.conf <<<"$SMOKE_VERDICTS_PY"
+    verdict_fails "a helper that exits 0 before its last verdict" 1 \
+        - <<<'print("ok - one")'
+    verdict_fails "a helper whose verdict count differs from its lines" 1 \
+        - <<<'print("ok - one"); print("# verdicts 2")'
+    verdict_fails "fewer verdicts than the minimum" 3 \
+        - <<<'print("ok - one"); print("# verdicts 1")'
+    verdict_fails "a nonzero exit with only passing verdicts" 1 \
+        - <<<'import sys; print("ok - one"); print("# verdicts 1"); sys.exit(3)'
+    if (PASS=0 FAIL=0; run_verdicts self 2 - \
+        <<<'print("ok - one"); print("ok - two"); print("# verdicts 2")' >/dev/null 2>&1; exit "$FAIL"); then
+        pass "self-check: a complete helper run passes"
+    else
+        fail "self-check: a complete helper run was rejected"
+    fi
+}
+
 # Each forky OCI product, the tree of its own that holds suite-specific files,
 # and the forky copy (shared/suite/forky/<name>) that must come after it.
 smoke_products=(
@@ -256,7 +333,7 @@ smoke_products=(
 )
 
 check_forky_smoke() { # profile product-tree forky-tree
-    local profile=$1 product_tree=$2 forky_tree=$3 tmp json status=0 out
+    local profile=$1 product_tree=$2 forky_tree=$3 tmp json
     tmp=$(mktemp -d)
     # shellcheck disable=SC2064
     trap "rm -rf '$tmp'" RETURN
@@ -267,8 +344,12 @@ check_forky_smoke() { # profile product-tree forky-tree
     fi
     local -a trixie_fragments=()
     mapfile -t trixie_fragments < <(suite_files trixie)
-    out=$(python3 - "$root" "$json" "$profile" "$product_tree" "$forky_tree" \
-        ${trixie_fragments[@]+"${trixie_fragments[@]}"} <<'PY'
+    # 12 verdicts for the 2 images (base, main) of a product build.
+    run_verdicts "forky $profile smoke" 12 - "$root" "$json" "$profile" "$product_tree" "$forky_tree" \
+        ${trixie_fragments[@]+"${trixie_fragments[@]}"} <<<"$SMOKE_VERDICTS_PY"
+}
+
+read -r -d '' SMOKE_VERDICTS_PY <<'PY' || true
 import json
 import re
 import sys
@@ -278,15 +359,19 @@ trixie_fragments = sys.argv[6:]
 images = json.load(open(path, encoding="utf-8"))["Images"]
 suite = f"{root}/shared/suite/forky"
 bad = False
+verdicts = 0
 
 
 def ok(message):
+    global verdicts
+    verdicts += 1
     print(f"ok - {profile}: {message}")
 
 
 def not_ok(message):
-    global bad
+    global bad, verdicts
     bad = True
+    verdicts += 1
     print(f"not ok - {profile}: {message}")
 
 
@@ -434,27 +519,14 @@ if trixie_libgpgme:
 else:
     ok("libgpgme11t64 is absent")
 
+print(f"# verdicts {verdicts}")
 sys.exit(1 if bad else 0)
 PY
-) || status=$?
-    while IFS= read -r line; do
-        case $line in
-        "ok - "*) pass "${line#ok - }" ;;
-        "not ok - "*) fail "${line#not ok - }" ;;
-        esac
-    done <<<"$out"
-    if ((status != 0 && FAIL == 0)); then
-        fail "the forky $profile check exited $status without a verdict"
-    fi
-    ((status == 0))
-}
 
-check_static
-check_isolation || true
 # The sysext set of the default build: an image that only trixie builds must
 # not reach a forky build.
 check_forky_sysexts() {
-    local tmp json out status=0
+    local tmp json
     tmp=$(mktemp -d)
     # shellcheck disable=SC2064
     trap "rm -rf '$tmp'" RETURN
@@ -463,19 +535,37 @@ check_forky_sysexts() {
         fail "the forky default summary failed: $(tail -n 3 "$tmp/err" | paste -sd' ' -)"
         return 1
     fi
-    out=$(python3 - "$root" "$json" <<'PY'
+    run_verdicts "forky default sysext set" 2 - "$root" "$json" <<<"$SYSEXT_VERDICTS_PY"
+}
+
+read -r -d '' SYSEXT_VERDICTS_PY <<'PY' || true
 import json
 import re
 import sys
 
 root, path = sys.argv[1], sys.argv[2]
+bad = False
+verdicts = 0
+
+
+def ok(message):
+    global verdicts
+    verdicts += 1
+    print(f"ok - default: {message}")
+
+
+def not_ok(message):
+    global bad, verdicts
+    bad = True
+    verdicts += 1
+    print(f"not ok - default: {message}")
+
+
 images = json.load(open(path, encoding="utf-8"))["Images"]
 names = {image.get("Image") or "<root>" for image in images}
 trixie_only, inside = set(), False
-try:
-    lines = open(f"{root}/mkosi.conf.d/trixie.conf", encoding="utf-8").read().splitlines()
-except FileNotFoundError:
-    lines = []
+# A missing fragment raises: the helper then stops without its sentinel.
+lines = open(f"{root}/mkosi.conf.d/trixie.conf", encoding="utf-8").read().splitlines()
 for line in lines:
     stripped = line.strip()
     if not stripped or stripped.startswith("#"):
@@ -490,25 +580,24 @@ for line in lines:
         trixie_only.update(match.group(1).split())
 wrong = sorted(image.get("Image") or "<root>" for image in images if image.get("Release") != "forky")
 if wrong:
-    print(f"not ok - default: images without Release=forky: {wrong}")
+    not_ok(f"images without Release=forky: {wrong}")
 else:
-    print(f"ok - default: every one of the {len(images)} images has Release=forky")
+    ok(f"every one of the {len(images)} images has Release=forky")
 leaks = sorted(trixie_only & names)
-if leaks:
-    print(f"not ok - default: trixie-only sysexts reach a forky build: {leaks}")
+if not trixie_only:
+    not_ok("mkosi.conf.d/trixie.conf adds no Dependencies=; the parser is stale")
+elif leaks:
+    not_ok(f"trixie-only sysexts reach a forky build: {leaks}")
 else:
-    print(f"ok - default: no trixie-only sysext is built on forky ({', '.join(sorted(trixie_only)) or 'none listed'})")
-PY
-) || status=$?
-    while IFS= read -r line; do
-        case $line in
-        "ok - "*) pass "${line#ok - }" ;;
-        "not ok - "*) fail "${line#not ok - }" ;;
-        esac
-    done <<<"$out"
-    ((status == 0))
-}
+    ok(f"no trixie-only sysext is built on forky ({', '.join(sorted(trixie_only))})")
 
+print(f"# verdicts {verdicts}")
+sys.exit(1 if bad else 0)
+PY
+
+check_static
+self_check_verdicts
+check_isolation || true
 for entry in "${smoke_products[@]}"; do
     IFS=: read -r smoke_profile smoke_tree smoke_forky <<<"$entry"
     check_forky_smoke "$smoke_profile" "$smoke_tree" "$smoke_forky" || true

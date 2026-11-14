@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-14",
+  "scope": "test/suite-isolation-test.sh Python verdict helpers (ADR-0037, PR #1306)",
+  "correction": "check_forky_sysexts stored a nonzero Python exit in a local status that never reached FAIL, and the caller ignored the return code, so an exception or malformed summary JSON left the test green. Every Python helper now runs through run_verdicts, which records a failure when the helper prints no final verdict count, the count differs from the verdicts that arrived, fewer verdicts than the minimum arrive, or it exits nonzero without a failed verdict.",
+  "evidence": "Cross-review of PR #1306 at 6e98a5d, finding 2. A mkosi wrapper that returns malformed JSON for the forky default summary: the old test exits 0 (75 passed, 0 failed); the new test exits 1 with 3 recorded failures. With the run_verdicts completeness checks removed, all 6 negative self-checks fail.",
+  "promoted_to": "test/suite-isolation-test.sh run_verdicts and self_check_verdicts"
+}

@@ -192,16 +192,20 @@ jobs:
       - name: Check the forky sysexts when the build passed
         # Every sysext built on forky must name VERSION_ID 14 in its file name
         # (shared/sysext/postoutput/sysext-postoutput.sh), so a host matches
-        # only the files of its own suite through %w; no _13_ file may appear.
+        # only the files of its own suite through %w. The expected ids come
+        # from the forky configuration itself (every Format=sysext image of
+        # the default build): each must have exactly 1 versioned _14_ file,
+        # and no other versioned file may appear
+        # (test/forky-sysext-names-test.sh).
         if: steps.build.outcome == 'success' && matrix.profile == 'sysexts'
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          forky=(output/*_*_14_*.raw*)
-          trixie=(output/*_*_13_*.raw*)
-          printf '%s\n' "${forky[@]##*/}" | tee -a "$GITHUB_STEP_SUMMARY"
-          (( ${#forky[@]} > 0 )) || { echo "::error::the forky sysext build made no _14_ sysext" >&2; exit 1; }
-          (( ${#trixie[@]} == 0 )) || { echo "::error::the forky sysext build made _13_ files: ${trixie[*]##*/}" >&2; exit 1; }
+          sudo mkosi --release forky --json summary >"$RUNNER_TEMP/forky-summary.json"
+          jq -r '.Images[] | select(.Format == "sysext") | .ImageId' \
+            "$RUNNER_TEMP/forky-summary.json" >"$RUNNER_TEMP/forky-sysext-ids.txt"
+          mapfile -t ids <"$RUNNER_TEMP/forky-sysext-ids.txt"
+          (( ${#ids[@]} > 0 )) || { echo "::error::the forky configuration names no sysext image" >&2; exit 1; }
+          ./shared/suite/forky/check-sysext-names.sh output "${ids[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: cleanup build output
         if: always()
