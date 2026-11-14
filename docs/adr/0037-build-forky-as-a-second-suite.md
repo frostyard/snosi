@@ -52,6 +52,12 @@ file starts with `[Match]` and holds exactly one match, `Release=trixie` or
 - `shared/suite/forky/floe.conf`, included last by
   `shared/composition/floe/mkosi.conf`, overrides Floe's own backports source
   and pin.
+- `shared/suite/forky/base-tree` and `floe-tree` also carry forky copies of
+  `usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf`. dracut 112 on forky renamed
+  the module `systemd-pcrphase` to `systemd-pcrextend`, and an unknown module
+  name fails the kernel postinst; dracut 106 on trixie knows only the old name.
+  `test/tss-user-initrd-static-test.sh` requires each forky copy to equal its
+  trixie copy with that one name changed.
 - `shared/packages/bootc/` splits the same way. `trixie.conf` holds the trixie
   bootc/libostree pair and `libgpgme11t64`. `forky.conf` holds the forky pair
   (`bootc=1.17.4-frostyard202611132023~deb14`,

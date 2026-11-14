@@ -36,6 +36,8 @@ tpm_confs=(
     "mkosi.images/base/mkosi.extra/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
     "shared/snow/tree/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
     "shared/floe/tree/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
+    "shared/suite/forky/base-tree/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
+    "shared/suite/forky/floe-tree/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf"
 )
 for conf in "${tpm_confs[@]}"; do
     path="$root/$conf"
@@ -44,6 +46,31 @@ for conf in "${tpm_confs[@]}"; do
         grep -Eq 'add_dracutmodules\+=.*\btss-user\b' "$path" \
             || { echo "$conf enables tpm2-tss but not the tss-user module (snosi#723)" >&2; exit 1; }
     fi
+done
+
+# dracut 112 (forky) renamed the module systemd-pcrphase to systemd-pcrextend,
+# after systemd 255 renamed the binary; dracut 106 (trixie) knows only
+# systemd-pcrphase. A module name that dracut does not know fails the kernel
+# postinst ("Module 'systemd-pcrphase' cannot be found", forky mechanics run
+# 43527271965). Each forky copy must equal its trixie copy with that one name
+# changed, and each trixie copy keeps the old name (ADR-0037).
+forky_pairs=(
+    "mkosi.images/base/mkosi.extra:shared/suite/forky/base-tree"
+    "shared/floe/tree:shared/suite/forky/floe-tree"
+)
+rel=usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf
+for pair in "${forky_pairs[@]}"; do
+    trixie="$root/${pair%%:*}/$rel"
+    forky="$root/${pair#*:}/$rel"
+    grep -Eq 'add_dracutmodules\+=.*\bsystemd-pcrphase\b' "$trixie" \
+        || { echo "${pair%%:*}/$rel must name systemd-pcrphase (dracut 106 on trixie)" >&2; exit 1; }
+    if grep -Eq '\bsystemd-pcrphase\b' "$forky"; then
+        echo "${pair#*:}/$rel names systemd-pcrphase, which dracut 112 on forky does not know" >&2
+        exit 1
+    fi
+    expected=$(sed 's/\bsystemd-pcrphase\b/systemd-pcrextend/' "$trixie")
+    [[ $(cat "$forky") == "$expected" ]] \
+        || { echo "${pair#*:}/$rel must equal ${pair%%:*}/$rel with systemd-pcrphase renamed to systemd-pcrextend" >&2; exit 1; }
 done
 
 echo "tss-user initrd static contract OK"
