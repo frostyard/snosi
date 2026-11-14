@@ -1,8 +1,8 @@
 # Forky mechanics build (no publish).
 #
 # The Debian release is a build input (ADR-0037): `mkosi --release forky` builds
-# the same Floe composition on Debian testing, beside the unchanged trixie
-# default. Nothing here publishes, tags or logs in to a registry: the job holds
+# the same compositions (the 4 products and the sysexts) on Debian testing,
+# beside the unchanged trixie default. Nothing here publishes, tags or logs in to a registry: the job holds
 # contents: read and no secret, so a fork PR cannot reach anything that writes.
 #
 # While Debian testing is incomplete the build may stop at a known gap. The
@@ -77,6 +77,12 @@ jobs:
       matrix:
         include:
           - profile: floe
+          - profile: snow
+          - profile: snowfield
+          - profile: sundog
+          # The root configuration: base plus every sysext except himmelblau,
+          # which builds in its own invocation (ADR-0020).
+          - profile: sysexts
     steps:
       - name: Show disk space (before)
         run: sudo df -h
@@ -143,11 +149,17 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          sudo TMPDIR="$TMPDIR" mkosi --release forky --profile ${{ matrix.profile }} \
-            --dependency= \
-            --dependency=base \
-            --image-version "${{ steps.version.outputs.tag }}" \
-            build 2>&1 | tee "$RUNNER_TEMP/build.log"
+          if [[ ${{ matrix.profile }} == sysexts ]]; then
+            sudo TMPDIR="$TMPDIR" mkosi --release forky \
+              --image-version "${{ steps.version.outputs.tag }}" \
+              build 2>&1 | tee "$RUNNER_TEMP/build.log"
+          else
+            sudo TMPDIR="$TMPDIR" mkosi --release forky --profile ${{ matrix.profile }} \
+              --dependency= \
+              --dependency=base \
+              --image-version "${{ steps.version.outputs.tag }}" \
+              build 2>&1 | tee "$RUNNER_TEMP/build.log"
+          fi
 
       - name: Classify against known forky gaps
         env:
@@ -164,7 +176,7 @@ jobs:
         # Only a complete forky tree reaches this step: it must be a forky image
         # with the VERSION_ID the sysext and sysupdate contracts key off, and it
         # must still trust the sysupdate vendor keyring.
-        if: steps.build.outcome == 'success'
+        if: steps.build.outcome == 'success' && matrix.profile != 'sysexts'
         run: |
           set -euo pipefail
           sudo ./test/sysext-signature-verification-test.sh --rootfs "output/${{ matrix.profile }}"
@@ -176,6 +188,20 @@ jobs:
             echo "::error::the forky image does not carry VERSION_ID=\"14\" (shared/suite/forky/version-id.postinst.chroot)" >&2
             exit 1
           }
+
+      - name: Check the forky sysexts when the build passed
+        # Every sysext built on forky must name VERSION_ID 14 in its file name
+        # (shared/sysext/postoutput/sysext-postoutput.sh), so a host matches
+        # only the files of its own suite through %w; no _13_ file may appear.
+        if: steps.build.outcome == 'success' && matrix.profile == 'sysexts'
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          forky=(output/*_*_14_*.raw*)
+          trixie=(output/*_*_13_*.raw*)
+          printf '%s\n' "${forky[@]##*/}" | tee -a "$GITHUB_STEP_SUMMARY"
+          (( ${#forky[@]} > 0 )) || { echo "::error::the forky sysext build made no _14_ sysext" >&2; exit 1; }
+          (( ${#trixie[@]} == 0 )) || { echo "::error::the forky sysext build made _13_ files: ${trixie[*]##*/}" >&2; exit 1; }
 
       - name: cleanup build output
         if: always()
