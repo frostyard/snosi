@@ -286,6 +286,24 @@ else
     fail 'the verify step sets GH_TOKEN and sits right before the main build step'
 fi
 
+# 13b. The forky job (build-forky) downloads the same pinned debs, so it runs
+# the same verify step right before its own build step.
+forky_job=$(awk '/^  build-forky:$/ { f = 1; next } f && /^  [A-Za-z0-9_-]+:$/ { exit } f { print }' "$BUILD_WORKFLOW")
+forky_step=$(awk '
+    /^      - name: Verify attested sysext downloads$/ { in_step = 1; print; next }
+    in_step && /^      - name: / { exit }
+    in_step { print }
+' <<<"$forky_job")
+forky_next=$(awk '/^      - name: Verify attested sysext downloads$/ { f = 1; next } f && /^      - name: / { print; exit }' <<<"$forky_job")
+if grep -Fq "$token_line" <<<"$forky_step" &&
+    grep -Fq 'run: ./shared/download/verify-attestations.sh' <<<"$forky_step" &&
+    [[ "$forky_next" == '      - name: Build forky sysexts' ]] &&
+    grep -Fq 'sudo -E mkosi --release forky build' <<<"$forky_job"; then
+    pass 'build-forky runs the verify step with GH_TOKEN right before its forky build'
+else
+    fail 'build-forky runs the verify step with GH_TOKEN right before its forky build'
+fi
+
 # 14. check-dependencies.yml pins attested releases only after the same script
 # passes on a candidate copy, and fails the job after the PR step.
 deps_workflow="$ROOT_DIR/.github/workflows/check-dependencies.yml"

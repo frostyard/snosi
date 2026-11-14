@@ -255,6 +255,15 @@ if "::error::" not in fail_step:
     bad("final himmelblau check must print a ::error:: annotation")
 if not fail_index > max(publish_indexes):
     bad("final himmelblau check must run after the publish steps")
+
+# The forky job (build-forky, ADR-0037) builds no himmelblau sysext: the
+# scoped source stays trixie-only (a known gap, docs/design/sysexts.md).
+if any(line == "  build-forky:" for line in lines):
+    forky_code = [
+        line for line in job_lines("build-forky") if not line.strip().startswith("#")
+    ]
+    if any("himmelblau" in line for line in forky_code):
+        bad("build-forky must not build or name the himmelblau sysext")
 PY
     then
         return 1
@@ -397,6 +406,14 @@ dir=$(fixture_root workflow)
 sed -i '/^      - name: Fail when the himmelblau sysext did not build$/,$d' \
     "$dir/.github/workflows/build.yml"
 expect_failure "missing final himmelblau fail step" check_build_workflow "$dir"
+
+# A himmelblau build added to the forky job.
+dir=$(fixture_root workflow-forky-himmelblau)
+sed -i 's|^          sudo -E mkosi --release forky build$|&\n          sudo -E mkosi --release forky --dependency=himmelblau build|' \
+    "$dir/.github/workflows/build.yml"
+grep -q -- '--release forky --dependency=himmelblau build' "$dir/.github/workflows/build.yml" ||
+    fail "self-check fixture: the forky himmelblau line was not added"
+expect_failure "a himmelblau build in build-forky" check_build_workflow "$dir"
 
 # The scoped invocation dropped from the Justfile target.
 dir=$(fixture_root justfile)
