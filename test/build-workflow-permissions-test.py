@@ -182,7 +182,7 @@ def check(text: str) -> None:
         if name not in jobs:
             fail(f"workflow has no {name!r} job")
     # Only the 2 ordered jobs may write to R2: a third writer could run beside
-    # them and break the ETag-guarded SHA256SUMS update (repogen#102, #104).
+    # them and lose an update of the shared SHA256SUMS.
     for name, job in jobs.items():
         writes = any("publish-to-r2" in line or "r2-upload-action" in line for line in job)
         if writes and name not in PUBLISHING_JOBS:
@@ -224,7 +224,7 @@ def check(text: str) -> None:
     if job_key(forky, "needs") != ["build"]:
         fail(
             "build-forky must declare 'needs: build': its publish must start "
-            "only after the trixie publish (repogen#102, #104)"
+            "only after the trixie publish"
         )
     # The forky job runs on pull requests too, so its build, output paths and
     # name check are tested before the first publish; only its upload steps
@@ -247,6 +247,12 @@ def check(text: str) -> None:
             f"manifests/ (the names carry no suite); found {destinations}"
         )
     steps = steps_of(forky)
+    # repogen writes each index.html from the local files only, so a forky
+    # publish with HTML indexes would drop the trixie links from the shared
+    # ext/ indexes (cross-review of PR #1308).
+    forky_publish = [l.strip() for l in steps[step_index(steps, "build-forky", PUBLISH)][1]]
+    if "html-index: false" not in forky_publish:
+        fail("build-forky publish step must set 'html-index: false' to keep the trixie indexes")
     collect = step_index(steps, "build-forky", FORKY_COLLECT)
     name_check = step_index(steps, "build-forky", NAME_CHECK)
     check_text = "\n".join(steps[name_check][1])
@@ -352,6 +358,10 @@ def self_tests(text: str) -> int:
         ("the forky publish without skip-published-identities",
          lambda t: in_forky(t, "skip-published-identities: true", "skip-published-identities: false"),
          "skip-published-identities"),
+        ("the forky publish writing HTML indexes",
+         lambda t: in_forky(t, "          html-index: false\n", ""), "html-index: false"),
+        ("the forky publish with html-index true",
+         lambda t: in_forky(t, "html-index: false", "html-index: true"), "html-index: false"),
         ("a floating repogen binary in the forky publish",
          lambda t: in_forky(t, "repogen-version: v0.7.2", "repogen-version: latest"), "repogen-version"),
         ("a forky publish on pull requests",

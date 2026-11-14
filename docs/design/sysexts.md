@@ -530,9 +530,11 @@ The `build` job builds and publishes the trixie (`_13_`) files. The
 (`_14_`) files. Every sysupdate transfer matches `%w` in both Source and
 Target, so a host selects only the files of its own suite.
 
-- **Order:** repogen's `publish-to-r2` rewrites `ext/<name>/SHA256SUMS` and
-  its `.gpg` under an ETag guard, and 2 writers to one directory at the same
-  time fail (frostyard/repogen#102, #104). `build-forky` declares
+- **Order:** repogen's `publish-to-r2` reads `ext/<name>/SHA256SUMS` and its
+  `.gpg`, merges its own files in and uploads the result with a plain sync,
+  so 2 writers to one directory at the same time can lose an update or leave
+  inconsistent metadata. The merge keys on `name:version:OSVersion:arch`, so
+  the `_13_` and `_14_` entries stay side by side. `build-forky` declares
   `needs: build`, so it starts after the trixie publish. The workflow
   concurrency group keeps 2 main runs from overlapping.
 - **Failure:** when the `build` job fails or is cancelled, `build-forky` is
@@ -550,6 +552,11 @@ Target, so a host selects only the files of its own suite.
   other versioned file.
 - **Manifests:** the manifest names carry no suite, so the forky manifests go
   to `manifests/forky/` and the trixie manifests stay in `manifests/`.
+- **HTML indexes:** repogen writes each `index.html` from the local files
+  only, and its metadata sync leaves out every published payload. The forky
+  publish sets `html-index: false`, so it keeps the indexes that the trixie
+  publish wrote; the browser indexes do not list the `_14_` files, which
+  `SHA256SUMS` lists.
 - **Known gaps:** `himmelblau` is trixie-only for now: its scoped source
   (ADR-0020) builds in a separate invocation, and `build-forky` has no such
   step. `sunshine` is trixie-only because upstream publishes no forky deb.

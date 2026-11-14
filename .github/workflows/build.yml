@@ -324,9 +324,10 @@ jobs:
     # version 14 and every sysupdate transfer matches %w, so a trixie host
     # never selects a forky file.
     #
-    # Order: repogen's publish-to-r2 rewrites ext/<name>/SHA256SUMS(.gpg) under
-    # an ETag guard, so 2 writers to one directory at the same time fail
-    # (frostyard/repogen#102, #104). `needs: build` starts this job only after
+    # Order: repogen's publish-to-r2 reads ext/<name>/SHA256SUMS(.gpg), merges
+    # its own files in and uploads the result with a plain sync, so 2 writers
+    # to one directory at the same time can lose an update or leave
+    # inconsistent metadata. `needs: build` starts this job only after
     # the trixie job, its publish steps included, has finished, and the
     # workflow concurrency group above keeps 2 main runs from overlapping.
     #
@@ -457,6 +458,11 @@ jobs:
           packages-dir: ./output/sysexts
           package-type: sysext
           base-url: https://repository.frostyard.org # required for sysext
+          # repogen writes each index.html from the local files only, and the
+          # metadata sync leaves out every published payload: a forky index
+          # would drop the trixie links that the build job just wrote. Keep
+          # the trixie indexes; forky files are reachable through SHA256SUMS.
+          html-index: false
       - name: Upload manifests to R2
         # Forky manifests go to manifests/forky/, never manifests/: the
         # manifest names carry no suite, so a forky upload to manifests/ would

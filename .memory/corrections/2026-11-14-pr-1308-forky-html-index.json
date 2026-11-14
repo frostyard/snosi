@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-14",
+  "scope": ".github/workflows/build.yml build-forky publish step (ADR-0037, PR #1308)",
+  "correction": "The forky publish-to-r2 call kept the action default html-index: true. repogen writes each index.html from the local files only and its metadata sync excludes every published payload, so the forky publish would replace the shared ext/ browser indexes and drop the trixie links that the build job had just written. The forky publish now sets html-index: false.",
+  "evidence": "Cross-review of PR #1308 at d25ed33, finding 1: repogen b5dccc7 .github/actions/publish-to-r2/action.yml (html-index default true; sysext sync excludes *.raw*), internal/cli/generate.go dirindex.Generate, internal/dirindex/dirindex.go (index from os.ReadDir). test/build-workflow-permissions-test.py fails when the line is removed or set to true.",
+  "promoted_to": "test/build-workflow-permissions-test.py; docs/design/sysexts.md"
+}
