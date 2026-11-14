@@ -3,9 +3,12 @@
 **Status:** In progress
 **Last verified:** 2026-11-13
 **Progress:** Phases 0 through 4 are complete. In Phase 5 the policy change
-and its lab compatibility change are open as PRs (2026-11-13). The
-retirement release and the operator steps on the two migrated hosts are
-not done.
+and its lab compatibility change merged on 2026-11-13, and the retirement
+release R is published (see Phase 5). The two migrated hosts are out of
+service, so their Phase 5 steps are dropped. The GHCR `cayo` description,
+the `AGENTS.md` scope count
+([#1298](https://github.com/frostyard/snosi/issues/1298)) and the removal
+of lab's retired-scope allowance are not done.
 
 <!--
 Plans are updated as work lands: check off what shipped, renumber what moved.
@@ -538,8 +541,8 @@ because they are absent from this snapshot.
 - [x] snosi PR: remove the `ghcr.io/frostyard/cayo` scope from
       `policy.json` and remove cayo from the policy test's `SECURE_IMAGES`
       array (floe/snow/snowfield remain). Done 2026-11-13 in
-      [#1299](https://github.com/frostyard/snosi/pull/1299), not
-      merged yet. Since ADR-0025 the scope lives in 2 files with equal
+      [#1299](https://github.com/frostyard/snosi/pull/1299). Since ADR-0025
+      the scope lives in 2 files with equal
       `transports.docker` blocks: the strict update policy
       `shared/bootc-secure/tree/usr/lib/snosi/containers/bootc-policy.json`
       (`default: reject`) and the system policy
@@ -550,26 +553,59 @@ because they are absent from this snapshot.
       every cayo image. A manual pull of `ghcr.io/frostyard/cayo` by a caller
       that reads the system policy is no longer signature-checked, like any
       repository outside the Frostyard scopes (ADR-0025, Consequences).
-- [ ] Merge the lab compatibility change first:
-      [lab #234](https://github.com/frostyard/lab/pull/234). Before it, the
+- [x] Merge the lab compatibility change first:
+      [lab #234](https://github.com/frostyard/lab/pull/234) (merged
+      2026-11-13, before #1299). Before it, the
       bootc lifecycle lane required the update policy's scopes to equal a
       fixed set that included cayo, so an image without the cayo scope
       failed `policy`. lab #234 requires the 4 product scopes and allows
       only cayo as an extra, so images on both sides of this change pass.
-- [ ] Merge [#1299](https://github.com/frostyard/snosi/pull/1299) (after lab
+- [x] Merge [#1299](https://github.com/frostyard/snosi/pull/1299) (after lab
       #234) and let the protected `secure-build` publish the signed
-      **retirement release** (call it R) before changing either host's
-      persistent `/etc`. Record R's 14-digit image version and immutable
-      digest from the successful run; verify `floe:latest` resolves to that
-      digest. A merged source change or a published artifact alone is not
-      enough — the running deployment supplies `snosi-etc-diff`'s pristine
-      policy source.
+      **retirement release** (call it R). Record R's 14-digit image version
+      and immutable digest from the successful run; verify `floe:latest`
+      resolves to that digest.
+      Published 2026-11-13. The `Build Image Variants` run of bdd3024
+      ([43520266749](https://github.com/frostyard/snosi/actions/runs/43520266749))
+      published floe and sundog; the merge of
+      [#1292](https://github.com/frostyard/snosi/pull/1292) cancelled its
+      snow and snowfield legs and its release job. The run of 797038c8,
+      which contains bdd3024
+      ([43525385507](https://github.com/frostyard/snosi/actions/runs/43525385507)),
+      passed all four `secure-build` legs and the release job (GitHub
+      release `2026-11-13.5`). R, the first image of each product without
+      the cayo scope:
+
+      | Product | R version | R digest | Run |
+      | --- | --- | --- | --- |
+      | floe | `20261113223657` | `sha256:443e49f9b18d1ee5fd687c0757062529e61395035c3df2fcea344c52231591c0` | 43520266749 |
+      | sundog | `20261113223651` | `sha256:05f5aa0e509a36049a1b4446cbdd5c4e518333bac68d855f271ab243abfad020` | 43520266749 |
+      | snow | `20261113231606` | `sha256:fdf5a17c6b1e9e4c49c4c553e13eeae6a1f37ea2d118c3ad155ed69b8371befa` | 43525385507 |
+      | snowfield | `20261113232318` | `sha256:8513d9502982209b494edbff848555de5f322562d3acf0259ba908e2c6127d99` | 43525385507 |
+
+      `floe:latest` resolved to the floe R digest after run 43520266749.
+      Run 43525385507 then promoted floe `20261113232607`
+      (`sha256:9f914554a0c56b1bd2a6a6d121a607ff7371f93b15dcf1e9054ac6868b34c1a6`)
+      and sundog `20261113231449`
+      (`sha256:df7b09045eb89544278a09579ec38034ebc4fa0d195792f0394c29e0d8b9792e`)
+      to `latest`; both are later than R. On 2026-11-13, after both runs,
+      each `latest` tag resolved to the digest that its last run promoted.
 - [ ] Later follow-up, after R is published and every image that lab tests
       is R or later (no cayo scope): remove lab's retired-scope allowance
       (`RETIRED_SCOPE` in
-      `argo/workflow-templates/snow-bootc-lifecycle-scripts.yaml`).
-- [ ] Stage and boot R on **both** migrated hosts through the normal floe
-      update path. On each host require `outcome=staged`,
+      `argo/workflow-templates/snow-bootc-lifecycle-scripts.yaml`). The
+      lifecycle lane checks the guest policy on both image N and image N+1
+      of its manifest, so the allowance stays in use while a lane manifest
+      can name a pre-R image as N. On 2026-11-13 snow and snowfield have no
+      release after R, so their image before `latest` still has the cayo
+      scope. Remove the allowance only when each product has a release after
+      R and no lane manifest names a pre-R image.
+- [ ] **Dropped 2026-11-13:** both migrated hosts (minisnow and
+      `bgs-trashcan`) are out of service, so no host is left to stage R or
+      to reconcile. This step and the next stay as the procedure for a host
+      that still runs a pre-R image. Stage and boot R on **both** migrated
+      hosts through the normal floe update path. On each host require
+      `outcome=staged`,
       `remote_version=<R>`, and R's host-local containers-storage digest in
       `/run/snosi/update-staged`; capture the digest before reboot. After
       reboot, require `snosi-update-status` to report running version R and
@@ -577,7 +613,8 @@ because they are absent from this snapshot.
       `snosi-etc-diff --restore` before these checks: floe N+1's pristine
       image policy still contains the cayo scope and would copy that scope
       back into the persistent overlay.
-- [ ] Only after both hosts are verified booted on R, reconcile the Phase 1
+- [ ] **Dropped 2026-11-13** (hosts out of service). Only after both hosts
+      are verified booted on R, reconcile the Phase 1
       escape hatch on **both** migrated hosts. First run
       `snosi-etc-diff /etc/containers/policy.json`; if the operator installed
       the manual whole-file override, restore the current image copy with
@@ -601,13 +638,17 @@ because they are absent from this snapshot.
       issue with links to the ADR. No tracking issue exists in snosi (search
       of 2026-11-13); only the user-memory note remains.
 - [ ] `AGENTS.md` still says that the system policy keeps "the five"
-      Frostyard scopes. Correct it to four after this PR merges:
+      Frostyard scopes. Correct it to four now that #1299 merged:
       [#1298](https://github.com/frostyard/snosi/issues/1298).
-- [ ] **Done when:** a fresh floe install and both migrated hosts' effective
-      policies no longer trust the cayo repository, the two migrated hosts
-      are verified booted on retirement release R with no policy-file drift,
-      and both operators have confirmed a full update cycle on floe with cayo
-      nowhere in `bootc status`.
+- [ ] **Done when:** the retirement release R is published from the merge
+      of #1299, the GHCR `cayo` package description says it is frozen and
+      renamed to floe, `AGENTS.md` counts the Frostyard scopes correctly
+      ([#1298](https://github.com/frostyard/snosi/issues/1298)), and lab's
+      `RETIRED_SCOPE` allowance is removed. The R2 marker (optional) and the
+      user-memory note are not part of this condition. The two migrated hosts
+      are out of service and are not part of it either (dropped 2026-11-13;
+      the earlier condition also required both hosts booted on R with no
+      policy-file drift and a full floe update cycle on each).
 
 ## Open questions
 
