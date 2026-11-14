@@ -129,7 +129,7 @@ mkosi cannot remove a list item, so suite-specific packages and trees live in
 files whose only `[Match]` is `Release=trixie` or `Release=forky`
 (`mkosi.conf.d/`, `mkosi.images/base/mkosi.conf.d/`,
 `shared/kernel/{backports,surface}/{trixie,forky}.conf`,
-`shared/packages/{bootc,snow}/{trixie,forky}.conf`, `shared/suite/forky/`); a
+`shared/packages/{bootc,snow,sundog}/{trixie,forky}.conf`, `shared/suite/forky/`); a
 shared file holds only suite-neutral content.
 `test/suite-isolation-test.sh` requires every trixie summary to stay the same
 with the forky fragments cut out. `shared/suite/forky/version-id.postinst.chroot`
