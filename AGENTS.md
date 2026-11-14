@@ -25,8 +25,10 @@ Node comes from `mise install`. `just` lists targets; `just sysexts`,
 `just test-install` and `just run-qemu` cover local builds and bootc tests.
 The Justfile bootstraps mkosi at the commit pinned in
 `.github/workflows/build.yml`. The retained
-`shared/native-ab/ci/bootstrap-mkosi.sh` and `check-mkosi-pin.sh` enforce
-the same pin for the installer ISO; their directory name is historical.
+`shared/native-ab/ci/bootstrap-mkosi.sh` bootstraps the installer ISO's
+mkosi at that pin, and `check-mkosi-pin.sh` fails when any workflow names a
+`systemd/mkosi@` ref other than that pin (`test/check-mkosi-pin-test.sh`);
+their directory name is historical.
 
 The root `mkosi.conf` builds base plus sysexts. Each profile resets the
 inherited `Dependencies=` list before adding `base`, then includes bootc

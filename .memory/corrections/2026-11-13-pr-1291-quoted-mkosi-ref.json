@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-13",
+  "scope": "shared/native-ab/ci/check-mkosi-pin.sh workflow pin check (#1285, PR #1291)",
+  "correction": "The first every-workflow ref pattern ended the systemd/mkosi@ ref only at whitespace, a double quote or #, so a single-quoted uses: value kept its closing quote and a matching pin was reported as divergent. The ref now ends at either quote, and fixtures cover matching single- and double-quoted pins and a divergent single-quoted pin.",
+  "evidence": "Cross-review of PR #1291 at de50e10, finding 1 (blocking). Fixed in 121d88f: test/check-mkosi-pin-test.sh cases 9f and 9g fail with the guard at de50e10 (17 passed, 2 failed) and pass at 121d88f (19 passed).",
+  "promoted_to": "test/check-mkosi-pin-test.sh"
+}
