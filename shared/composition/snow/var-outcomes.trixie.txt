@@ -1,0 +1,10 @@
+# Trixie-only /var paths of Snow and Snowfield (ADR-0037). var-audit.finalize reads this
+# map after var-outcomes.txt when RELEASE=trixie. Forky ships none of these
+# paths: its Python is 3.14, and it ships no log/README and no wtmp, btmp or
+# lastlog files (login history lives in lib/wtmpdb/wtmp.db, in the product map).
+lib/python/python3.13_installed	discard
+log/README	tmpfiles
+# Login history: machine state, the plan's canonical discard example.
+log/btmp	discard
+log/lastlog	discard
+log/wtmp	discard

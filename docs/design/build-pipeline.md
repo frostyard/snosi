@@ -209,8 +209,10 @@ trixie contract except the three bootc version fields.
 `shared/composition/var-audit.finalize` reads the suite map
 `shared/composition/<product>/var-outcomes.$RELEASE.txt` after the product
 map when it exists; a path that only one suite ships goes there, and
-`test/var-audit-suite-map-test.sh` covers it. No product has a forky
-suite map yet: one is added when a forky build shows a gap.
+`test/var-audit-suite-map-test.sh` covers it. The floe, snow (also read by
+Snowfield) and sundog maps each have a trixie and a forky suite map: trixie
+ships `lib/python/python3.13_installed`, `log/README` and the `wtmp`, `btmp`
+and `lastlog` files; forky ships `lib/python/python3.14_installed`.
 
 A sysext package list names the real package where a trixie name is a virtual
 package: `libasound2t64` and `libcurl3t64-gnutls` (1password, edge). On
