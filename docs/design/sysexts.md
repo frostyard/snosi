@@ -688,13 +688,24 @@ presets the units later ADDED to
 transaction, so the timer runs from the second boot of the first image that
 carries the preset.
 
+`frostyard-updex` 2.3.1 also ships `updex-suite-switch.service`
+(`Type=oneshot`, `ExecStart=/usr/bin/updex features update --suite-switch`,
+`Before=updex-update.service`, `WantedBy=multi-user.target`) with no preset.
+`05-updex.preset` enables it too. After a `bootc switch` between Debian suites
+(trixie `VERSION_ID` 13, forky 14), it links the running suite's sysext images
+at boot, before `updex-update.service` runs. See
+[updex ADR-0021](https://github.com/frostyard/updex/blob/main/docs/adr/0021-link-the-running-suites-images-at-boot-after-a-suite-switch.md).
+
 `shared/outformat/image/finalize/updex-timer.finalize` is the build guard. It
 fails the image build when a preset enables `updex-update.timer` and either
 unit is missing, or when `/usr/share/snosi/enablement-manifest.txt` lacks the
 line `system timers.target.wants/updex-update.timer` (without it no existing
-host would get the timer). `test/updex-timer-guard-test.sh` fixtures the
-guard and its wiring; `test/bootc-secure-static-test.sh` pins the preset line
-and the absence of a mask.
+host would get the timer). It also fails the build when a preset enables
+`updex-suite-switch.service` and that unit is missing, or when the manifest
+lacks the line `system multi-user.target.wants/updex-suite-switch.service`.
+`test/updex-timer-guard-test.sh` fixtures the guard and its wiring, and checks
+both preset lines; `test/bootc-secure-static-test.sh` pins the timer preset
+line and the absence of a mask.
 
 **Opt-out.** `systemctl mask updex-update.timer` is the durable per-host
 opt-out: a mask survives image updates, and `preset-reconcile` skips masked

@@ -239,7 +239,11 @@ It stages sysext revisions with updex, and a staged revision applies at the
 next boot. `shared/outformat/image/finalize/updex-timer.finalize` fails the
 image build when a preset enables that timer and the unit or its
 enablement-manifest entry is missing; the host opt-out is
-`systemctl mask updex-update.timer`. A sysext revision that needs a base
+`systemctl mask updex-update.timer`. The same preset enables
+`updex-suite-switch.service` (relinks the running suite's sysexts after a
+suite switch, updex ADR-0021), and the same guard checks its unit and the
+manifest line `system multi-user.target.wants/updex-suite-switch.service`.
+A sysext revision that needs a base
 change must set `UPDEX_MIN_IMAGE_VERSION`; see
 [docs/design/sysexts.md](docs/design/sysexts.md#automatic-sysext-updates-updex-update-timer).
 
