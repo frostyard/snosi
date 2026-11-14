@@ -64,8 +64,8 @@ base `nbc-update-download` units; installed-image tier 2 checks the package
 and binary are absent. `test/check-no-nbc-package-test.sh` fixtures the
 dpkg-status gate that blocks OCI publication when `frostyard-nbc` is installed.
 `test/updex-timer-guard-test.sh` fixtures the `updex-timer.finalize` build
-guard (updex's update timer must ship and be in the enablement manifest), its
-composition wiring and the base preset line.
+guard (updex's update timer and `updex-suite-switch.service` must ship and be
+in the enablement manifest), its composition wiring and the base preset lines.
 `test/snosi-health-timer-guard-test.sh` does the same for
 `snosi-health-timer.finalize` (the timer, the service, `/usr/bin/snosi-health`
 and the manifest entry). `test/snosi-health-test.sh` drives the collector

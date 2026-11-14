@@ -137,8 +137,9 @@ Image builds have four phases, in order:
    [core Flatpak set](../integration-contracts.md#core-flatpak-sets) under
    `/usr/share/frostyard/`.
    `shared/outformat/image/finalize/updex-timer.finalize` fails the build
-   when a preset enables `updex-update.timer` and the unit or its
-   enablement-manifest entry is missing (see
+   when a preset enables `updex-update.timer` or
+   `updex-suite-switch.service` and the unit or its enablement-manifest
+   entry is missing (see
    [sysexts](sysexts.md#automatic-sysext-updates-updex-update-timer)).
    `shared/outformat/image/finalize/snosi-health-timer.finalize` does the
    same for `snosi-health.timer`, its service and `/usr/bin/snosi-health`,

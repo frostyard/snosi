@@ -1,16 +1,20 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
-# Build guard: a preset that enables updex-update.timer must be consistent with
-# the image it is packed into.
+# Build guard: a preset that enables updex-update.timer or
+# updex-suite-switch.service must be consistent with the image it is packed
+# into.
 #
 # The base image installs frostyard-updex (`mkosi.images/base/mkosi.conf`),
-# whose package ships /usr/lib/systemd/system/updex-update.timer and
-# updex-update.service NOT enabled. `05-updex.preset` (base) is what turns the
-# timer on: automatic sysext updates, staged by updex and applied at the next
-# boot (updex ADR-0016). A preset line with no unit behind it would leave every
-# install without sysext updates, silently, and a preset line with no
-# enablement-manifest entry would leave an EXISTING host without the timer:
+# whose package ships /usr/lib/systemd/system/updex-update.timer,
+# updex-update.service and (2.3.1 and later) updex-suite-switch.service NOT
+# enabled. `05-updex.preset` (base) is what turns them on: the timer gives
+# automatic sysext updates, staged by updex and applied at the next boot
+# (updex ADR-0016); the service links the running suite's sysext images at
+# boot after a `bootc switch` between Debian suites, before
+# updex-update.service runs (updex ADR-0021). A preset line with no unit behind
+# it would leave every install without that unit, silently, and a preset line
+# with no enablement-manifest entry would leave an EXISTING host without it:
 # preset-reconcile only presets the units ADDED to
 # /usr/share/snosi/enablement-manifest.txt.
 #
@@ -24,6 +28,12 @@
 #     usr/lib/systemd/system/updex-update.service is not a regular file, or
 #   - the manifest is missing or lacks the exact line
 #     "system timers.target.wants/updex-update.timer".
+# It also fails the build when any such preset enables
+# updex-suite-switch.service AND
+#   - usr/lib/systemd/system/updex-suite-switch.service is not a regular
+#     file, or
+#   - the manifest is missing or lacks the exact line
+#     "system multi-user.target.wants/updex-suite-switch.service".
 #
 # The guard fails closed: an unreadable preset directory, a find(1) error or a
 # grep(1) read error fails the build instead of reporting the image clean.
@@ -38,6 +48,9 @@ SERVICE_UNIT="$BUILDROOT/usr/lib/systemd/system/updex-update.service"
 MANIFEST="$BUILDROOT/usr/share/snosi/enablement-manifest.txt"
 MANIFEST_LINE="system timers.target.wants/updex-update.timer"
 PRESET_LINE='^[[:space:]]*enable[[:space:]]+updex-update\.timer([[:space:]]|$)'
+SWITCH_UNIT="$BUILDROOT/usr/lib/systemd/system/updex-suite-switch.service"
+SWITCH_MANIFEST_LINE="system multi-user.target.wants/updex-suite-switch.service"
+SWITCH_PRESET_LINE='^[[:space:]]*enable[[:space:]]+updex-suite-switch\.service([[:space:]]|$)'
 
 die() {
     echo "updex-timer.finalize: $*" >&2
@@ -54,7 +67,7 @@ if [[ ! -r "$USR_PRESET_DIR" ]]; then
     die "$USR_PRESET_DIR is unreadable (preset policy cannot be checked)"
 fi
 
-# --- 2. which presets enable the timer? -------------------------------------
+# --- 2. list the presets ----------------------------------------------------
 list=$(mktemp)
 trap 'rm -f "$list"' EXIT
 
@@ -64,44 +77,72 @@ if ! find "${preset_dirs[@]}" -maxdepth 1 -type f -name '*.preset' -print >"$lis
     die "cannot list the *.preset files under ${preset_dirs[*]}"
 fi
 
-enabled_by=""
-status=0
-while IFS= read -r preset; do
-    if grep -qE "$PRESET_LINE" "$preset"; then
-        enabled_by="$preset"
-        break
+# find_enabler REGEX: print the first preset whose line matches REGEX, or
+# nothing. grep exits 1 for "no match" (clean) and 2 for a read error (fatal).
+find_enabler() {
+    local preset status
+    while IFS= read -r preset; do
+        if grep -qE "$1" "$preset"; then
+            printf '%s\n' "$preset"
+            return 0
+        else
+            status=$?
+            if [[ $status -ne 1 ]]; then
+                die "cannot read $preset (grep exit $status)"
+            fi
+        fi
+    done <"$list"
+}
+
+# require_manifest_line ENABLER UNIT LINE: the manifest must exist and hold
+# LINE exactly, or an existing host never gets UNIT.
+require_manifest_line() {
+    local status
+    [[ -f "$MANIFEST" ]] || die "$1 enables $2 but ${MANIFEST#"$BUILDROOT"} is missing (preset-reconcile would never enable it on an existing host)"
+    if grep -Fqx "$3" "$MANIFEST"; then
+        :
     else
         status=$?
-        # grep exits 1 for "no match" (clean) and 2 for a read error (fatal).
         if [[ $status -ne 1 ]]; then
-            die "cannot read $preset (grep exit $status)"
+            die "cannot read ${MANIFEST#"$BUILDROOT"} (grep exit $status)"
         fi
+        die "${MANIFEST#"$BUILDROOT"} lacks the entry \"$3\" (preset-reconcile would never enable $2 on an existing host)"
     fi
-done <"$list"
+}
+
+# --- 3. updex-update.timer --------------------------------------------------
+# find_enabler runs in a subshell; its die() exit status reaches the
+# assignment, and set -e stops the build.
+enabled_by=$(find_enabler "$PRESET_LINE")
 
 if [[ -z "$enabled_by" ]]; then
     echo "updex-timer.finalize: no preset enables updex-update.timer; nothing to check"
+else
+    echo "updex-timer.finalize: $(basename "$enabled_by") enables updex-update.timer"
+
+    # both units must ship
+    for unit in "$TIMER_UNIT" "$SERVICE_UNIT"; do
+        [[ -f "$unit" ]] || die "$enabled_by enables updex-update.timer but ${unit#"$BUILDROOT"} is missing or not a regular file"
+    done
+
+    # an existing host needs the manifest entry to get the timer
+    require_manifest_line "$enabled_by" updex-update.timer "$MANIFEST_LINE"
+
+    echo "updex-timer.finalize: updex-update.timer ships, is preset-enabled and is recorded in the enablement manifest"
+fi
+
+# --- 4. updex-suite-switch.service ------------------------------------------
+switch_by=$(find_enabler "$SWITCH_PRESET_LINE")
+
+if [[ -z "$switch_by" ]]; then
+    echo "updex-timer.finalize: no preset enables updex-suite-switch.service; nothing to check"
     exit 0
 fi
 
-echo "updex-timer.finalize: $(basename "$enabled_by") enables updex-update.timer"
+echo "updex-timer.finalize: $(basename "$switch_by") enables updex-suite-switch.service"
 
-# --- 3. both units must ship ------------------------------------------------
-for unit in "$TIMER_UNIT" "$SERVICE_UNIT"; do
-    [[ -f "$unit" ]] || die "$enabled_by enables updex-update.timer but ${unit#"$BUILDROOT"} is missing or not a regular file"
-done
+[[ -f "$SWITCH_UNIT" ]] || die "$switch_by enables updex-suite-switch.service but ${SWITCH_UNIT#"$BUILDROOT"} is missing or not a regular file"
 
-# --- 4. an existing host needs the manifest entry to get the timer ----------
-[[ -f "$MANIFEST" ]] || die "$enabled_by enables updex-update.timer but ${MANIFEST#"$BUILDROOT"} is missing (preset-reconcile would never enable it on an existing host)"
+require_manifest_line "$switch_by" updex-suite-switch.service "$SWITCH_MANIFEST_LINE"
 
-if grep -Fqx "$MANIFEST_LINE" "$MANIFEST"; then
-    :
-else
-    status=$?
-    if [[ $status -ne 1 ]]; then
-        die "cannot read ${MANIFEST#"$BUILDROOT"} (grep exit $status)"
-    fi
-    die "${MANIFEST#"$BUILDROOT"} lacks the entry \"$MANIFEST_LINE\" (preset-reconcile would never enable updex-update.timer on an existing host)"
-fi
-
-echo "updex-timer.finalize: updex-update.timer ships, is preset-enabled and is recorded in the enablement manifest"
+echo "updex-timer.finalize: updex-suite-switch.service ships, is preset-enabled and is recorded in the enablement manifest"

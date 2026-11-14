@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Fixtures for shared/outformat/image/finalize/updex-timer.finalize plus
 # wiring checks: every OCI composition that runs the image finalize also runs
-# this guard after it, and the base preset enables updex-update.timer.
+# this guard after it, and the base preset enables updex-update.timer and
+# updex-suite-switch.service.
 # No root needed.
 set -euo pipefail
 
@@ -28,9 +29,18 @@ reset_root() {
         "$(dirname "$BUILDROOT/$MANIFEST_PATH")"
 }
 
-add_preset() { # [line]
-    printf 'enable something-else.timer\n%s\n' "${1:-}" >"$BUILDROOT/$PRESET_DIR/05-updex.preset"
+add_preset() { # [line...]
+    {
+        printf 'enable something-else.timer\n'
+        printf '%s\n' "${@:-}"
+    } >"$BUILDROOT/$PRESET_DIR/05-updex.preset"
 }
+
+add_switch_unit() {
+    printf '[Unit]\nDescription=fixture suite switch\n' >"$BUILDROOT/$UNIT_DIR/updex-suite-switch.service"
+}
+
+SWITCH_ENTRY='system multi-user.target.wants/updex-suite-switch.service'
 
 add_units() {
     printf '[Unit]\nDescription=fixture timer\n' >"$BUILDROOT/$UNIT_DIR/updex-update.timer"
@@ -131,6 +141,68 @@ add_units
 add_manifest
 expect_pass "an /etc preset that enables the timer is honored"
 
+# --- updex-suite-switch.service fixtures -----------------------------------
+
+reset_root
+add_preset 'enable updex-update.timer' 'enable updex-suite-switch.service'
+add_units
+add_switch_unit
+add_manifest "$(printf '%s\n%s' "$SWITCH_ENTRY" 'system timers.target.wants/updex-update.timer')"
+expect_pass "timer and suite-switch presets, units and manifest entries pass"
+
+reset_root
+add_preset 'enable updex-suite-switch.service'
+add_switch_unit
+add_manifest "$SWITCH_ENTRY"
+expect_pass "suite-switch preset alone with its unit and manifest entry passes"
+
+reset_root
+add_preset 'enable updex-update.timer' 'enable updex-suite-switch.service'
+add_units
+add_manifest "$(printf '%s\n%s' "$SWITCH_ENTRY" 'system timers.target.wants/updex-update.timer')"
+expect_reject "missing suite-switch unit is rejected" "updex-suite-switch.service is missing"
+
+reset_root
+add_preset 'enable updex-update.timer' 'enable updex-suite-switch.service'
+add_units
+add_switch_unit
+rm -f "$BUILDROOT/$UNIT_DIR/updex-suite-switch.service"
+mkdir "$BUILDROOT/$UNIT_DIR/updex-suite-switch.service"
+add_manifest "$(printf '%s\n%s' "$SWITCH_ENTRY" 'system timers.target.wants/updex-update.timer')"
+expect_reject "a suite-switch unit that is not a regular file is rejected" "not a regular file"
+
+reset_root
+add_preset 'enable updex-update.timer' 'enable updex-suite-switch.service'
+add_units
+add_switch_unit
+add_manifest
+expect_reject "manifest without the suite-switch entry is rejected" \
+    "lacks the entry \"$SWITCH_ENTRY\""
+
+reset_root
+add_preset 'enable updex-suite-switch.service'
+add_switch_unit
+rm -f "$BUILDROOT/$MANIFEST_PATH"
+expect_reject "suite-switch preset with no enablement manifest is rejected" \
+    "enables updex-suite-switch.service but /$MANIFEST_PATH is missing"
+
+reset_root
+add_preset 'enable updex-update.timer'
+add_units
+add_manifest
+run
+if [[ $RUN_STATUS -eq 0 && "$RUN_OUTPUT" == *"no preset enables updex-suite-switch.service; nothing to check"* ]]; then
+    pass "no preset line for the suite-switch service skips its checks"
+else
+    fail "no preset line for the suite-switch service must skip its checks (exit $RUN_STATUS): $RUN_OUTPUT"
+fi
+
+reset_root
+add_preset 'enable updex-update.timer' '# enable updex-suite-switch.service'
+add_units
+add_manifest
+expect_pass "a commented-out suite-switch preset line passes without its unit"
+
 # Fail closed: grep's error status (2) must fail, not pass.
 SHIM_DIR="$WORK_DIR/shims"
 mkdir -p "$SHIM_DIR"
@@ -151,6 +223,32 @@ else
     fi
 fi
 
+# Fail closed on the suite-switch path too: a grep error on its pattern or
+# manifest line must fail, while the timer greps still succeed.
+SWITCH_SHIM_DIR="$WORK_DIR/switch-shims"
+mkdir -p "$SWITCH_SHIM_DIR"
+REAL_GREP=$(command -v grep)
+cat >"$SWITCH_SHIM_DIR/grep" <<SHIM
+#!/bin/bash
+for arg in "\$@"; do
+    case "\$arg" in *suite-switch*) echo "grep: simulated failure" >&2; exit 2 ;; esac
+done
+exec "$REAL_GREP" "\$@"
+SHIM
+chmod +x "$SWITCH_SHIM_DIR/grep"
+reset_root
+add_preset 'enable updex-update.timer' 'enable updex-suite-switch.service'
+add_units
+add_switch_unit
+add_manifest "$(printf '%s\n%s' "$SWITCH_ENTRY" 'system timers.target.wants/updex-update.timer')"
+if RUN_OUTPUT=$(PATH="$SWITCH_SHIM_DIR:$PATH" BUILDROOT="$BUILDROOT" "$GUARD" 2>&1); then
+    fail "a failing grep on the suite-switch path must fail the guard (exit 0): $RUN_OUTPUT"
+elif [[ "$RUN_OUTPUT" == *"cannot read"* && "$RUN_OUTPUT" == *"updex-update.timer ships"* ]]; then
+    pass "a failing grep on the suite-switch path fails the guard"
+else
+    fail "a failing grep on the suite-switch path must report a read error after the timer checks: $RUN_OUTPUT"
+fi
+
 if RUN_OUTPUT=$(env -u BUILDROOT "$GUARD" 2>&1); then
     fail "missing BUILDROOT must fail closed"
 else
@@ -163,6 +261,12 @@ if grep -Fqx 'enable updex-update.timer' "$PRESET"; then
     pass "05-updex.preset enables updex-update.timer"
 else
     fail "$PRESET must contain the exact line 'enable updex-update.timer'"
+fi
+
+if grep -Fqx 'enable updex-suite-switch.service' "$PRESET"; then
+    pass "05-updex.preset enables updex-suite-switch.service"
+else
+    fail "$PRESET must contain the exact line 'enable updex-suite-switch.service'"
 fi
 
 compositions=0
