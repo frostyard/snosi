@@ -652,3 +652,6 @@ jobs:
 
       - name: Validate the forky known-gap classifier
         run: ./test/forky-known-gaps-test.sh
+
+      - name: Validate the /var audit suite maps
+        run: ./test/var-audit-suite-map-test.sh

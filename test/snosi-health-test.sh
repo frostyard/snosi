@@ -134,7 +134,7 @@ check "06-snosi-health.preset enables the timer" unit_has "$PRESET" 'enable snos
 check "no preset enables the service directly" \
     bash -c "! grep -rqE '^[[:space:]]*enable[[:space:]]+snosi-health\.service' '$ROOT_DIR/mkosi.images/base/mkosi.extra/usr/lib/systemd/system-preset'"
 check "no var-outcomes map names /var/lib/snosi-health (StateDirectory= creates it)" \
-    bash -c "! grep -q 'snosi-health' '$ROOT_DIR'/shared/composition/*/var-outcomes.txt"
+    bash -c "! grep -q 'snosi-health' '$ROOT_DIR'/shared/composition/*/var-outcomes*.txt"
 check "collector is executable" test -x "$COLLECTOR"
 check "a commit publishes problems, details, state, then the cursor" \
     grep -qxF 'readonly PUBLISHED=(problems.json details.json state.json journal.cursor)' "$COLLECTOR"

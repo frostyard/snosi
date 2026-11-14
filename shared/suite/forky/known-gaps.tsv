@@ -11,6 +11,3 @@
 # workflow fails while any row is still listed and the forky build passes.
 # Every apt error line ("E: ...") of a failed build must contain the fixed
 # string of one row.
-G1	for 'bootc' was not found	https://github.com/frostyard/snosi/issues/1300
-G1b	Unable to locate package libgpgme11t64	https://github.com/frostyard/snosi/issues/1300
-G1c	for 'libostree-1-1' was not found	https://github.com/frostyard/snosi/issues/1300

@@ -88,9 +88,9 @@ Image builds have four phases, in order:
    10-second delay on any curl error, including a connection reset, and it
    never retries a checksum mismatch. Frostyard's `bootc` and
    `libostree-1-1` arrive as debs from the configured APT source, not an
-   in-tree source build, and `shared/packages/bootc/mkosi.conf` pins that pair
-   to one exact Frostyard build: they are revalidated together, because secure
-   assembly depends on both
+   in-tree source build. Each suite pins that pair to one exact Frostyard
+   build in `shared/packages/bootc/{trixie,forky}.conf` (ADR-0037). They are
+   revalidated together, because secure assembly depends on both
    ([compatibility contract](../bootc-secure-assembly-compatibility.md)).
 2. **PostInstallationScripts:** kernel dracut postinstall, shared
    `shared/scripts/common-postinst.sh`, and the product's setup prepare
@@ -176,6 +176,36 @@ and existing account/state handling. Sysext factory `/etc` captures must
 match only tmpfiles `C` targets; copying the buildroot's full `/etc` would
 publish sensitive base state. See [sysext design](sysexts.md).
 
+## Suite-specific content
+
+The Debian release is a build input
+([ADR-0037](../adr/0037-build-forky-as-a-second-suite.md)): `mkosi --release
+forky` builds the same composition on forky, and trixie stays the default.
+mkosi cannot remove a list item, so content that differs between the suites
+lives in files whose only `[Match]` is `Release=trixie` or `Release=forky`.
+`test/suite-isolation-test.sh` requires every trixie summary to stay the same
+when the forky fragments are cut out. The suite-specific content today:
+
+| Content | Trixie | Forky |
+| --- | --- | --- |
+| bootc/libostree pair and libgpgme | `shared/packages/bootc/trixie.conf`: 1.17.3 `~deb13`, `libgpgme11t64` | `shared/packages/bootc/forky.conf`: 1.17.4 `~deb14`, `libgpgme45` |
+| Secure assembly contract (`/usr/lib/snosi/bootc-secure.json`) | `shared/bootc-secure/tree` | `shared/bootc-secure/suite/forky/tree`, added after the shared tree by `shared/bootc-secure/forky.conf` |
+| systemd-boot `loader.conf` at install | bootc 1.17.3 writes `timeout 5` itself | the forky tree ships `/usr/lib/bootc/install/systemd-boot/loader.conf` (`timeout 5`); bootc 1.17.4 copies it |
+| Isolation pin (forky source, `n=forky` at 50) | `shared/bootc-secure/trixie.conf` adds `shared/bootc-secure/package-manager` | not read: the forky suite sandbox gives the forky source |
+| dracut TPM module list (`20-tpm-luks.conf`) | `systemd-pcrphase` (dracut 106) | `systemd-pcrextend` (dracut 112), in `shared/suite/forky/{base,floe}-tree` |
+| `/var` outcome map | `var-outcomes.txt` plus `var-outcomes.trixie.txt` | `var-outcomes.txt` plus `var-outcomes.forky.txt` |
+| Kernel and backports | `shared/kernel/backports/trixie.conf` | `shared/kernel/backports/forky.conf` |
+
+`test/bootc-secure-static-test.sh` requires the forky contract to equal the
+trixie contract except the three bootc version fields.
+`test/tss-user-initrd-static-test.sh` requires each forky
+`20-tpm-luks.conf` to equal its trixie copy with the one module name changed.
+`shared/composition/var-audit.finalize` reads the suite map
+`shared/composition/<product>/var-outcomes.$RELEASE.txt` after the product
+map when it exists; a path that only one suite ships goes there, and
+`test/var-audit-suite-map-test.sh` covers it. Forky snow, snowfield and
+sundog need the same splits when they gain a forky build.
+
 ## Secure bootc assembly
 
 `shared/bootc-secure/mkosi.conf` selects a coherent Forky systemd family
@@ -207,7 +237,8 @@ private material. See the
 [compatibility contract](../bootc-secure-assembly-compatibility.md) for
 revalidation triggers and [secure operations](../bootc-secure-operations.md)
 for support/evidence limits. The Frostyard bootc/libostree package pair that
-this adapter binds is pinned exactly in `shared/packages/bootc/mkosi.conf` and
+this adapter binds is pinned exactly per suite in
+`shared/packages/bootc/{trixie,forky}.conf` and
 guarded by `test/bootc-secure-static-test.sh`; a change to either version is a
 revalidation trigger, not a routine bump.
 

@@ -97,29 +97,68 @@ is never a capability signal.
 
 ## Build-input package pin
 
-`shared/packages/bootc/mkosi.conf` selects one exact Frostyard build pair for
-every OCI bootc profile:
+Each suite pins its own exact Frostyard build pair for every OCI bootc
+profile. `shared/packages/bootc/mkosi.conf` includes the two suite fragments,
+and the fragment of the build's suite applies (ADR-0037). The shared fragment
+holds no bootc, libostree-1-1 or libgpgme entry.
+
+Trixie is unchanged. `shared/packages/bootc/trixie.conf` selects:
 
 - `bootc=1.17.3-frostyard202611042030~deb13`
 - `libostree-1-1=2026.6-frostyard202611042030~deb13`
+- `libgpgme11t64`
 
-They come from the frostyard/bootc-debian release
+Its contract is `shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json`.
+
+Forky pins its own pair. `shared/packages/bootc/forky.conf` selects:
+
+- `bootc=1.17.4-frostyard202611132023~deb14`
+- `libostree-1-1=2026.6-frostyard202611132023~deb14`
+- `libgpgme45` (the forky name of `libgpgme11t64`; the forky libostree
+  depends on it)
+
+The forky pair comes from frostyard/bootc-debian run 43501170071, read from
+the `image` component of the forky index. Forky has its own contract copy,
+`shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json`.
+`shared/bootc-secure/forky.conf` adds that tree after
+`shared/bootc-secure/tree`, so the forky file replaces the trixie file in a
+forky image. The copy differs from the trixie contract in 3 fields only:
+`assembly.bootc_version` (`1.17.4`), `assembly.compatibility`
+(`bootc-1.17.4-storage-digest-v1`) and `installer.minimum_versions.bootc`
+(`1.17.4`). Host-side secure assembly still reads the trixie contract. Forky
+secure assembly is a later change.
+
+bootc 1.17.4 does not write `timeout 5` to the ESP `loader/loader.conf` at
+install (upstream commit `cbd34248659c3c95de03032de3d2c5f6a1f92e1b`,
+"sd-boot: Pick loader.conf from the image"). It copies
+`/usr/lib/bootc/install/systemd-boot/loader.conf` from the image after
+`bootctl install`. Without that file, the systemd-boot menu is hidden. The
+forky tree ships
+`shared/bootc-secure/suite/forky/tree/usr/lib/bootc/install/systemd-boot/loader.conf`
+with the single line `timeout 5`, so a forky install shows the same 5-second
+menu as a trixie install. The trixie tree does not ship it: bootc 1.17.3 writes
+the timeout itself.
+
+The trixie pair comes from the frostyard/bootc-debian release
 `bootc-1.17.3-ostree-2026.6-202611042030` (Build run 41907166706), read from the
 `image` component of the trixie index at repository.frostyard.org on
 2026-11-04. ostree 2026.6 fixes
 [ostree#3681](https://github.com/ostreedev/ostree/issues/3681): with libostree
 2026.5, a system Flatpak update that applies a static delta fails.
 
-The pin scope is that fragment only. It adds no global APT preference and
-changes no sysext or base package selection; every other entry in the fragment
-stays a floating Debian or Forky selector. `test/bootc-secure-static-test.sh`
-enforces both exact selectors, requires the upstream part of the bootc package
-version to agree with `assembly.bootc_version` in
-`shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json` (the full Debian
-version does not equal that field), requires all four product profiles
-(`floe`, `snow`, `snowfield`, `sundog`) to include the fragment, and rejects a
-removed, floating or disagreeing entry. The guard proves selector values and
-version agreement only; it cannot show that revalidation occurred.
+The pin scope is those fragments only. They add no global APT preference and
+change no sysext or base package selection; every other entry in the shared
+fragment stays a floating Debian or Forky selector.
+`test/bootc-secure-static-test.sh` enforces the exact selectors of each suite.
+It requires the upstream part of each bootc package version to agree with
+`assembly.bootc_version` of that suite's contract (the full Debian version
+does not equal that field). It requires each contract to be consistent, as
+`shared/bootc-secure/compatibility.sh` requires, and the forky contract to
+equal the trixie contract except the 3 bootc fields. It requires each suite
+fragment to match only its own `Release=`, and all four product profiles
+(`floe`, `snow`, `snowfield`, `sundog`) to include the shared fragment. It
+rejects a removed, floating or disagreeing entry. The guard proves selector
+values and version agreement only; it cannot show that revalidation occurred.
 
 The fragment also runs `shared/packages/bootc/finalize/bootc-pair.chroot` in
 every OCI bootc build, so the PR mechanics builds and the main secure builds
@@ -131,7 +170,7 @@ guard shows that the fixed library is in the image. It does not run a
 static-delta Flatpak update; that needs a booted image and a remote that
 serves static deltas, which is lab work.
 
-Evidence for this pair (2026-11-04):
+Evidence for the trixie pair (2026-11-04):
 
 - Rootfs probe: a clean `debian:trixie` container installed exactly this pair
   from the Frostyard repository. `bootc --version` printed `bootc 1.17.3`,
@@ -188,6 +227,45 @@ promoted to `latest`:
 
 Not done yet: an N (1.17.1) to N+1 (1.17.3) lab lifecycle run, and a booted
 static-delta Flatpak update (ostree#3681).
+
+### Forky pair evidence
+
+The forky pair is the frostyard/bootc-debian release
+`bootc-1.17.4-ostree-2026.6-202611132023` (Build run 43501170071, source
+`6f0df0d8c3f20fc1e94fb27082bdf32a85c19718`), read from the `image` component
+of the forky index at repository.frostyard.org on 2026-11-13. Evidence
+(2026-11-13):
+
+- Rootfs probe: a clean `debian:forky` container installed exactly this pair
+  from the Frostyard repository, with `libgpgme45` 2.2.0-2. `bootc --version`
+  printed `bootc 1.17.4`, `bootc container --help` and
+  `bootc container compute-composefs-digest-from-storage --help` ran, and
+  `bootc-pair.chroot` passed against the forky contract copy. Both help texts
+  are byte-identical to 1.17.3 from the trixie pair, probed the same way in a
+  clean `debian:trixie` container.
+- Digest stability: on one fixed tree (all mtimes 0, with `boot` and `sysroot`
+  directories), 1.17.3 on trixie and 1.17.4 on forky print the same
+  `compute-composefs-digest` value for `--erofs-version v1` and for `v2`, in
+  2 runs each. This shows agreement for that tree only; it is not a
+  source-level proof that the algorithm is unchanged.
+- Upstream v1.17.3..v1.17.4 (27 commits, read by subject, and by diff where a
+  subject touches an install path that snosi uses): `sd-boot: Pick loader.conf
+  from the image` changes the installed menu timeout (handled above with the
+  forky `loader.conf`). `prepare-install: Check for composefs cmdline in UKI
+  Addons` rejects a composefs command line in a global addon at install prep;
+  `snosi-kargs` refuses every `composefs=` argument (`dangerous_reason`), and
+  Firn installs no addon.
+  `gc: Only GC UKI Artifacts if boot type is UKI` narrows GC to UKI boots,
+  which is the snosi boot type. `container aboot/ukify: allow specifying
+  --erofs-version=v1-only` changes commands that snosi does not use. No
+  subject names the hidden storage-digest command.
+- The forky mechanics build of Floe runs `bootc-pair.chroot` against this
+  pair.
+
+Not done yet: a forky secure assembly (Task 1-3 rootfs proof and Task 5
+artifact and negative tests on a forky rootfs). It needs the forky secure
+build, which is a later change; until then no forky image is published. A lab
+install, update and rollback on forky is not done either.
 
 Previous pins (history):
 
@@ -254,10 +332,18 @@ only with replacement evidence; do not silently normalize the changed shape.
 
 An upgrade of either package needs the revalidation above on the complete
 pair. Either package can keep its companion after that revalidation; the pair
-is the unit of evidence, not of change. When bootc changes, these contract
-fields move with it in one change: `assembly.bootc_version`,
-`assembly.compatibility`, `installer.minimum_versions.bootc` and the bootc
-selector in `shared/packages/bootc/mkosi.conf`. The same change must update the
-expected pins in `test/bootc-secure-static-test.sh`; a mismatch between that
-file and the fragment fails the guard. Until revalidation passes, the pin
-stays.
+is the unit of evidence, not of change. Each suite has its own pair, contract
+and fragment:
+
+| Suite | Contract | Fragment |
+| --- | --- | --- |
+| trixie | `shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json` | `shared/packages/bootc/trixie.conf` |
+| forky | `shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json` | `shared/packages/bootc/forky.conf` |
+
+When the bootc of a suite changes, these fields move with it in one change:
+`assembly.bootc_version`, `assembly.compatibility` and
+`installer.minimum_versions.bootc` in the contract of that suite, and the bootc
+selector in the fragment of that suite. The same change must update the
+expected pins of that suite in `test/bootc-secure-static-test.sh`; a mismatch
+between that file and the fragment fails the guard. Until revalidation passes,
+the pin stays.

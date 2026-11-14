@@ -73,11 +73,15 @@ setup_multiple_blocks() {
 setup_tab_indentation() {
     printf '[Content]\nPackages=alpha\n\talpha\n' | write_conf mkosi.profiles/test/mkosi.conf
 }
+setup_suite_fragment() {
+    printf '[Match]\nRelease=forky\n\n[Content]\nPackages=alpha\n alpha\n' |
+        write_conf shared/packages/test/forky.conf
+}
 setup_saved_unused() {
     printf '[Content]\nPackages=alpha\n alpha\n' | write_conf saved-unused/test/mkosi.conf
 }
 
-printf '1..12\n'
+printf '1..13\n'
 CASE_SETUP=setup_empty run_case "empty repository passes" 0
 CASE_SETUP=setup_single run_case "single package passes" 0
 CASE_SETUP=setup_unique_multiline run_case "unique multiline packages pass" 0
@@ -89,6 +93,7 @@ CASE_SETUP=setup_blank_line run_case "blank lines preserve a package list" 1 "al
 CASE_SETUP=setup_section_boundary run_case "a new section ends a package list" 0
 CASE_SETUP=setup_multiple_blocks run_case "duplicates across package blocks are rejected" 1 "alpha: lines 2, 3"
 CASE_SETUP=setup_tab_indentation run_case "tab-indented duplicates are rejected" 1 "alpha: lines 2, 3"
+CASE_SETUP=setup_suite_fragment run_case "a duplicate in a suite fragment is rejected" 1 "alpha: lines 5, 6"
 CASE_SETUP=setup_saved_unused run_case "saved-unused configurations are excluded" 0
 
 exit "$failures"
