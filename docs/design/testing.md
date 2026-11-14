@@ -227,8 +227,13 @@ sysext the forky configuration does not build, 2 files for 1 sysext and a
 malformed name each fail.
 
 `test/forky-publish-workflow-test.py` holds `forky-publish.yml` to
-[ADR-0038](../adr/0038-publish-signed-forky-test-images.md): dispatch only from
-main in `native-build`, `SNOSI_BOOTC_SECURE_SUITE: forky` for the job, no
+[ADR-0038](../adr/0038-publish-signed-forky-test-images.md) and
+[ADR-0039](../adr/0039-publish-forky-test-images-of-every-product.md): the
+required `profile` choice input with exactly the 4 products, a `select` job
+(main gate, `permissions: {}`, no action, no secret) whose fixed table equals
+the `secure-build` matrix and that outputs exactly 1 entry and fails on any
+other value, no `inputs.` reference outside the select step's `env:`,
+dispatch only from main in `native-build`, `SNOSI_BOOTC_SECURE_SUITE: forky` for the job, no
 `latest`, R2, release or artifact step, `mkosi --release forky`, the
 `forky-<version>` tag on every push and verification, the suite passed through
 each `sudo` call of a suite-aware script, and the step list and action pins of

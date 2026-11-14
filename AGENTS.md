@@ -286,9 +286,11 @@ most 20 reportable problems and 1 weekly count, never a `crash` report, and
 
 `.github/workflows/build.yml` publishes sysexts; `build-images.yml` publishes
 signed OCI images by immutable digest before promoting `latest`. `forky-publish.yml`
-(dispatch from main only) publishes signed forky Floe test images under
-immutable `forky-<ts>` tags, never `latest`; `SNOSI_BOOTC_SECURE_SUITE=forky`
-selects the forky contract (ADR-0038). The
+(dispatch from main only) publishes signed forky test images of Floe, Snow,
+Snowfield or Sundog, 1 product per dispatch (the required `profile` choice
+input), under immutable `forky-<ts>` tags, never `latest`;
+`SNOSI_BOOTC_SECURE_SUITE=forky` selects the forky contract (ADR-0038,
+ADR-0039). The
 first-party sysexts `lodge`, `notesd`, `maild`, `porterd` and `readd` pin
 attested `.deb` files; `shared/download/verify-attestations.sh` checks their
 GitHub build-provenance attestation at pin time and in every `build.yml` run

@@ -1,12 +1,15 @@
-# Publish signed forky Floe TEST images (ADR-0038).
+# Publish signed forky TEST images of Floe, Snow, Snowfield or Sundog
+# (ADR-0038, amended by ADR-0039).
 #
 # The Debian release is a build input (ADR-0037): `mkosi --release forky`
-# builds the Floe composition on Debian testing. This workflow signs and
-# publishes that image so the lab can prove install, update and rollback on
-# forky with signed N and N+1 digests.
+# builds each product composition on Debian testing. This workflow signs and
+# publishes 1 product image per dispatch so the lab can prove install, update
+# and rollback on forky with signed N and N+1 digests of that product.
 #
 # TEST IMAGES ONLY, with no support claim. Deliberately:
 #   - dispatch only, from main (the native-build environment allows only main)
+#   - 1 product per dispatch: the dispatcher selects it in the `profile`
+#     input, so each registry write is a deliberate choice; there is no "all"
 #   - published only under immutable `forky-<14 digits>` tags in the product
 #     repository; `latest` and every trixie tag are never touched
 #   - no R2 manifests, no release, no update stream (an immutable tag never
@@ -22,6 +25,17 @@ name: Publish forky test images (no latest)
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: "Product to publish as a forky test image (1 per dispatch)"
+        required: true
+        type: choice
+        default: floe
+        options:
+          - floe
+          - snow
+          - snowfield
+          - sundog
 
 permissions: {}
 
@@ -33,7 +47,42 @@ env:
   REPO_NAME: snosi
 
 jobs:
+  select:
+    # Maps the dispatch input to exactly 1 matrix entry from a fixed table of
+    # the 4 products, with the descriptions of build-images.yml secure-build
+    # (test/forky-publish-workflow-test.py compares the two). Any other value
+    # fails, so nothing publishes. The input reaches the script only through
+    # env, never by expression interpolation into the script. No checkout, no
+    # token, no secret.
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - name: Select the product
+        id: select
+        env:
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          set -euo pipefail
+          case "$PROFILE" in
+            floe) description="Floe Linux Server Image" ;;
+            snow) description="Snow Linux OS Image" ;;
+            snowfield) description="Snowfield Linux OS Image" ;;
+            sundog) description="Sundog Linux OS Image" ;;
+            *) echo "::error::unknown forky product: '$PROFILE'" >&2; exit 1 ;;
+          esac
+          matrix=$(jq -cn --arg profile "$PROFILE" --arg description "$description" \
+            '[{profile: $profile, description: $description}]')
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "- Selected forky product: \`$PROFILE\`" >> "$GITHUB_STEP_SUMMARY"
+
   forky-publish:
+    needs: select
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main'
@@ -51,9 +100,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - profile: floe
-            description: "Floe Linux Server Image"
+        include: ${{ fromJSON(needs.select.outputs.matrix) }}
 
     steps:
       - name: Show disk space (before)
