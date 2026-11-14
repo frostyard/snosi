@@ -1,0 +1,476 @@
+# Publish signed forky Floe TEST images (ADR-0038).
+#
+# The Debian release is a build input (ADR-0037): `mkosi --release forky`
+# builds the Floe composition on Debian testing. This workflow signs and
+# publishes that image so the lab can prove install, update and rollback on
+# forky with signed N and N+1 digests.
+#
+# TEST IMAGES ONLY, with no support claim. Deliberately:
+#   - dispatch only, from main (the native-build environment allows only main)
+#   - published only under immutable `forky-<14 digits>` tags in the product
+#     repository; `latest` and every trixie tag are never touched
+#   - no R2 manifests, no release, no update stream (an immutable tag never
+#     updates)
+#   - SNOSI_BOOTC_SECURE_SUITE=forky selects the forky secure contract; the
+#     helper scripts refuse a forky promote and a tag of the wrong form
+#
+# The steps are those of build-images.yml secure-build, in the same order, with
+# the same signing key, signature policy, SBOM and provenance, minus the latest
+# promotion, the R2 manifests and the release tag record.
+# test/forky-publish-workflow-test.py holds the two step lists together.
+name: Publish forky test images (no latest)
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  REPO_NAME: snosi
+
+jobs:
+  forky-publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main'
+    environment: native-build
+    runs-on: ubuntu-latest
+    # A hung mkosi/apt otherwise burns the 6-hour default.
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      SNOSI_BOOTC_SECURE_SUITE: forky
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: floe
+            description: "Floe Linux Server Image"
+
+    steps:
+      - name: Show disk space (before)
+        run: sudo df -h
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@ceedf095f4ec1a097402bc6bd80831f2e1a6fde6 # v2.0.0
+        with:
+          # We don't use the runner's preinstalled language toolchains; reclaim
+          # the tool cache (~8-12GB) on / for extra headroom on large builds.
+          tool-cache: true
+
+      - name: Mount BTRFS for podman storage
+        uses: ublue-os/container-storage-action@dc1f4c8f17b672069e921f001132f7cf98a423a6 # main 2026-02-11
+        with:
+          target-dir: /var/lib/containers
+
+      - name: Configure Podman OCI runtime
+        # GitHub runner 20260726 upgraded Podman 4.9.3 -> 5.8.4; its default
+        # crun path rejects the generated OCI version. The matched bundled
+        # runc works for direct and script-nested podman invocations.
+        run: |
+          sudo install -d -m 0755 /etc/containers/containers.conf.d
+          printf '%s\n' '[engine]' 'runtime = "runc"' \
+            | sudo tee /etc/containers/containers.conf.d/99-snosi-ci-runtime.conf >/dev/null
+          runtime=$(sudo podman info --format '{{.Host.OCIRuntime.Name}}')
+          [[ $runtime == runc ]] || {
+            echo "::error::Podman selected OCI runtime '$runtime', expected 'runc'" >&2
+            exit 1
+          }
+
+      - name: Redirect temp to /mnt
+        # / (/dev/root) has ~45G free after cleanup; /mnt has ~70G free. mkosi's
+        # build workspace and podman/buildah tar staging default to TMPDIR
+        # (/var/tmp on /), which overflows / on the larger variants and
+        # crashes the runner with "No space left on device". Point TMPDIR at the
+        # roomy /mnt volume for all subsequent steps.
+        run: |
+          sudo mkdir -p /mnt/tmp
+          sudo chmod 1777 /mnt/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
+      - name: Show disk space (after)
+        run: sudo df -h
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check mkosi package duplicates
+        run: ./check-duplicate-packages.sh
+
+      - name: Generate build date
+        id: date
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate version tag
+        # IMAGE_VERSION stays 14 digits, as on trixie; the suite is in the tag
+        # (forky-<version>) and in os-release VERSION_ID="14" (ADR-0038).
+        id: version
+        run: |
+          version=$(date +%Y%m%d%H%M%S)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=forky-$version" >> "$GITHUB_OUTPUT"
+
+      - name: setup-mkosi
+        uses: systemd/mkosi@904357aa12013e3adbb4857cc4bf8840c6c83682 # main 2026-11-09
+
+      - name: Build Image
+        run: |
+          sudo TMPDIR="$TMPDIR" mkosi --release forky --profile ${{ matrix.profile }} \
+            --dependency= \
+            --dependency=base \
+            --image-version "${{ steps.version.outputs.version }}" \
+            build
+
+      - name: Check sysupdate vendor keyring
+        # systemd-container/forky overwrites the base keyring; the built tree
+        # must still trust the repository signer for sysext transfers.
+        run: sudo ./test/sysext-signature-verification-test.sh --rootfs "output/${{ matrix.profile }}"
+
+      - name: Materialize protected bootc signing credentials
+        env:
+          NATIVE_SECURE_BOOT_KEY: ${{ secrets.NATIVE_SECURE_BOOT_KEY }}
+          NATIVE_SECURE_BOOT_CERTIFICATE: ${{ secrets.NATIVE_SECURE_BOOT_CERTIFICATE }}
+          NATIVE_PCR_SIGNING_KEY: ${{ secrets.NATIVE_PCR_SIGNING_KEY }}
+          NATIVE_PCR_SIGNING_CERTIFICATE: ${{ secrets.NATIVE_PCR_SIGNING_CERTIFICATE }}
+        run: |
+          set -euo pipefail
+          for name in NATIVE_SECURE_BOOT_KEY NATIVE_SECURE_BOOT_CERTIFICATE NATIVE_PCR_SIGNING_KEY NATIVE_PCR_SIGNING_CERTIFICATE; do
+            [[ -n "${!name}" ]] || { echo "::error::secrets.$name is not set in native-build" >&2; exit 1; }
+          done
+          umask 077
+          mkdir -p /var/tmp/bootc-secure-credentials
+          printf '%s' "$NATIVE_SECURE_BOOT_KEY" > /var/tmp/bootc-secure-credentials/mok.key
+          printf '%s' "$NATIVE_SECURE_BOOT_CERTIFICATE" > /var/tmp/bootc-secure-credentials/mok.crt
+          printf '%s' "$NATIVE_PCR_SIGNING_KEY" > /var/tmp/bootc-secure-credentials/pcr.key
+          printf '%s' "$NATIVE_PCR_SIGNING_CERTIFICATE" > /var/tmp/bootc-secure-credentials/pcr.crt
+          chmod 600 /var/tmp/bootc-secure-credentials/*
+          openssl x509 -in /var/tmp/bootc-secure-credentials/pcr.crt -pubkey -noout \
+            > /var/tmp/bootc-secure-credentials/pcr.pub
+          chmod 600 /var/tmp/bootc-secure-credentials/pcr.pub
+          cmp -s /var/tmp/bootc-secure-credentials/mok.crt shared/native-ab/keys/mok-2026.crt || {
+            echo "::error::protected MOK certificate differs from the committed identity" >&2
+            exit 1
+          }
+          cmp -s /var/tmp/bootc-secure-credentials/pcr.pub shared/native-ab/keys/pcr-signing-2026.pub || {
+            echo "::error::protected PCR certificate differs from the committed identity" >&2
+            exit 1
+          }
+
+      - name: Package image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          MAX_LAYERS: 128
+          SNOSI_BOOTC_SECURE: "1"
+          SNOSI_BOOTC_MOK_KEY: /var/tmp/bootc-secure-credentials/mok.key
+          SNOSI_BOOTC_MOK_CERT: /var/tmp/bootc-secure-credentials/mok.crt
+          SNOSI_BOOTC_PCR_KEY: /var/tmp/bootc-secure-credentials/pcr.key
+          SNOSI_BOOTC_PCR_CERT: /var/tmp/bootc-secure-credentials/pcr.pub
+        run: |
+          SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          # Core Flatpak set label (flatpaks/core-flatpaks.py). Products
+          # without a set get no label at all (frostyard/firn ADR-0018).
+          core_flatpaks_label=()
+          label=$(python3 ./flatpaks/core-flatpaks.py label "${{ matrix.profile }}")
+          [[ -z $label ]] || core_flatpaks_label=("$label")
+          sudo TMPDIR="$TMPDIR" \
+            SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" \
+            MAX_LAYERS="$MAX_LAYERS" \
+            SNOSI_BOOTC_SECURE="$SNOSI_BOOTC_SECURE" \
+            SNOSI_BOOTC_MOK_KEY="$SNOSI_BOOTC_MOK_KEY" \
+            SNOSI_BOOTC_MOK_CERT="$SNOSI_BOOTC_MOK_CERT" \
+            SNOSI_BOOTC_PCR_KEY="$SNOSI_BOOTC_PCR_KEY" \
+            SNOSI_BOOTC_PCR_CERT="$SNOSI_BOOTC_PCR_CERT" \
+            SNOSI_BOOTC_SECURE_SUITE="$SNOSI_BOOTC_SECURE_SUITE" \
+            ./shared/outformat/image/buildah-package.sh \
+            output/${{ matrix.profile }} \
+            "$IMAGE:${{ steps.version.outputs.tag }}" \
+            "org.opencontainers.image.title=${{ matrix.profile }}" \
+            "org.opencontainers.image.description=${{ matrix.description }}" \
+            "org.opencontainers.image.version=${{ steps.version.outputs.version }}" \
+            "org.opencontainers.image.created=${{ steps.date.outputs.date }}" \
+            "org.opencontainers.image.source=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/blob/${{ github.sha }}/mkosi.conf" \
+            "org.opencontainers.image.url=https://github.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/tree/${{ github.sha }}" \
+            "org.opencontainers.image.documentation=https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ env.REPO_NAME }}/${{ github.sha }}/README.md" \
+            "${core_flatpaks_label[@]}"
+
+      - name: Check core Flatpak label
+        # The packaged image is the one pushed: confirm its label matches the
+        # product's flatpaks/ file, or is absent for products without one.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          set -o pipefail
+          sudo podman image inspect "$IMAGE:${{ steps.version.outputs.tag }}" |
+            python3 ./flatpaks/core-flatpaks.py check-image "${{ matrix.profile }}"
+
+      - name: Check image version annotation
+        # bootc reads the image version from the OCI manifest annotation, not
+        # from the config label (frostyard/snosi#1125).
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo ./shared/outformat/image/check-image-version.sh \
+            "containers-storage:$IMAGE:${{ steps.version.outputs.tag }}" \
+            "${{ steps.version.outputs.version }}"
+
+      - name: Install secure artifact validation dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends dracut-core zstd
+
+      - name: Validate locally assembled secure artifact
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo SNOSI_REQUIRE_GPT_AUTO_VALIDATION=1 \
+            SNOSI_BOOTC_SECURE_SUITE="$SNOSI_BOOTC_SECURE_SUITE" \
+            ./test/bootc-secure-artifact-test.sh \
+            "output/${{ matrix.profile }}" \
+            "$IMAGE:${{ steps.version.outputs.tag }}" \
+            /var/tmp/bootc-secure-credentials/mok.crt \
+            /var/tmp/bootc-secure-credentials/pcr.pub
+          echo '- Real assembled UKI: initramfs gpt-auto structural validation passed.' \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove protected bootc signing credentials
+        if: always()
+        run: sudo rm -rf /var/tmp/bootc-secure-credentials
+
+      - name: Smoke test - verify SUID bit and bcvk requirements
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          sudo podman run --rm "$IMAGE:${{ steps.version.outputs.tag }}" sh -ec '
+            mode=$(stat -c "%a" /usr/bin/sudo)
+            echo "sudo permissions: $mode"
+            if [ "$mode" != "4755" ]; then
+              echo "::error::SUID bit not set on /usr/bin/sudo (expected 4755, got $mode)"
+              exit 1
+            fi
+
+            for required in bwrap systemctl objcopy ssh ssh-keygen; do
+              if ! command -v "$required" >/dev/null; then
+                echo "::error::Missing $required required for optional bcvk testing"
+                exit 1
+              fi
+            done
+          '
+
+      - name: Refuse images containing frostyard-nbc
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          set -euo pipefail
+          status_file=$(mktemp)
+          sudo podman run --rm --entrypoint cat "$IMAGE:${{ steps.version.outputs.tag }}" /var/lib/dpkg/status > "$status_file"
+          ./test/check-no-nbc-package.sh "$status_file"
+          echo '- Package inventory: frostyard-nbc not installed.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Syft
+        id: setup-syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          syft-version: v1.57.1
+
+      - name: Generate SBOM
+        id: generate-sbom
+        env:
+          PROFILE: ${{ matrix.profile }}
+          SYFT_CMD: ${{ steps.setup-syft.outputs.cmd }}
+        run: |
+          SBOM="$(mktemp -d)/sbom.json"
+          export SYFT_PARALLELISM=$(($(nproc)*2))
+          sudo TMPDIR="$TMPDIR" "${SYFT_CMD}" --source-name "${PROFILE}" "output/${PROFILE}" -o "syft-json=${SBOM}"
+          du -sh "${SBOM}"
+          echo "SBOM=${SBOM}" >> "$GITHUB_OUTPUT"
+
+      - name: Push immutable version tag
+        id: push
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          # The job-scoped token has only this repository's packages:write.
+          # Pass it via stdin so it never appears in process arguments.
+          printf '%s' "$GH_TOKEN" | sudo buildah login -u "$GHCR_USER" --password-stdin ghcr.io
+
+          DIGEST=$(sudo TMPDIR="$TMPDIR" SNOSI_BOOTC_SECURE_SUITE="$SNOSI_BOOTC_SECURE_SUITE" \
+            ./shared/bootc-secure/ci/push-immutable-image.sh "$IMAGE" "${{ steps.version.outputs.tag }}")
+          if [[ ! "$DIGEST" =~ ^sha256: ]]; then
+            echo "::error::Failed to extract valid digest: $DIGEST"
+            exit 1
+          fi
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          # v2.6.3-v2.6.5 break `verify --key` on digests carrying GitHub
+          # provenance-attestation referrers ("no matching attestations:
+          # expected key signature, not certificate"; bisected 2026-08-26,
+          # 2.6.2 last good) -- the same class as the v3 exclusion below in
+          # check-dependencies. Do not bump past 2.6.2 without the
+          # "Re-verify key signature after attestation" step passing.
+          cosign-release: "v2.6.2"
+
+      - name: Sign immutable image digest
+        # docker/login-action writes the user-context registry credentials used
+        # directly by Cosign and passed explicitly to Skopeo verification and
+        # promotion. Pinned Cosign signing remains a user-context operation.
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+        run: |
+          cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
+            "$IMAGE@${{ steps.push.outputs.digest }}"
+
+      - name: Verify pushed secure image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          VERSION_TAG: ${{ steps.version.outputs.tag }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          LOCAL_REF: localhost/snosi-verified-${{ matrix.profile }}:${{ steps.version.outputs.tag }}
+        run: |
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          ./shared/bootc-secure/ci/verify-published-image.sh \
+            "$IMAGE" "$VERSION_TAG" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
+
+      - name: Validate policy-copied secure artifact
+        env:
+          LOCAL_REF: localhost/snosi-verified-${{ matrix.profile }}:${{ steps.version.outputs.tag }}
+        run: |
+          sudo SNOSI_REQUIRE_GPT_AUTO_VALIDATION=1 \
+            SNOSI_BOOTC_SECURE_SUITE="$SNOSI_BOOTC_SECURE_SUITE" \
+            ./test/bootc-secure-artifact-test.sh \
+            "output/${{ matrix.profile }}" "$LOCAL_REF" \
+            "output/${{ matrix.profile }}/usr/lib/snosi/mok.crt" \
+            "output/${{ matrix.profile }}/usr/lib/snosi/pcr-signing.pub"
+
+      - name: Check core Flatpak label on pushed digest
+        # Firn reads the label from the signed digest it installs; check that
+        # digest, not only the local image checked before the push.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -o pipefail
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          skopeo inspect --authfile "$AUTH_FILE" "docker://$IMAGE@$DIGEST" |
+            python3 ./flatpaks/core-flatpaks.py check-image "${{ matrix.profile }}"
+
+      - name: Check image version annotation on pushed digest
+        # bootc reads the image version from the OCI manifest annotation, not
+        # from the config label (frostyard/snosi#1125). Check the pushed
+        # digest, not only the local image.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          ./shared/outformat/image/check-image-version.sh \
+            "docker://$IMAGE@$DIGEST" "${{ steps.version.outputs.version }}" "$AUTH_FILE"
+
+      - name: Install ORAS
+        uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63 # v2
+
+      - name: Login to GHCR with ORAS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io -u "$GHCR_USER" --password-stdin
+
+      - name: Upload SBOM
+        id: upload-sbom
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+          SBOM: ${{ steps.generate-sbom.outputs.SBOM }}
+        run: |
+          cd "$(dirname "${SBOM}")"
+          oras attach \
+            --artifact-type application/vnd.syft+json \
+            --annotation "filename=$(basename "${SBOM}")" \
+            "${IMAGE}@${DIGEST}" \
+            "$(basename "${SBOM}")"
+
+          sbom_digest=$(oras discover --format json "${IMAGE}@${DIGEST}" | jq -r '[.referrers[] | select(.artifactType == "application/vnd.syft+json")] | last | .digest')
+          if [[ -z "${sbom_digest}" || "${sbom_digest}" == "null" ]]; then
+            echo "::error::Failed to discover SBOM artifact digest"
+            exit 1
+          fi
+          echo "sbom_digest=${sbom_digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign SBOM
+        env:
+          COSIGN_EXPERIMENTAL: "false"
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          SBOM_DIGEST: ${{ steps.upload-sbom.outputs.sbom_digest }}
+        run: |
+          cosign sign --key env://COSIGN_PRIVATE_KEY --yes \
+            "${IMAGE}@${SBOM_DIGEST}"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Re-verify key signature after attestation
+        # The provenance attestation attaches a certificate-based referrer to
+        # the digest, and cosign >= 2.6.3 then fails `verify --key` with "no
+        # matching attestations: expected key signature, not certificate"
+        # (bisected 2026-08-26 against ghcr.io/frostyard/cayo: 2.6.2 OK,
+        # 2.6.3/2.6.4/2.6.5 fail). The earlier "Verify pushed secure image"
+        # step runs BEFORE this referrer exists, so it can never catch a
+        # cosign version whose verification breaks only on attested images --
+        # which is what every downstream verifier (the lab's bootc switch
+        # above all) actually sees. This step re-runs the exact pinned-cosign
+        # key verification against the attested digest so a future cosign
+        # bump that reintroduces the breakage fails THIS job. The forky tag is
+        # already pushed by this point; a failure here is a loud after-the-fact
+        # alarm. No mutable tag moves in this workflow.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          cosign verify --key cosign.pub "$IMAGE@$DIGEST"
+
+      - name: cleanup build output
+        run: |
+          sudo -E mkosi clean
+
+      - name: Record the forky test image
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.profile }}
+          TAG: ${{ steps.version.outputs.tag }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          {
+            echo '### Forky test image (test image, no support claim)'
+            echo
+            echo "- Tag: \`$IMAGE:$TAG\` (immutable; latest did not move)"
+            echo "- Digest: \`$IMAGE@$DIGEST\`"
+            echo "- Lab switch: \`bootc switch $IMAGE:$TAG\`"
+            echo '- An immutable tag never updates: this is no update stream (ADR-0038).'
+          } >> "$GITHUB_STEP_SUMMARY"

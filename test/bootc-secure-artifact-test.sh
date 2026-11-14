@@ -379,12 +379,64 @@ STUB
     echo "bootc secure sealed splash fixtures passed"
 )
 
+# SNOSI_BOOTC_SECURE_SUITE selects the assembler's contract (ADR-0038). The
+# selected contract is the one --validate requires in the rootfs, so a rootfs
+# of the other suite fails at the contract check, and an unknown suite fails
+# before any work.
+suite_contract_fixture() (
+    local work output status trixie_contract forky_contract
+    trixie_contract="$ROOT_DIR/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
+    forky_contract="$ROOT_DIR/shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json"
+    work=$(mktemp -d)
+    trap 'rm -rf -- "$work"' EXIT
+    SNOSI_BOOTC_SECURE_SUITE=forky "$ASSEMBLER" --self-test >/dev/null 2>&1 || {
+        echo "Error: suite fixture: the forky assembler self-test failed" >&2; return 1;
+    }
+    set +e
+    output=$(SNOSI_BOOTC_SECURE_SUITE=sid "$ASSEMBLER" --self-test 2>&1)
+    status=$?
+    set -e
+    [[ $status -ne 0 && $output == *'unsupported SNOSI_BOOTC_SECURE_SUITE: sid'* ]] || {
+        echo "Error: suite fixture: an unknown suite reached the assembler ($output)" >&2; return 1;
+    }
+    validate_with() { # suite contract
+        mkdir -p "$work/$1/usr/lib/snosi"
+        cp "$2" "$work/$1/usr/lib/snosi/bootc-secure.json"
+        set +e
+        output=$(SNOSI_BOOTC_SECURE_SUITE=$1 "$ASSEMBLER" --validate "$work/$1" localhost/none:none none none 2>&1)
+        set -e
+        rm -rf -- "${work:?}/$1"
+    }
+    # Its own contract passes the contract check and stops later, at the kernel.
+    for suite in trixie forky; do
+        contract=$trixie_contract
+        [[ $suite == trixie ]] || contract=$forky_contract
+        validate_with "$suite" "$contract"
+        [[ $output != *'unexpected bootc secure rootfs contract'* && $output == *'expected exactly one kernel'* ]] || {
+            echo "Error: suite fixture: $suite rejected its own contract ($output)" >&2; return 1;
+        }
+    done
+    if ! cmp -s "$trixie_contract" "$forky_contract" &&
+            [[ $(jq -r .assembly.bootc_version "$trixie_contract") != $(jq -r .assembly.bootc_version "$forky_contract") ]]; then
+        validate_with forky "$trixie_contract"
+        [[ $output == *'unexpected bootc secure rootfs contract'* ]] || {
+            echo "Error: suite fixture: forky accepted a trixie rootfs contract ($output)" >&2; return 1;
+        }
+        validate_with trixie "$forky_contract"
+        [[ $output == *'unexpected bootc secure rootfs contract'* ]] || {
+            echo "Error: suite fixture: trixie accepted a forky rootfs contract ($output)" >&2; return 1;
+        }
+    fi
+    echo "bootc secure suite contract fixtures passed"
+)
+
 if [[ ${1:-} == --fixtures ]]; then
     "$ASSEMBLER" --self-test
     "$ASSEMBLER" --credential-self-test
     gpt_auto_fixture
     sealed_lockdown_fixture
     sealed_splash_fixture
+    suite_contract_fixture
     echo "bootc secure artifact fixtures passed"
     exit 0
 fi

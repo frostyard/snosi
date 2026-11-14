@@ -235,6 +235,51 @@ if snosi_bootc_secure_load_compatibility "$compatibility_fixture" 2>/dev/null; t
     exit 1
 fi
 
+# SNOSI_BOOTC_SECURE_SUITE selects the contract and the tag form (ADR-0038).
+# Unset or empty is trixie; only trixie and forky are known; any other value
+# fails closed in every helper.
+suite_fail() { echo "compatibility.sh suite helpers: $*" >&2; exit 1; }
+[[ $(env -u SNOSI_BOOTC_SECURE_SUITE bash -c \
+    'source "$1"; snosi_bootc_secure_suite' _ "$root/shared/bootc-secure/compatibility.sh") == trixie ]] ||
+    suite_fail "unset suite is not trixie"
+[[ $(SNOSI_BOOTC_SECURE_SUITE='' snosi_bootc_secure_suite) == trixie ]] ||
+    suite_fail "empty suite is not trixie"
+[[ $(SNOSI_BOOTC_SECURE_SUITE=forky snosi_bootc_secure_suite) == forky ]] ||
+    suite_fail "forky suite is not forky"
+for bogus in sid Forky 'trixie ' bookworm; do
+    if SNOSI_BOOTC_SECURE_SUITE=$bogus snosi_bootc_secure_suite >/dev/null 2>&1; then
+        suite_fail "suite '$bogus' was accepted"
+    fi
+    if SNOSI_BOOTC_SECURE_SUITE=$bogus snosi_bootc_secure_contract_path "$root" >/dev/null 2>&1; then
+        suite_fail "suite '$bogus' has a contract path"
+    fi
+    if SNOSI_BOOTC_SECURE_SUITE=$bogus snosi_bootc_secure_valid_version_tag 20260301000000 2>/dev/null ||
+            SNOSI_BOOTC_SECURE_SUITE=$bogus snosi_bootc_secure_valid_version_tag forky-20260301000000 2>/dev/null; then
+        suite_fail "suite '$bogus' accepted a tag"
+    fi
+done
+[[ $(SNOSI_BOOTC_SECURE_SUITE='' snosi_bootc_secure_contract_path "$root") == "$contract" ]] ||
+    suite_fail "trixie contract path is not shared/bootc-secure/tree"
+suite_forky_contract=$(SNOSI_BOOTC_SECURE_SUITE=forky snosi_bootc_secure_contract_path "$root")
+[[ $suite_forky_contract == "$root/shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json" ]] ||
+    suite_fail "forky contract path is not shared/bootc-secure/suite/forky/tree"
+(snosi_bootc_secure_load_compatibility "$suite_forky_contract") ||
+    suite_fail "forky contract does not load"
+for tag in 20260301000000 forky-20260301000000 2026030100000 forky-2026030100000 \
+    forky20260301000000 trixie-20260301000000 latest forky '' 20260301000000-forky \
+    $'20260301000000\n'; do
+    trixie_ok=0; forky_ok=0
+    SNOSI_BOOTC_SECURE_SUITE='' snosi_bootc_secure_valid_version_tag "$tag" && trixie_ok=1
+    SNOSI_BOOTC_SECURE_SUITE=forky snosi_bootc_secure_valid_version_tag "$tag" && forky_ok=1
+    case $tag in
+        20260301000000) expected="1 0" ;;
+        forky-20260301000000) expected="0 1" ;;
+        *) expected="0 0" ;;
+    esac
+    [[ "$trixie_ok $forky_ok" == "$expected" ]] ||
+        suite_fail "tag '$tag' gave trixie=$trixie_ok forky=$forky_ok, expected $expected"
+done
+
 python3 - "$contract" <<'PY'
 import json
 import sys

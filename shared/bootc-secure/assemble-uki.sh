@@ -45,7 +45,9 @@ rootfs_ships_plymouth() { # rootfs
 source "$(dirname "${BASH_SOURCE[0]}")/storage-digest-probe.sh"
 # shellcheck source=shared/bootc-secure/compatibility.sh
 source "$(dirname "${BASH_SOURCE[0]}")/compatibility.sh"
-BOOTC_SECURE_CANONICAL_CONTRACT="$(dirname "${BASH_SOURCE[0]}")/tree/usr/lib/snosi/bootc-secure.json"
+# SNOSI_BOOTC_SECURE_SUITE selects the suite's contract (ADR-0038); unset is trixie.
+BOOTC_SECURE_CANONICAL_CONTRACT=$(snosi_bootc_secure_contract_path \
+    "$(dirname "${BASH_SOURCE[0]}")/../..") || die "no bootc secure contract for the selected suite"
 readonly BOOTC_SECURE_CANONICAL_CONTRACT
 snosi_bootc_secure_load_compatibility "$BOOTC_SECURE_CANONICAL_CONTRACT"
 

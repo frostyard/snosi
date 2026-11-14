@@ -278,7 +278,10 @@ most 20 reportable problems and 1 weekly count, never a `crash` report, and
 `test/snosi-health-report-test.sh` enforces all of it (ADR-0030).
 
 `.github/workflows/build.yml` publishes sysexts; `build-images.yml` publishes
-signed OCI images by immutable digest before promoting `latest`. The
+signed OCI images by immutable digest before promoting `latest`. `forky-publish.yml`
+(dispatch from main only) publishes signed forky Floe test images under
+immutable `forky-<ts>` tags, never `latest`; `SNOSI_BOOTC_SECURE_SUITE=forky`
+selects the forky contract (ADR-0038). The
 first-party sysexts `lodge`, `notesd`, `maild`, `porterd` and `readd` pin
 attested `.deb` files; `shared/download/verify-attestations.sh` checks their
 GitHub build-provenance attestation at pin time and in every `build.yml` run

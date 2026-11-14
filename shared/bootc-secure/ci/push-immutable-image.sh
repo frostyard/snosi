@@ -5,6 +5,8 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 # shellcheck source=test/lib/bootc-secure-assertions.sh
 source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
+# shellcheck source=shared/bootc-secure/compatibility.sh
+source "$ROOT_DIR/shared/bootc-secure/compatibility.sh"
 
 if [[ $# -ne 2 ]]; then
     printf 'usage: %s IMAGE TAG\n' "${0##*/}" >&2
@@ -18,8 +20,11 @@ if ! valid_published_image "$IMAGE"; then
     printf 'invalid secure image reference: %s\n' "$IMAGE" >&2
     exit 2
 fi
-if [[ ! $TAG =~ ^[0-9]{14}$ ]]; then
-    printf 'invalid immutable image tag: %s\n' "$TAG" >&2
+# SNOSI_BOOTC_SECURE_SUITE selects the tag form (ADR-0038): trixie pushes
+# 14-digit tags, forky pushes only forky-<14 digits>.
+SUITE=$(snosi_bootc_secure_suite) || exit 2
+if ! snosi_bootc_secure_valid_version_tag "$TAG"; then
+    printf 'invalid immutable image tag for suite %s: %s\n' "$SUITE" "$TAG" >&2
     exit 2
 fi
 
@@ -62,7 +67,7 @@ check_tag_before_push() { # fail closed if the immutable tag already exists
     return 1
 }
 
-# The 14-digit tag is unique per job.  This helper assumes no concurrent writer
+# The timestamp tag is unique per job.  This helper assumes no concurrent writer
 # of the same tag: a check-then-push cannot exclude a concurrent writer.
 attempt=1
 while (( attempt <= SNOSI_PUSH_ATTEMPTS)); do

@@ -125,8 +125,12 @@ the `image` component of the forky index. Forky has its own contract copy,
 forky image. The copy differs from the trixie contract in 3 fields only:
 `assembly.bootc_version` (`1.17.4`), `assembly.compatibility`
 (`bootc-1.17.4-storage-digest-v1`) and `installer.minimum_versions.bootc`
-(`1.17.4`). Host-side secure assembly still reads the trixie contract. Forky
-secure assembly is a later change.
+(`1.17.4`). Host-side secure assembly reads the contract of the suite that
+`SNOSI_BOOTC_SECURE_SUITE` selects (unset is trixie;
+[ADR-0038](adr/0038-publish-signed-forky-test-images.md)):
+`assemble-uki.sh`, `buildah-package.sh` and `ci/verify-published-image.sh`
+load it through `shared/bootc-secure/compatibility.sh`, and the packager fails
+when the rootfs `VERSION_CODENAME` is of another suite.
 
 bootc 1.17.4 does not write `timeout 5` to the ESP `loader/loader.conf` at
 install (upstream commit `cbd34248659c3c95de03032de3d2c5f6a1f92e1b`,
@@ -262,9 +266,15 @@ of the forky index at repository.frostyard.org on 2026-11-13. Evidence
 - The forky mechanics build of Floe runs `bootc-pair.chroot` against this
   pair.
 
-Not done yet: a forky secure assembly (Task 1-3 rootfs proof and Task 5
-artifact and negative tests on a forky rootfs). It needs the forky secure
-build, which is a later change; until then no forky image is published. A lab
+Forky secure assembly path: `.github/workflows/forky-publish.yml` (manual
+dispatch from main) builds forky Floe with `SNOSI_BOOTC_SECURE_SUITE=forky`,
+assembles and validates the secure artifact against the forky contract, and
+publishes only an immutable `forky-<version>` test tag (ADR-0038).
+
+Not done yet: forky secure-assembly evidence. No dispatch of that workflow has
+run, so nothing yet shows a forky secure assembly (Task 1-3 rootfs proof and
+Task 5 artifact and negative tests on a forky rootfs) or a published forky
+image. The first dispatch run is that evidence; record its run here. A lab
 install, update and rollback on forky is not done either.
 
 Previous pins (history):

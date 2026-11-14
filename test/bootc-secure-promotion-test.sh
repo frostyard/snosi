@@ -7,6 +7,8 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 HELPER="$ROOT_DIR/shared/bootc-secure/ci/promote-published-image.sh"
 DIGEST="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 IMAGE="ghcr.io/frostyard/floe"
+# The cases run with the default (trixie) suite unless a case sets one.
+unset SNOSI_BOOTC_SECURE_SUITE
 WORK=""
 AUTH_FILE=""
 PASS=0
@@ -91,6 +93,30 @@ SKOPEO_COPY_FAIL=1 run_case "copy failure is propagated" failure "$IMAGE" "$DIGE
 SKOPEO_INSPECT_FAIL=1 run_case "inspect failure is propagated" failure "$IMAGE" "$DIGEST" "$AUTH_FILE"
 LATEST_DIGEST="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" \
     run_case "latest digest mismatch is rejected" failure "$IMAGE" "$DIGEST" "$AUTH_FILE"
+
+# Only trixie moves latest (ADR-0038). A forky or unknown suite must refuse
+# before any registry call, with a clear message and exit status 2.
+run_suite_refusal() { # description suite expected-text
+    local output status
+    : >"$WORK/commands"
+    set +e
+    output=$(SNOSI_BOOTC_SECURE_SUITE=$2 PATH="$WORK/bin:$PATH" COMMAND_LOG="$WORK/commands" \
+        EXPECTED_AUTH_FILE="$AUTH_FILE" EXPECTED_DIGEST="$DIGEST" \
+        "$HELPER" "$IMAGE" "$DIGEST" "$AUTH_FILE" 2>&1)
+    status=$?
+    set -e
+    if [[ $status -eq 2 && ! -s "$WORK/commands" && $output == *"$3"* ]]; then
+        pass "$1"
+    else
+        fail "$1 (status $status: $output)"
+    fi
+}
+run_suite_refusal "forky suite never promotes to latest" forky \
+    'refusing to promote a forky image to latest'
+run_suite_refusal "unknown suite never promotes to latest" sid \
+    'unsupported SNOSI_BOOTC_SECURE_SUITE: sid'
+SNOSI_BOOTC_SECURE_SUITE=trixie run_case "explicit trixie suite promotes" success "$IMAGE" "$DIGEST" "$AUTH_FILE"
+SNOSI_BOOTC_SECURE_SUITE='' run_case "empty suite promotes as trixie" success "$IMAGE" "$DIGEST" "$AUTH_FILE"
 
 printf '# Results: %d passed, %d failed\n' "$PASS" "$FAIL"
 exit "$FAIL"

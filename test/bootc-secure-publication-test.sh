@@ -12,6 +12,8 @@ DIGEST="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 IMAGE="ghcr.io/frostyard/floe"
 VERSION="20260729010101"
 LOCAL_REF="localhost/snosi-verified-floe:$VERSION"
+# The cases run with the default (trixie) suite unless a case sets one.
+unset SNOSI_BOOTC_SECURE_SUITE
 WORK=""
 AUTH_FILE=""
 PASS=0
@@ -165,6 +167,57 @@ INSPECTION=$(jq -nc --arg digest "$DIGEST" --arg compatibility "$ASSEMBLY_COMPAT
     '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": $compatibility}}')
 COSIGN_VERIFY_FAIL=1 run_case "failed Cosign verification is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
 SKOPEO_COPY_FAIL=1 run_case "failed policy copy is rejected" failure "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
+
+# SNOSI_BOOTC_SECURE_SUITE selects the contract and the tag form (ADR-0038).
+# Forky verifies only forky-<timestamp> tags against the forky contract's
+# assembly label; trixie (unset) never accepts a forky tag; an unknown suite
+# fails before any registry call.
+FORKY_CONTRACT="$ROOT_DIR/shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json"
+FORKY_COMPATIBILITY=$(jq -er '.assembly.compatibility' "$FORKY_CONTRACT")
+FORKY_VERSION="forky-$VERSION"
+FORKY_LOCAL_REF="localhost/snosi-verified-floe:$FORKY_VERSION"
+INSPECTION=$(jq -nc --arg digest "$DIGEST" --arg compatibility "$FORKY_COMPATIBILITY" \
+    '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": $compatibility}}')
+SNOSI_BOOTC_SECURE_SUITE=forky run_case "forky suite verifies a forky tag under the forky contract" success \
+    "$IMAGE" "$FORKY_VERSION" "$DIGEST" "$FORKY_LOCAL_REF" "$AUTH_FILE"
+grep -Fqx "skopeo inspect --authfile $AUTH_FILE --format {{.Digest}} docker://$IMAGE:$FORKY_VERSION" "$WORK/commands" &&
+    grep -Fq "docker://$IMAGE@$DIGEST containers-storage:$FORKY_LOCAL_REF" "$WORK/commands" &&
+    pass "forky suite resolves and copies the forky tag" ||
+    fail "forky suite resolves and copies the forky tag"
+SNOSI_BOOTC_SECURE_SUITE=forky run_case "forky suite rejects a bare 14-digit tag" failure \
+    "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
+SNOSI_BOOTC_SECURE_SUITE=forky run_case "forky suite rejects a local reference of another tag" failure \
+    "$IMAGE" "$FORKY_VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
+# The trixie label isolates the tag check: only the forky tag can reject here.
+INSPECTION=$(jq -nc --arg digest "$DIGEST" --arg compatibility "$ASSEMBLY_COMPATIBILITY" \
+    '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": $compatibility}}')
+run_case "unset suite rejects a forky tag" failure \
+    "$IMAGE" "$FORKY_VERSION" "$DIGEST" "$FORKY_LOCAL_REF" "$AUTH_FILE"
+SNOSI_BOOTC_SECURE_SUITE='' run_case "empty suite rejects a forky tag" failure \
+    "$IMAGE" "$FORKY_VERSION" "$DIGEST" "$FORKY_LOCAL_REF" "$AUTH_FILE"
+INSPECTION=$(jq -nc --arg digest "$DIGEST" --arg compatibility "$FORKY_COMPATIBILITY" \
+    '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": $compatibility}}')
+SNOSI_BOOTC_SECURE_SUITE=sid run_case "unknown suite is rejected" failure \
+    "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
+if [[ ! -s "$WORK/commands" ]]; then
+    pass "unknown suite makes no registry call"
+else
+    fail "unknown suite makes no registry call"
+fi
+if [[ $FORKY_COMPATIBILITY != "$ASSEMBLY_COMPATIBILITY" ]]; then
+    # While the two contracts differ, each suite must reject the other's label:
+    # this shows that the suite, not a fixed path, selects the contract.
+    INSPECTION=$(jq -nc --arg digest "$DIGEST" --arg compatibility "$ASSEMBLY_COMPATIBILITY" \
+        '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": $compatibility}}')
+    SNOSI_BOOTC_SECURE_SUITE=forky run_case "forky suite rejects an image with the trixie assembly label" failure \
+        "$IMAGE" "$FORKY_VERSION" "$DIGEST" "$FORKY_LOCAL_REF" "$AUTH_FILE"
+    INSPECTION=$(jq -nc --arg digest "$DIGEST" --arg compatibility "$FORKY_COMPATIBILITY" \
+        '{Digest: $digest, Labels: {"io.snosi.bootc.secureboot-capable": "true", "io.snosi.bootc.secureboot-assembly": $compatibility}}')
+    run_case "trixie suite rejects an image with the forky assembly label" failure \
+        "$IMAGE" "$VERSION" "$DIGEST" "$LOCAL_REF" "$AUTH_FILE"
+else
+    pass "forky and trixie contracts carry one assembly label; the cross-label cases do not apply"
+fi
 
 if [[ -f "$HELPER" ]] && ! grep -Eiq "(skopeo|docker)[^#]*push|docker://[^[:space:]\"']+:latest" "$HELPER"; then
     pass "helper has no publication or mutable-tag operation"

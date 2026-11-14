@@ -8,6 +8,8 @@ HELPER="$ROOT_DIR/shared/bootc-secure/ci/push-immutable-image.sh"
 DIGEST="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 IMAGE="ghcr.io/frostyard/floe"
 TAG="20260301000000"
+# The cases above the suite cases run with the default (trixie) suite.
+unset SNOSI_BOOTC_SECURE_SUITE
 WORK=""
 PASS=0
 FAIL=0
@@ -256,6 +258,58 @@ if [[ $result -eq 0 ]] && grep -Fq "buildah push --compression-format=zstd:chunk
 else
     fail "push command contains compression, digest file, and exact source/destination"
 fi
+
+# SNOSI_BOOTC_SECURE_SUITE selects the tag form (ADR-0038): trixie (unset or
+# empty) pushes only 14-digit tags, forky pushes only forky-<14 digits>, and an
+# unknown suite pushes nothing.
+run_suite_helper() { # suite|-unset- tag
+    local suite=$1 tag=$2 status
+    local -a suite_env=(env SNOSI_BOOTC_SECURE_SUITE="$suite")
+    [[ $suite != -unset- ]] || suite_env=(env -u SNOSI_BOOTC_SECURE_SUITE)
+    reset_state
+    set +e
+    "${suite_env[@]}" PATH="$WORK/bin:$PATH" COMMAND_LOG="$WORK/commands" PUSH_COUNT="$WORK/push-count" \
+        RAW_COUNT="$WORK/raw-count" EXPECTED_DIGEST="$DIGEST" EXPECTED_IMAGE="$IMAGE" EXPECTED_TAG="$tag" \
+        SNOSI_PUSH_RETRY_DELAY=0 \
+        "$HELPER" "$IMAGE" "$tag" >"$WORK/stdout" 2>"$WORK/stderr"
+    status=$?
+    set -e
+    printf '%s\n' "$status"
+}
+
+assert_suite_push() { # description suite tag
+    local result
+    result=$(run_suite_helper "$2" "$3")
+    if [[ $result -eq 0 ]] && [[ $(cat "$WORK/stdout") == "$DIGEST" ]] &&
+            grep -Eq "^buildah push --compression-format=zstd:chunked --digestfile=[^ ]+ $IMAGE:$3 docker://$IMAGE:$3\$" "$WORK/commands"; then
+        pass "$1"
+    else
+        fail "$1 (status $result: $(cat "$WORK/stderr"))"
+    fi
+}
+
+assert_suite_refused() { # description suite tag expected-text
+    local result
+    result=$(run_suite_helper "$2" "$3")
+    if [[ $result -eq 2 ]] && [[ $(cat "$WORK/push-count") -eq 0 ]] && [[ ! -s "$WORK/commands" ]] &&
+            grep -Fq "$4" "$WORK/stderr"; then
+        pass "$1"
+    else
+        fail "$1 (status $result: $(cat "$WORK/stderr"))"
+    fi
+}
+
+FORKY_TAG="forky-$TAG"
+assert_suite_push "forky suite pushes a forky-<timestamp> tag" forky "$FORKY_TAG"
+assert_suite_push "explicit trixie suite pushes a 14-digit tag" trixie "$TAG"
+assert_suite_push "unset suite pushes a 14-digit tag" -unset- "$TAG"
+assert_suite_refused "forky suite rejects a bare 14-digit tag" forky "$TAG" 'invalid immutable image tag for suite forky'
+assert_suite_refused "forky suite rejects a short forky tag" forky "forky-2026" 'invalid immutable image tag for suite forky'
+assert_suite_refused "unset suite rejects a forky tag" -unset- "$FORKY_TAG" 'invalid immutable image tag for suite trixie'
+assert_suite_refused "empty suite rejects a forky tag" '' "$FORKY_TAG" 'invalid immutable image tag for suite trixie'
+assert_suite_refused "trixie suite rejects latest" trixie latest 'invalid immutable image tag for suite trixie'
+assert_suite_refused "unknown suite pushes nothing" sid "$TAG" 'unsupported SNOSI_BOOTC_SECURE_SUITE: sid'
+assert_suite_refused "unknown suite pushes nothing for a forky tag" sid "$FORKY_TAG" 'unsupported SNOSI_BOOTC_SECURE_SUITE: sid'
 
 printf '# Results: %d passed, %d failed\n' "$PASS" "$FAIL"
 exit "$FAIL"

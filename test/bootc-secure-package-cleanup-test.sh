@@ -9,6 +9,8 @@ CONTRACT="$ROOT_DIR/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
 BOOTC_SECURE_VERSION=$(jq -er '.assembly.bootc_version' "$CONTRACT")
 BOOTC_SECURE_ASSEMBLY_COMPATIBILITY=$(jq -er '.assembly.compatibility' "$CONTRACT")
 export BOOTC_SECURE_VERSION
+# The cases run with the default (trixie) suite unless a case sets one.
+unset SNOSI_BOOTC_SECURE_SUITE
 failures=0
 
 fail() {
@@ -26,6 +28,7 @@ write_fixtures() { # state root
         "$root/usr/lib/snosi" \
         "$root/boot/EFI/Linux" "$root/boot/EFI/BOOT"
     cp "$CONTRACT" "$root/usr/lib/snosi/bootc-secure.json"
+    printf '%s\n' 'ID=debian' 'VERSION_CODENAME=trixie' 'IMAGE_VERSION=fixture' >"$root/usr/lib/os-release"
     : >"$root/usr/lib/modules/test-kernel/vmlinuz"
     : >"$root/usr/lib/modules/test-kernel/initramfs.img"
     printf 'keep-linux\n' >"$root/boot/EFI/Linux/keep.txt"
@@ -207,6 +210,7 @@ if [[ $1 == --prepare-systemd-boot-source ]]; then
     exit 0
 fi
 printf '%s\n' "${SNOSI_BOOTC_SECURE_UKIFY_IMAGE:-}" >"$BUILD_FIXTURE_STATE/ukify-image"
+printf '%s\n' "${SNOSI_BOOTC_SECURE_SUITE:-}" >"$BUILD_FIXTURE_STATE/assembler-env-suite"
 touch "$BUILD_FIXTURE_STATE/assembler-invoked"
 mkdir -p "$1/boot/EFI/Linux" "$1/boot/EFI/BOOT"
 printf 'injected-uki\n' >"$1/boot/EFI/Linux/test-kernel.efi"
@@ -455,6 +459,83 @@ run_invalid_epoch_case() {
 run_success_case
 run_missing_epoch_case
 run_invalid_epoch_case
+
+# SNOSI_BOOTC_SECURE_SUITE selects the contract (ADR-0038), and the rootfs must
+# be of that suite. A mismatch, a missing os-release or an unknown suite must
+# fail before the proc mount, Buildah and the assembler.
+FORKY_CONTRACT="$ROOT_DIR/shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json"
+FORKY_BOOTC_VERSION=$(jq -er '.assembly.bootc_version' "$FORKY_CONTRACT")
+FORKY_ASSEMBLY_COMPATIBILITY=$(jq -er '.assembly.compatibility' "$FORKY_CONTRACT")
+
+set_codename_forky() { sed -i 's/^VERSION_CODENAME=.*/VERSION_CODENAME=forky/' "$2/usr/lib/os-release"; }
+remove_os_release() { rm "$2/usr/lib/os-release"; }
+remove_codename() { sed -i '/^VERSION_CODENAME=/d' "$2/usr/lib/os-release"; }
+symlink_os_release() {
+    mv "$2/usr/lib/os-release" "$1/outside-os-release"
+    ln -s "$1/outside-os-release" "$2/usr/lib/os-release"
+}
+
+run_suite_failure_case() { # name suite|-unset- setup expected-text
+    local name=$1 suite=$2 setup=$3 expected=$4 work state root status output
+    local -a suite_env=(SNOSI_BOOTC_SECURE_SUITE="$suite")
+    [[ $suite != -unset- ]] || suite_env=(-u SNOSI_BOOTC_SECURE_SUITE)
+    work=$(mktemp -d)
+    trap 'rm -rf -- "$work"' RETURN
+    state="$work/state"; root="$work/root"
+    write_fixtures "$state" "$root"
+    [[ $setup == none ]] || "$setup" "$state" "$root"
+    set +e
+    output=$(env "${suite_env[@]}" BUILD_FIXTURE_STATE="$state" BUILD_FIXTURE_ROOT="$root" PATH="$state/bin:$PATH" \
+        SNOSI_BOOTC_SECURE=1 SNOSI_BOOTC_MOK_KEY=fixture SNOSI_BOOTC_MOK_CERT=fixture \
+        SNOSI_BOOTC_PCR_KEY=fixture SNOSI_BOOTC_PCR_CERT=fixture \
+        SNOSI_BOOTC_SECURE_TEST_HOOKS=1 SNOSI_BOOTC_SECURE_TEST_ASSEMBLER="$state/assembler" SOURCE_DATE_EPOCH=1722384000 \
+        "$PACKAGER" "$root" "localhost/suite-$name:latest" 2>&1)
+    status=$?
+    set -e
+    [[ $status -ne 0 ]] || fail "suite case $name unexpectedly succeeded"
+    [[ $output == *"$expected"* ]] || fail "suite case $name lacked diagnostic: $expected ($output)"
+    [[ ! -e "$state/mount-invoked" ]] || fail "suite case $name reached the rootfs proc mount"
+    [[ ! -e "$state/chroot-invoked" ]] || fail "suite case $name ran the rootfs bootc"
+    [[ ! -e "$state/buildah-invoked" ]] || fail "suite case $name reached Buildah"
+    [[ ! -e "$state/assembler-invoked" ]] || fail "suite case $name reached the assembler"
+}
+
+run_suite_failure_case forky-suite-trixie-rootfs forky none \
+    'rootfs VERSION_CODENAME trixie differs from SNOSI_BOOTC_SECURE_SUITE forky'
+run_suite_failure_case trixie-suite-forky-rootfs -unset- set_codename_forky \
+    'rootfs VERSION_CODENAME forky differs from SNOSI_BOOTC_SECURE_SUITE trixie'
+run_suite_failure_case empty-suite-forky-rootfs '' set_codename_forky \
+    'rootfs VERSION_CODENAME forky differs from SNOSI_BOOTC_SECURE_SUITE trixie'
+run_suite_failure_case missing-os-release -unset- remove_os_release \
+    'rootfs os-release is missing or not a regular file'
+run_suite_failure_case symlinked-os-release -unset- symlink_os_release \
+    'rootfs os-release is missing or not a regular file'
+run_suite_failure_case missing-codename forky remove_codename \
+    'rootfs VERSION_CODENAME <none> differs from SNOSI_BOOTC_SECURE_SUITE forky'
+run_suite_failure_case unknown-suite sid none \
+    'unsupported SNOSI_BOOTC_SECURE_SUITE: sid'
+
+run_forky_success_case() {
+    local work state root published
+    work=$(mktemp -d)
+    trap 'rm -rf -- "$work"' RETURN
+    state="$work/state"; root="$work/root"; published="localhost/suite-forky-success:forky-fixture"
+    write_fixtures "$state" "$root"
+    cp "$FORKY_CONTRACT" "$root/usr/lib/snosi/bootc-secure.json"
+    set_codename_forky "$state" "$root"
+    BUILD_FIXTURE_STATE="$state" BUILD_FIXTURE_ROOT="$root" BUILD_FIXTURE_PUBLISHED="$published" PATH="$state/bin:$PATH" \
+        SNOSI_BOOTC_SECURE_SUITE=forky BUILD_FIXTURE_BOOTC_VERSION="bootc $FORKY_BOOTC_VERSION" SNOSI_BOOTC_SECURE=1 \
+        SNOSI_BOOTC_MOK_KEY=fixture SNOSI_BOOTC_MOK_CERT=fixture SNOSI_BOOTC_PCR_KEY=fixture SNOSI_BOOTC_PCR_CERT=fixture \
+        SNOSI_BOOTC_SECURE_TEST_HOOKS=1 SNOSI_BOOTC_SECURE_TEST_ASSEMBLER="$state/assembler" SOURCE_DATE_EPOCH=1722384000 \
+        "$PACKAGER" "$root" "$published" org.opencontainers.image.version=fixture >/dev/null ||
+        fail "forky suite did not package a forky rootfs"
+    grep -Fxq "io.snosi.bootc.secureboot-assembly=$FORKY_ASSEMBLY_COMPATIBILITY" "$state/container-2-labels" 2>/dev/null ||
+        fail "forky suite did not label the forky assembly compatibility"
+    [[ -f "$state/assembler-env-suite" && $(<"$state/assembler-env-suite") == forky ]] ||
+        fail "the assembler did not inherit SNOSI_BOOTC_SECURE_SUITE=forky"
+    "$state/assembler" --remove-injected "$root"
+}
+run_forky_success_case
 
 [[ $failures -eq 0 ]] || exit 1
 echo "bootc secure package cleanup fixtures passed"

@@ -96,6 +96,27 @@ probe_rootfs_bootc_version() ( # rootfs
     }
 )
 
+# The rootfs must be of the selected suite: a forky contract must never sign a
+# trixie rootfs, nor the reverse. Parse os-release; never source it.
+check_rootfs_suite() { # rootfs suite
+    local os_release="$1/usr/lib/os-release" suite=$2 codename
+
+    [[ -f $os_release && ! -L $os_release ]] || {
+        echo "Error: rootfs os-release is missing or not a regular file: $os_release" >&2
+        exit 1
+    }
+    codename=$(sed -n 's/^VERSION_CODENAME=//p' "$os_release" | tail -n 1)
+    case $codename in
+        \"*\") codename=${codename#\"}; codename=${codename%\"} ;;
+        \'*\') codename=${codename#\'}; codename=${codename%\'} ;;
+    esac
+    [[ $codename == "$suite" ]] || {
+        printf 'Error: rootfs VERSION_CODENAME %s differs from SNOSI_BOOTC_SECURE_SUITE %s\n' \
+            "${codename:-<none>}" "$suite" >&2
+        exit 1
+    }
+}
+
 readonly SECURE_CAPABLE_LABEL="io.snosi.bootc.secureboot-capable=true"
 readonly SECURE_INCAPABLE_LABEL="io.snosi.bootc.secureboot-capable=false"
 SECURE_ASSEMBLY_LABEL=""
@@ -126,8 +147,12 @@ if [[ ${SNOSI_BOOTC_SECURE:-0} == 1 ]]; then
     }
     # shellcheck source=shared/bootc-secure/compatibility.sh
     source "$COMPATIBILITY_HELPER"
-    snosi_bootc_secure_load_compatibility \
-        "$(dirname "${BASH_SOURCE[0]}")/../../bootc-secure/tree/usr/lib/snosi/bootc-secure.json" || exit 1
+    # SNOSI_BOOTC_SECURE_SUITE selects the suite's contract (ADR-0038); unset is
+    # trixie. The assembler inherits the same environment and loads the same one.
+    secure_suite=$(snosi_bootc_secure_suite) || exit 1
+    secure_contract=$(snosi_bootc_secure_contract_path \
+        "$(dirname "${BASH_SOURCE[0]}")/../../..") || exit 1
+    snosi_bootc_secure_load_compatibility "$secure_contract" || exit 1
     SECURE_ASSEMBLY_LABEL="io.snosi.bootc.secureboot-assembly=$BOOTC_SECURE_ASSEMBLY_COMPATIBILITY"
     case ${SNOSI_BOOTC_SECURE_TEST_HOOKS:-0} in
         0)
@@ -155,6 +180,7 @@ if [[ ${SNOSI_BOOTC_SECURE:-0} == 1 ]]; then
     # shellcheck source=shared/bootc-secure/storage-digest-probe.sh
     source "$DIGEST_PROBE"
     : "${SOURCE_DATE_EPOCH:?SOURCE_DATE_EPOCH is required for secure chunking}"
+    check_rootfs_suite "$ROOTFS_DIR" "$secure_suite"
     probe_rootfs_bootc_version "$ROOTFS_DIR"
     trap cleanup_secure EXIT
     # The reconciler's signed source must be in the pristine first OCI pass:

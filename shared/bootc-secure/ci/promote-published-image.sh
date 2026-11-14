@@ -5,6 +5,17 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 # shellcheck source=test/lib/bootc-secure-assertions.sh
 source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
+# shellcheck source=shared/bootc-secure/compatibility.sh
+source "$ROOT_DIR/shared/bootc-secure/compatibility.sh"
+
+# Only trixie moves latest. A forky image is a test image under an immutable
+# forky-<timestamp> tag and never moves latest (ADR-0038).
+SUITE=$(snosi_bootc_secure_suite) || exit 2
+if [[ $SUITE != trixie ]]; then
+    printf 'refusing to promote a %s image to latest: only trixie moves latest (ADR-0038)\n' \
+        "$SUITE" >&2
+    exit 2
+fi
 
 if [[ $# -ne 3 ]]; then
     printf 'usage: %s IMAGE EXPECTED_DIGEST AUTH_FILE\n' "${0##*/}" >&2

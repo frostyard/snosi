@@ -111,6 +111,11 @@ jobs:
         # and checkout steps that do not persist credentials.
         run: python3 ./test/workflow-pins-test.py
 
+      - name: Validate forky publish workflow
+        # ADR-0038: dispatch only from main, never latest, R2 or a release,
+        # forky-<timestamp> tags only, and the secure-build steps kept in the same order.
+        run: python3 ./test/forky-publish-workflow-test.py
+
       - name: Validate canonical Copilot automation secret
         # Keep both automation consumers on the fleet-wide name and retain a
         # visible failure when the organization secret is unavailable.
