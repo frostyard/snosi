@@ -222,6 +222,18 @@ else
     fail 'second divergent pin in build.yml is rejected'
 fi
 
+# 9b2. A second job in build.yml (build-forky, ADR-0037) with the same pin
+# passes: the pins agree, and the first match is the canonical pin.
+f="$work/second-job-same-pin"
+make_fixture "$f" "$PIN_A" "-"
+printf '  build-forky:\n    steps:\n      - uses: systemd/mkosi@%s\n' "$PIN_A" >>"$f/.github/workflows/build.yml"
+run_guard "$f"
+if [[ $RC -eq 0 ]] && grep -Fq "build.yml mkosi pin: $PIN_A" <<<"$OUT"; then
+    pass 'a second build.yml job with the same pin passes'
+else
+    fail 'a second build.yml job with the same pin passes'
+fi
+
 # 9c. A tag or branch ref in another workflow is a divergence too.
 f="$work/tag-validate"
 make_fixture "$f" "$PIN_A" "-"

@@ -43,7 +43,7 @@ is_file() { [[ -f $1 ]]; }
 not_exists() { [[ ! -e $1 ]]; }
 contains() { [[ $1 == *"$2"* ]]; }
 
-printf '1..19\n'
+printf '1..23\n'
 
 # --- manifestmv.sh ------------------------------------------------------------
 
@@ -127,5 +127,33 @@ status=$?
 ok "sysextmv: succeeds when no sysext artifacts are present" test "$status" -eq 0
 ok "sysextmv: reports the empty case" contains "$sx_out" "No sysext files found"
 ok "sysextmv: creates the sysexts/ directory even when empty" test -d "$out/sysexts"
+
+# --- the forky publication path (build.yml build-forky, ADR-0037) -------------
+
+# A forky output directory as shared/sysext/postoutput/sysext-postoutput.sh
+# leaves it: after sysextmv.sh and manifestmv.sh, output/sysexts holds only
+# the versioned _14_ files, which shared/suite/forky/check-sysext-names.sh
+# accepts, and each versioned manifest is under manifests/<id>/.
+out=$(fresh_out)
+mkdir -p "$out/base"
+for id in lodge 1password-cli; do
+    : >"$out/$id.raw.zst"
+    : >"$out/${id}_1.2.3+r1_14_x86-64.raw.zst"
+    ln -s "${id}_1.2.3+r1_14_x86-64.raw.zst" "$out/$id"
+    : >"$out/$id.manifest"
+    : >"$out/$id.1.2.3+r1.manifest.json"
+done
+OUTPUTDIR="$out" "$sysextmv" >/dev/null
+OUTPUTDIR="$out" "$manifestmv" >/dev/null
+sysext_names=$(find "$out/sysexts" -mindepth 1 -printf '%f\n' | sort | paste -sd' ' -)
+ok "forky: sysextmv moves only the versioned _14_ files" \
+    test "$sysext_names" = "1password-cli_1.2.3+r1_14_x86-64.raw.zst lodge_1.2.3+r1_14_x86-64.raw.zst"
+ok "forky: the unversioned copy and the symlink stay in OUTPUTDIR" \
+    test -f "$out/lodge.raw.zst" -a -L "$out/lodge"
+quiet() { "$@" >/dev/null 2>&1; }
+ok "forky: check-sysext-names.sh accepts output/sysexts" \
+    quiet "$root/shared/suite/forky/check-sysext-names.sh" "$out/sysexts" lodge 1password-cli
+ok "forky: the versioned manifest is under manifests/<id>/" \
+    is_file "$out/manifests/1password-cli/1password-cli.1.2.3+r1.manifest.json"
 
 exit "$failures"

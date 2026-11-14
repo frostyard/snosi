@@ -521,6 +521,40 @@ The shared postoutput script (`shared/sysext/postoutput/sysext-postoutput.sh`) h
 7. Annotates manifest with `.config.key_package` and `.config.key_version`
 8. Creates unversioned symlink for systemd-sysupdate MatchPattern
 
+### Publication per suite
+
+`build.yml` publishes the sysexts of both suites to the same
+`ext/<name>/` directories in R2 ([ADR-0037](../adr/0037-build-forky-as-a-second-suite.md)).
+The `build` job builds and publishes the trixie (`_13_`) files. The
+`build-forky` job runs `mkosi --release forky build` and publishes the forky
+(`_14_`) files. Every sysupdate transfer matches `%w` in both Source and
+Target, so a host selects only the files of its own suite.
+
+- **Order:** repogen's `publish-to-r2` rewrites `ext/<name>/SHA256SUMS` and
+  its `.gpg` under an ETag guard, and 2 writers to one directory at the same
+  time fail (frostyard/repogen#102, #104). `build-forky` declares
+  `needs: build`, so it starts after the trixie publish. The workflow
+  concurrency group keeps 2 main runs from overlapping.
+- **Failure:** when the `build` job fails or is cancelled, `build-forky` is
+  skipped. This includes a run where only the final himmelblau check failed
+  after the trixie publish. The forky sysexts then publish with the next main
+  run that passes.
+- **Pull requests:** `build-forky` also runs on a pull request, after the
+  trixie build. It builds, collects and checks the names, so these exact
+  steps are tested before the first publish from main. Only its 2 upload
+  steps skip pull requests. `forky-mechanics.yml` also builds the forky
+  sysexts on a pull request; that duplicate cost is accepted.
+- **Name check:** before any upload, `shared/suite/forky/check-sysext-names.sh`
+  requires exactly 1 versioned `_14_` file in `output/sysexts` for each
+  `Format=sysext` image of `mkosi --release forky --json summary`, and no
+  other versioned file.
+- **Manifests:** the manifest names carry no suite, so the forky manifests go
+  to `manifests/forky/` and the trixie manifests stay in `manifests/`.
+- **Known gaps:** `himmelblau` is trixie-only for now: its scoped source
+  (ADR-0020) builds in a separate invocation, and `build-forky` has no such
+  step. `sunshine` is trixie-only because upstream publishes no forky deb.
+  `test/build-workflow-permissions-test.py` holds these rules.
+
 ### Compressed output: every sysext publishes as `.raw.zst`
 
 Every tracked sysext `mkosi.conf` sets `CompressOutput=zstd` and

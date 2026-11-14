@@ -200,7 +200,7 @@ jobs:
         if: steps.build.outcome == 'success' && matrix.profile == 'sysexts'
         run: |
           set -euo pipefail
-          sudo mkosi --release forky --json summary >"$RUNNER_TEMP/forky-summary.json"
+          sudo mkosi --release forky --json summary | tee "$RUNNER_TEMP/forky-summary.json" >/dev/null
           jq -r '.Images[] | select(.Format == "sysext") | .ImageId' \
             "$RUNNER_TEMP/forky-summary.json" >"$RUNNER_TEMP/forky-sysext-ids.txt"
           mapfile -t ids <"$RUNNER_TEMP/forky-sysext-ids.txt"

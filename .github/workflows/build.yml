@@ -316,3 +316,157 @@ jobs:
         run: |
           echo "::error::the himmelblau sysext did not build; its APT source (https://packages.himmelblau-idm.org) may be unavailable (ADR-0020)"
           exit 1
+
+  build-forky:
+    # The forky sysexts (ADR-0037; core plan 0009 phase 6): the same root
+    # configuration with `mkosi --release forky`, published to the same
+    # ext/<name>/ directories as the trixie ones. Their file names carry OS
+    # version 14 and every sysupdate transfer matches %w, so a trixie host
+    # never selects a forky file.
+    #
+    # Order: repogen's publish-to-r2 rewrites ext/<name>/SHA256SUMS(.gpg) under
+    # an ETag guard, so 2 writers to one directory at the same time fail
+    # (frostyard/repogen#102, #104). `needs: build` starts this job only after
+    # the trixie job, its publish steps included, has finished, and the
+    # workflow concurrency group above keeps 2 main runs from overlapping.
+    #
+    # Failure: with the default `needs` semantics this job is skipped when the
+    # trixie job fails or is cancelled, also when only the final himmelblau
+    # check failed after the trixie publish. The forky sysexts then publish
+    # with the next main run that passes; a forky publish never runs beside or
+    # after a broken trixie run.
+    #
+    # Pull requests: this job also runs on a pull request, after the trixie
+    # build, so its build, output paths, summary command and name check are
+    # tested before the first publish from main. Only its 2 upload steps carry
+    # `if: github.event_name != 'pull_request'`
+    # (test/build-workflow-permissions-test.py). forky-mechanics.yml builds the
+    # same sysexts on a pull request too; that duplicate cost is accepted.
+    needs: build
+    runs-on: ubuntu-latest
+    # A hung mkosi/apt otherwise burns the 6-hour default.
+    timeout-minutes: 120
+    # This job executes mkosi configuration as root. It does not publish
+    # through GITHUB_TOKEN, mint OIDC tokens, or create attestations.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Aggressive cleanup
+        run: |
+          sudo rm -rf /usr/lib/jvm /usr/share/dotnet /usr/share/swift \
+            /usr/local/.ghcup /usr/local/julia* /usr/local/lib/android \
+            /usr/local/share/chromium /opt/microsoft /opt/google /opt/az \
+            /usr/local/share/powershell /opt/hostedtoolcache
+          docker system prune -af || true
+          docker builder prune -af || true
+          df -h
+
+      - name: Redirect temp to /mnt
+        # Same disk-exhaustion class as the build job: mkosi's workspace
+        # defaults to TMPDIR on /; /mnt has the headroom. sudo -E preserves
+        # TMPDIR below.
+        run: |
+          sudo mkdir -p /mnt/tmp
+          sudo chmod 1777 /mnt/tmp
+          echo "TMPDIR=/mnt/tmp" >> "$GITHUB_ENV"
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generate build date
+        id: date
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate version tag
+        id: version
+        run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
+
+      - name: setup-mkosi
+        uses: systemd/mkosi@904357aa12013e3adbb4857cc4bf8840c6c83682 # main 2026-11-09
+
+      - name: Verify attested sysext downloads
+        # The same check as the build job (ADR-0024): the forky build
+        # downloads the same pinned first-party debs.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./shared/download/verify-attestations.sh
+
+      - name: Build forky sysexts
+        # No himmelblau step: the himmelblau sysext stays trixie-only for now
+        # (a known gap, docs/design/sysexts.md).
+        env:
+          # These are picked up by mkosi.postoutput script
+          CREATED_DATE: ${{ steps.date.outputs.date }}
+          DEFAULT_TAG: ${{ steps.version.outputs.tag }}
+          IMAGE_VERSION: ${{ steps.version.outputs.tag }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_DESC: ${{ env.IMAGE_DESC }}
+          IMAGE_KEYWORDS: ${{ env.IMAGE_KEYWORDS }}
+          IMAGE_LICENSE: ${{ env.IMAGE_LICENSE }}
+          IMAGE_LOGO_URL: ${{ env.IMAGE_LOGO_URL }}
+          # These are automatically available from GitHub context
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          sudo -E mkosi --release forky build
+
+      - name: Collect forky sysext outputs
+        # The files are root-owned (the scripts run under sudo); hand them to
+        # the runner user so the unprivileged publish step reads them.
+        run: |
+          sudo ./sysextmv.sh
+          sudo ./manifestmv.sh
+          sudo chown -R "$(id -u):$(id -g)" output/sysexts output/manifests
+
+      - name: Check the forky sysext names
+        # Before any upload: each Format=sysext image of the forky
+        # configuration must have exactly 1 versioned <id>_<version>_14_<arch>
+        # file in output/sysexts, and no other versioned file may be there
+        # (test/forky-sysext-names-test.sh). A trixie (_13_) or foreign file
+        # never reaches the shared ext/<name>/ directories.
+        run: |
+          set -euo pipefail
+          sudo mkosi --release forky --json summary | tee "$RUNNER_TEMP/forky-summary.json" >/dev/null
+          jq -r '.Images[] | select(.Format == "sysext") | .ImageId' \
+            "$RUNNER_TEMP/forky-summary.json" >"$RUNNER_TEMP/forky-sysext-ids.txt"
+          mapfile -t ids <"$RUNNER_TEMP/forky-sysext-ids.txt"
+          (( ${#ids[@]} > 0 )) || { echo "::error::the forky configuration names no sysext image" >&2; exit 1; }
+          ./shared/suite/forky/check-sysext-names.sh output/sysexts "${ids[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish sysexts to frostyard repo
+        # The same action, pins and inputs as the build job's publish step.
+        # skip-published-identities skips each identity that the
+        # signature-verified SHA256SUMS already lists (repogen ADR-0018).
+        if: github.event_name != 'pull_request'
+        uses: frostyard/repogen/.github/actions/publish-to-r2@b5dccc7fe10f40d55d34b092cf7ed92dd1473c26 # v0.7.2
+        with:
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          r2-bucket: frostyardrepo
+          # Never let the binary float: test/build-workflow-permissions-test.py
+          # pins repogen-version and repogen-commit to the action pin.
+          repogen-version: v0.7.2
+          repogen-commit: b5dccc7fe10f40d55d34b092cf7ed92dd1473c26
+          skip-duplicates: true
+          skip-published-identities: true
+          gpg-private-key: ${{ secrets.REPOGEN_GPG_KEY }}
+          packages-dir: ./output/sysexts
+          package-type: sysext
+          base-url: https://repository.frostyard.org # required for sysext
+      - name: Upload manifests to R2
+        # Forky manifests go to manifests/forky/, never manifests/: the
+        # manifest names carry no suite, so a forky upload to manifests/ would
+        # overwrite the trixie manifest of the same id and version.
+        if: github.event_name != 'pull_request'
+        uses: ryand56/r2-upload-action@33ebb7a494b3a8a3c5ed2ea6bbdc72e707090317 # v1.5
+        with:
+          r2-account-id: ${{ secrets.R2_ACCOUNT_ID }}
+          r2-access-key-id: ${{ secrets.R2_ACCESS_KEY_ID }}
+          r2-secret-access-key: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          r2-bucket: frostyardrepo
+          source-dir: output/manifests
+          destination-dir: manifests/forky/

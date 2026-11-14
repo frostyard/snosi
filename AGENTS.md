@@ -280,7 +280,10 @@ that file, and no image ships `/etc/snosi-health`. The daily timer posts at
 most 20 reportable problems and 1 weekly count, never a `crash` report, and
 `test/snosi-health-report-test.sh` enforces all of it (ADR-0030).
 
-`.github/workflows/build.yml` publishes sysexts; `build-images.yml` publishes
+`.github/workflows/build.yml` publishes sysexts; its `build-forky` job
+(`needs: build`, so never beside the trixie publish) publishes the forky
+`_14_` sysexts to the same `ext/<name>/` and its manifests to
+`manifests/forky/`. `build-images.yml` publishes
 signed OCI images by immutable digest before promoting `latest`. `forky-publish.yml`
 (dispatch from main only) publishes signed forky Floe test images under
 immutable `forky-<ts>` tags, never `latest`; `SNOSI_BOOTC_SECURE_SUITE=forky`
