@@ -274,6 +274,7 @@ required_coverage = {
     ".github/workflows/build-mechanics.yml": "publication",
     ".github/workflows/build-installer-iso.yml": "publication",
     ".github/workflows/deploy-native-installer-redirect.yml": "publication",
+    ".github/workflows/forky-publish.yml": "publication",
     "shared/native-ab/publish/promote.sh": "publication",
     "shared/outformat/image/buildah-package.sh": "publication",
     "mkosi.profiles/firn-installer/mkosi.conf": "destructive-disk-operations",

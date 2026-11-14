@@ -24,7 +24,7 @@
     { "glob": "**/libexec/bootc-update-stage", "level": "L1", "why": "update-verification: pulls and stages updates under the strict policy" },
     { "glob": "shared/download/verif*.sh", "level": "L1", "why": "update-verification: checksum and build-provenance attestation checks of downloads" },
     { "glob": "**/*.transfer", "level": "L1", "why": "update-verification: sysupdate transfer files that set the sysext source and Verify=true" },
-    { "glob": ".github/workflows/{build,build-images,build-mechanics,build-installer-iso,deploy-native-installer-redirect}.yml", "level": "L1", "why": "publication: the workflows that sign and publish sysexts, OCI images, the QA mechanics images, the installer ISO and the redirect Worker" },
+    { "glob": ".github/workflows/{build,build-images,build-mechanics,build-installer-iso,deploy-native-installer-redirect,forky-publish}.yml", "level": "L1", "why": "publication: the workflows that sign and publish sysexts, OCI images, the QA mechanics images, the forky test images, the installer ISO and the redirect Worker" },
     { "glob": "shared/native-ab/publish/**", "level": "L1", "why": "publication: installer ISO publication, promotion and verification scripts" },
     { "glob": "shared/outformat/image/buildah-package.sh", "level": "L1", "why": "publication: packages the OCI image that is signed and published" },
     { "glob": "workers/native-installer-redirect/**", "level": "L1", "why": "publication: the stable installer ISO URL redirect Worker" },

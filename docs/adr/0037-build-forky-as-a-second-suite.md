@@ -1,6 +1,6 @@
 # 0037 — Build forky as a second suite beside trixie
 
-- **Status:** Accepted
+- **Status:** Accepted; publication of forky test images is decided by [ADR-0038](0038-publish-signed-forky-test-images.md)
 - **Date:** 2026-11-13
 
 ## Context

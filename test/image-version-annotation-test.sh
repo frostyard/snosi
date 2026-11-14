@@ -239,6 +239,11 @@ workflows = root / ".github" / "workflows"
 packager = "./shared/outformat/image/buildah-package.sh"
 checker = "check-image-version.sh"
 label = '"org.opencontainers.image.version=${{ steps.version.outputs.tag }}"'
+# forky-publish.yml tags forky-<version>; its label and IMAGE_VERSION stay the
+# 14-digit version output (ADR-0038).
+labels = {
+    "forky-publish.yml": '"org.opencontainers.image.version=${{ steps.version.outputs.version }}"',
+}
 
 problems = []
 lanes = 0
@@ -253,7 +258,7 @@ for workflow in sorted(workflows.glob("*.yml")):
         if packager in step:
             lanes += 1
             package_steps += 1
-            if label not in step:
+            if labels.get(workflow.name, label) not in step:
                 problems.append(f"{workflow.name}: {name} does not pass the version label")
         if checker in step:
             if "containers-storage:" in step:

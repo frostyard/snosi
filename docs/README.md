@@ -56,6 +56,7 @@ states intent; the categories below hold the record.
 - [adr/0035-lodge-app-sysexts-declare-user-lodge.md](adr/0035-lodge-app-sysexts-declare-user-lodge.md) — **Proposed:** a Lodge app sysext ships lodge's own sysusers line for user `lodge`, the lodge sysext ships it in its own file, and every account a system unit names is declared by the delta; `shared/sysext/finalize/sysext-lodge-accounts-guard.sh` fails the build otherwise ([#1245](https://github.com/frostyard/snosi/issues/1245))
 - [adr/0036-prune-installer-isos-after-promotion.md](adr/0036-prune-installer-isos-after-promotion.md) — **Proposed:** amends ADR-0018: the ISO promote job keeps the live installer ISO and the two before it and deletes older ones, at most 30 objects a run; a larger backlog needs a maintainer dispatch
 - [adr/0037-build-forky-as-a-second-suite.md](adr/0037-build-forky-as-a-second-suite.md) — the Debian release is a build input: `mkosi --release forky` builds Floe on forky beside the unchanged trixie default; suite-specific content lives in `[Match] Release=` fragments; known forky gaps are listed with evidence
+- [adr/0038-publish-signed-forky-test-images.md](adr/0038-publish-signed-forky-test-images.md) — `forky-publish.yml` (dispatch only, from main) signs and publishes forky Floe test images under immutable `forky-<timestamp>` tags, never `latest`, R2 or a release; `SNOSI_BOOTC_SECURE_SUITE` selects the secure contract and tag form
 - [org-adrs.md](org-adrs.md) — the frostyard/core ADRs that bind this repo
 
 ### Design

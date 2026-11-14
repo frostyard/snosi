@@ -195,6 +195,7 @@ when the forky fragments are cut out. The suite-specific content today:
 | dracut TPM module list (`20-tpm-luks.conf`) | `systemd-pcrphase` (dracut 106) | `systemd-pcrextend` (dracut 112), in `shared/suite/forky/{base,floe}-tree` |
 | `/var` outcome map | `var-outcomes.txt` plus `var-outcomes.trixie.txt` | `var-outcomes.txt` plus `var-outcomes.forky.txt` |
 | Kernel and backports | `shared/kernel/backports/trixie.conf` | `shared/kernel/backports/forky.conf` |
+| Host-side contract and tag form (`SNOSI_BOOTC_SECURE_SUITE`, ADR-0038) | unset, empty or `trixie`: the `shared/bootc-secure/tree` contract and `^[0-9]{14}$` tags | `forky`: the forky contract copy and `^forky-[0-9]{14}$` tags; the packager requires rootfs `VERSION_CODENAME=forky`; promotion to `latest` refuses |
 
 `test/bootc-secure-static-test.sh` requires the forky contract to equal the
 trixie contract except the three bootc version fields.
@@ -205,6 +206,15 @@ trixie contract except the three bootc version fields.
 map when it exists; a path that only one suite ships goes there, and
 `test/var-audit-suite-map-test.sh` covers it. Forky snow, snowfield and
 sundog need the same splits when they gain a forky build.
+
+The host-side secure scripts (`assemble-uki.sh`, `buildah-package.sh`,
+`ci/push-immutable-image.sh`, `ci/verify-published-image.sh`,
+`ci/promote-published-image.sh`) read the suite from
+`SNOSI_BOOTC_SECURE_SUITE` through the helpers of
+`shared/bootc-secure/compatibility.sh`
+([ADR-0038](../adr/0038-publish-signed-forky-test-images.md)). An unknown
+value fails. `.github/workflows/forky-publish.yml` sets it to `forky`; no other
+workflow sets it, so every trixie caller keeps the default.
 
 ## Secure bootc assembly
 

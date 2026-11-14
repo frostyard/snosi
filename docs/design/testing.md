@@ -18,8 +18,8 @@ symlinks, the `docs/README.md` index, the risk-path list and caller, the
 record files in `.memory/corrections/` and the two hash-pinned copies of core
 scripts), `node --test test/*.test.mjs`, and the policy tests
 `policy-as-code-test.py`, `risk-paths-test.py`,
-`build-workflow-permissions-test.py` and `workflow-pins-test.py`. It does not
-change the checkout. `workflow-pins-test.py` enforces core ADR-0021 for every
+`build-workflow-permissions-test.py`, `workflow-pins-test.py` and
+`forky-publish-workflow-test.py`. It does not change the checkout. `workflow-pins-test.py` enforces core ADR-0021 for every
 workflow in `.github/workflows/`: a 40-character commit SHA with a release
 comment on each remote action, one top-level `permissions:` of `{}` or
 read-only grants, and `persist-credentials: false` on each `actions/checkout`
@@ -210,6 +210,19 @@ default build is identical when every forky fragment is cut down to its
 and extra trees after the trixie ones. `test/forky-known-gaps-test.sh`
 exercises `shared/suite/forky/classify-build.sh` with fixture logs, including
 a known gap beside an unknown apt error, which must fail.
+
+`test/forky-publish-workflow-test.py` holds `forky-publish.yml` to
+[ADR-0038](../adr/0038-publish-signed-forky-test-images.md): dispatch only from
+main in `native-build`, `SNOSI_BOOTC_SECURE_SUITE: forky` for the job, no
+`latest`, R2, release or artifact step, `mkosi --release forky`, the
+`forky-<version>` tag on every push and verification, the suite passed through
+each `sudo` call of a suite-aware script, and the step list and action pins of
+`build-images.yml` `secure-build` minus the omitted steps; a shared step outside
+the test's short list of forky-specific steps must be byte-identical. Its self-test
+mutates the workflow and requires each mutation to fail. The suite helpers of
+`shared/bootc-secure/compatibility.sh` are covered by
+`test/bootc-secure-static-test.sh`, and their use by the fixture suites of the
+push, promotion, publication, packaging and artifact helpers.
 
 ## Bootc installation and update tests
 

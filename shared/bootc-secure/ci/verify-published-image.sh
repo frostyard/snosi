@@ -10,8 +10,9 @@ REGISTRIES="$ROOT_DIR/shared/bootc-secure/tree/etc/containers/registries.d/frost
 source "$ROOT_DIR/test/lib/bootc-secure-assertions.sh"
 # shellcheck source=shared/bootc-secure/compatibility.sh
 source "$ROOT_DIR/shared/bootc-secure/compatibility.sh"
-snosi_bootc_secure_load_compatibility \
-    "$ROOT_DIR/shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json"
+# SNOSI_BOOTC_SECURE_SUITE selects the contract and the tag form (ADR-0038).
+CONTRACT=$(snosi_bootc_secure_contract_path "$ROOT_DIR") || exit 2
+snosi_bootc_secure_load_compatibility "$CONTRACT"
 
 if [[ $# -ne 5 ]]; then
     printf 'usage: %s IMAGE VERSION_TAG EXPECTED_DIGEST LOCAL_REF AUTH_FILE\n' "${0##*/}" >&2
@@ -39,7 +40,7 @@ if ! valid_published_image "$IMAGE"; then
 fi
 
 IMAGE_NAME=${IMAGE##*/}
-if [[ ! $VERSION_TAG =~ ^[0-9]{14}$ ]] ||
+if ! snosi_bootc_secure_valid_version_tag "$VERSION_TAG" ||
         ! valid_published_digest "$EXPECTED_DIGEST"; then
     printf 'invalid secure image reference\n' >&2
     exit 2

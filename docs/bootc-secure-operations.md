@@ -109,10 +109,21 @@ and carries the wider local trust warning documented in
 ## Build Modes And Publication
 
 PR mechanics builds are secretless and may only create images labelled insecure.
-Protected `secure-build` is the only OCI publisher: it materializes the
+Protected `secure-build` is the only publisher of user-facing secure OCI images:
+it materializes the
 production identities only for local assembly and validation, verifies an
 immutable version digest before moving `latest`, deletes credentials before any
 registry write, and then advances the tracking tag.
+
+`forky-publish.yml` publishes forky Floe **test images** on manual dispatch
+from main ([ADR-0038](adr/0038-publish-signed-forky-test-images.md)). It runs
+the same signed path with `SNOSI_BOOTC_SECURE_SUITE=forky`, which selects the
+forky contract
+(`shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json`), and
+pushes only an immutable `forky-<version>` tag. It never moves `latest`, and
+`promote-published-image.sh` refuses a forky promotion. A `forky-<version>` tag
+is a test artifact with no support claim and no update stream; its assembly
+label equals `assembly.compatibility` in the forky contract, not the trixie one.
 
 GitHub's `native-build` environment must be restricted to protected/default
 branches and have no required reviewer. Root Skopeo receives the Docker login auth file explicitly through --src-authfile.
