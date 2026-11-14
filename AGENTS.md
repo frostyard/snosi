@@ -130,7 +130,9 @@ suite-specific packages and trees live in files whose only `[Match]` is
 shared file holds only suite-neutral content.
 `test/suite-isolation-test.sh` requires every trixie summary to stay the same
 with the forky fragments cut out. `shared/suite/forky/version-id.postinst.chroot`
-gives Debian testing `VERSION_ID="14"`. `forky-mechanics.yml` builds forky
+gives Debian testing `VERSION_ID="14"`. The suite-specific content (bootc
+pair and contract, dracut module names, `/var` suite maps) is listed in
+[build pipeline](docs/design/build-pipeline.md#suite-specific-content). `forky-mechanics.yml` builds forky
 Floe with no publication; a failed build passes only when every apt error
 matches a row of `shared/suite/forky/known-gaps.tsv` (id, log string,
 tracking URL), and a passing build fails while a row remains.

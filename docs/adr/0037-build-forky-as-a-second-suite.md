@@ -52,27 +52,6 @@ file starts with `[Match]` and holds exactly one match, `Release=trixie` or
 - `shared/suite/forky/floe.conf`, included last by
   `shared/composition/floe/mkosi.conf`, overrides Floe's own backports source
   and pin.
-- `shared/suite/forky/base-tree` and `floe-tree` also carry forky copies of
-  `usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf`. dracut 112 on forky renamed
-  the module `systemd-pcrphase` to `systemd-pcrextend`, and an unknown module
-  name fails the kernel postinst; dracut 106 on trixie knows only the old name.
-  `test/tss-user-initrd-static-test.sh` requires each forky copy to equal its
-  trixie copy with that one name changed.
-- `shared/packages/bootc/` splits the same way. `trixie.conf` holds the trixie
-  bootc/libostree pair and `libgpgme11t64`. `forky.conf` holds the forky pair
-  (`bootc=1.17.4-frostyard202611132023~deb14`,
-  `libostree-1-1=2026.6-frostyard202611132023~deb14`) and `libgpgme45`, the
-  forky name of that library.
-- `shared/bootc-secure/` splits too. `trixie.conf` holds the isolation pin
-  `SandboxTrees=%D/shared/bootc-secure/package-manager` (a low-priority forky
-  source and an `n=forky` pin at 50). A forky build does not read it: the forky
-  sandbox already gives the forky source. `forky.conf` adds
-  `shared/bootc-secure/suite/forky/tree` after `shared/bootc-secure/tree`. Its
-  `bootc-secure.json` is the trixie contract with the forky bootc version in
-  `assembly.bootc_version`, `assembly.compatibility` and
-  `installer.minimum_versions.bootc`, so `bootc-pair.chroot` checks the forky
-  pair against it. Host-side secure assembly still reads the trixie contract;
-  forky secure assembly is a later change.
 
 Debian testing's `base-files` ships no `VERSION_ID`. The forky post-installation
 script writes `VERSION_ID="14"` and `VERSION="14 (forky)"` when the codename is
@@ -110,13 +89,11 @@ cannot go stale.
   files per matched fragment, and no setting changes.
 - `shared/scripts/common-postinst.sh` keeps its `VERSION_ID="1.0"` fallback; on
   forky it no longer applies because the forky script runs first.
-- The isolation pin `shared/bootc-secure/package-manager` applies to trixie
-  builds only. Forky builds do not read it, so its `n=forky` pin at priority 50
-  does not apply to the forky archive.
-- Each suite pins its own bootc/libostree pair and has its own copy of the
-  secure assembly contract. `test/bootc-secure-static-test.sh` requires the
-  forky contract to equal the trixie contract except the three bootc version
-  fields, and each pin to agree with the contract of its suite.
+- Forky builds still read `shared/bootc-secure/package-manager`: its second
+  forky source and its `n=forky` pin at priority 50 then apply to the whole
+  forky archive. apt still has one candidate per package, so the solve is the
+  same, but the trixie-only isolation pin must leave forky builds in the change
+  that pins the forky bootc pair (a `risk:high` path).
 - Not in this decision, and each needs its own: per-suite sysexts, publication
   of forky images, and a user-visible way to choose the suite.
 - A known gap in `known-gaps.tsv` is a temporary record with a tracking URL; it

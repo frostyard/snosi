@@ -86,7 +86,6 @@ lock	tmpfiles
 log/apt	tmpfiles
 log/journal	tmpfiles
 log/private	tmpfiles
-log/README	tmpfiles
 mail	tmpfiles
 mnt	tmpfiles
 opt	tmpfiles
@@ -156,7 +155,6 @@ lib/pam/**	discard
 # systemd-portabled image storage; empty until an admin attaches a portable
 # service image, which is not part of this product.
 lib/portables	discard
-lib/python/python3.13_installed	discard
 lib/saned	discard
 lib/sgml-base/**	discard
 lib/shells.state	discard
@@ -178,8 +176,5 @@ lib/vim/addons	discard
 lib/wtmpdb/wtmp.db	discard
 lib/xml-core/**	discard
 log/alternatives.log	discard
-log/btmp	discard
-log/lastlog	discard
 log/runit/**	discard
 log/tuned	discard
-log/wtmp	discard

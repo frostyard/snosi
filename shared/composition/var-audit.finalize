@@ -50,6 +50,7 @@ set -euo pipefail
 : "${BUILDROOT:?var-audit.finalize: \$BUILDROOT not set (must run as a FinalizeScript)}"
 : "${SRCDIR:?var-audit.finalize: \$SRCDIR not set (must run as a FinalizeScript)}"
 : "${IMAGE_ID:?var-audit.finalize: \$IMAGE_ID not set (must run as a FinalizeScript)}"
+: "${RELEASE:?var-audit.finalize: \$RELEASE not set (must run as a FinalizeScript)}"
 
 case "$IMAGE_ID" in
     floe)
@@ -72,6 +73,15 @@ esac
     exit 1
 }
 
+# The Debian release is a build input (ADR-0037). A path that only one suite
+# ships (a Python minor version, a login-history file) goes in the optional
+# suite map var-outcomes.<release>.txt beside the product map; its entries
+# come after the product map's. The product map holds suite-neutral entries.
+maps=("$map")
+suite_map="${map%.txt}.$RELEASE.txt"
+[[ -f "$suite_map" ]] && maps+=("$suite_map")
+map_names="${maps[*]}"
+
 var_dir="$BUILDROOT/var"
 [[ -d "$var_dir" ]] || {
     echo "var-audit.finalize: $var_dir does not exist" >&2
@@ -87,29 +97,32 @@ valid_outcome() {
 
 patterns=()
 outcomes=()
-lineno=0
-while IFS= read -r line || [[ -n "$line" ]]; do
-    lineno=$((lineno + 1))
-    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ -z "${line//[[:space:]]/}" ]] && continue
-    if [[ "$line" != *$'\t'* ]]; then
-        echo "var-audit.finalize: $map:$lineno: expected '<glob><TAB><outcome>', got: $line" >&2
-        exit 1
-    fi
-    glob="${line%%$'\t'*}"
-    outcome="${line#*$'\t'}"
-    valid_outcome "$outcome" || {
-        echo "var-audit.finalize: $map:$lineno: invalid outcome '$outcome' (want image-metadata|tmpfiles|discard|installer-seed)" >&2
+for map_file in "${maps[@]}"; do
+    lineno=0
+    entries=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        lineno=$((lineno + 1))
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line//[[:space:]]/}" ]] && continue
+        if [[ "$line" != *$'\t'* ]]; then
+            echo "var-audit.finalize: $map_file:$lineno: expected '<glob><TAB><outcome>', got: $line" >&2
+            exit 1
+        fi
+        glob="${line%%$'\t'*}"
+        outcome="${line#*$'\t'}"
+        valid_outcome "$outcome" || {
+            echo "var-audit.finalize: $map_file:$lineno: invalid outcome '$outcome' (want image-metadata|tmpfiles|discard|installer-seed)" >&2
+            exit 1
+        }
+        patterns+=("$glob")
+        outcomes+=("$outcome")
+        entries=$((entries + 1))
+    done <"$map_file"
+    [[ $entries -gt 0 ]] || {
+        echo "var-audit.finalize: $map_file has no entries" >&2
         exit 1
     }
-    patterns+=("$glob")
-    outcomes+=("$outcome")
-done <"$map"
-
-[[ ${#patterns[@]} -gt 0 ]] || {
-    echo "var-audit.finalize: $map has no entries" >&2
-    exit 1
-}
+done
 
 used=()
 for ((i = 0; i < ${#patterns[@]}; i++)); do used[i]=0; done
@@ -137,7 +150,7 @@ failed=0
 
 if [[ ${#unclassified[@]} -gt 0 ]]; then
     failed=1
-    echo "var-audit.finalize: ${#unclassified[@]} unclassified /var path(s) for IMAGE_ID='$IMAGE_ID' (map: $map):" >&2
+    echo "var-audit.finalize: ${#unclassified[@]} unclassified /var path(s) for IMAGE_ID='$IMAGE_ID' (maps: $map_names):" >&2
     printf '  /var/%s\n' "${unclassified[@]}" | LC_ALL=C sort >&2
 fi
 
@@ -147,12 +160,12 @@ for ((i = 0; i < ${#patterns[@]}; i++)); do
 done
 if [[ ${#stale[@]} -gt 0 ]]; then
     failed=1
-    echo "var-audit.finalize: ${#stale[@]} stale outcome-map glob(s) matched nothing (map: $map):" >&2
+    echo "var-audit.finalize: ${#stale[@]} stale outcome-map glob(s) matched nothing (maps: $map_names):" >&2
     printf '  %s\n' "${stale[@]}" | LC_ALL=C sort >&2
 fi
 
 if [[ "$failed" == 1 ]]; then
-    echo "var-audit.finalize: FAILED. Triage unclassified paths into $map (outcome one of:" \
+    echo "var-audit.finalize: FAILED. Triage unclassified paths into $map_names (outcome one of:" \
         "image-metadata, tmpfiles, discard, installer-seed) and/or remove stale globs." >&2
     exit 1
 fi
