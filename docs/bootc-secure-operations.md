@@ -126,6 +126,14 @@ pushes only an immutable `forky-<version>` tag. It never moves `latest`, and
 `promote-published-image.sh` refuses a forky promotion. A `forky-<version>` tag
 is a test artifact with no support claim and no update stream; its assembly
 label equals `assembly.compatibility` in the forky contract, not the trixie one.
+A dispatch with `promote=true` moves the moving `:forky` tag to an existing
+`forky-<version>` digest after it verifies the signature and the version of
+that digest; it builds nothing and writes no other tag
+([ADR-0040](adr/0040-move-the-forky-tag-to-a-verified-forky-image-by-dispatch.md)).
+`:forky` is a test stream with no support claim. Before a promotion, the
+dispatcher must have a passing lab bootc lifecycle run with that digest as
+N+1; a rollback is a re-point to a known-good `forky-<version>` tag, never a
+delete in the GHCR UI.
 
 GitHub's `native-build` environment must be restricted to protected/default
 branches and have no required reviewer. Root Skopeo receives the Docker login auth file explicitly through --src-authfile.

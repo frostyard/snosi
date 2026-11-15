@@ -1,6 +1,6 @@
 # 0038 — Publish signed forky test images under forky-<timestamp> tags
 
-- **Status:** Accepted; amended by [ADR-0039](0039-publish-forky-test-images-of-every-product.md)
+- **Status:** Accepted; amended by [ADR-0039](0039-publish-forky-test-images-of-every-product.md) and [ADR-0040](0040-move-the-forky-tag-to-a-verified-forky-image-by-dispatch.md) (the moving `:forky` tag)
 - **Date:** 2026-11-13
 
 ## Context
