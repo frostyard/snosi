@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Every documented `bootc switch` command pulls through Podman first.
+"""Every documented `bootc switch` command pulls through Podman first, fail closed.
 
 bootc's registry-transport composefs pull fails on snosi images, and a direct
 registry switch reads the system container policy, which root overrides can
 replace (ADR-0025). bootc-update-stage therefore pulls with Podman under the
-strict update policy in /usr and switches with
-`--transport containers-storage`. A user command in the docs must do the same:
+strict update policy in /usr, stops when the pull fails, and switches with
+`--transport containers-storage`. A user command in the docs must do the same.
 
-- every command line that runs `bootc switch` names
-  `--transport containers-storage`;
-- the nearest preceding command line in the same code block is a
-  `podman pull --signature-policy /usr/lib/snosi/containers/bootc-policy.json`
-  of the same image reference.
+A logical command (lines joined after a trailing `\\`, `&&`, `||` or `|`) that
+names `bootc switch` anywhere must be exactly an `&&` chain of:
 
-Accepted ADRs and the dated records under docs/ are history and are not
+1. `[sudo] podman pull --signature-policy /usr/lib/snosi/containers/bootc-policy.json IMAGE`
+2. `[sudo] bootc switch --transport containers-storage IMAGE` (the same IMAGE)
+3. optionally `[sudo] systemctl reboot`
+
+So the switch runs only after that pull succeeded, and the reboot only after
+the switch succeeded. Any other form (`;`, `||`, `|`, a background `&`, a
+switch that is not the 2nd step, a switch in a separate command) fails.
+
+Accepted ADRs, plans and the dated records under docs/ are history and are not
 checked.
 """
 from __future__ import annotations
@@ -31,61 +36,72 @@ SKIP = (
     re.compile(r"^docs/plans/"),
     re.compile(r"^docs/\d{4}-\d{2}-\d{2}-"),
 )
-SWITCH = re.compile(r"^\s*(?:sudo\s+)?bootc\s+switch\b")
+MENTION = re.compile(r"\bbootc\s+switch\b")
+JOIN_SUFFIXES = ("\\", "&&", "||", "|")
+PULL = re.compile(
+    r"^(?:sudo\s+)?podman\s+pull\s+--signature-policy\s+" + re.escape(POLICY) + r"\s+(\S+)$")
+SWITCH = re.compile(r"^(?:sudo\s+)?bootc\s+switch\s+--transport\s+containers-storage\s+(\S+)$")
+REBOOT = re.compile(r"^(?:sudo\s+)?systemctl\s+reboot$")
 
 
-def commands(lines: list[str]):
-    """Yield (line number, command) for each fenced command, with `\\` joins."""
+def logical_commands(text: str):
+    """Yield (first line number, logical command) for every fenced command."""
     in_block = False
     pending = ""
     start = 0
-    for number, line in enumerate(lines, 1):
+    for number, line in enumerate(text.splitlines(), 1):
         if line.lstrip().startswith("```"):
+            if in_block and pending:
+                yield start, pending
             in_block = not in_block
             pending = ""
-            if not in_block:
-                yield number, None  # block end resets the pull
             continue
         if not in_block:
             continue
         if not pending:
             start = number
-        if line.rstrip().endswith("\\"):
-            pending += line.rstrip()[:-1] + " "
+        stripped = line.strip()
+        if stripped.endswith(JOIN_SUFFIXES):
+            body = stripped[:-1] if stripped.endswith("\\") else stripped
+            pending += body + " "
             continue
-        yield start, pending + line
+        yield start, pending + stripped
         pending = ""
+    if in_block and pending:
+        yield start, pending
 
 
-def image_of(command: str) -> str:
-    return command.split()[-1] if command.split() else ""
+def check_command(where: str, command: str) -> list[str]:
+    if not MENTION.search(command):
+        return []
+    # Split on && only; any other control operator is not allowed in a chain
+    # that switches the deployment.
+    if re.search(r";|\|\||(?<!&)&(?!&)|(?<!\|)\|(?!\|)", command):
+        return [f"{where}: a bootc switch chain may use only && between steps"]
+    steps = [step.strip() for step in command.split("&&")]
+    if len(steps) not in (2, 3):
+        return [f"{where}: bootc switch must be the 2nd step of `podman pull ... && bootc switch ...`"]
+    pull = PULL.match(steps[0])
+    switch = SWITCH.match(steps[1])
+    errors = []
+    if not pull:
+        errors.append(f"{where}: the step before bootc switch must be "
+                      f"`podman pull --signature-policy {POLICY} IMAGE`")
+    if not switch:
+        errors.append(f"{where}: bootc switch must be "
+                      "`bootc switch --transport containers-storage IMAGE`")
+    if pull and switch and pull.group(1) != switch.group(1):
+        errors.append(f"{where}: the pull ({pull.group(1)}) and the switch "
+                      f"({switch.group(1)}) must name the same image")
+    if len(steps) == 3 and not REBOOT.match(steps[2]):
+        errors.append(f"{where}: only `systemctl reboot` may follow the switch")
+    return errors
 
 
 def check_text(name: str, text: str) -> list[str]:
     errors = []
-    last_pull = None
-    for number, command in commands(text.splitlines()):
-        if command is None:
-            last_pull = None
-            continue
-        if not command.strip():
-            continue
-        if re.search(r"\bpodman\s+pull\b", command):
-            last_pull = command
-            continue
-        if not SWITCH.search(command):
-            continue
-        where = f"{name}:{number}"
-        if "--transport containers-storage" not in command:
-            errors.append(f"{where}: bootc switch must use --transport containers-storage")
-            continue
-        image = image_of(command)
-        if (last_pull is None or f"--signature-policy {POLICY}" not in last_pull
-                or image_of(last_pull) != image):
-            errors.append(
-                f"{where}: bootc switch of {image} must follow "
-                f"`podman pull --signature-policy {POLICY} {image}` in the same block")
-        last_pull = None
+    for number, command in logical_commands(text):
+        errors += check_command(f"{name}:{number}", command)
     return errors
 
 
@@ -95,37 +111,47 @@ def tracked_docs() -> list[str]:
     return [p for p in out.splitlines() if not any(s.search(p) for s in SKIP)]
 
 
-GOOD = f"""```bash
-sudo podman pull --signature-policy {POLICY} \\
-  ghcr.io/frostyard/snow:forky
-sudo bootc switch --transport containers-storage ghcr.io/frostyard/snow:forky
-```
-"""
+def block(*lines: str) -> str:
+    return "```bash\n" + "\n".join(lines) + "\n```\n"
+
+
+P = f"sudo podman pull --signature-policy {POLICY}"
+IMG = "ghcr.io/frostyard/snow:forky"
+SW = "sudo bootc switch --transport containers-storage"
 
 SELF_TESTS = [
-    ("good", GOOD, 0),
-    ("registry switch", "```bash\nsudo bootc switch ghcr.io/frostyard/snow:forky\n```\n", 1),
-    ("no pull", "```bash\nsudo bootc switch --transport containers-storage ghcr.io/frostyard/snow:forky\n```\n", 1),
-    ("pull without policy",
-     "```bash\nsudo podman pull ghcr.io/frostyard/snow:forky\n"
-     "sudo bootc switch --transport containers-storage ghcr.io/frostyard/snow:forky\n```\n", 1),
-    ("pull of another image",
-     f"```bash\nsudo podman pull --signature-policy {POLICY} ghcr.io/frostyard/snow:latest\n"
-     "sudo bootc switch --transport containers-storage ghcr.io/frostyard/snow:forky\n```\n", 1),
-    ("pull in another block",
-     f"```bash\nsudo podman pull --signature-policy {POLICY} ghcr.io/frostyard/snow:forky\n```\n\n"
-     "```bash\nsudo bootc switch --transport containers-storage ghcr.io/frostyard/snow:forky\n```\n", 1),
+    ("good, && continuation", block(f"{P} \\", f"  {IMG} &&", f"{SW} {IMG} &&", "sudo systemctl reboot"), 0),
+    ("good, one line without sudo or reboot",
+     block(f"podman pull --signature-policy {POLICY} {IMG} && bootc switch --transport containers-storage {IMG}"), 0),
+    ("registry switch", block(f"sudo bootc switch {IMG}"), 1),
+    ("bare switch without sudo", block(f"bootc switch {IMG}"), 1),
+    ("switch without pull", block(f"{SW} {IMG}"), 1),
+    ("pull and switch as separate commands", block(f"{P} {IMG}", f"{SW} {IMG}"), 1),
+    ("pull without policy", block(f"sudo podman pull {IMG} && {SW} {IMG}"), 1),
+    ("pull of another image", block(f"{P} ghcr.io/frostyard/snow:latest && {SW} {IMG}"), 1),
+    ("registry switch after a good pull", block(f"{P} {IMG} && sudo bootc switch {IMG}"), 1),
+    ("semicolon chain", block(f"{P} {IMG}; {SW} {IMG}"), 1),
+    ("or chain", block(f"{P} {IMG} || {SW} {IMG}"), 1),
+    ("pipe", block(f"{P} {IMG} | {SW} {IMG}"), 1),
+    ("background", block(f"{P} {IMG} & {SW} {IMG}"), 1),
+    ("retag between pull and switch",
+     block(f"{P} {IMG} && sudo podman tag x {IMG} && {SW} {IMG}"), 1),
+    ("switch after another command", block(f"echo go && {SW} {IMG}"), 1),
+    ("unconditional reboot after the chain", block(f"{P} {IMG} && {SW} {IMG}; sudo systemctl reboot"), 1),
+    ("something else after the switch", block(f"{P} {IMG} && {SW} {IMG} && rm -rf /var"), 1),
+    ("backslash continuation of a registry switch", block("sudo bootc switch \\", f"  {IMG}"), 1),
     ("prose is not checked", "Run `bootc switch ghcr.io/x` never.\n", 0),
-    ("bootc rollback is not a switch", "```bash\nsudo bootc rollback\n```\n", 0),
+    ("rollback is not a switch", block("sudo bootc rollback &&", "sudo systemctl reboot"), 0),
 ]
 
 
 def main() -> int:
     failed = False
     for label, text, expected in SELF_TESTS:
-        got = len(check_text(label, text))
-        if got != expected:
-            print(f"self-test '{label}': expected {expected} errors, got {got}", file=sys.stderr)
+        got = check_text(label, text)
+        if (len(got) > 0) != (expected > 0):
+            print(f"self-test '{label}': expected {'errors' if expected else 'no error'}, got {got}",
+                  file=sys.stderr)
             failed = True
     errors = []
     docs = tracked_docs()

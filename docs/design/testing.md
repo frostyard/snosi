@@ -21,9 +21,10 @@ scripts), `node --test test/*.test.mjs`, and the policy tests
 `build-workflow-permissions-test.py`, `workflow-pins-test.py` and
 `forky-publish-workflow-test.py`, the fixture test
 `bootc-secure-forky-promotion-test.sh`, and `docs-bootc-switch-test.py`,
-which requires every documented `bootc switch` command to switch with
-`--transport containers-storage` after a strict-policy Podman pull of the same
-image, as `bootc-update-stage` does. It does not change the checkout. `workflow-pins-test.py` enforces core ADR-0021 for every
+which requires every documented `bootc switch` command to be the 2nd step of
+an `&&` chain: a strict-policy Podman pull, then a switch of the same image
+with `--transport containers-storage`, then optionally `systemctl reboot`, so
+it fails closed as `bootc-update-stage` does. It does not change the checkout. `workflow-pins-test.py` enforces core ADR-0021 for every
 workflow in `.github/workflows/`: a 40-character commit SHA with a release
 comment on each remote action, one top-level `permissions:` of `{}` or
 read-only grants, and `persist-credentials: false` on each `actions/checkout`

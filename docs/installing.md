@@ -246,13 +246,15 @@ and it would read the system policy, which root overrides can replace
 
 ```bash
 sudo podman pull --signature-policy /usr/lib/snosi/containers/bootc-policy.json \
-  ghcr.io/frostyard/<product>:forky
-sudo bootc switch --transport containers-storage ghcr.io/frostyard/<product>:forky
+  ghcr.io/frostyard/<product>:forky &&
+sudo bootc switch --transport containers-storage ghcr.io/frostyard/<product>:forky &&
 sudo systemctl reboot
 ```
 
 Replace `<product>` with `snow`, `snowfield`, `floe` or `sundog`. The pull
-fails if the image is not signed with the Frostyard key. After the reboot,
+fails if the image is not signed with the Frostyard key, and the `&&` chain
+then stops: the switch never uses an older local copy of the image, and the
+system reboots only after a successful switch. After the reboot,
 `sudo bootc status` shows the `:forky` image, and `bootc-update-stage.timer`
 stages new forky images from that tag. They apply at the next reboot, as on
 trixie.
@@ -272,16 +274,20 @@ image: use the rollback below on that machine.
 To go back to the deployment you switched from, before you make other changes:
 
 ```bash
-sudo bootc rollback
+sudo bootc rollback &&
 sudo systemctl reboot
 ```
 
-To return to the trixie stream at any time:
+To return to the trixie stream later, first look at `sudo bootc status`. If
+the trixie image you want is still the rollback deployment, use the
+`bootc rollback` above: bootc refuses to switch to an image with the same
+fs-verity digest as the rollback deployment. In every other case, pull and
+switch to `:latest`:
 
 ```bash
 sudo podman pull --signature-policy /usr/lib/snosi/containers/bootc-policy.json \
-  ghcr.io/frostyard/<product>:latest
-sudo bootc switch --transport containers-storage ghcr.io/frostyard/<product>:latest
+  ghcr.io/frostyard/<product>:latest &&
+sudo bootc switch --transport containers-storage ghcr.io/frostyard/<product>:latest &&
 sudo systemctl reboot
 ```
 
