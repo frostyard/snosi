@@ -17,7 +17,9 @@ names `bootc switch` anywhere must be exactly an `&&` chain of:
 
 So the switch runs only after that pull succeeded, and the reboot only after
 the switch succeeded. Any other form (`;`, `||`, `|`, a background `&`, a
-switch that is not the 2nd step, a switch in a separate command) fails.
+switch that is not the 2nd step, a switch in a separate command) fails. The
+chain must also be the last command of its code block, so no separate line
+(an unconditional reboot) runs after a failed switch.
 
 Accepted ADRs, plans and the dated records under docs/ are history and are not
 checked.
@@ -45,7 +47,8 @@ REBOOT = re.compile(r"^(?:sudo\s+)?systemctl\s+reboot$")
 
 
 def logical_commands(text: str):
-    """Yield (first line number, logical command) for every fenced command."""
+    """Yield (first line number, logical command) for every fenced command,
+    and (line number, None) at the end of each code block."""
     in_block = False
     pending = ""
     start = 0
@@ -53,6 +56,8 @@ def logical_commands(text: str):
         if line.lstrip().startswith("```"):
             if in_block and pending:
                 yield start, pending
+            if in_block:
+                yield number, None
             in_block = not in_block
             pending = ""
             continue
@@ -69,6 +74,8 @@ def logical_commands(text: str):
         pending = ""
     if in_block and pending:
         yield start, pending
+    if in_block:
+        yield len(text.splitlines()), None
 
 
 def check_command(where: str, command: str) -> list[str]:
@@ -100,8 +107,20 @@ def check_command(where: str, command: str) -> list[str]:
 
 def check_text(name: str, text: str) -> list[str]:
     errors = []
+    switch_at = None  # the switch chain of the current block, if any
     for number, command in logical_commands(text):
-        errors += check_command(f"{name}:{number}", command)
+        if command is None:
+            switch_at = None
+            continue
+        if not command.strip():
+            continue
+        where = f"{name}:{number}"
+        if switch_at is not None:
+            errors.append(f"{where}: no command may follow the bootc switch chain of "
+                          f"{switch_at} in its block; join it with &&")
+        if MENTION.search(command):
+            errors += check_command(where, command)
+            switch_at = where
     return errors
 
 
@@ -138,6 +157,13 @@ SELF_TESTS = [
      block(f"{P} {IMG} && sudo podman tag x {IMG} && {SW} {IMG}"), 1),
     ("switch after another command", block(f"echo go && {SW} {IMG}"), 1),
     ("unconditional reboot after the chain", block(f"{P} {IMG} && {SW} {IMG}; sudo systemctl reboot"), 1),
+    ("reboot on a separate line after the chain",
+     block(f"{P} {IMG} &&", f"{SW} {IMG}", "sudo systemctl reboot"), 1),
+    ("other command on a separate line after the chain",
+     block(f"{P} {IMG} && {SW} {IMG}", "echo done"), 1),
+    ("chain then a reboot in the next block is the reader's choice",
+     block(f"{P} {IMG} && {SW} {IMG}") + "\n" + block("sudo systemctl reboot"), 0),
+    ("commands before the chain are allowed", block("sudo bootc status", f"{P} {IMG} && {SW} {IMG}"), 0),
     ("something else after the switch", block(f"{P} {IMG} && {SW} {IMG} && rm -rf /var"), 1),
     ("backslash continuation of a registry switch", block("sudo bootc switch \\", f"  {IMG}"), 1),
     ("prose is not checked", "Run `bootc switch ghcr.io/x` never.\n", 0),
