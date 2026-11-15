@@ -224,3 +224,55 @@ or wallet.
 Enrollment data is stored on the device or in `/var/lib/fprint`, depending on
 the reader, and is not part of the image. Check the device's behavior before
 disposing of it or transferring it to another user.
+
+## Try the next Debian release (forky)
+
+Each bootc product also has a forky stream: the same composition, built on
+Debian testing (forky, `VERSION_ID` 14) instead of trixie
+([ADR-0037](adr/0037-build-forky-as-a-second-suite.md)). It is opt-in and has
+no support claim. Debian testing changes every day, so a forky image can break
+where the trixie image does not. Snowfield is untested on Surface hardware on
+both suites.
+
+Switch a running system to the forky stream of its product, then reboot:
+
+```bash
+sudo bootc switch ghcr.io/frostyard/<product>:forky
+sudo systemctl reboot
+```
+
+Replace `<product>` with `snow`, `snowfield`, `floe` or `sundog`. The same
+signature policy applies: the switch fails if the image is not signed with the
+Frostyard key. After the reboot, `sudo bootc status` shows the `:forky` image,
+and `bootc-update-stage.timer` stages new forky images from that tag. They
+apply at the next reboot, as on trixie.
+
+Sysexts follow the suite. At the first boot after a switch,
+`updex-suite-switch.service` (ordered before `updex-update.service`) links
+each enabled feature to the sysext built for the running suite: file names
+with `_14_` on forky and `_13_` on trixie. `sunshine` is built only on trixie,
+so on forky its feature has no image.
+
+To go back to the deployment you switched from, before you make other changes:
+
+```bash
+sudo bootc rollback
+sudo systemctl reboot
+```
+
+To return to the trixie stream at any time:
+
+```bash
+sudo bootc switch ghcr.io/frostyard/<product>:latest
+sudo systemctl reboot
+```
+
+`/etc` and `/var` stay across a switch and a rollback, in both directions. An
+application that upgraded its data in `/var` or in your home directory on
+forky can fail to read that data on trixie.
+
+Known issue: the Debian kernels 7.2.11 to 7.2.15, 7.3.3 and 7.3.4, and the
+linux-surface kernels `7.2.15-1-surface` and `7.3.4-1-surface`, have an
+upstream btrfs fs-verity defect: the kernel logs `FILE CORRUPTED` lines that a
+re-read corrects ([#1130](https://github.com/frostyard/snosi/issues/1130)).
+The trixie images use the same kernels, so it is not specific to forky.
