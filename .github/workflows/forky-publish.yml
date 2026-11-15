@@ -37,7 +37,7 @@ on:
   workflow_dispatch:
     inputs:
       profile:
-        description: "Product to publish as a forky test image (1 per dispatch)"
+        description: "Product (1 per dispatch). Start the next dispatch only after this run has started: a newer waiting dispatch cancels an older waiting one"
         required: true
         type: choice
         default: floe
@@ -59,6 +59,10 @@ on:
 
 permissions: {}
 
+# 1 run at a time for publish and promote alike (ADR-0039, ADR-0040). GitHub
+# keeps at most 1 waiting run per group: a newer dispatch cancels the older
+# waiting run before it starts any job. Dispatch the next product only after
+# the previous run has started.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
