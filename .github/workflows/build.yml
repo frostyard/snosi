@@ -200,8 +200,8 @@ jobs:
 
       - name: Verify attested sysext downloads
         # First-party debs pinned in shared/download/sysext-checksums.json with
-        # an `attestation` entry (lodge, notesd, maild, porterd, readd) must
-        # carry a valid GitHub build-provenance attestation from their release
+        # an `attestation` entry (lodge, notesd, maild, porterd) must carry a
+        # valid GitHub build-provenance attestation from their release
         # workflow at the tag of the pinned version (ADR-0024). The pinned
         # SHA-256 binds the bytes that mkosi downloads later to the attested
         # digest, so this step only has to check the pinned file once. `gh` is

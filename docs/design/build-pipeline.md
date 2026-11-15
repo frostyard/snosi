@@ -120,7 +120,7 @@ Image builds have four phases, in order:
    without `extension-release.<ImageId>` carrying `EXTENSION_RELOAD_MANAGER=1`,
    so PID 1 loads the units in the same boot (snosi#1189;
    [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)).
-   The five Lodge suite sysexts also run `shared/sysext/finalize/sysext-lodge-accounts-guard.sh`,
+   The four Lodge suite sysexts also run `shared/sysext/finalize/sysext-lodge-accounts-guard.sh`,
    which fails a delta that ships a Lodge app manifest without lodge's own
    `u lodge` sysusers line, or a `*.service`/`*.socket` that names a user or
    group its sysusers.d files do not declare. It parses the unit files only
@@ -361,7 +361,7 @@ theme in the initramfs of every product that ships it, and the sealed
 
 `shared/download/sysext-checksums.json` pins direct sysext downloads and
 triggers sysext builds. An entry with an `attestation` object (the first-party
-suite sysexts `lodge`, `notesd`, `maild`, `porterd` and `readd`) is also checked
+suite sysexts `lodge`, `notesd`, `maild` and `porterd`) is also checked
 by `shared/download/verify-attestations.sh`
 ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)).
 `shared/download/image-checksums.json` pins OCI

@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Static checks for the Frostyard suite sysexts lodge, notesd, maild, porterd
-# and readd: unit sets, presets, extension-release, required paths, pinned
+# Static checks for the Frostyard suite sysexts lodge, notesd, maild and
+# porterd: unit sets, presets, extension-release, required paths, pinned
 # releases with their attestation metadata, and the sysupdate component. No
 # root, no network, no image build.
 set -euo pipefail
@@ -27,6 +27,7 @@ check() {
 
 has_line() { grep -Fxq -- "$2" "$1"; }
 lacks_text() { local f; for f in "${@:2}"; do ! grep -Fq -- "$1" "$f" || return 1; done; }
+lacks_word() { ! grep -Ewq -- "$1" "$2"; }
 
 # Upholds= units of a drop-in, sorted, one per line.
 upheld_units() {
@@ -141,19 +142,16 @@ check_sysext notesd frostyard-notesd frostnotes notes frostnotes-lodge.socket fr
 check_sysext maild frostyard-maild frostmail mail frostmail.socket frostmail.service
 check_sysext lodge frostyard-lodge lodge '' lodge.service
 check_sysext porterd frostyard-porterd frostporter porter frostporter.socket frostporter.service
-check_sysext readd frostyard-readd frostread read frostread.socket frostread.service
 
 check_pin notesd frostyard/frostnotes frostyard-notesd
 check_pin maild frostyard/frostmail frostyard-maild
 check_pin lodge frostyard/lodge frostyard-lodge
 check_pin porterd frostyard/porter frostyard-porterd
-check_pin readd frostyard/frostread frostyard-readd
 
 notesd_required="$ROOT_DIR/mkosi.images/notesd/required-paths.txt"
 maild_required="$ROOT_DIR/mkosi.images/maild/required-paths.txt"
 lodge_required="$ROOT_DIR/mkosi.images/lodge/required-paths.txt"
 porterd_required="$ROOT_DIR/mkosi.images/porterd/required-paths.txt"
-readd_required="$ROOT_DIR/mkosi.images/readd/required-paths.txt"
 check 'notesd: required-paths lists notesd and notesctl' \
     has_all "$notesd_required" /usr/bin/notesd /usr/bin/notesctl
 check 'maild: required-paths lists maild and mailctl' \
@@ -162,8 +160,6 @@ check 'lodge: required-paths lists lodge and lodgectl' \
     has_all "$lodge_required" /usr/bin/lodge /usr/bin/lodgectl
 check 'porterd: required-paths lists porterd' \
     has_all "$porterd_required" /usr/bin/porterd
-check 'readd: required-paths lists readd and readctl' \
-    has_all "$readd_required" /usr/bin/readd /usr/bin/readctl
 # The secrets-key oneshot ships and frostmail.service pulls it, but it has a
 # condition and no [Install]: it must stay out of Upholds= and the preset.
 check 'maild: required-paths lists the secrets-key unit and its helper' \
@@ -173,6 +169,17 @@ check 'maild: required-paths lists the secrets-key unit and its helper' \
 # the shell and its example configuration; /etc/lodge stays the administrator's.
 check 'lodge: required-paths lists the tmpfiles fragment, the shell and the example config' \
     has_all "$lodge_required" /usr/lib/tmpfiles.d/lodge.conf /usr/share/lodge/shell/index.html /usr/share/lodge/config.example.json
+
+# The readd sysext is retired with the frostread app (docs/design/sysexts.md,
+# "readd (retired)"): no build input may bring it back by accident.
+check 'readd: retired, no image definition' test ! -e "$ROOT_DIR/mkosi.images/readd"
+check 'readd: retired, base ships no sysupdate component' \
+    test ! -e "$ROOT_DIR/mkosi.images/base/mkosi.extra/usr/lib/sysupdate.readd.d"
+check 'readd: retired, no pin' jq -e 'has("readd") | not' "$CHECKSUMS" >/dev/null
+check 'readd: retired, not in the root mkosi.conf' \
+    lacks_word readd "$ROOT_DIR/mkosi.conf"
+check 'readd: retired, check-dependencies.yml tracks no frostyard/frostread release' \
+    lacks_text frostyard/frostread "$ROOT_DIR/.github/workflows/check-dependencies.yml"
 
 # The comparison helpers must reject a wrong set, not only accept the right one.
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/suite-sysexts-test.XXXXXX")

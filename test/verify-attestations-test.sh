@@ -312,7 +312,6 @@ final_line=$(grep -n 'name: Fail when an attestation did not verify' "$deps_work
 if grep -Fq 'CHECKSUMS_FILE="$cand" ./shared/download/verify-attestations.sh "$key"' "$deps_workflow" &&
     grep -Fq 'pin_attested notesd' "$deps_workflow" && grep -Fq 'pin_attested maild' "$deps_workflow" &&
     grep -Fq 'pin_attested lodge' "$deps_workflow" && grep -Fq 'pin_attested porterd' "$deps_workflow" &&
-    grep -Fq 'pin_attested readd' "$deps_workflow" &&
     grep -Fq 'GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}' "$deps_workflow" &&
     [[ -n "$pr_line" && -n "$final_line" && "$pr_line" -lt "$final_line" ]]; then
     pass 'check-dependencies.yml verifies a candidate pin and fails the job after the PR step'

@@ -307,13 +307,13 @@ exit 22
 EOF
 chmod +x "$work/curl-stub/curl"
 
-sysext_keys='bitwarden obsidian localsend github-copilot gitdesktop sunshine code-server coder k3s lemonade paseo pilothouse notesd maild lodge porterd readd microsoft-edge-stable 1password'
+sysext_keys='bitwarden obsidian localsend github-copilot gitdesktop sunshine code-server coder k3s lemonade paseo pilothouse notesd maild lodge porterd microsoft-edge-stable 1password'
 GITHUB_OUTPUT="$work/sysext-output" GH_TOKEN=dummy PATH="$work/curl-stub:$PATH" bash -e "$work/sysext-check.sh" >"$work/sysext-check.log" 2>&1
 sysext_status=$?
 case_done
 if [[ $sysext_status -eq 0 ]] &&
    grep -Fq 'has_updates=false' "$work/sysext-output" &&
-   grep -Fq 'checked 19 dependencies, 19 could not be read' "$work/sysext-check.log"; then
+   grep -Fq 'checked 18 dependencies, 18 could not be read' "$work/sysext-check.log"; then
     sysext_failed=$(awk -F= '/^check_failed=/ {print $2}' "$work/sysext-output")
     if [[ "$sysext_failed" == "$sysext_keys" ]]; then
         pass 'sysext check reports every unreadable dependency and stays successful'
