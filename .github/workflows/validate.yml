@@ -614,6 +614,8 @@ jobs:
         run: ./test/bootc-secure-install-contract-test.sh
       - name: Validate bootc secure operations documentation
         run: ./test/bootc-secure-docs-test.sh
+      - name: Validate documented bootc switch commands
+        run: python3 ./test/docs-bootc-switch-test.py
       - name: Validate secure install harness fixtures
         run: ./test/bootc-secure-install-test.sh --fixtures
       - name: Validate secure update harness fixtures

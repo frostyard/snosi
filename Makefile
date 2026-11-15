@@ -28,6 +28,7 @@ verify:
 	python3 ./test/workflow-pins-test.py
 	python3 ./test/forky-publish-workflow-test.py
 	./test/bootc-secure-forky-promotion-test.sh
+	python3 ./test/docs-bootc-switch-test.py
 
 check: verify
 

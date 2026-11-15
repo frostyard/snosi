@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-15",
+  "scope": "docs/installing.md forky opt-in section (PR #1312)",
+  "correction": "The forky opt-in section told users to run a direct registry `bootc switch` to :forky and back to :latest. bootc's registry-transport composefs pull fails on snosi images, and a direct switch reads the system container policy, which root overrides can replace (ADR-0025). The commands now pull with Podman under /usr/lib/snosi/containers/bootc-policy.json and switch with --transport containers-storage, as bootc-update-stage does. The same review also corrected the /etc statement (per deployment, not shared on rollback) and the kernel warning (Snowfield carries linux-surface).",
+  "evidence": "Cross-review of PR #1312 at ca47fa1, findings 1 to 4: mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage lines 8-13; docs/nbc-to-bootc-migration.md section 7; docs/adr/0025; docs/plans/2026-07-03-bootc-update-validation-plan.md Phase 3; shared/kernel/surface/mkosi.conf. test/docs-bootc-switch-test.py fails on the old section (installing.md lines 241 and 273).",
+  "promoted_to": "test/docs-bootc-switch-test.py; docs/design/testing.md"
+}
