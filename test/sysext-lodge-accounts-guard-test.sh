@@ -5,7 +5,7 @@
 # so a Lodge app sysext must ship lodge's own sysusers line, the lodge sysext
 # must ship it in its own file, and every account a system unit names must be
 # declared by the delta's sysusers.d files. A repository check requires the
-# finalizer in the five suite sysexts. See docs/design/sysexts.md and ADR-0035.
+# finalizer in the four suite sysexts. See docs/design/sysexts.md and ADR-0035.
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -17,7 +17,7 @@ UNITS=usr/lib/systemd/system
 SYSUSERS=usr/lib/sysusers.d
 APPS=usr/share/lodge/apps
 LODGE_USER_LINE="u lodge - \"lodge, the tailnet web shell for frostyard's apps\" /var/lib/lodge"
-SUITE="lodge notesd maild porterd readd"
+SUITE="lodge notesd maild porterd"
 test_number=0
 failures=0
 delta=""
@@ -320,7 +320,7 @@ run_guard
 check "a u! line declares its user" 0 "OK (system units: 1"
 
 # --- repository check -------------------------------------------------------
-# The five suite sysexts wire the guard, and no other sysext does.
+# The four suite sysexts wire the guard, and no other sysext does.
 for name in $SUITE; do
     config="$root/mkosi.images/$name/mkosi.conf"
     test_number=$((test_number + 1))
@@ -348,7 +348,7 @@ for config in "$root"/mkosi.images/*/mkosi.conf; do
 done
 test_number=$((test_number + 1))
 if ((extra == 0)); then
-    echo "ok $test_number - only the five suite sysexts wire the guard"
+    echo "ok $test_number - only the four suite sysexts wire the guard"
 else
     echo "not ok $test_number - $extra sysexts outside the suite wire the guard"
     failures=$((failures + 1))

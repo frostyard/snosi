@@ -100,15 +100,6 @@
       "signer_workflow": ".github/workflows/release.yml"
     }
   },
-  "readd": {
-    "url": "https://github.com/frostyard/frostread/releases/download/v0.5.0/frostyard-readd_0.5.0_amd64.deb",
-    "sha256": "64974573916e1493efe86f36d72ec550596c78d056cd399da3e9b9a4815a7256",
-    "version": "0.5.0",
-    "attestation": {
-      "repository": "frostyard/frostread",
-      "signer_workflow": ".github/workflows/release.yml"
-    }
-  },
   "sunshine": {
     "url": "https://github.com/LizardByte/Sunshine/releases/download/v2026.914.233613/sunshine_2026.914.233613-1+debiantrixie_amd64.deb",
     "sha256": "a86f858cbae57f60ecebd445402ee0295c1c057b857bd45d44c2ea2d255cbbfb",

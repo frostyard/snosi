@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# Finalize script for the five Lodge suite sysexts (lodge, notesd, maild,
-# porterd, readd): fail the build if the delta breaks the account contract of
+# Finalize script for the four Lodge suite sysexts (lodge, notesd, maild,
+# porterd): fail the build if the delta breaks the account contract of
 # the Lodge suite. Lodge's own sysusers line creates
 # the system user lodge; a Lodge app daemon resolves that user at start, and a
 # unit may name an account only if the delta declares it.

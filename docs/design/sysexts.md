@@ -71,7 +71,6 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **pilothouse** | frostyard-pilothouse | Pilothouse web administration with capability-gated Updex/container backends (web UI + root broker) — downloaded via `verified_download()` from frostyard/pilothouse GitHub releases |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
 | **porterd** | frostyard-porterd | Porter assistant daemon (`porterd`) and Lodge porter app — downloaded via `verified_download()` from frostyard/porter GitHub releases after its build-provenance attestation is checked ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)); useful only behind lodge (porter ADR-0003), so enable `lodge` first |
-| **readd** | frostyard-readd | frostread feed reader and read-later daemon (`readd`, `readctl`) and Lodge read app — downloaded via `verified_download()` from frostyard/frostread GitHub releases after its build-provenance attestation is checked ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)); enable `lodge` first |
 | **sunshine** | sunshine | Sunshine self-hosted game streaming host (official pinned Trixie .deb via verified_download; trixie builds only) |
 | **tailscale** | tailscale | Tailscale VPN client |
 | **vscode** | code | Visual Studio Code desktop application (from packages.microsoft.com) |
@@ -129,7 +128,7 @@ When adding a new sysext direct download, add the checksum entry to
 `sysext-checksums.json` and add the upstream version check to the
 `check-sysext-updates` job.
 
-### Attested downloads (lodge, notesd, maild, porterd, readd)
+### Attested downloads (lodge, notesd, maild, porterd)
 
 A first-party release `.deb` that the upstream workflow attests (GitHub
 build-provenance attestation) carries an `attestation` object in its
@@ -170,11 +169,11 @@ The check runs at two points ([ADR-0024](../adr/0024-verify-attestations-of-firs
 
 **Account contract of the Lodge suite.** The Lodge app daemons resolve the
 system user `lodge` at start
-([#1245](https://github.com/frostyard/snosi/issues/1245)). Each of these five
+([#1245](https://github.com/frostyard/snosi/issues/1245)). Each of these four
 debs declares that user in its own `usr/lib/sysusers.d/<name>.conf`, with the
 line byte-identical to lodge's own
 `u lodge - "lodge, the tailnet web shell for frostyard's apps" /var/lib/lodge`.
-`shared/sysext/finalize/sysext-lodge-accounts-guard.sh`, wired in the five
+`shared/sysext/finalize/sysext-lodge-accounts-guard.sh`, wired in the four
 suite sysexts, fails the sysext build when the delta ships a Lodge app manifest
 and no sysusers file holds that exact line, when
 `usr/lib/sysusers.d/lodge.conf` lacks it, or when a `*.service` or `*.socket`
@@ -242,7 +241,7 @@ installed" at build time, contributes nothing to the delta, and its paths will
 always fail the check even though they exist at runtime — caught live when
 `wget` in debdev's list failed CI on the first run.
 
-`code-server`, `coder`, `edge`, `bitwarden`, `gitdesktop`, `github-copilot`, `lodge`, `maild`, `notesd`, `paseo`, `porterd`, `readd`, and `sunshine` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb` and `gitdesktop` uses the upstream GitDesktop `.deb`; both Tauri payloads already have a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, used by the Edge sysext. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
+`code-server`, `coder`, `edge`, `bitwarden`, `gitdesktop`, `github-copilot`, `lodge`, `maild`, `notesd`, `paseo`, `porterd`, and `sunshine` are the current exceptions to the `Packages=` line: each downloads a pinned upstream artifact with `verified_download()` and installs it with `dpkg -i`. `github-copilot` uses GitHub's official `.deb` and `gitdesktop` uses the upstream GitDesktop `.deb`; both Tauri payloads already have a native `/usr` layout. The shared postoutput script resolves every `KEYPACKAGE` version from the merged dpkg database. `edge` does the same via the shared `shared/packages/edge/mkosi.postinst.d/edge.chroot` (pinned Edge .deb, postinst repo hooks stripped, `/opt/microsoft/msedge` relocated to `/usr/lib/microsoft-edge`, product logos symlinked into hicolor); its runtime dependency list comes from `Include=%D/shared/packages/edge/mkosi.conf`, used by the Edge sysext. `bitwarden` follows the same shape (`shared/packages/bitwarden/`): pinned .deb, `/opt/Bitwarden` relocated to `/usr/lib/Bitwarden`, SUID `chrome-sandbox`, desktop-file `Exec=` rewrite, deps via `Include=`. `paseo` is the same shape again (`shared/packages/paseo/`), plus the `edge`-style update-alternatives repointing (its deb registers `/usr/bin/Paseo` through `/etc/alternatives`, which a sysext never ships).
 
 ## Sysext-Specific Extra Files
 
@@ -436,7 +435,7 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 - `usr/lib/extension-release.d/extension-release.podman` — `EXTENSION_RELOAD_MANAGER=1`, so `systemd-sysext` reloads PID 1 after a merge and the units start in the same boot, for example after `updex features enable podman --now` (snosi#1189; [ADR-0026](../adr/0026-sysexts-with-system-units-reload-the-manager.md)). The build guard `sysext-reload-manager-guard.sh` requires it. `SYSEXT_REVISION=1` republishes it at the same package version; remove it when the package version bumps
 
 ### notesd
-- `mkosi.postinst.chroot` — Downloads the frostyard-notesd .deb (frostyard/frostnotes GitHub release, no apt repo) via `verified_download()`, checks its `Depends: systemd` against the merged buildroot with `shared/download/deb-dependencies.sh`, then `dpkg -i`. The pin carries attestation metadata, checked at pin time and at every build (see [Attested downloads](#attested-downloads-lodge-notesd-maild-porterd-readd)). No maintainer scripts, no `/etc` file and no tmpfiles (the units use `StateDirectory=`/`RuntimeDirectory=`), so there is no `mkosi.finalize`
+- `mkosi.postinst.chroot` — Downloads the frostyard-notesd .deb (frostyard/frostnotes GitHub release, no apt repo) via `verified_download()`, checks its `Depends: systemd` against the merged buildroot with `shared/download/deb-dependencies.sh`, then `dpkg -i`. The pin carries attestation metadata, checked at pin time and at every build (see [Attested downloads](#attested-downloads-lodge-notesd-maild-porterd)). No maintainer scripts, no `/etc` file and no tmpfiles (the units use `StateDirectory=`/`RuntimeDirectory=`), so there is no `mkosi.finalize`
 - The deb ships `notesd`, `notesctl`, `frostnotes.service`, `frostnotes-lodge.socket`, `usr/lib/sysusers.d/frostnotes.conf` (user `frostnotes`, the groups `lodge` and `lodge-apps` so the socket starts without Lodge's own sysext, and user `lodge` with lodge's own line byte for byte, because the daemon resolves that user at start) and the Lodge app under `/usr/share/lodge/apps/notes/` (`app.json`, `web/`). Lodge itself is a separate component and is not part of this sysext
 - `usr/lib/systemd/system-preset/40-notesd.preset` — Enables `frostnotes-lodge.socket` and `frostnotes.service`
 - `usr/lib/systemd/system/multi-user.target.d/10-notesd.conf` — `Upholds=frostnotes-lodge.socket frostnotes.service` (core ADR-0063). Neither unit has a `Condition*=`
@@ -453,7 +452,7 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 - No `RequisiteFeatures=` in the transfer, as for notesd
 
 ### lodge
-- `mkosi.postinst.chroot` — Downloads the frostyard-lodge .deb (frostyard/lodge GitHub release, no apt repo) via `verified_download()`, checks its `Depends: systemd` against the merged buildroot with `shared/download/deb-dependencies.sh`, then `dpkg -i`. The pin carries attestation metadata, checked at pin time and at every build (see [Attested downloads](#attested-downloads-lodge-notesd-maild-porterd-readd)). The deb ships its own `sysusers.d` and `tmpfiles.d` fragments and no `/etc` file, so there is no `mkosi.finalize`
+- `mkosi.postinst.chroot` — Downloads the frostyard-lodge .deb (frostyard/lodge GitHub release, no apt repo) via `verified_download()`, checks its `Depends: systemd` against the merged buildroot with `shared/download/deb-dependencies.sh`, then `dpkg -i`. The pin carries attestation metadata, checked at pin time and at every build (see [Attested downloads](#attested-downloads-lodge-notesd-maild-porterd)). The deb ships its own `sysusers.d` and `tmpfiles.d` fragments and no `/etc` file, so there is no `mkosi.finalize`
 - The deb ships `lodge`, `lodgectl`, `lodge.service`, `usr/lib/sysusers.d/lodge.conf` (user `lodge`, groups `lodge-apps` and `lodge-agents`; the app sysexts repeat the `u lodge` line unchanged), `usr/lib/tmpfiles.d/lodge.conf` (`/run/lodge` owned by `lodge`, `/run/lodge/apps` owned by root, and `/var/lib/lodge`), the web shell under `/usr/share/lodge/shell/` and `/usr/share/lodge/config.example.json`. It ships no socket and no app manifest: every app sysext adds its own manifest under `/usr/share/lodge/apps/`
 - `/etc/lodge/config.json` and `/etc/lodge/lodge.env` belong to the administrator. The sysext ships neither and the daemon starts with its defaults; `lodge.service` reads `lodge.env` with `EnvironmentFile=-`, so a missing file does not fail the start
 - `lodge.service` has no `RuntimeDirectory=`: systemd would remove `/run/lodge` and the apps' sockets with it, so the deb's `tmpfiles.d` fragment creates the directory instead
@@ -470,13 +469,37 @@ The nix system tmpfiles rules (`/usr/lib/tmpfiles.d`) target the bind-mount sour
 - `usr/lib/extension-release.d/extension-release.porterd` — `EXTENSION_RELOAD_MANAGER=1`, as for notesd
 - No `RequisiteFeatures=` in the transfer, as for notesd. porterd is useful only behind lodge (porter ADR-0003), so its documentation says to enable `lodge` first
 
-### readd
-- `mkosi.postinst.chroot` — Same as notesd, for frostyard-readd from frostyard/frostread (core ADR-0058). No `mkosi.finalize`: the units use `StateDirectory=`/`RuntimeDirectory=`, the deb ships its own `sysusers.d` fragment and no tmpfiles are needed, and nothing is captured from `/etc`
-- The deb ships `readd`, `readctl`, `frostread.socket`, `frostread.service`, `usr/lib/sysusers.d/frostread.conf` (user `frostread`, group `lodge`, member of `lodge-apps` and `lodge-agents`, and user `lodge` with lodge's own line byte for byte) and the Lodge read app under `/usr/share/lodge/apps/read/`. It ships no `/etc` file
-- `usr/lib/systemd/system-preset/40-readd.preset` — Enables `frostread.socket` and `frostread.service`
-- `usr/lib/systemd/system/multi-user.target.d/10-readd.conf` — `Upholds=frostread.socket frostread.service` (core ADR-0058)
-- `usr/lib/extension-release.d/extension-release.readd` — `EXTENSION_RELOAD_MANAGER=1`, as for notesd
-- No `RequisiteFeatures=` in the transfer, as for notesd. readd is useful only behind lodge, so its documentation says to enable `lodge` first
+### readd (retired)
+The readd sysext (frostyard-readd, the frostread feed reader daemon and its
+Lodge read app) is retired: the frostread app is retired, and saved articles
+stay as notes in frostnotes. snosi no longer builds or publishes it, base no
+longer ships `usr/lib/sysupdate.readd.d/`, and `check-dependencies.yml` no
+longer tracks frostyard/frostread. The images already published under
+`ext/readd/` stay; any R2 deletion is gated per object (ADR-0018).
+
+A host that has the feature enabled keeps it until an administrator removes
+it. Once the host boots a base image without the readd transfer, updex no
+longer knows the feature: `updex-update.timer` does not update it, and
+`updex features disable readd` fails with `feature 'readd' not found`. The
+link `/var/lib/extensions/readd.raw` and the staged image in
+`/var/lib/extensions.d/` stay, so systemd-sysext merges the last image at
+every trixie boot, and its `Upholds=` keeps `frostread.socket` and
+`frostread.service` running. After a suite switch to forky, systemd-sysext
+refuses that trixie image, and updex cannot relink it.
+
+To remove it:
+
+- Before the update, while base still ships the transfer:
+  `sudo updex features disable readd --now --force`, then reboot.
+- After the update: `sudo rm -f /var/lib/extensions/readd.raw
+  /var/lib/extensions.d/readd.raw /var/lib/extensions.d/readd_*`, then
+  reboot.
+
+Neither path deletes `/var/lib/frostread` (the daemon's state), the `frostread`
+system user, or the updex drop-in
+`/etc/sysupdate.readd.d/readd.feature.d/00-updex.conf`; the drop-in names no
+feature that exists and has no effect.
+
 
 ### tailscale
 - `mkosi.finalize` — Captures `/etc/default/tailscaled` to factory defaults (tailscaled requires the EnvironmentFile)

@@ -238,16 +238,6 @@ jobs:
             echo "porterd_version=$LATEST_PORTERD" >> "$GITHUB_OUTPUT"
           fi
 
-          # Check readd (frostread feed reader daemon; first-party release, GitHub-attested)
-          CURRENT_READD=$(jq -r '.readd.version' "$CHECKSUMS")
-          LATEST_READD=$(gh_api https://api.github.com/repos/frostyard/frostread/releases/latest | jq -r '.tag_name' | sed 's/^v//')
-          mark_failed "readd" "${LATEST_READD}"
-          if [[ -n "$LATEST_READD" && "$LATEST_READD" != "null" ]] && ver_gt "$LATEST_READD" "$CURRENT_READD"; then
-            UPDATES="${UPDATES}readd: $CURRENT_READD -> $LATEST_READD\n"
-            echo "readd_update=true" >> "$GITHUB_OUTPUT"
-            echo "readd_version=$LATEST_READD" >> "$GITHUB_OUTPUT"
-          fi
-
           # Check Microsoft Edge Stable
           CURRENT_EDGE=$(jq -r '.["microsoft-edge-stable"].version' "$CHECKSUMS")
           LATEST_EDGE=$(curl -fsSL --max-time 120 --retry 3 --retry-delay 2 https://packages.microsoft.com/repos/edge/dists/stable/main/binary-amd64/Packages | awk '/^Package: microsoft-edge-stable$/,/^$/' | awk '/^Version:/ {print $2}' | sort -V | tail -1)
@@ -320,8 +310,6 @@ jobs:
           LODGE_VERSION: ${{ steps.check.outputs.lodge_version }}
           PORTERD_UPDATE: ${{ steps.check.outputs.porterd_update }}
           PORTERD_VERSION: ${{ steps.check.outputs.porterd_version }}
-          READD_UPDATE: ${{ steps.check.outputs.readd_update }}
-          READD_VERSION: ${{ steps.check.outputs.readd_version }}
           EDGE_UPDATE: ${{ steps.check.outputs.edge_update }}
           EDGE_VERSION: ${{ steps.check.outputs.edge_version }}
           ONEPASSWORD_UPDATE: ${{ steps.check.outputs.onepassword_update }}
@@ -333,7 +321,7 @@ jobs:
           ATTESTATION_FAILED=""
 
           # Pin a first-party release that has attestation metadata (lodge,
-          # notesd, maild, porterd, readd) only when its GitHub build-provenance
+          # notesd, maild, porterd) only when its GitHub build-provenance
           # attestation verifies (ADR-0024). The candidate pin (URL, SHA-256 of
           # the download, version; `.attestation` is kept) goes into a temporary
           # copy of the checksums file. verify-attestations.sh checks that copy,
@@ -525,11 +513,6 @@ jobs:
           if [[ "$MAILD_UPDATE" == "true" ]]; then
             pin_attested maild "$MAILD_VERSION" \
               "https://github.com/frostyard/frostmail/releases/download/v${MAILD_VERSION}/frostyard-maild_${MAILD_VERSION}_amd64.deb"
-          fi
-
-          if [[ "$READD_UPDATE" == "true" ]]; then
-            pin_attested readd "$READD_VERSION" \
-              "https://github.com/frostyard/frostread/releases/download/v${READD_VERSION}/frostyard-readd_${READD_VERSION}_amd64.deb"
           fi
 
           if [[ "$PORTERD_UPDATE" == "true" ]]; then
