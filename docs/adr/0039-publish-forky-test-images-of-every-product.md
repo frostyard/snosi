@@ -1,6 +1,6 @@
 # 0039 — Publish forky test images of every product, 1 product per dispatch
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0040](0040-move-the-forky-tag-to-a-verified-forky-image-by-dispatch.md) (the `promote` and `source_tag` inputs and the moving `:forky` tag)
 - **Date:** 2026-11-14
 
 ## Context

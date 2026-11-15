@@ -295,7 +295,10 @@ signed OCI images by immutable digest before promoting `latest`. `forky-publish.
 Snowfield or Sundog, 1 product per dispatch (the required `profile` choice
 input), under immutable `forky-<ts>` tags, never `latest`;
 `SNOSI_BOOTC_SECURE_SUITE=forky` selects the forky contract (ADR-0038,
-ADR-0039). The
+ADR-0039). With `promote=true` it builds nothing and moves only `:forky` to
+a `source_tag` digest after its signature and version checks; a lab N+1 PASS
+on that digest comes first, and a rollback is a re-point, never a GHCR
+delete (ADR-0040). The
 first-party sysexts `lodge`, `notesd`, `maild`, `porterd` and `readd` pin
 attested `.deb` files; `shared/download/verify-attestations.sh` checks their
 GitHub build-provenance attestation at pin time and in every `build.yml` run

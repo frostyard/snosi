@@ -223,7 +223,7 @@ forky `libasound2` has 2 providers and `libcurl3-gnutls` has none.
 
 The host-side secure scripts (`assemble-uki.sh`, `buildah-package.sh`,
 `ci/push-immutable-image.sh`, `ci/verify-published-image.sh`,
-`ci/promote-published-image.sh`) read the suite from
+`ci/promote-published-image.sh`, `ci/promote-forky-image.sh`) read the suite from
 `SNOSI_BOOTC_SECURE_SUITE` through the helpers of
 `shared/bootc-secure/compatibility.sh`
 ([ADR-0038](../adr/0038-publish-signed-forky-test-images.md)). An unknown
