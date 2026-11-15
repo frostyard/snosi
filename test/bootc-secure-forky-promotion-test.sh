@@ -33,16 +33,20 @@ run_helper() { # image expected-digest auth-file
     printf '%s\n%s\n' "$status" "$output"
 }
 
-run_case() { # description expected-status image expected-digest auth-file
+# A failure must come from the helper itself: 126 and 127 (not executable,
+# not found) never count, and an expected text must be in the output.
+run_case() { # description expected-status image expected-digest auth-file [expected-text]
     local result status output
     : >"$WORK/commands"
     result=$(run_helper "$3" "$4" "$5")
     status=${result%%$'\n'*}
     output=${result#*$'\n'}
-    if [[ $2 == success && $status -eq 0 ]] || [[ $2 == failure && $status -ne 0 ]]; then
+    if [[ $2 == success && $status -eq 0 ]] ||
+        [[ $2 == failure && $status -ne 0 && $status -ne 126 && $status -ne 127 &&
+            $output == *"${6:-}"* ]]; then
         pass "$1"
     else
-        fail "$1 ($output)"
+        fail "$1 (status $status: $output)"
     fi
 }
 
@@ -96,13 +100,17 @@ skopeo inspect --authfile $AUTH_FILE --format {{.Digest}} docker://$IMAGE:forky"
 [[ $(cat "$WORK/commands") == "$expected_log" ]] &&
     pass "copies the digest to :forky only and checks :forky" ||
     fail "copies the digest to :forky only and checks :forky ($(cat "$WORK/commands"))"
-grep -q 'latest' "$WORK/commands" &&
-    fail "never names latest" ||
-    pass "never names latest"
+[[ -s "$WORK/commands" ]] && ! grep -q 'latest' "$WORK/commands" &&
+    pass "never names latest" ||
+    fail "never names latest"
 
-# Mismatch after the copy fails.
+# Mismatch after the copy fails, after the copy and the check ran.
 FORKY_DIGEST="$OTHER_DIGEST" \
-    run_case "forky digest mismatch after the copy is rejected" failure "$IMAGE" "$DIGEST" "$AUTH_FILE"
+    run_case "forky digest mismatch after the copy is rejected" failure "$IMAGE" "$DIGEST" "$AUTH_FILE" \
+    "forky resolved to $OTHER_DIGEST instead of $DIGEST"
+[[ $(grep -c '^skopeo ' "$WORK/commands") -eq 2 ]] &&
+    pass "the mismatch case copied and checked :forky" ||
+    fail "the mismatch case copied and checked :forky ($(cat "$WORK/commands"))"
 SKOPEO_COPY_FAIL=1 run_case "copy failure is propagated" failure "$IMAGE" "$DIGEST" "$AUTH_FILE"
 SKOPEO_INSPECT_FAIL=1 run_case "inspect failure is propagated" failure "$IMAGE" "$DIGEST" "$AUTH_FILE"
 

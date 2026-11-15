@@ -761,8 +761,10 @@ def self_test(forky_text: str, images_text: str) -> int:
     }
     failures = 0
     if check(forky_text, images_text):
-        print(f"{PREFIX} FAIL self-test baseline is not clean", file=sys.stderr)
-        failures += 1
+        # The mutations need the anchors of a clean workflow; main() prints
+        # the real errors.
+        print(f"{PREFIX} FAIL self-test baseline is not clean; mutations skipped", file=sys.stderr)
+        return -1
     for name, mutate in cases.items():
         if not check(mutate(forky_text), images_text):
             print(f"{PREFIX} FAIL self-test mutation passed: {name}", file=sys.stderr)
