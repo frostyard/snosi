@@ -231,8 +231,9 @@ Each bootc product also has a forky stream: the same composition, built on
 Debian testing (forky, `VERSION_ID` 14) instead of trixie
 ([ADR-0037](adr/0037-build-forky-as-a-second-suite.md)). It is opt-in and has
 no support claim. Debian testing changes every day, so a forky image can break
-where the trixie image does not. Snowfield is untested on Surface hardware on
-both suites.
+where the trixie image does not. Forky images also carry the Debian testing
+kernel, which can regress on your hardware before Debian fixes it. Snowfield is
+untested on Surface hardware on both suites.
 
 Switch a running system to the forky stream of its product, then reboot:
 
@@ -252,6 +253,12 @@ Sysexts follow the suite. At the first boot after a switch,
 each enabled feature to the sysext built for the running suite: file names
 with `_14_` on forky and `_13_` on trixie. `sunshine` is built only on trixie,
 so on forky its feature has no image.
+
+The `:forky` tag moves only to a forky image that passed its checks
+([ADR-0040](adr/0040-move-the-forky-tag-to-a-verified-forky-image-by-dispatch.md)). If a
+bad image is ever published under it, the tag is moved back to an earlier
+image, but that does not repair a machine that already staged or booted the bad
+image: use the rollback below on that machine.
 
 To go back to the deployment you switched from, before you make other changes:
 
