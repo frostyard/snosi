@@ -628,6 +628,8 @@ jobs:
         run: ./test/bootc-secure-push-test.sh
       - name: Validate authenticated promotion fixtures
         run: ./test/bootc-secure-promotion-test.sh
+      - name: Validate forky tag promotion fixtures
+        run: ./test/bootc-secure-forky-promotion-test.sh
 
   mkosi-config-sanity:
     runs-on: ubuntu-latest

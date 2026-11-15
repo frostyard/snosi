@@ -1,5 +1,6 @@
 # Publish signed forky TEST images of Floe, Snow, Snowfield or Sundog
-# (ADR-0038, amended by ADR-0039).
+# (ADR-0038, amended by ADR-0039), or move the moving `:forky` tag of 1
+# product to an already published forky test image (ADR-0040).
 #
 # The Debian release is a build input (ADR-0037): `mkosi --release forky`
 # builds each product composition on Debian testing. This workflow signs and
@@ -12,15 +13,24 @@
 #     input, so each registry write is a deliberate choice; there is no "all"
 #   - published only under immutable `forky-<14 digits>` tags in the product
 #     repository; `latest` and every trixie tag are never touched
-#   - no R2 manifests, no release, no update stream (an immutable tag never
-#     updates)
+#   - no R2 manifests, no release
 #   - SNOSI_BOOTC_SECURE_SUITE=forky selects the forky secure contract; the
-#     helper scripts refuse a forky promote and a tag of the wrong form
+#     helper scripts refuse a forky promote to latest and a tag of the wrong
+#     form
 #
-# The steps are those of build-images.yml secure-build, in the same order, with
-# the same signing key, signature policy, SBOM and provenance, minus the latest
-# promotion, the R2 manifests and the release tag record.
-# test/forky-publish-workflow-test.py holds the two step lists together.
+# promote=true (default false) builds and publishes nothing: the forky-promote
+# job alone runs. It resolves `source_tag` (an existing `forky-<14 digits>`
+# tag) to its digest, records the plan, verifies the Cosign signature and the
+# image version of that digest, and only then moves `:forky` to it with
+# promote-forky-image.sh. That move is its only registry write. The workflow
+# checks signature and identity only: the lab proof that ADR-0040 requires
+# before a promotion is the dispatcher's duty.
+#
+# The steps of forky-publish are those of build-images.yml secure-build, in
+# the same order, with the same signing key, signature policy, SBOM and
+# provenance, minus the latest promotion, the R2 manifests and the release tag
+# record. test/forky-publish-workflow-test.py holds the two step lists
+# together and holds forky-promote to ADR-0040.
 name: Publish forky test images (no latest)
 
 on:
@@ -36,6 +46,16 @@ on:
           - snow
           - snowfield
           - sundog
+      promote:
+        description: "Move :forky to the existing source_tag image; builds nothing (ADR-0040)"
+        required: false
+        type: boolean
+        default: false
+      source_tag:
+        description: "With promote only: the forky-<14 digits> tag that :forky moves to"
+        required: false
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -51,9 +71,10 @@ jobs:
     # Maps the dispatch input to exactly 1 matrix entry from a fixed table of
     # the 4 products, with the descriptions of build-images.yml secure-build
     # (test/forky-publish-workflow-test.py compares the two). Any other value
-    # fails, so nothing publishes. The input reaches the script only through
-    # env, never by expression interpolation into the script. No checkout, no
-    # token, no secret.
+    # fails, so nothing publishes. A source_tag without promote=true also
+    # fails, so a publish run never ignores it. The inputs reach the script
+    # only through env, never by expression interpolation into the script. No
+    # checkout, no token, no secret.
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.ref == 'refs/heads/main'
@@ -62,13 +83,20 @@ jobs:
     permissions: {}
     outputs:
       matrix: ${{ steps.select.outputs.matrix }}
+      profile: ${{ steps.select.outputs.profile }}
     steps:
       - name: Select the product
         id: select
         env:
           PROFILE: ${{ inputs.profile }}
+          PROMOTE: ${{ inputs.promote }}
+          SOURCE_TAG: ${{ inputs.source_tag }}
         run: |
           set -euo pipefail
+          if [[ $PROMOTE != true && -n $SOURCE_TAG ]]; then
+            echo "::error::source_tag is only valid with promote=true (ADR-0040)" >&2
+            exit 1
+          fi
           case "$PROFILE" in
             floe) description="Floe Linux Server Image" ;;
             snow) description="Snow Linux OS Image" ;;
@@ -79,13 +107,15 @@ jobs:
           matrix=$(jq -cn --arg profile "$PROFILE" --arg description "$description" \
             '[{profile: $profile, description: $description}]')
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "profile=$PROFILE" >> "$GITHUB_OUTPUT"
           echo "- Selected forky product: \`$PROFILE\`" >> "$GITHUB_STEP_SUMMARY"
 
   forky-publish:
     needs: select
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      github.ref == 'refs/heads/main'
+      github.ref == 'refs/heads/main' &&
+      !inputs.promote
     environment: native-build
     runs-on: ubuntu-latest
     # A hung mkosi/apt otherwise burns the 6-hour default.
@@ -520,4 +550,142 @@ jobs:
             echo "- Digest: \`$IMAGE@$DIGEST\`"
             echo "- Lab switch: \`bootc switch $IMAGE:$TAG\`"
             echo '- An immutable tag never updates: this is no update stream (ADR-0038).'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  forky-promote:
+    # Moves the moving `:forky` tag of the selected product to the digest of
+    # an existing `forky-<14 digits>` tag (ADR-0040). It builds nothing and
+    # signs nothing: no id-token, no attestations, no signing secret. Every
+    # check runs before the move, and the move is the only registry write, so
+    # a failed check leaves `:forky` unchanged. It never names the trixie
+    # moving tag.
+    needs: select
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.ref == 'refs/heads/main' &&
+      inputs.promote
+    environment: native-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    env:
+      SNOSI_BOOTC_SECURE_SUITE: forky
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate the source tag
+        id: source
+        env:
+          SOURCE_TAG: ${{ inputs.source_tag }}
+        run: |
+          set -euo pipefail
+          re='^forky-[0-9]{14}$'
+          if [[ ! $SOURCE_TAG =~ $re ]]; then
+            echo "::error::source_tag must be forky-<14 digits>; found '$SOURCE_TAG'" >&2
+            exit 1
+          fi
+          echo "tag=$SOURCE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${SOURCE_TAG#forky-}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          # The pin of forky-publish: v2.6.3-v2.6.5 break `verify --key` on
+          # digests that carry provenance-attestation referrers.
+          cosign-release: "v2.6.2"
+
+      - name: Resolve the source digest and record the plan
+        # Read only. The plan is in the step summary before anything moves.
+        id: resolve
+        env:
+          PROFILE: ${{ needs.select.outputs.profile }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ needs.select.outputs.profile }}
+          SOURCE_TAG: ${{ steps.source.outputs.tag }}
+        run: |
+          set -euo pipefail
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          digest=$(skopeo inspect --authfile "$AUTH_FILE" --format '{{.Digest}}' \
+            "docker://$IMAGE:$SOURCE_TAG")
+          if [[ ! $digest =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "::error::$IMAGE:$SOURCE_TAG resolved to an invalid digest: '$digest'" >&2
+            exit 1
+          fi
+          # A missing :forky tag is "none"; any other read error fails.
+          err="$RUNNER_TEMP/forky-inspect.err"
+          if previous=$(skopeo inspect --authfile "$AUTH_FILE" --format '{{.Digest}}' \
+              "docker://$IMAGE:forky" 2>"$err"); then
+            if [[ ! $previous =~ ^sha256:[a-f0-9]{64}$ ]]; then
+              echo "::error::$IMAGE:forky resolved to an invalid digest: '$previous'" >&2
+              exit 1
+            fi
+          elif grep -qi 'manifest unknown' "$err"; then
+            previous=none
+          else
+            cat "$err" >&2
+            echo "::error::cannot read the current $IMAGE:forky digest" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          {
+            echo '### Forky tag promotion plan (test image, no support claim)'
+            echo
+            echo "- Product: \`$PROFILE\`"
+            echo "- Source tag: \`$IMAGE:$SOURCE_TAG\`"
+            echo "- Target digest: \`$IMAGE@$digest\`"
+            echo "- Previous :forky digest: \`$previous\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify the signature of the source digest
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ needs.select.outputs.profile }}
+          DIGEST: ${{ steps.resolve.outputs.digest }}
+        run: |
+          cosign verify --key cosign.pub "$IMAGE@$DIGEST"
+
+      - name: Check the image version of the source digest
+        # The config label and the manifest annotation must both equal the 14
+        # digits of the source tag (frostyard/snosi#1125).
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ needs.select.outputs.profile }}
+          DIGEST: ${{ steps.resolve.outputs.digest }}
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          ./shared/outformat/image/check-image-version.sh \
+            "docker://$IMAGE@$DIGEST" "$VERSION" "$AUTH_FILE"
+
+      - name: Move the forky tag to the verified digest
+        # The only registry write of this job.
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ needs.select.outputs.profile }}
+          DIGEST: ${{ steps.resolve.outputs.digest }}
+        run: |
+          AUTH_FILE="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+          ./shared/bootc-secure/ci/promote-forky-image.sh \
+            "$IMAGE" "$DIGEST" "$AUTH_FILE"
+
+      - name: Record the forky tag move
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ needs.select.outputs.profile }}
+          PREVIOUS: ${{ steps.resolve.outputs.previous }}
+          DIGEST: ${{ steps.resolve.outputs.digest }}
+        run: |
+          {
+            echo
+            echo "- Moved \`$IMAGE:forky\`: \`$PREVIOUS\` -> \`$DIGEST\`"
+            echo '- Re-point: dispatch again with promote=true and a retained known-good forky-<ts> source_tag (ADR-0040).'
           } >> "$GITHUB_STEP_SUMMARY"
