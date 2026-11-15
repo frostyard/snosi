@@ -492,7 +492,8 @@ To remove it:
 - Before the update, while base still ships the transfer:
   `sudo updex features disable readd --now --force`, then reboot.
 - After the update: `sudo rm -f /var/lib/extensions/readd.raw
-  /var/lib/extensions.d/readd_*`, then reboot.
+  /var/lib/extensions.d/readd.raw /var/lib/extensions.d/readd_*`, then
+  reboot.
 
 Neither path deletes `/var/lib/frostread` (the daemon's state), the `frostread`
 system user, or the updex drop-in
