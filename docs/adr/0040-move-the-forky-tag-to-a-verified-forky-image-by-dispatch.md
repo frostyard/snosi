@@ -1,6 +1,6 @@
 # 0040 — Move the :forky tag to a verified forky image by dispatch
 
-- **Status:** Accepted
+- **Status:** Accepted; amended by [ADR-0041](0041-queue-forky-publish-dispatches-per-product-and-mode.md) (the concurrency group)
 - **Date:** 2026-11-14
 
 ## Context

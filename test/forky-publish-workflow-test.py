@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Static gate for .github/workflows/forky-publish.yml (ADR-0038, ADR-0039,
-ADR-0040).
+ADR-0040, ADR-0041).
 
 The forky publish workflow signs and publishes forky test images of Floe,
 Snow, Snowfield or Sundog, 1 product per dispatch, or moves the moving
@@ -30,7 +30,12 @@ Snow, Snowfield or Sundog, 1 product per dispatch, or moves the moving
      run: script, a ^forky-[0-9]{14}$ check of source_tag, then the plan in
      the step summary, the Cosign verification of the digest, the version
      check of that digest and the :forky move, in this order; the move is the
-     only registry write, and no step names latest.
+     only registry write, and no step names latest;
+  6. set exactly 1 top-level concurrency group, made of the workflow, the
+     product and the mode (publish or promote), with cancel-in-progress false:
+     dispatches of different products, or of publish and promote, run in
+     parallel, and 2 dispatches of the same product and mode run 1 at a time
+     (ADR-0041).
 
 The parse is line based on purpose, as in workflow-pins-test.py: CI python may
 not ship PyYAML. The self-test mutates the real workflow and requires each
@@ -60,15 +65,22 @@ SELECT_ENV = "          PROFILE: ${{ inputs.profile }}"
 PROMOTE_ENV = "          PROMOTE: ${{ inputs.promote }}"
 SOURCE_TAG_ENV = "          SOURCE_TAG: ${{ inputs.source_tag }}"
 SOURCE_TAG_REFUSAL = "if [[ $PROMOTE != true && -n $SOURCE_TAG ]]; then"
+CONCURRENCY_GROUP = (
+    "  group: ${{ github.workflow }}-${{ inputs.profile }}"
+    "-${{ inputs.promote && 'promote' || 'publish' }}"
+)
+CONCURRENCY_LINES = [CONCURRENCY_GROUP, "  cancel-in-progress: false"]
 # The only lines that may name an input, and how often each appears: the
-# select step's env, the env of the source tag step of forky-promote, and the
-# job conditions that pick forky-publish or forky-promote.
+# select step's env, the env of the source tag step of forky-promote, the job
+# conditions that pick forky-publish or forky-promote, and the concurrency
+# group, which is per product and per mode (ADR-0041).
 INPUT_LINES = {
     SELECT_ENV: 1,
     PROMOTE_ENV: 1,
     SOURCE_TAG_ENV: 2,
     "      !inputs.promote": 1,
     "      inputs.promote": 1,
+    CONCURRENCY_GROUP: 1,
 }
 PROMOTE_STEPS = [
     "Checkout repository",
@@ -487,6 +499,18 @@ def check(forky_text: str, images_text: str) -> list[str]:
     if "permissions: {}" not in lines:
         errors.append("top-level permissions must be {}")
 
+    # 6. The concurrency group: 1 per product and per mode, no cancel.
+    concurrency = top_block(lines, "concurrency")
+    if concurrency is None:
+        errors.append("workflow has no top-level concurrency: block")
+    else:
+        found = [line.rstrip() for line in code(concurrency) if line.strip()]
+        if found != CONCURRENCY_LINES:
+            errors.append(
+                "top-level concurrency must be exactly 1 group per product and mode (ADR-0041):\n"
+                f"  expected {CONCURRENCY_LINES}\n  actual   {found}"
+            )
+
     jobs = top_block(lines, "jobs") or []
     names = [m.group(1) for line in jobs if (m := JOB_KEY.match(line))]
     if names != [SELECT_JOB, JOB, PROMOTE_JOB]:
@@ -691,6 +715,18 @@ def self_test(forky_text: str, images_text: str) -> int:
         "push of version": sub(f'push-immutable-image.sh "$IMAGE" "{TAG}"', f'push-immutable-image.sh "$IMAGE" "{VERSION}"'),
         "verify of version": sub(f"          VERSION_TAG: {TAG}", f"          VERSION_TAG: {VERSION}"),
         "summary step removed": sub(f"      - name: {SUMMARY_STEP}\n", "      - name: Something else\n"),
+        # ADR-0041: 1 concurrency group per product and per mode.
+        "1 concurrency group for the workflow": sub(CONCURRENCY_GROUP, "  group: ${{ github.workflow }}"),
+        "concurrency group without the product": sub(
+            CONCURRENCY_GROUP,
+            "  group: ${{ github.workflow }}-${{ inputs.promote && 'promote' || 'publish' }}",
+        ),
+        "concurrency group without the mode": sub(
+            CONCURRENCY_GROUP, "  group: ${{ github.workflow }}-${{ inputs.profile }}"
+        ),
+        "concurrency that cancels in progress": sub(
+            "  cancel-in-progress: false", "  cancel-in-progress: true"
+        ),
         "step renamed": sub("      - name: Sign SBOM\n", "      - name: Sign the SBOM\n"),
         "credential compare dropped": sub(
             "          cmp -s /var/tmp/bootc-secure-credentials/mok.crt shared/native-ab/keys/mok-2026.crt || {",

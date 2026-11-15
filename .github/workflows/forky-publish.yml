@@ -37,7 +37,7 @@ on:
   workflow_dispatch:
     inputs:
       profile:
-        description: "Product (1 per dispatch). Start the next dispatch only after this run has started: a newer waiting dispatch cancels an older waiting one"
+        description: "Product (1 per dispatch). Different products, and publish vs promote, run in parallel; 2 dispatches of the same product and mode run 1 at a time"
         required: true
         type: choice
         default: floe
@@ -59,12 +59,16 @@ on:
 
 permissions: {}
 
-# 1 run at a time for publish and promote alike (ADR-0039, ADR-0040). GitHub
-# keeps at most 1 waiting run per group: a newer dispatch cancels the older
-# waiting run before it starts any job. Dispatch the next product only after
-# the previous run has started.
+# 1 run at a time for each product and each mode (ADR-0041). Dispatches of
+# different products, and of publish and promote, queue in separate groups and
+# run in parallel: a publish writes only a new immutable forky-<14 digits> tag,
+# and a promote writes only :forky from a source tag that already exists, so
+# they share no tag. 2 dispatches of the same product and mode run 1 at a time.
+# GitHub keeps at most 1 waiting run per group, so a 3rd dispatch of the same
+# product and mode replaces the waiting run before it starts any job: dispatch
+# the next run of 1 product and mode only after the previous one has started.
 concurrency:
-  group: ${{ github.workflow }}
+  group: ${{ github.workflow }}-${{ inputs.profile }}-${{ inputs.promote && 'promote' || 'publish' }}
   cancel-in-progress: false
 
 env:
