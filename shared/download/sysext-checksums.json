@@ -83,9 +83,9 @@
     }
   },
   "lodge": {
-    "url": "https://github.com/frostyard/lodge/releases/download/v0.4.0/frostyard-lodge_0.4.0_amd64.deb",
-    "sha256": "b4564ea69daeee575221b11f5ac92c059f94c2b7c8b7ca705f69e6c710762a83",
-    "version": "0.4.0",
+    "url": "https://github.com/frostyard/lodge/releases/download/v0.5.0/frostyard-lodge_0.5.0_amd64.deb",
+    "sha256": "ca3bd930030d63823ac00d6ca0288056230e84075eaf6d0e1f94bd99d5daefc4",
+    "version": "0.5.0",
     "attestation": {
       "repository": "frostyard/lodge",
       "signer_workflow": ".github/workflows/release.yml"
