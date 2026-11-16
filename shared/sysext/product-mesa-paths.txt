@@ -1,8 +1,9 @@
 # Mesa runtime files the PRODUCTS own, removed from a base-built sysext's
 # delta (issue #1318; shared/sysext/finalize/sysext-strip-product-mesa.sh).
 #
-# Every product (snow, snowfield, floe, sundog) pins the Mesa runtime from
-# trixie-backports through its kernel fragment
+# Every product (snow, snowfield, floe, sundog) pins the Mesa runtime
+# through its kernel fragment (from trixie-backports on trixie, from forky
+# itself on forky)
 # (shared/kernel/{backports,surface}/{trixie,forky}.conf): libegl-mesa0,
 # libgbm1, libgl1-mesa-dri, libglx-mesa0, mesa-libgallium and
 # mesa-vulkan-drivers. A sysext built against `base` installs those packages

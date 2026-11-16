@@ -3,10 +3,10 @@
 # Shared finalize script for every base-built sysext: remove the product-owned
 # Mesa runtime from the delta (shared/sysext/product-mesa-paths.txt).
 #
-# Why (issue #1318): every product pins its Mesa runtime from trixie-backports
-# through its kernel fragment (shared/kernel/{backports,surface}/{trixie,forky}
-# .conf). A sysext built against `base` installs those packages from plain
-# trixie into its delta, and a merged delta copy shadow-downgrades the
+# Why (issue #1318): every product pins its Mesa runtime through its kernel
+# fragment (from trixie-backports on trixie, from forky itself on forky;
+# shared/kernel/{backports,surface}/{trixie,forky}.conf). A sysext built
+# against `base` installs those packages from plain trixie into its delta, and a merged delta copy shadow-downgrades the
 # product's Mesa for the whole /usr (dev and incus carried Mesa 25.0.7 over the
 # products' 26.1.6: with dev merged, OpenGL, EGL and GBM ran on 25.0.7 while
 # Vulkan stayed on the product's 26.1.6).

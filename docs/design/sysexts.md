@@ -371,7 +371,7 @@ shape under real systemd, with a negative control without the `-`.
 
 ### incus
 - `mkosi.finalize` — Captures the tmpfiles-referenced `/etc` paths to factory defaults
-- `shared/sysext/finalize/sysext-strip-product-mesa.sh` — Removes the trixie Mesa runtime from the delta, so a merged incus cannot shadow-downgrade the Mesa every product pins from trixie-backports. `SYSEXT_REVISION=7` republishes it at the same incus version (#1318)
+- `shared/sysext/finalize/sysext-strip-product-mesa.sh` — Removes the trixie Mesa runtime from the delta, so a merged incus cannot shadow-downgrade the Mesa every product pins (from trixie-backports on trixie). `SYSEXT_REVISION=7` republishes it at the same incus version (#1318)
 - `usr/lib/systemd/system-preset/40-incus.preset` — Enable incus services
 - `usr/lib/systemd/system/multi-user.target.d/10-incus.conf` — `Upholds=` drop-in for reliable boot activation (sockets + startup + sysext-setup; incus.service itself is socket-activated). `incus-lxcfs.service` is deliberately not upheld: it has `ConditionVirtualization=!container`, and systemd retries an upheld unit with a failed condition forever (snosi#1100). `sysext-upholds-guard.sh` found it (#1113); `incus-sysext-setup.service` `Wants=` it instead (a single clean skip inside a container), and `incus-lxcfs.service` keeps `Restart=on-failure` for crash recovery. `SYSEXT_REVISION=5` republishes the fix at the same incus version
 - `usr/lib/systemd/system/incus-sysext-setup.service` — Oneshot (`RemainAfterExit=yes`) post-merge setup (subuid/subgid); also the upheld unit that `Wants=incus-lxcfs.service`
@@ -1139,8 +1139,8 @@ App sysexts are `Overlay=yes` deltas: apt omits from the delta exactly the
 packages the *build base* already has. Built against the server-ish `base`,
 an Electron/GTK app's delta carried its whole GUI closure — including
 libraries desktop products pin from **other suites** — every product pins
-its Mesa runtime from trixie-backports through its kernel fragment (issue
-#1318), and a
+its Mesa runtime through its kernel fragment (from trixie-backports on
+trixie; issue #1318), and a
 since-retired Hyprland product pinned libxkbcommon/pipewire/alsa/mesa
 there too. The merged delta's trixie copy shadow-**downgrades** the
 product's version for the entire `/usr` overlay (root-caused live
@@ -1196,8 +1196,8 @@ present, in both directions.
 **Base-built sysexts strip the product Mesa (#1318)**: a sysext that stays
 on `base` (every server/CLI sysext, and dev — Floe has no GUI closure) still
 installs the trixie Mesa runtime into its delta when a package needs it,
-because `base` lacks Mesa, while every product pins its own Mesa from
-trixie-backports. The gui-base
+because `base` lacks Mesa, while every product pins its own Mesa runtime
+(from trixie-backports on trixie, from forky itself on forky). The gui-base
 tripwire covers the app sysexts only, so base-built sysexts run
 `shared/sysext/finalize/sysext-strip-product-mesa.sh` instead: it removes
 the Mesa runtime files listed in `shared/sysext/product-mesa-paths.txt`

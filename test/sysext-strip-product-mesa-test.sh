@@ -249,43 +249,82 @@ else
 fi
 
 # --- case e: every product pins its own Mesa runtime (the strip's premise) -
-mesa_packages=(libegl-mesa0 libgbm1 libgl1-mesa-dri libglx-mesa0 mesa-libgallium)
-for product in snow snowfield floe sundog; do
-    profile="$root/mkosi.profiles/$product/mkosi.conf"
-    fragment=no
-    suite_files=()
+# premise_errors ROOT PRODUCT prints 1 line per premise violation: the
+# product's kernel fragment must include BOTH its trixie.conf and forky.conf,
+# and each must list every Mesa runtime package that the strip list covers.
+mesa_packages=(libegl-mesa0 libgbm1 libgl1-mesa-dri libglx-mesa0 mesa-libgallium mesa-vulkan-drivers)
+premise_errors() { # root product
+    local proot=$1 product=$2 include fragment="" dir suite suite_file pkg
+    local profile="$proot/mkosi.profiles/$product/mkosi.conf"
+    [[ -f $profile ]] || { echo "$product: no profile $profile"; return 0; }
     while IFS= read -r include; do
-        include=${include#Include=}
+        include=${include#*=}
         include=${include#%D/}
         case "$include" in
             shared/kernel/backports/mkosi.conf | shared/kernel/surface/mkosi.conf)
-                fragment=$include
-                while IFS= read -r inner; do
-                    inner=${inner#Include=}
-                    inner=${inner#%D/}
-                    suite_files+=("$root/$inner")
-                done < <(grep -E '^[[:space:]]*Include[[:space:]]*=' "$root/$include")
-                ;;
+                fragment=$include ;;
         esac
     done < <(grep -E '^[[:space:]]*Include[[:space:]]*=' "$profile")
-    if [[ $fragment == no ]]; then
-        fail "$product includes a kernel fragment that pins Mesa"
-        continue
+    if [[ -z $fragment ]]; then
+        echo "$product: includes no kernel fragment that pins Mesa"
+        return 0
     fi
-    if ((${#suite_files[@]} == 0)); then
-        fail "$product's kernel fragment ($fragment) includes suite files"
-        continue
-    fi
-    for suite_file in "${suite_files[@]}"; do
+    dir=${fragment%/mkosi.conf}
+    for suite in trixie forky; do
+        suite_file="$dir/$suite.conf"
+        if ! grep -Eq "^[[:space:]]*Include[[:space:]]*=[[:space:]]*(%D/)?${suite_file//./\\.}[[:space:]]*\$" "$proot/$fragment"; then
+            echo "$product: $fragment does not include $suite_file"
+            continue
+        fi
+        if [[ ! -f $proot/$suite_file ]]; then
+            echo "$product: $suite_file is missing"
+            continue
+        fi
         for pkg in "${mesa_packages[@]}"; do
-            if grep -Eq "^[[:space:]]*$pkg(/[[:alnum:]-]+)?[[:space:]]*\$" "$suite_file"; then
-                ok "$product: ${suite_file#"$root/"} lists $pkg"
-            else
-                fail "$product: ${suite_file#"$root/"} lists $pkg"
-            fi
+            grep -Eq "^([[:space:]]*|[[:space:]]*Packages[[:space:]]*=[[:space:]]*)$pkg(/[[:alnum:]-]+)?[[:space:]]*\$" "$proot/$suite_file" ||
+                echo "$product: $suite_file does not list $pkg"
         done
     done
+}
+
+for product in snow snowfield floe sundog; do
+    errors=$(premise_errors "$root" "$product")
+    if [[ -z $errors ]]; then
+        ok "$product: its kernel fragment pins the Mesa runtime (${#mesa_packages[@]} packages) for trixie and forky"
+    else
+        fail "$product: its kernel fragment pins the Mesa runtime for trixie and forky" "$errors"
+    fi
 done
+
+# Negative fixtures: copy Snow's profile and kernel fragment into a fake root,
+# then break the premise 2 ways; each must be reported.
+make_premise_root() { # name -> path
+    local d="$work/premise-$1"
+    mkdir -p "$d/mkosi.profiles/snow" "$d/shared/kernel/backports"
+    cp "$root/mkosi.profiles/snow/mkosi.conf" "$d/mkosi.profiles/snow/"
+    cp "$root/shared/kernel/backports/"{mkosi,trixie,forky}.conf "$d/shared/kernel/backports/"
+    echo "$d"
+}
+d=$(make_premise_root intact)
+if [[ -z $(premise_errors "$d" snow) ]]; then
+    ok "premise fixture: an intact copy of Snow's fragment passes"
+else
+    fail "premise fixture: an intact copy of Snow's fragment passes" "$(premise_errors "$d" snow)"
+fi
+d=$(make_premise_root no-forky)
+sed -i '\#shared/kernel/backports/forky.conf#d' "$d/shared/kernel/backports/mkosi.conf"
+if premise_errors "$d" snow | grep -q 'does not include shared/kernel/backports/forky.conf'; then
+    ok "premise fixture: a fragment that drops its forky include is reported"
+else
+    fail "premise fixture: a fragment that drops its forky include is reported" "$(premise_errors "$d" snow)"
+fi
+d=$(make_premise_root no-vulkan)
+sed -i '/mesa-vulkan-drivers/d' "$d/shared/kernel/backports/trixie.conf"
+if premise_errors "$d" snow | grep -q 'trixie.conf does not list mesa-vulkan-drivers'; then
+    ok "premise fixture: a suite file without mesa-vulkan-drivers is reported"
+else
+    fail "premise fixture: a suite file without mesa-vulkan-drivers is reported" "$(premise_errors "$d" snow)"
+fi
 
 echo
 echo "# Results: $((test_number - failures)) passed, $failures failed, $test_number total"

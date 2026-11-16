@@ -29,8 +29,9 @@ lib/*/spa-0.2/*
 lib/*/libwireplumber*.so*
 
 # mesa userspace -- LIVE today: all 4 products (snow, snowfield, floe,
-# sundog) pin the mesa runtime from trixie-backports through the kernel
-# fragments (shared/kernel/{backports,surface}/{trixie,forky}.conf).
+# sundog) pin the mesa runtime through the kernel fragments (from
+# trixie-backports on trixie, from forky itself on forky;
+# shared/kernel/{backports,surface}/{trixie,forky}.conf).
 # Includes the mesa-vulkan-drivers ICDs and layers -- chatgpt's deb
 # hard-depends on that package, which is why gui-base and
 # shared/packages/snow both carry it. Base-built sysexts strip the same
