@@ -298,8 +298,8 @@ input), under immutable `forky-<ts>` tags, never `latest`;
 ADR-0039). With `promote=true` it builds nothing and moves only `:forky` to
 a `source_tag` digest after its signature and version checks; a lab N+1 PASS
 on that digest comes first, and a rollback is a re-point, never a GHCR
-delete (ADR-0040). The
-first-party sysexts `lodge`, `notesd`, `maild` and `porterd` pin attested
+delete (ADR-0040). Its concurrency group is per product and mode
+(ADR-0041). The first-party sysexts `lodge`, `notesd`, `maild` and `porterd` pin attested
 `.deb` files; `shared/download/verify-attestations.sh` checks their
 GitHub build-provenance attestation at pin time and in every `build.yml` run
 ([ADR-0024](docs/adr/0024-verify-attestations-of-first-party-sysext-debs.md)).

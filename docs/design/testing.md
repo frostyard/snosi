@@ -252,8 +252,13 @@ it also checks the boolean `promote` input (default false) and the
 only, its `contents: read` and `packages: write` permissions (no `id-token`,
 no `attestations`), inputs only through `env:`, the `^forky-[0-9]{14}$`
 check, the order plan summary, signature, version check and move, the move
-as its only registry write, and no `latest` in its steps. Its self-test
-mutates the workflow and requires each mutation to fail.
+as its only registry write, and no `latest` in its steps. It also holds the
+top-level `concurrency:` block: 1 group made of the workflow, the product and
+the mode, with `cancel-in-progress: false`
+([ADR-0041](../adr/0041-queue-forky-publish-dispatches-per-product-and-mode.md)).
+Its self-test mutates the workflow and requires each mutation to fail; the
+mutations include the single-group form, a group without the product, a group
+without the mode and `cancel-in-progress: true`.
 `test/bootc-secure-forky-promotion-test.sh` runs `promote-forky-image.sh`
 with a fake `skopeo`: it refuses every suite but forky, an invalid image or
 digest and a bad auth file before any registry call, fails when `:forky`
