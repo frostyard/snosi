@@ -109,6 +109,13 @@ file at a path base ships: mkosi drops it from the delta (#1111).
 Base owns the host VM runtime (`qemu-system-x86`, `qemu-utils`, `ovmf`);
 every sysext runs `shared/sysext/finalize/sysext-no-base-owned.sh`, which
 fails a delta that ships any glob in `shared/sysext/base-owned-paths.txt`.
+Every base-built sysext also runs
+`shared/sysext/finalize/sysext-strip-product-mesa.sh`, which removes the Mesa
+runtime listed in `shared/sysext/product-mesa-paths.txt` from the delta,
+because every product pins its own Mesa runtime in its kernel fragment
+(trixie-backports on trixie; #1318).
+A gui-base-built sysext must not run it: its divergent-lib tripwire must
+still see Mesa if gui-base loses it.
 Incus uses its bundled `/usr/incus` qemu, not Debian's.
 The Frostyard repository key must be the content of
 `/usr/lib/systemd/import-pubring.pgp`: `systemd-container/forky` overwrites

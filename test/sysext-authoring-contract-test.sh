@@ -15,6 +15,32 @@ validation_error() {
     validation_failures=$((validation_failures + 1))
 }
 
+# Which tree a sysext is built against: `base`, `gui-base`, or empty when the
+# config names none (then no Mesa-strip rule applies). BaseTrees= may sit in an
+# [Include]d fragment (edge, bitwarden, localsend, obsidian, paseo), so follow
+# one level of Include= like the sysext tests do.
+basetrees_kind() { # repository-root config-path (already rooted, as the caller built it)
+    local root=$1 config=$2 file include
+    local -a files=("$config")
+    while IFS= read -r include; do
+        include=${include#Include=}
+        include=${include#%D/}
+        files+=("$root/$include")
+    done < <(grep -E '^[[:space:]]*Include[[:space:]]*=' "$config" || true)
+    for file in "${files[@]}"; do
+        [[ -f $file ]] || continue
+        if grep -Eq '^[[:space:]]*BaseTrees[[:space:]]*=[[:space:]]*%O/gui-base[[:space:]]*$' "$file"; then
+            echo gui-base
+            return 0
+        fi
+        if grep -Eq '^[[:space:]]*BaseTrees[[:space:]]*=[[:space:]]*%O/base[[:space:]]*$' "$file"; then
+            echo base
+            return 0
+        fi
+    done
+    return 0
+}
+
 validate_inventory() {
     local root=$1
     local config config_path name required_paths metadata_dir
@@ -78,6 +104,29 @@ validate_inventory() {
                 grep -Fq "$file" ||
                 validation_error "$name: mkosi.conf is missing finalizer $file"
         done
+
+        # Mesa strip wiring (#1318). A sysext built against `base` installs the
+        # trixie Mesa runtime into its delta; merged, that copy shadow-downgrades
+        # the Mesa every product pins from trixie-backports. So every base-built
+        # sysext must strip it, and every gui-base-built one must NOT: the
+        # gui-base tripwire (sysext-no-divergent-libs.sh) has to keep seeing
+        # Mesa if gui-base loses the package.
+        local basetrees has_strip=no
+        basetrees=$(basetrees_kind "$root" "$config_path")
+        grep -E '^[[:space:]]*FinalizeScripts=' "$config_path" |
+            grep -Fq '%D/shared/sysext/finalize/sysext-strip-product-mesa.sh' &&
+            has_strip=yes
+        case "$basetrees" in            base)
+                if [[ $has_strip == no ]]; then
+                    validation_error "$name: mkosi.conf is missing finalizer %D/shared/sysext/finalize/sysext-strip-product-mesa.sh; a base-built sysext delta carries the trixie Mesa runtime, which shadow-downgrades every product's trixie-backports Mesa (#1318)"
+                fi
+                ;;
+            gui-base)
+                if [[ $has_strip == yes ]]; then
+                    validation_error "$name: a gui-base-built sysext must not run %D/shared/sysext/finalize/sysext-strip-product-mesa.sh; its sysext-no-divergent-libs.sh tripwire must still see Mesa if gui-base loses it (#1318)"
+                fi
+                ;;
+        esac
 
         # Published sysexts are .raw.zst. CompressOutput= is SettingScope.local
         # in mkosi (never inherited from the root config), so every sysext must
@@ -153,7 +202,8 @@ Overlay=yes
 CompressOutput=zstd
 
 [Content]
-FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh,%D/shared/sysext/finalize/sysext-no-base-owned.sh,%D/shared/sysext/finalize/sysext-upholds-guard.sh,%D/shared/sysext/finalize/sysext-reload-manager-guard.sh
+BaseTrees=%O/base
+FinalizeScripts=%D/shared/sysext/finalize/sysext-usr-only.sh,%D/shared/sysext/finalize/sysext-strip-product-mesa.sh,%D/shared/sysext/finalize/sysext-required-paths.sh,%D/shared/sysext/finalize/sysext-strip-icon-cache.sh,%D/shared/sysext/finalize/sysext-no-base-owned.sh,%D/shared/sysext/finalize/sysext-upholds-guard.sh,%D/shared/sysext/finalize/sysext-reload-manager-guard.sh
 
 [Build]
 Environment=KEYPACKAGE=fixture-package
@@ -236,6 +286,16 @@ run_negative_fixture() {
                 "$root/mkosi.images/fixture/mkosi.conf"
             git -C "$root" add mkosi.images/fixture/mkosi.conf
             ;;
+        missing-mesa-strip-finalizer)
+            sed -i 's#%D/shared/sysext/finalize/sysext-strip-product-mesa.sh,##' \
+                "$root/mkosi.images/fixture/mkosi.conf"
+            git -C "$root" add mkosi.images/fixture/mkosi.conf
+            ;;
+        mesa-strip-in-gui-base-sysext)
+            sed -i 's#^BaseTrees=%O/base$#BaseTrees=%O/gui-base#' \
+                "$root/mkosi.images/fixture/mkosi.conf"
+            git -C "$root" add mkosi.images/fixture/mkosi.conf
+            ;;
         mismatched-feature)
             sed -i 's/Features=fixture/Features=other/' \
                 "$metadata_dir/sysupdate.fixture.d/fixture.transfer"
@@ -310,6 +370,8 @@ run_negative_fixture missing-usr-only-finalizer "sysext-usr-only.sh"
 run_negative_fixture missing-base-owned-finalizer "sysext-no-base-owned.sh"
 run_negative_fixture missing-upholds-finalizer "sysext-upholds-guard.sh"
 run_negative_fixture missing-reload-manager-finalizer "sysext-reload-manager-guard.sh"
+run_negative_fixture missing-mesa-strip-finalizer "a base-built sysext delta carries the trixie Mesa runtime"
+run_negative_fixture mesa-strip-in-gui-base-sysext "a gui-base-built sysext must not run"
 run_negative_fixture mismatched-feature "transfer must select Features=fixture"
 run_negative_fixture unsigned-transfer "transfer must set Verify=true"
 run_negative_fixture orphan-metadata "orphan component-scoped sysext metadata"

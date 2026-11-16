@@ -1,0 +1,49 @@
+# Mesa runtime files the PRODUCTS own, removed from a base-built sysext's
+# delta (issue #1318; shared/sysext/finalize/sysext-strip-product-mesa.sh).
+#
+# Every product (snow, snowfield, floe, sundog) pins the Mesa runtime
+# through its kernel fragment (from trixie-backports on trixie, from forky
+# itself on forky)
+# (shared/kernel/{backports,surface}/{trixie,forky}.conf): libegl-mesa0,
+# libgbm1, libgl1-mesa-dri, libglx-mesa0, mesa-libgallium and
+# mesa-vulkan-drivers. A sysext built against `base` installs those packages
+# from plain trixie into its delta, and the merged delta copy shadow-DOWNGRADES
+# the product's version for the whole /usr (dev carried Mesa 25.0.7 over the
+# products' 26.1.6). mkosi runs FinalizeScripts after it unmounts the base
+# overlay, so $BUILDROOT is the delta only: removing a file here cannot create
+# a whiteout, and the product's own file stays visible.
+#
+# Format: one shell glob per line, matched against paths RELATIVE to the
+# delta's /usr (e.g. lib/x86_64-linux-gnu/libgbm.so.1). Comments and blank
+# lines ignored. A match is removed from the delta; zero matches is a pass.
+#
+# KEEP the Mesa consumers and their loaders: libglvnd (libEGL.so.1,
+# libGL.so.1, libGLX.so.0, libGLESv2.so.2), libvulkan.so.1 (the loader, not
+# an ICD), libdrm, libllvm, the -dev headers, and the unsuffixed
+# development symlinks (libgbm.so). Only the Mesa implementation files go.
+
+# mesa-libgallium (the whole Mesa driver/driver-helper payload since 25.2.8-3)
+lib/*/libgallium-*.so
+
+# libgbm1 (libgbm.so, with no version suffix, is a development symlink)
+lib/*/libgbm.so.*
+lib/*/gbm/*
+
+# libegl-mesa0
+lib/*/libEGL_mesa.so*
+share/glvnd/egl_vendor.d/50_mesa.json
+
+# libglx-mesa0
+lib/*/libGLX_mesa.so*
+lib/*/libGLX_indirect.so*
+
+# libgl1-mesa-dri (the DRI drivers, plus the symlinks apt leaves for them)
+lib/*/dri/*
+share/drirc.d/00-mesa-defaults.conf
+
+# mesa-vulkan-drivers (ICDs and layers only, never the libvulkan.so.1 loader)
+lib/*/libvulkan_*.so
+lib/*/libVkLayer_MESA_*.so
+share/vulkan/icd.d/*_icd.*.json
+share/vulkan/implicit_layer.d/VkLayer_MESA_*.json
+share/vulkan/explicit_layer.d/VkLayer_MESA_*.json
