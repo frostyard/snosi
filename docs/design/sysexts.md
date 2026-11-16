@@ -54,7 +54,7 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **code-server** | code-server | code-server (VS Code in the browser) — downloaded via `verified_download()` from coder/code-server GitHub releases |
 | **coder** | coder | Coder workspaces server — downloaded via `verified_download()` from coder/coder GitHub releases |
 | **debdev** | debootstrap | Debian development tools (debootstrap, distro-info, arch-test, archive keyrings) |
-| **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace |
+| **dev** | build-essential | Build essentials, cmake, Python3, valgrind, gdb, strace, GTK4/WebKitGTK headers, Xvfb for headless GUI tests |
 | **docker** | docker-ce | Docker CE, containerd, buildx, compose |
 | **edge** | microsoft-edge-stable | Microsoft Edge browser (pinned .deb via verified_download, relocated from /opt) |
 | **gitdesktop** | git-desktop | GitDesktop keyboard-first Git client (pinned upstream .deb via verified_download from theBGuy/GitDesktop GitHub releases; Tauri; native /usr layout) |
@@ -326,6 +326,7 @@ shape under real systemd, with a negative control without the `-`.
 
 ### debdev / dev
 - `mkosi.postinst.chroot` — Repoints `/usr/bin`+`/usr/sbin` symlinks that route through `/etc/alternatives` to their resolved targets. Sysexts cannot ship `/etc`, so alternatives symlinks created while installing these sysexts' packages would dangle at runtime (observed live: `/usr/bin/automake -> /etc/alternatives/automake`, missing).
+- dev ships `xvfb` and `xauth`, so headless GTK test suites can run under `xvfb-run` (with `dbus-run-session` from base). `required-paths.txt` asserts `/usr/bin/Xvfb`, `/usr/bin/xvfb-run` and `/usr/bin/xauth`. dev stays base-built, because Floe has no GUI closure: its delta carries trixie Mesa, which shadows the backports Mesa of a desktop product while dev is merged (see [Desktop-App Sysexts Build Against gui-base](#desktop-app-sysexts-build-against-gui-base-issue-781)).
 
 ### docker
 - `usr/lib/systemd/system-preset/20-docker.preset` — Enable docker.socket + containerd (numbered below 30 so it beats the base image's `30-docker.preset` disable; presets are first-match-wins in lexical order)
