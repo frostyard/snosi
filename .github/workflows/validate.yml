@@ -500,6 +500,9 @@ jobs:
       - name: Test gui-base sysext divergent-lib contract
         run: ./test/sysext-divergent-libs-test.sh
 
+      - name: Test product-Mesa strip for base-built sysexts
+        run: ./test/sysext-strip-product-mesa-test.sh
+
       - name: Test base-owned VM runtime sysext guard
         run: ./test/sysext-no-base-owned-test.sh
 

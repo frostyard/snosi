@@ -28,11 +28,14 @@ lib/*/pipewire-0.3/*
 lib/*/spa-0.2/*
 lib/*/libwireplumber*.so*
 
-# mesa userspace -- LIVE today: snowfield pins mesa from trixie-backports
-# through shared/kernel/surface/mkosi.conf while snow tracks trixie.
+# mesa userspace -- LIVE today: all 4 products (snow, snowfield, floe,
+# sundog) pin the mesa runtime from trixie-backports through the kernel
+# fragments (shared/kernel/{backports,surface}/{trixie,forky}.conf).
 # Includes the mesa-vulkan-drivers ICDs and layers -- chatgpt's deb
 # hard-depends on that package, which is why gui-base and
-# shared/packages/snow both carry it.
+# shared/packages/snow both carry it. Base-built sysexts strip the same
+# mesa runtime from their deltas instead (product-mesa-paths.txt, #1318);
+# a match here is still a gui-base rebuild-or-re-triage event.
 lib/*/libgbm.so*
 lib/*/libgallium*.so*
 lib/*/libEGL_mesa*.so*
