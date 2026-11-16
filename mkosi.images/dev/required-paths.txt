@@ -27,3 +27,8 @@
 # that the cache names this exact module.
 /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader_svg.so
 /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache
+# Headless X server for GUI tests (xvfb, xauth): base carries neither
+# package, so both must land in the delta.
+/usr/bin/Xvfb
+/usr/bin/xvfb-run
+/usr/bin/xauth
