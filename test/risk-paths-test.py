@@ -389,7 +389,9 @@ for key, package in packages.items():
         fail(f"redirect Worker lockfile package {key!r} must be an object")
     if key == "" or package.get("link") is True:
         continue
-    name = package.get("name", key.rsplit("node_modules/", 1)[-1])
+    name = key.rsplit("node_modules/", 1)[-1]
+    if "name" in package and package["name"] != name:
+        fail(f"redirect Worker lockfile package {key!r} name mismatch: expected {name!r}, got {package['name']!r}")
     version = package.get("version")
     if not isinstance(name, str) or not name:
         fail(f"redirect Worker lockfile package {key!r} must have a non-empty string name")
