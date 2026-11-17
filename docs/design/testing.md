@@ -38,6 +38,9 @@ edits or removes an existing corrections line. `.github/workflows/ci.yml`
 `scripts/check-template.mjs`, `scripts/check-corrections.mjs`,
 `scripts/lib/risk-paths.mjs` and `test/check-template.test.mjs` are copies
 from bketelsen/agentic-template: copy them again, never edit them by hand.
+`test/docs-claims.test.mjs` checks that `AGENTS.md` counts the system policy's
+Frostyard scopes correctly and that the plan index status agrees with every
+linked plan file.
 The make gate does not replace `validate.yml`, which runs shellcheck and the
 fixture suites below.
 

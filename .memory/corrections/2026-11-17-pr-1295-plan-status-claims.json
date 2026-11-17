@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-17",
+  "scope": "plan status lines and the docs/README.md plan index",
+  "correction": "A plan status claim must come from git history, not the plan's checkboxes. Check what landed against git log and docs/native-ab-prototype-history.md, and keep the plan index status in agreement with the plan file.",
+  "evidence": "PR #1295 cross-review found a blocking claim at b53f58d: the graphical-installer plan said 'Never implemented', although PR #424 implemented snosi-setup on 2026-07-17. Commit 8aed9a6 fixed the claim to record implementation before removal by ADR-0018.",
+  "promoted_to": "AGENTS.md (Documentation rule); test/docs-claims.test.mjs"
+}

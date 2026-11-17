@@ -637,8 +637,8 @@ because they are absent from this snapshot.
 - [ ] Update the user-memory note (`minisnow` etc.) and close the tracking
       issue with links to the ADR. No tracking issue exists in snosi (search
       of 2026-11-13); only the user-memory note remains.
-- [ ] `AGENTS.md` still says that the system policy keeps "the five"
-      Frostyard scopes. Correct it to four now that #1299 merged:
+- [x] Corrected `AGENTS.md` from "the five" Frostyard scopes to four in
+      this change, now that #1299 merged:
       [#1298](https://github.com/frostyard/snosi/issues/1298).
 - [ ] **Done when:** the retirement release R is published from the merge
       of #1299, the GHCR `cayo` package description says it is frozen and

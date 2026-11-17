@@ -247,8 +247,9 @@ reuses the stager's strict-policy pull, its `/run/snosi/update-stage.lock` and
 its locked-and-verified staging, and it runs `bootc rollback` when the target
 image is the rollback deployment. `test/snosi-stream-test.sh` drives it with
 PATH stubs. The system
-`/etc/containers/policy.json` accepts workload images and keeps the five
-Frostyard scopes signed. `--pkg-diff` uses the identity-bound
+`/etc/containers/policy.json` accepts workload images and keeps the four
+Frostyard scopes signed: floe, snow, snowfield and sundog.
+`--pkg-diff` uses the identity-bound
 `mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh` sidecar.
 That shared library retains `version=` support as an API even though the
 only shipped stager publishes a bootc `digest=` identity; do not remove
@@ -343,6 +344,11 @@ for live Firn install, update or rollback evidence. See
 [CI/CD](docs/design/ci-cd.md) and [testing](docs/design/testing.md).
 
 ## Documentation
+
+A Done, Shipped or Superseded plan status must state what landed, checked
+against `git log` and `docs/native-ab-prototype-history.md`, not the plan's
+checkboxes. The `docs/README.md` plan index must show the plan file's status;
+`test/docs-claims.test.mjs` checks that agreement and the policy scope count.
 
 Keep living design and user guidance current with code. New decisions start
 from `docs/adr/TEMPLATE.md`; accepted ADRs are immutable except status and
