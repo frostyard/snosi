@@ -128,6 +128,14 @@ login key (`AutomaticLogin`, `TimedLogin`) on a line that is not a comment,
 with or without an `=`. The retired live-ISO
 `shared/snow/tree/etc/gdm3/daemon.conf` set `AutomaticLogin=snow`; the Firn
 installer creates the only user an installed system has.
+`test/xfs-healer-preset-test.sh` keeps the root instance of forky's
+`xfs_healer@.service` disabled
+([#1326](https://github.com/frostyard/snosi/issues/1326)): its
+`ExecCondition` exits 255 on the composefs overlay root, so the unit fails at
+every boot. The test runs `systemctl --root ... preset-all` on a scratch root
+with the base presets, Debian's `enable *` and stub units, plus a control run
+without the base presets, and checks that `xfs_healer_start.service` stays
+enabled.
 `test/system-monitor-launcher-test.sh` keeps the Logomenu System Monitor
 item on a shipped program: `shared/packages/snow/mkosi.conf` must install
 `gnome-system-monitor` (no `RemovePackages=` may name it),

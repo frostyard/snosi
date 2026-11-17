@@ -162,6 +162,14 @@ jobs:
         # network, or image build.
         run: ./test/gdm-autologin-scope-test.sh
 
+      - name: Validate the xfs_healer root instance stays disabled
+        # Static guard (#1326): forky's xfs_healer@.service fails on the
+        # composefs overlay root, so the base presets disable its root
+        # instance and keep xfs_healer_start.service. systemctl --root
+        # preset-all on a scratch root, with a control run. No root,
+        # network, or image build.
+        run: ./test/xfs-healer-preset-test.sh
+
       - name: Validate the first-login trigger
         # Static guard (ADR-0028): Snow and Snowfield ship exactly one
         # first-login autostart entry, Exec=/usr/bin/chairlift-first-run,
