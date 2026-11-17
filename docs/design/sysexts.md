@@ -642,7 +642,7 @@ mixed `SHA256SUMS` is normal during the transition.
 
 ### Publishing only unpublished identities
 
-`build.yml` publishes with repogen `publish-to-r2` v0.7.2. Since v0.7.0
+`build.yml` publishes with repogen `publish-to-r2` v0.7.4. Since v0.7.0
 repogen reconciles digests: it fails the whole run when a rebuilt sysext has an
 identity (`NAME_VERSION_OSVERSION_ARCH`, compression suffix ignored) that
 `ext/<name>/SHA256SUMS` already lists with other bytes or another filename.
@@ -677,6 +677,29 @@ Since v0.7.1 the action also uploads in order (repogen ADR-0017): payloads
 first, then a check that every payload arrived, then metadata such as
 `SHA256SUMS`, then directory indexes, each upload phase retried. A failed payload
 upload therefore stops the run before any metadata names it.
+
+Since v0.7.4 the action writes each `ext/<name>/SHA256SUMS` and its
+`SHA256SUMS.gpg` conditionally, in its own upload phase "Phase 3b (guarded
+metadata)" after the other metadata and before the indexes
+([repogen ADR-0019](https://github.com/frostyard/repogen/blob/v0.7.4/docs/adr/0019-guard-sysext-manifests-and-opt-in-retention.md)).
+The metadata restore records the ETag of each manifest and signature it
+downloads; the write uses `--if-match` on that ETag, or `--if-none-match '*'`
+for a new extension. It writes 1 extension at a time, each `SHA256SUMS`
+before its `SHA256SUMS.gpg`. When another publisher changed an object since
+the restore, R2 answers 412 and the run stops: that object keeps the other
+publisher's bytes, so none of its entries are lost, and no later manifest and
+no index is written. The manifests written before the conflict stay
+written, and the payloads of the extensions not yet written are listed
+nowhere. A 412 on a `SHA256SUMS.gpg` after its `SHA256SUMS` was written leaves
+that pair out of step, which repogen and updex both refuse until a rerun
+writes both. Rerun the job. A manifest whose bytes did not change is not
+written. This needs AWS CLI v2.22 or newer on the runner; an older CLI fails
+the step and writes nothing without its condition. The guard does not
+replace serialization: the trixie `build` and forky `build-forky` jobs write
+the same `ext/<name>/` manifests, so `build-forky` runs only after `build`
+(`needs: build`), the workflow concurrency group keeps 2 main runs apart,
+and a 412 means that rule broke. snosi does not set
+`sysext-keep-versions`, so its default `0` keeps every published version.
 
 Main push runs of `build.yml` are never cancelled by a newer push (only PR
 runs are): a cancel during the upload can leave `SHA256SUMS` and
