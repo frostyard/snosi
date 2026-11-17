@@ -1,0 +1,350 @@
+#!/bin/bash
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# snosi-stream — move this bootc machine between the 2 streams of its own
+# product: ghcr.io/frostyard/<product>:latest (trixie) and
+# ghcr.io/frostyard/<product>:forky (forky, ADR-0037, ADR-0040).
+#
+# It is the supported replacement for the hand-typed chain in installing.md
+# (ADR-0042) and does what bootc-update-stage does after its own pull, so the
+# safe path is the only path a user types:
+#   * the transfer is a podman pull under the strict update policy in
+#     immutable /usr, never a registry transport `bootc switch`: that pull
+#     fails on snosi images, and a registry switch reads the system container
+#     policy, which root overrides can replace (ADR-0025);
+#   * it takes the stager's own run lock, so the 2 never stage at the same
+#     time and a deployment cannot be left locked behind a concurrent run;
+#   * it stages LOCKED, checks the staged digest, and unlocks only then, so a
+#     deployment staged from a tag that moved never applies.
+# A failing step stops the script: nothing falls back to an older local copy
+# and nothing is staged.
+set -euo pipefail
+
+# The strict signature policy this command enforces on its own pull. A literal
+# path with no environment override: the file lives in immutable /usr, so a
+# root ~/.config/containers/policy.json or a /etc edit cannot replace it
+# (ADR-0025).
+readonly BOOTC_POLICY=/usr/lib/snosi/containers/bootc-policy.json
+
+# The target is always one of this product's 2 streams on the Frostyard
+# registry: the command takes no image reference from the user, so it cannot
+# switch to another product or another registry (ADR-0042).
+readonly REGISTRY=ghcr.io/frostyard
+readonly PRODUCTS="snow snowfield floe sundog"
+
+# The stager's run directory and lock (bootc-update-stage). SNOSI_RUN_DIR is
+# the same isolation hook the stager honors.
+RUN_DIR=${SNOSI_RUN_DIR:-/run/snosi}
+OS_RELEASE=/usr/lib/os-release
+# How long to wait for a running bootc-update-stage run: 30 minutes at most,
+# then fail (ADR-0042).
+LOCK_WAIT=1800
+
+usage_text() {
+    cat <<'EOF'
+Usage: snosi-stream                  show the product, the followed image and the stream
+       snosi-stream forky|trixie     switch this product to that stream, then print
+                                     the reboot step
+       snosi-stream forky|trixie --reboot
+                                     also run `systemctl reboot` after a
+                                     successful switch or rollback
+  -h, --help                         show this help
+EOF
+}
+
+usage_error() { # message
+    echo "snosi-stream: $*" >&2
+    usage_text >&2
+    exit 2
+}
+
+# --- arguments --------------------------------------------------------------
+
+STREAM=""
+REBOOT=0
+for arg in "$@"; do
+    case $arg in
+    -h | --help)
+        usage_text
+        exit 0
+        ;;
+    --reboot)
+        REBOOT=1
+        ;;
+    forky | trixie)
+        [[ -z $STREAM ]] || usage_error "only 1 stream may be given"
+        STREAM=$arg
+        ;;
+    *)
+        usage_error "unknown argument '$arg'"
+        ;;
+    esac
+done
+
+if [[ $REBOOT -eq 1 && -z $STREAM ]]; then
+    usage_error "--reboot needs a stream"
+fi
+
+# --- test hooks (ADR-0009 class 3, paired) ----------------------------------
+
+# The hooks are inert unless SNOSI_STREAM_TEST_HOOKS=1. Any other value is
+# refused rather than guessed, so a stray variable cannot lift the root check.
+TEST_HOOKS=0
+case "${SNOSI_STREAM_TEST_HOOKS-}" in
+"" | 0) ;;
+1) TEST_HOOKS=1 ;;
+*)
+    echo "snosi-stream: refusing SNOSI_STREAM_TEST_HOOKS='${SNOSI_STREAM_TEST_HOOKS}' (only 0 or 1)" >&2
+    exit 2
+    ;;
+esac
+if [[ $TEST_HOOKS -eq 1 ]]; then
+    # The hook lifts the root check, moves the os-release path and shortens
+    # the lock wait for the lock fixture; it cannot change the policy path or
+    # the image reference (ADR-0042).
+    OS_RELEASE=${SNOSI_STREAM_OS_RELEASE:-$OS_RELEASE}
+    LOCK_WAIT=${SNOSI_STREAM_LOCK_WAIT:-1800}
+fi
+
+# --- root and product -------------------------------------------------------
+
+if [[ $EUID -ne 0 && $TEST_HOOKS -ne 1 ]]; then
+    echo "snosi-stream: must run as root" >&2
+    exit 1
+fi
+
+# The product is the running image's own IMAGE_ID, read in a subshell like the
+# stager reads os-release: 2 streams of the booted product are the whole use
+# case (ADR-0042).
+image_id=""
+if [[ -r $OS_RELEASE ]]; then
+    # shellcheck disable=SC1090 # an os-release file, whose path only the test hook moves
+    image_id=$(. "$OS_RELEASE" && echo "${IMAGE_ID:-}")
+fi
+product_ok=0
+for product in $PRODUCTS; do
+    [[ $image_id == "$product" ]] && product_ok=1
+done
+if [[ $product_ok -ne 1 ]]; then
+    echo "snosi-stream: refusing to switch streams: IMAGE_ID '${image_id:-none}' in $OS_RELEASE is not one of $PRODUCTS" >&2
+    exit 1
+fi
+
+# --- bootc-managed system ---------------------------------------------------
+
+if ! command -v bootc >/dev/null 2>&1; then
+    echo "snosi-stream: not a bootc-managed system (no bootc)" >&2
+    exit 1
+fi
+if ! status=$(bootc status --format json); then
+    echo "snosi-stream: not a bootc-managed system ('bootc status' failed)" >&2
+    exit 1
+fi
+image=$(jq -r '.spec.image.image // empty' <<<"$status")
+if [[ -z $image ]]; then
+    echo "snosi-stream: not a bootc-managed system (no image reference in 'bootc status')" >&2
+    exit 1
+fi
+
+# print_deployment LABEL PATH -- 1 line for a deployment bootc reports: its
+# reference, its version and its digest, or none (ADR-0042). PATH is the JSON
+# path of the deployment without its leading dot, e.g. status.booted.
+print_deployment() { # label json-path
+    local label=$1 path=$2 ref version digest
+    ref=$(jq -r ".$path.image.image.image // empty" <<<"$status")
+    version=$(jq -r ".$path.image.version // empty" <<<"$status")
+    digest=$(jq -r ".$path.image.imageDigest // empty" <<<"$status")
+    if [[ -z $ref && -z $version && -z $digest ]]; then
+        printf '%-11s none\n' "$label:"
+        return 0
+    fi
+    printf '%-11s %s %s %s\n' "$label:" "${ref:-unknown}" "${version:-unknown}" "${digest:-none}"
+}
+
+# --- status mode ------------------------------------------------------------
+
+if [[ -z $STREAM ]]; then
+    transport=$(jq -r '.spec.image.transport // empty' <<<"$status")
+    case $image in
+    "$REGISTRY/$image_id:latest") stream=trixie ;;
+    "$REGISTRY/$image_id:forky") stream=forky ;;
+    *) stream=other ;;
+    esac
+    echo "Product:   $image_id"
+    echo "Following: $image${transport:+ ($transport)}"
+    echo "Stream:    $stream"
+    print_deployment Booted status.booted
+    print_deployment Staged status.staged
+    print_deployment Rollback status.rollback
+    exit 0
+fi
+
+# --- switch mode ------------------------------------------------------------
+
+if [[ $STREAM == forky ]]; then
+    target="$REGISTRY/$image_id:forky"
+else
+    target="$REGISTRY/$image_id:latest"
+fi
+
+# already_follows -- the spec image (any transport) is the target. The
+# transport is deliberately not compared: containers-storage after the first
+# staged update still follows the same stream (ADR-0042).
+already_follows() {
+    [[ $(jq -r '.spec.image.image // empty' <<<"$status") == "$target" ]]
+}
+
+# rollback_queued -- the next boot already changes the deployment, so a switch
+# now would be undone by it. The user must reboot or undo that first.
+rollback_queued() {
+    [[ $(jq -r '.status.rollbackQueued // false' <<<"$status") == true ]]
+}
+
+refuse_queued_rollback() {
+    echo "snosi-stream: a rollback is queued (.status.rollbackQueued), so the next boot already changes the deployment. Reboot to apply it, or undo it, and run this command again." >&2
+    exit 1
+}
+
+report_already_follows() {
+    echo "This machine already follows $target; nothing to switch."
+    # Never reboot here, also with --reboot: this run pulled and staged
+    # nothing, so a reboot would not move the machine to another stream.
+    if [[ -n $(jq -r '.status.staged.image.imageDigest // empty' <<<"$status") ]]; then
+        echo "A deployment is staged and applies at the next reboot."
+    fi
+    exit 0
+}
+
+if already_follows; then
+    report_already_follows
+fi
+if rollback_queued; then
+    refuse_queued_rollback
+fi
+
+# Serialize with bootc-update-stage: the staged deployment is shared state and
+# its unlock step opens WHATEVER is staged at that moment, so the 2 must never
+# stage at the same time (ADR-0042). The lock is held on the fd below and
+# released when this process exits. A running stager is waited for, not
+# skipped: this is a user command that must do its work.
+mkdir -p "$RUN_DIR"
+exec {lock_fd}>"$RUN_DIR/update-stage.lock"
+if ! flock -n "$lock_fd"; then
+    echo "bootc-update-stage holds $RUN_DIR/update-stage.lock; waiting up to ${LOCK_WAIT}s for it to finish."
+    if ! flock -w "$LOCK_WAIT" "$lock_fd"; then
+        echo "snosi-stream: gave up waiting for $RUN_DIR/update-stage.lock after ${LOCK_WAIT}s; nothing was pulled or staged" >&2
+        exit 1
+    fi
+fi
+
+# Re-read the status under the lock: the run that held it may have changed the
+# spec, queued a rollback, or staged a deployment. The checks above were made
+# on a snapshot that is no longer authoritative.
+status=$(bootc status --format json)
+if already_follows; then
+    report_already_follows
+fi
+if rollback_queued; then
+    refuse_queued_rollback
+fi
+
+# Prune BEFORE pulling: a previous run's cached image would otherwise need its
+# size again on top of the new one (the stager's ENOSPC observation). The
+# transfer cache is fully re-pullable.
+podman image prune -f >/dev/null || true
+
+# The pull carries the strict policy: the verified image is the only thing that
+# can be staged, and a failed pull stops everything (ADR-0025, ADR-0042).
+if ! pulled_id=$(podman pull --quiet --signature-policy "$BOOTC_POLICY" "$target"); then
+    echo "snosi-stream: the pull of $target under $BOOTC_POLICY failed; nothing was pulled or staged" >&2
+    exit 1
+fi
+# The pull prints the image ID that policy actually accepted. Every later
+# inspection and the staging below address that ID, never the mutable tag.
+if [[ ! $pulled_id =~ ^[[:xdigit:]]{64}$ ]]; then
+    echo "snosi-stream: podman pull printed no valid image ID: '${pulled_id:-none}'" >&2
+    exit 1
+fi
+if ! pulled=$(podman image inspect --format '{{.Digest}}' "$pulled_id"); then
+    echo "snosi-stream: could not inspect the pulled image $pulled_id" >&2
+    exit 1
+fi
+if [[ ! $pulled =~ ^sha256:[[:xdigit:]]{64}$ ]]; then
+    echo "snosi-stream: the pulled image has no valid registry manifest digest: '${pulled:-none}'" >&2
+    exit 1
+fi
+
+# bootc refuses a switch to an image with the same fs-verity digest as the
+# rollback deployment. So the way back to trixie is `bootc rollback` while the
+# trixie image is still that deployment. The test is the pulled DIGEST, not the
+# reference alone: the same reference with an older digest is a plain switch
+# (ADR-0042).
+rollback_digest=$(jq -r '.status.rollback.image.imageDigest // empty' <<<"$status")
+rollback_ref=$(jq -r '.status.rollback.image.image.image // empty' <<<"$status")
+if [[ -n $rollback_digest && $pulled == "$rollback_digest" ]]; then
+    if [[ $rollback_ref != "$target" ]]; then
+        echo "snosi-stream: the pulled image $pulled is the rollback deployment, but that deployment follows '${rollback_ref:-none}', not $target; a rollback would leave this machine on another stream. Refusing." >&2
+        exit 1
+    fi
+    echo "The pulled image is the rollback deployment ($rollback_ref), and bootc refuses that switch. Rolling back."
+    bootc rollback
+else
+    # Refuse when the local tag no longer names the image the strict policy
+    # accepted. The check is cheap but NOT atomic: bootc resolves the mutable
+    # local tag again itself, which is why the stage below is locked first.
+    tag_id=$(podman image inspect --format '{{.Id}}' "$target" 2>/dev/null) || tag_id=""
+    if [[ $tag_id != "$pulled_id" ]]; then
+        echo "snosi-stream: the local tag no longer points at the verified image: local tag is '${tag_id:-none}', verified image is $pulled_id" >&2
+        exit 1
+    fi
+
+    # Stage LOCKED (download-only), check the staged digest, and unlock only
+    # then. A deployment staged from a tag that moved stays locked and never
+    # boots, so a wrong deployment can be staged but not applied.
+    echo "Staging $target ($pulled), locked until verified."
+    bootc switch --quiet --download-only --transport containers-storage "$target"
+
+    # Verify bootc staged the image the strict policy accepted AND left the
+    # deployment locked. Both failure modes have been observed to be silent
+    # (exit 0), so the exit code alone is not trusted (the stager's reason).
+    locked_status=$(bootc status --format json)
+    staged_now=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$locked_status")
+    locked_now=$(jq -r '.status.staged.downloadOnly // false' <<<"$locked_status")
+    if [[ $staged_now != "$pulled" ]]; then
+        echo "snosi-stream: the staged image is not the verified image; left locked, it will not apply: staged deployment is '${staged_now:-none}', expected $pulled" >&2
+        exit 1
+    fi
+    if [[ $locked_now != true ]]; then
+        echo "snosi-stream: bootc did not lock the staged deployment ('${staged_now:-none}' is not download-only); refusing to report success" >&2
+        exit 1
+    fi
+
+    # `bootc upgrade --from-downloaded` performs no new fetch and reads no
+    # image reference, so it cannot pick up a tag that moved after the digest
+    # check. Afterwards the staged deployment must still be the pulled digest
+    # and must no longer be download-only, or it would never apply.
+    bootc upgrade --quiet --from-downloaded
+    after=$(bootc status --format json)
+    staged_after=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$after")
+    locked_after=$(jq -r '.status.staged.downloadOnly // false' <<<"$after")
+    if [[ $staged_after != "$pulled" ]]; then
+        echo "snosi-stream: the staged deployment changed during unlock: staged is '${staged_after:-none}', expected $pulled" >&2
+        exit 1
+    fi
+    if [[ $locked_after != false ]]; then
+        echo "snosi-stream: the staged deployment is still download-only after unlock, so it will not apply" >&2
+        exit 1
+    fi
+
+    # The image content is copied into the composefs repository at switch time;
+    # prune the dangling transfer images to keep podman storage bounded.
+    podman image prune -f >/dev/null || true
+fi
+
+# Only a successful switch or rollback reaches here, so a failed run never
+# reboots (ADR-0042).
+echo "The new deployment ($pulled) applies at the next reboot."
+if [[ $REBOOT -eq 1 ]]; then
+    systemctl reboot
+else
+    echo "Reboot to apply: sudo systemctl reboot"
+fi

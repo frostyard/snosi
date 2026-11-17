@@ -19,8 +19,9 @@ record files in `.memory/corrections/` and the two hash-pinned copies of core
 scripts), `node --test test/*.test.mjs`, and the policy tests
 `policy-as-code-test.py`, `risk-paths-test.py`,
 `build-workflow-permissions-test.py`, `workflow-pins-test.py` and
-`forky-publish-workflow-test.py`, the fixture test
-`bootc-secure-forky-promotion-test.sh`, and `docs-bootc-switch-test.py`,
+`forky-publish-workflow-test.py`, the fixture tests
+`bootc-secure-forky-promotion-test.sh` and `snosi-stream-test.sh`, and
+`docs-bootc-switch-test.py`,
 which requires every documented `bootc switch` command to be the 2nd step of
 an `&&` chain: a strict-policy Podman pull, then a switch of the same image
 with `--transport containers-storage`, then optionally `systemctl reboot`, as the
@@ -94,6 +95,16 @@ the daily limit and the weekly count, the answer handling, `install_age` and
 (`Storage=none`, `ProcessSizeMax`, `%d` and `%F`, `fs.suid_dumpable`, libdw
 and libelf). `test/bootc-container-policy-test.sh` pins 1 stager
 `error_class` case for each class.
+`test/snosi-stream-test.sh` drives `snosi-stream` (ADR-0042) with
+PATH stubs for `bootc`, `podman` and `systemctl` and a fixture os-release
+behind the paired hook `SNOSI_STREAM_TEST_HOOKS=1`: the usage errors, the
+product and bootc-managed guards, the status mode, a target that is already
+followed, a queued rollback, the exact argv order of the strict-policy pull
+and the local-tag check, the locked staging with its digest and
+`downloadOnly` checks, the rollback branch, a failed pull or switch, and a
+held `update-stage.lock`. It also pins the command's source: one
+`readonly BOOTC_POLICY=` line, `--signature-policy` on every pull, no
+`--policy` and no `POLICY:-`.
 `test/ghostty-terminfo-test.sh` checks that base compiles the shipped
 `xterm-ghostty` terminfo (Debian ships only `ghostty`) into `/usr/share/terminfo`.
 `test/firn-catalog-test.sh` checks the

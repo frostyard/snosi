@@ -58,6 +58,9 @@ and releases. A future schema-owning update/sysext API is discussed in the
 
 `bootc status --format json` is consumed by
 `mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage`,
+`mkosi.images/base/mkosi.extra/usr/bin/snosi-stream` (`spec.image`, the
+booted/staged/rollback `imageDigest` values, `downloadOnly` and
+`rollbackQueued`, [ADR-0042](adr/0042-switch-the-bootc-stream-with-snosi-stream.md)),
 `mkosi.images/base/mkosi.extra/usr/bin/snosi-update-status`, and chairlift.
 The updater reads `spec.image` plus booted/staged/rollback digests and
 checks the staged `imageDigest` against the Podman-pulled manifest digest.
