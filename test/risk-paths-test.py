@@ -367,7 +367,11 @@ for block in re.split(r"(?=^  - package-ecosystem:)", dependabot, flags=re.MULTI
     if fields.get("package-ecosystem") == "npm" and fields.get("directory") == "/" + worker_prefix.rstrip("/"):
         worker_npm_entries.append(fields)
 if len(worker_npm_entries) != 1 or worker_npm_entries[0].get("versioning-strategy") != "lockfile-only":
-    worker_errors.append("redirect Worker npm Dependabot entry must set versioning-strategy: lockfile-only")
+    strategies = [entry.get("versioning-strategy") for entry in worker_npm_entries]
+    worker_errors.append(
+        "redirect Worker npm Dependabot entry must set versioning-strategy: lockfile-only; "
+        f"found {len(worker_npm_entries)} matching npm entries, versioning-strategy values read: {strategies!r}"
+    )
 if worker_errors:
     fail("; ".join(worker_errors))
 
@@ -380,20 +384,26 @@ packages = lockfile.get("packages") if isinstance(lockfile, dict) else None
 if not isinstance(packages, dict) or not packages:
     fail("redirect Worker lockfile must contain packages")
 resolved_packages = 0
-for name, package in packages.items():
+for key, package in packages.items():
     if not isinstance(package, dict):
-        fail(f"redirect Worker lockfile package {name!r} must be an object")
-    if name == "" or package.get("link") is True:
+        fail(f"redirect Worker lockfile package {key!r} must be an object")
+    if key == "" or package.get("link") is True:
         continue
-    if "resolved" not in package:
-        fail(f"redirect Worker lockfile package {name!r} must have resolved")
+    name = package.get("name", key.rsplit("node_modules/", 1)[-1])
+    version = package.get("version")
+    if not isinstance(name, str) or not name:
+        fail(f"redirect Worker lockfile package {key!r} must have a non-empty string name")
+    if not isinstance(version, str):
+        fail(f"redirect Worker lockfile package {key!r} must have a string version")
+    basename = name.split("/", 1)[-1] if name.startswith("@") else name
+    expected = f"https://registry.npmjs.org/{name}/-/{basename}-{version}.tgz"
+    resolved = package.get("resolved")
+    if resolved != expected:
+        fail(f"redirect Worker lockfile package {key!r} resolved mismatch: expected {expected!r}, got {resolved!r}")
     resolved_packages += 1
-    resolved = package["resolved"]
     integrity = package.get("integrity")
-    if not isinstance(resolved, str) or not resolved.startswith("https://registry.npmjs.org/"):
-        fail(f"redirect Worker lockfile package {name!r} resolved must start with https://registry.npmjs.org/")
     if not isinstance(integrity, str) or not integrity.startswith("sha512-"):
-        fail(f"redirect Worker lockfile package {name!r} integrity must start with sha512-")
+        fail(f"redirect Worker lockfile package {key!r} integrity must start with sha512-")
 if not resolved_packages:
     fail("redirect Worker lockfile has no resolved packages to check")
 
