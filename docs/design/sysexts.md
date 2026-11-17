@@ -684,10 +684,15 @@ metadata)" after the other metadata and before the indexes
 ([repogen ADR-0019](https://github.com/frostyard/repogen/blob/v0.7.4/docs/adr/0019-guard-sysext-manifests-and-opt-in-retention.md)).
 The metadata restore records the ETag of each manifest and signature it
 downloads; the write uses `--if-match` on that ETag, or `--if-none-match '*'`
-for a new extension. When another publisher changed the object since the
-restore, R2 answers 412 and the run fails before it writes any later
-manifest or index: no entry is lost, and the payloads it uploaded are listed
-nowhere. Rerun the job. A manifest whose bytes did not change is not
+for a new extension. It writes 1 extension at a time, each `SHA256SUMS`
+before its `SHA256SUMS.gpg`. When another publisher changed an object since
+the restore, R2 answers 412 and the run stops: that object keeps the other
+publisher's bytes, so none of its entries are lost, and no later manifest and
+no index is written. The manifests written before the conflict stay
+written, and the payloads of the extensions not yet written are listed
+nowhere. A 412 on a `SHA256SUMS.gpg` after its `SHA256SUMS` was written leaves
+that pair out of step, which repogen and updex both refuse until a rerun
+writes both. Rerun the job. A manifest whose bytes did not change is not
 written. This needs AWS CLI v2.22 or newer on the runner; an older CLI fails
 the step and writes nothing without its condition. The guard does not
 replace serialization: the trixie `build` and forky `build-forky` jobs write
