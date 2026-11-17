@@ -238,7 +238,15 @@ under the strict update policy in `/usr`
 drift cannot weaken, and stages without forcing a reboot. It checks the
 staged digest and writes `/run/snosi/update-check` and
 `/run/snosi/update-staged`; the motd, desktop notifier and
-`snosi-update-status` read this state. The system
+`snosi-update-status` read this state. Base also ships the root command
+`/usr/bin/snosi-stream`, which moves a machine between the 2 streams of its
+own product (`ghcr.io/frostyard/<product>:latest` for trixie, `:forky` for
+forky)
+([ADR-0042](docs/adr/0042-switch-the-bootc-stream-with-snosi-stream.md)). It
+reuses the stager's strict-policy pull, its `/run/snosi/update-stage.lock` and
+its locked-and-verified staging, and it runs `bootc rollback` when the target
+image is the rollback deployment. `test/snosi-stream-test.sh` drives it with
+PATH stubs. The system
 `/etc/containers/policy.json` accepts workload images and keeps the five
 Frostyard scopes signed. `--pkg-diff` uses the identity-bound
 `mkosi.images/base/mkosi.extra/usr/lib/snosi/staged-packages.sh` sidecar.

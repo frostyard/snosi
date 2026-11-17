@@ -4,8 +4,9 @@
 #
 #   make verify  the baseline gate: the template gate (agent symlinks, docs
 #                index, risk-path list, corrections, vendored core copies),
-#                its Node tests, the repository policy tests and the forky
-#                tag promotion fixtures. It does not change the checkout.
+#                its Node tests, the repository policy tests, the forky tag
+#                promotion fixtures and the snosi-stream fixtures. It does not
+#                change the checkout.
 #   make check   the developer gate; the same as verify.
 #   make ci      verify, plus the corrections records check against BASE
 #                when BASE is set (CI passes the pull request base commit).
@@ -28,6 +29,7 @@ verify:
 	python3 ./test/workflow-pins-test.py
 	python3 ./test/forky-publish-workflow-test.py
 	./test/bootc-secure-forky-promotion-test.sh
+	./test/snosi-stream-test.sh
 	python3 ./test/docs-bootc-switch-test.py
 
 check: verify

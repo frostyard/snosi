@@ -187,6 +187,7 @@ For a bootc image, confirm the deployment and update timer:
 systemctl is-system-running
 sudo bootc status
 sudo snosi-update-status --check
+sudo snosi-stream
 systemctl list-timers bootc-update-stage.timer
 ```
 
@@ -236,10 +237,30 @@ testing kernel, which can regress on your hardware before Debian fixes it;
 Snowfield carries the linux-surface kernel on both suites, which can regress
 too. Snowfield is untested on Surface hardware on both suites.
 
-Switch a running system to the forky stream of its product, then reboot.
-Pull the image with Podman under the strict update policy first, then switch
-from local storage, as `bootc-update-stage` does: a direct `bootc switch` from
-the registry fails on these images (see
+Switch a running system to the forky stream of its product with
+`snosi-stream`, then reboot
+([ADR-0042](adr/0042-switch-the-bootc-stream-with-snosi-stream.md)):
+
+```bash
+sudo snosi-stream                # show the product, the followed image and the stream
+sudo snosi-stream forky          # switch to :forky, then print the reboot step
+sudo snosi-stream forky --reboot # switch to :forky and reboot in 1 step
+```
+
+`snosi-stream` is the supported way to move a machine between the 2 streams of
+its own product. It pulls the image with Podman under the strict update policy
+in `/usr`, takes the run lock of `bootc-update-stage` while it works, and
+stages the deployment locked: it checks the staged digest and unlocks the
+deployment only then. The pull fails if the image is not signed with the
+Frostyard key, and a failing step stops the command, so it never switches to an
+older local copy of the image and it reboots only after a successful switch or
+rollback. An argument other than `forky`, `trixie` or `--reboot` is a usage
+error, and so is `--reboot` without a stream.
+
+If `snosi-stream` is not on your image yet, do the same by hand. Pull the
+image with Podman under the strict update policy first, then switch from local
+storage, as `bootc-update-stage` does: a direct `bootc switch` from the
+registry fails on these images (see
 [NBC to bootc migration](nbc-to-bootc-migration.md#7-how-updates-behave-after-migration)),
 and it would read the system policy, which root overrides can replace
 ([ADR-0025](adr/0025-scope-strict-container-policy-to-bootc-updates.md)):
@@ -278,7 +299,11 @@ sudo bootc rollback &&
 sudo systemctl reboot
 ```
 
-To return to the trixie stream later, first look at `sudo bootc status`. If
+To return to the trixie stream later, run `sudo snosi-stream trixie`. It runs
+`bootc rollback` itself when the pulled image is still the rollback deployment,
+because bootc refuses that switch, and otherwise it switches to `:latest`.
+
+By hand, first look at `sudo bootc status`. If
 the trixie image you want is still the rollback deployment, use the
 `bootc rollback` above: bootc refuses to switch to an image with the same
 fs-verity digest as the rollback deployment. In every other case, pull and

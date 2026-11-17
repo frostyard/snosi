@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-16",
+  "scope": "mkosi.images/base/mkosi.extra/usr/bin/snosi-stream (PR #1325)",
+  "correction": "snosi-stream lifted the root check on SNOSI_STREAM_TEST_HOOKS=1 alone, which ADR-0009 class 3 does not allow for a hook that relaxes a check, and its already-follows branch reported a download-only (locked) staged deployment as one that applies at the next reboot, although bootc-finalize-staged never finalizes a locked deployment. SNOSI_STREAM_TEST_HOOKS=1 is now refused without SNOSI_STREAM_OS_RELEASE (exit 2, before the root check), and a target that is already followed with a locked staged deployment exits 1 and names 'sudo systemctl start bootc-update-stage.service' as the repair.",
+  "evidence": "Cross-review of PR #1325 at c3cfb7b (findings 1 and 2); docs/adr/0009-snosi-env-var-classes.md test-hook pairing; mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage already-staged branch. test/snosi-stream-test.sh fails without the pairing fix ('SNOSI_STREAM_TEST_HOOKS=1 without SNOSI_STREAM_OS_RELEASE is refused', 'the unpaired hook is refused in status mode too') and without the locked-staged fix ('already following with a locked staged deployment fails', 'a locked staged deployment is not reported as a pending update').",
+  "promoted_to": "test/snosi-stream-test.sh; docs/adr/0042-switch-the-bootc-stream-with-snosi-stream.md"
+}

@@ -233,6 +233,13 @@ jobs:
         # fixtures. No root, firmware access, image build, or real ESP.
         run: ./test/snosi-kargs-test.sh
 
+      - name: Validate stream switch tooling
+        # PATH-stubbed bootc, podman and systemctl drive the real
+        # snosi-stream against fixture bootc status documents, so the strict
+        # policy pull, the tag check, the stager lock and the locked staging
+        # are proven without root, network or an image build (ADR-0042).
+        run: ./test/snosi-stream-test.sh
+
       - name: Validate snosi-health problem records
         # PATH-stubbed journalctl, systemctl and bootc serve fixture journals,
         # unit states, bootc status, update-check and last-run.json files to

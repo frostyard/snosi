@@ -266,6 +266,7 @@ required_coverage = {
     "cosign.pub": "signing",
     "shared/security/no-private-keys.finalize": "credentials",
     "mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage": "update-verification",
+    "mkosi.images/base/mkosi.extra/usr/bin/snosi-stream": "update-verification",
     "mkosi.images/base/mkosi.extra/usr/lib/sysupdate.1password.d/1password.transfer": "update-verification",
     "shared/download/verify-attestations.sh": "update-verification",
     "shared/download/verified-download.sh": "update-verification",

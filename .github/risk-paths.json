@@ -22,6 +22,7 @@
     { "glob": "**/containers/bootc-policy.json", "level": "L1", "why": "update-verification: the strict signed-image policy for bootc updates" },
     { "glob": "**/etc/containers/policy.json", "level": "L1", "why": "update-verification: the system container policy that keeps the Frostyard scopes signed" },
     { "glob": "**/libexec/bootc-update-stage", "level": "L1", "why": "update-verification: pulls and stages updates under the strict policy" },
+    { "glob": "**/usr/bin/snosi-stream", "level": "L1", "why": "update-verification: switches the OS image between the trixie and forky streams with a strict-policy pull and locked staging" },
     { "glob": "shared/download/verif*.sh", "level": "L1", "why": "update-verification: checksum and build-provenance attestation checks of downloads" },
     { "glob": "**/*.transfer", "level": "L1", "why": "update-verification: sysupdate transfer files that set the sysext source and Verify=true" },
     { "glob": ".github/workflows/{build,build-images,build-mechanics,build-installer-iso,deploy-native-installer-redirect,forky-publish}.yml", "level": "L1", "why": "publication: the workflows that sign and publish sysexts, OCI images, the QA mechanics images, the forky test images, the installer ISO and the redirect Worker" },
