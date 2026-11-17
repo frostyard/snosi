@@ -1,0 +1,13 @@
+# forky's xfsprogs (7.x) ships xfs_healer@.service with DefaultInstance=- (the
+# root, /). Its ExecCondition `xfs_healer --supported /` exits 255, not a skip
+# code, when / is not XFS, and the root of a snosi system is always a composefs
+# overlay: the unit fails at every boot (frostyard/snosi#1326). Only the
+# default root instance is disabled; xfs_healer_start.service still starts a
+# healer for each XFS mount. trixie's xfsprogs has no healer, so this file is a
+# no-op there.
+#
+# This is its own file, not a line in 03-core.preset: the product trees
+# (shared/snow/tree, shared/floe/tree) ship their own 03-core.preset, which
+# replaces base's. No product tree may ship a 07-xfs-healer.preset.
+# test/xfs-healer-preset-test.sh checks every composition with systemctl --root.
+disable xfs_healer@.service
