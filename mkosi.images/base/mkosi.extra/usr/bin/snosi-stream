@@ -86,8 +86,10 @@ fi
 
 # --- test hooks (ADR-0009 class 3, paired) ----------------------------------
 
-# The hooks are inert unless SNOSI_STREAM_TEST_HOOKS=1. Any other value is
-# refused rather than guessed, so a stray variable cannot lift the root check.
+# The root check is a security property, so lifting it is PAIRED: the hooks
+# value alone is inert, and SNOSI_STREAM_TEST_HOOKS=1 is refused unless it
+# names an explicit fixture os-release. Any hooks value but 0 or 1 is refused
+# too, never guessed, so 1 stray variable cannot weaken the command (ADR-0009).
 TEST_HOOKS=0
 case "${SNOSI_STREAM_TEST_HOOKS-}" in
 "" | 0) ;;
@@ -98,10 +100,14 @@ case "${SNOSI_STREAM_TEST_HOOKS-}" in
     ;;
 esac
 if [[ $TEST_HOOKS -eq 1 ]]; then
-    # The hook lifts the root check, moves the os-release path and shortens
-    # the lock wait for the lock fixture; it cannot change the policy path or
-    # the image reference (ADR-0042).
-    OS_RELEASE=${SNOSI_STREAM_OS_RELEASE:-$OS_RELEASE}
+    if [[ -z ${SNOSI_STREAM_OS_RELEASE-} ]]; then
+        echo "snosi-stream: refusing SNOSI_STREAM_TEST_HOOKS=1 without SNOSI_STREAM_OS_RELEASE" >&2
+        exit 2
+    fi
+    # The paired hook moves the os-release path and shortens the lock wait for
+    # the lock fixture; it cannot change the policy path or the image
+    # reference (ADR-0042).
+    OS_RELEASE=$SNOSI_STREAM_OS_RELEASE
     LOCK_WAIT=${SNOSI_STREAM_LOCK_WAIT:-1800}
 fi
 
@@ -205,10 +211,24 @@ refuse_queued_rollback() {
 }
 
 report_already_follows() {
+    local staged_digest staged_locked
+    staged_digest=$(jq -r '.status.staged.image.imageDigest // empty' <<<"$status")
+    staged_locked=$(jq -r '.status.staged.downloadOnly // false' <<<"$status")
+    # A download-only deployment is staged but LOCKED: bootc-finalize-staged
+    # never finalizes it, so it never applies. An interrupted switch leaves
+    # exactly this state (staged locked, the unlock failed), so do not report a
+    # pending update that cannot happen; name the recovery instead (ADR-0042).
+    # The stager's already-staged branch verifies the digest of the deployment
+    # it finds and unlocks it, so starting it is the supported repair.
+    if [[ -n $staged_digest && $staged_locked == true ]]; then
+        echo "snosi-stream: the deployment staged for $target ($staged_digest) is download-only, so it will not apply." >&2
+        echo "snosi-stream: run 'sudo systemctl start bootc-update-stage.service' to verify and unlock it, then 'sudo snosi-stream' to check." >&2
+        exit 1
+    fi
     echo "This machine already follows $target; nothing to switch."
     # Never reboot here, also with --reboot: this run pulled and staged
     # nothing, so a reboot would not move the machine to another stream.
-    if [[ -n $(jq -r '.status.staged.image.imageDigest // empty' <<<"$status") ]]; then
+    if [[ -n $staged_digest ]]; then
         echo "A deployment is staged and applies at the next reboot."
     fi
     exit 0

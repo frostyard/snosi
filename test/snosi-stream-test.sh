@@ -58,10 +58,17 @@ status)
         exit 1
     fi
     # The status follows the calls made so far, so a switch or an upgrade
-    # changes what the next read reports.
-    if grep -qF -- '--from-downloaded' "$FIXTURE_STATE/bootc-calls"; then
+    # changes what the next read reports. A fixture may also answer the reads
+    # made AFTER the first one and before any staging: that is the snapshot
+    # snosi-stream re-reads under the lock, after a stager run changed it.
+    reads=$(grep -c '^status ' "$FIXTURE_STATE/bootc-calls")
+    staged_calls=$(grep -cE '^(switch|upgrade)( |$)' "$FIXTURE_STATE/bootc-calls")
+    if [[ $reads -ge 2 ]] && [[ $staged_calls -eq 0 ]] &&
+            [[ -f $FIXTURE_STATE/status-under-lock ]]; then
+        file=status-under-lock
+    elif grep -qF -- '--from-downloaded' "$FIXTURE_STATE/bootc-calls"; then
         file=status-unlocked
-    elif grep -qE -- '^(switch|upgrade) ' "$FIXTURE_STATE/bootc-calls"; then
+    elif [[ $staged_calls -gt 0 ]]; then
         file=status-locked
     else
         file=status-before
@@ -183,11 +190,13 @@ new_work() {
     : >"$work/state/podman-calls"
     : >"$work/state/systemctl-calls"
     : >"$work/state/all-calls"
+    rm -f "$work/state/status-under-lock"
     printf 'IMAGE_ID=snow\nIMAGE_VERSION=20261115010101\n' >"$work/os-release"
     status "$TARGET_TRIXIE" '' false '' '' false >"$work/state/status-before"
     os_release="$work/os-release"
     run_bin=$bin
     hooks_value=1
+    omit_os_release=0
     lock_wait=1800
     env_extra=()
 }
@@ -204,8 +213,8 @@ stream_run() {
         "FIXTURE_STATE=$work/state"
         "DEFAULT_ID=$DEFAULT_ID"
         "DEFAULT_DIGEST=$manifest"
-        "SNOSI_STREAM_OS_RELEASE=$os_release"
     )
+    [[ $omit_os_release -eq 1 ]] || env_args+=("SNOSI_STREAM_OS_RELEASE=$os_release")
     [[ -n $hooks_value ]] && env_args+=("SNOSI_STREAM_TEST_HOOKS=$hooks_value")
     [[ -n $lock_wait ]] && env_args+=("SNOSI_STREAM_LOCK_WAIT=$lock_wait")
     if (( ${#env_extra[@]} > 0 )); then
@@ -255,6 +264,14 @@ check_no_call() { # log needle description
         fail "$3 (calls: $(tr '\n' '|' <"$work/state/$1-calls"))"
     else
         pass "$3"
+    fi
+}
+
+check_stdout_not() { # needle description
+    if grep -Fq -- "$1" "$work/output"; then
+        fail "$2 (stdout: $(<"$work/output"))"
+    else
+        pass "$2"
     fi
 }
 
@@ -373,13 +390,28 @@ stream_run forky
 check_rc 1 "SNOSI_STREAM_TEST_HOOKS=0 leaves the root check in force"
 check_no_call podman pull "a refused non-root run pulls nothing"
 
+# ADR-0009 class 3: the hooks value alone is inert. hooks=1 without the
+# fixture os-release is refused, and the os-release alone leaves the root
+# check in force.
+new_work
+omit_os_release=1
+stream_run forky
+check_rc 2 "SNOSI_STREAM_TEST_HOOKS=1 without SNOSI_STREAM_OS_RELEASE is refused"
+check_stderr 'without SNOSI_STREAM_OS_RELEASE' "the refusal names the missing os-release"
+check_no_call bootc status "hooks=1 without the paired os-release calls no stub"
+
+new_work
+omit_os_release=1
+stream_run
+check_rc 2 "the unpaired hook is refused in status mode too"
+
 new_work
 hooks_value=''
-stream_run
+stream_run forky
 if [[ $EUID -eq 0 ]]; then
     printf 'skip - the root check cannot be exercised as root\n'
 else
-    check_rc 1 "without the hook a non-root run is refused"
+    check_rc 1 "SNOSI_STREAM_OS_RELEASE alone stays inert: a non-root run is refused"
     check_stderr 'snosi-stream: must run as root' "the refusal names the root requirement"
     check_no_call bootc status "a refused non-root run calls no stub"
 fi
@@ -480,11 +512,27 @@ check_stage_calls "a machine that already follows the target stages nothing"
 check_no_reboot "a machine that already follows the target does not reboot, even with --reboot"
 
 new_work
-status "$TARGET_FORKY" "$manifest" true '' '' false >"$work/state/status-before"
+status "$TARGET_FORKY" "$manifest" false '' '' false >"$work/state/status-before"
 stream_run forky
-check_rc 0 "already following with a staged deployment exits 0"
-check_stdout 'applies at the next reboot' "already following says a staged deployment applies at the next reboot"
-check_no_reboot "already following with a staged deployment does not reboot"
+check_rc 0 "already following with an unlocked staged deployment exits 0"
+check_stdout 'applies at the next reboot' \
+    "already following says an unlocked staged deployment applies at the next reboot"
+check_no_reboot "already following with an unlocked staged deployment does not reboot"
+
+# An interrupted switch leaves the target staged but LOCKED (download-only):
+# bootc-finalize-staged never finalizes it, so it never applies. The command
+# must not report a pending update; it names the stager as the repair.
+new_work
+status "$TARGET_FORKY" "$manifest" true '' '' false >"$work/state/status-before"
+stream_run forky --reboot
+check_rc 1 "already following with a locked staged deployment fails"
+check_stderr 'download-only' "the refusal says the staged deployment is download-only"
+check_stderr 'bootc-update-stage.service' "the refusal names the stager as the repair"
+check_stdout_not 'applies at the next reboot' \
+    "a locked staged deployment is not reported as a pending update"
+check_no_podman_calls "a locked staged deployment pulls nothing"
+check_stage_calls "a locked staged deployment stages nothing"
+check_no_reboot "a locked staged deployment does not reboot, even with --reboot"
 
 # --- a queued rollback ------------------------------------------------------
 
@@ -664,6 +712,32 @@ check_stderr 'not ghcr.io/frostyard/snow:latest' \
     "the refusal names the foreign rollback reference"
 check_stage_calls "a foreign rollback deployment neither rolls back nor switches"
 check_no_reboot "a refused rollback does not reboot, even with --reboot"
+
+# --- the re-read under the lock ---------------------------------------------
+
+# The first read is a snapshot: a stager run can change the spec, queue a
+# rollback or stage a deployment while this command waits for the lock, so the
+# read under the lock must decide again.
+new_work
+status "$TARGET_TRIXIE" '' false '' '' false >"$work/state/status-before"
+status "$TARGET_FORKY" '' false '' '' false >"$work/state/status-under-lock"
+stream_run forky --reboot
+check_rc 0 "a spec that already follows the target under the lock exits 0"
+check_stdout "$TARGET_FORKY" "the under-lock read reports the followed target"
+check_no_call podman pull "a spec changed under the lock pulls nothing"
+check_stage_calls "a spec changed under the lock stages nothing"
+check_no_reboot "a spec changed under the lock does not reboot"
+
+new_work
+status "$TARGET_TRIXIE" '' false '' '' false >"$work/state/status-before"
+status "$TARGET_TRIXIE" '' false "$TARGET_FORKY" "$other_manifest" true \
+    >"$work/state/status-under-lock"
+stream_run forky --reboot
+check_rc 1 "a rollback queued under the lock is refused"
+check_stderr 'rollback is queued' "the under-lock refusal names the queued rollback"
+check_no_call podman pull "a rollback queued under the lock pulls nothing"
+check_stage_calls "a rollback queued under the lock stages nothing"
+check_no_reboot "a rollback queued under the lock does not reboot"
 
 # --- the stager's lock ------------------------------------------------------
 

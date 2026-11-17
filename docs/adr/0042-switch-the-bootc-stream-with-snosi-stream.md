@@ -58,7 +58,13 @@ manual chain stays in the docs as the fallback.
   rollback (`.status.rollbackQueued`): the next boot already changes the
   deployment, so the user must reboot or undo that first.
 - If the followed reference (any transport) is already the target, it prints
-  so and exits 0. It does not reboot in that case, also with `--reboot`.
+  so and exits 0. It does not reboot in that case, also with `--reboot`. A
+  deployment staged for the target that is still download-only is locked, so
+  it never applies (an interrupted switch leaves exactly that state): instead
+  of reporting a pending update, the command says the staged deployment is
+  locked, names the repair, `sudo systemctl start
+  bootc-update-stage.service` (whose already-staged branch verifies the staged
+  digest and unlocks it), and exits 1 without pulling or staging.
 - It takes `/run/snosi/update-stage.lock`, the lock of `bootc-update-stage`,
   and waits for a running stager run (30 minutes at most, then it fails).
   So the 2 never stage at the same time.
@@ -80,12 +86,14 @@ manual chain stays in the docs as the fallback.
   --from-downloaded`, after which the staged digest must still be the pulled
   digest and the deployment must not be download-only.
 - `test/snosi-stream-test.sh` drives the command with PATH stubs for
-  `bootc`, `podman` and `systemctl`, and a fixture os-release behind the
-  test hook `SNOSI_STREAM_TEST_HOOKS=1` (only `0` or `1`; any other value is
-  refused). The hook only lifts the root check, lets the os-release path
-  move (`SNOSI_STREAM_OS_RELEASE`) and lets the lock fixture shorten the
-  lock wait (`SNOSI_STREAM_LOCK_WAIT`); it cannot change the policy path or
-  the image reference. Without the hook both variables are ignored.
+  `bootc`, `podman` and `systemctl`, and a fixture os-release behind a PAIRED
+  test hook ([ADR-0009](0009-snosi-env-var-classes.md) class 3):
+  `SNOSI_STREAM_TEST_HOOKS=1` is refused without `SNOSI_STREAM_OS_RELEASE`,
+  and any hooks value other than `0` or `1` is refused. Only the pair lifts
+  the root check; it moves the os-release path (`SNOSI_STREAM_OS_RELEASE`) and
+  lets the lock fixture shorten the lock wait (`SNOSI_STREAM_LOCK_WAIT`). It
+  cannot change the policy path or the image reference, and without the hooks
+  value every one of those variables is inert.
 - `.github/risk-paths.json` lists `**/usr/bin/snosi-stream` at L1
   (update-verification): the command pulls and stages the OS image.
 

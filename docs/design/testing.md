@@ -97,14 +97,18 @@ and libelf). `test/bootc-container-policy-test.sh` pins 1 stager
 `error_class` case for each class.
 `test/snosi-stream-test.sh` drives `snosi-stream` (ADR-0042) with
 PATH stubs for `bootc`, `podman` and `systemctl` and a fixture os-release
-behind the paired hook `SNOSI_STREAM_TEST_HOOKS=1`: the usage errors, the
-product and bootc-managed guards, the status mode, a target that is already
-followed, a queued rollback, the exact argv order of the strict-policy pull
-and the local-tag check, the locked staging with its digest and
-`downloadOnly` checks, the rollback branch, a failed pull or switch, and a
-held `update-stage.lock`. It also pins the command's source: one
-`readonly BOOTC_POLICY=` line, `--signature-policy` on every pull, no
-`--policy` and no `POLICY:-`.
+behind the paired hook `SNOSI_STREAM_TEST_HOOKS=1`, and proves the pairing:
+hooks=1 without `SNOSI_STREAM_OS_RELEASE` exits 2 before the root check, and
+the os-release alone leaves the root check in force (ADR-0009 class 3). It
+covers the usage errors, the product and bootc-managed guards, the status
+mode, a target that is already followed (unlocked: exit 0; locked: exit 1 with
+`bootc-update-stage.service` as the repair), a queued rollback, a spec or a
+queued rollback that appears under the lock (the re-read decides again), the
+exact argv order of the strict-policy pull and the local-tag check, the locked
+staging with its digest and `downloadOnly` checks, the rollback branch, a
+failed pull or switch, and a held `update-stage.lock`. It also pins the
+command's source: one `readonly BOOTC_POLICY=` line, `--signature-policy` on
+every pull, no `--policy` and no `POLICY:-`.
 `test/ghostty-terminfo-test.sh` checks that base compiles the shipped
 `xterm-ghostty` terminfo (Debian ships only `ghostty`) into `/usr/share/terminfo`.
 `test/firn-catalog-test.sh` checks the
