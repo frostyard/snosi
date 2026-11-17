@@ -363,7 +363,7 @@ def self_tests(text: str) -> int:
         ("the forky publish with html-index true",
          lambda t: in_forky(t, "html-index: false", "html-index: true"), "html-index: false"),
         ("a floating repogen binary in the forky publish",
-         lambda t: in_forky(t, "repogen-version: v0.7.2", "repogen-version: latest"), "repogen-version"),
+         lambda t: in_forky(t, "repogen-version: v0.7.4", "repogen-version: latest"), "repogen-version"),
         ("a forky publish on pull requests",
          lambda t: in_forky(t, "if: github.event_name != 'pull_request'\n        uses: frostyard/repogen",
                             "uses: frostyard/repogen"), "non-PR event"),
