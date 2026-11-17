@@ -5,11 +5,4 @@ disable wpa_supplicant.service
 enable reload-sysext.service
 # systemd-firstboot is STATIC (no [Install]) and cannot be preset-disabled;
 # it is neutered by the ConditionPathExists drop-in in
-# usr/lib/systemd/system/systemd-firstboot.service.d/ instead.# forky's xfsprogs (7.x) ships xfs_healer@.service with DefaultInstance=- (the
-# root, /). Its ExecCondition `xfs_healer --supported /` exits 255, not a skip
-# code, when / is not XFS, and the root of a snosi system is always a composefs
-# overlay: the unit fails at every boot (frostyard/snosi#1326). Only the
-# default root instance is disabled; xfs_healer_start.service still starts a
-# healer for each XFS mount. trixie's xfsprogs has no healer, so this line is a
-# no-op there. test/xfs-healer-preset-test.sh checks it with systemctl --root.
-disable xfs_healer@.service
+# usr/lib/systemd/system/systemd-firstboot.service.d/ instead.

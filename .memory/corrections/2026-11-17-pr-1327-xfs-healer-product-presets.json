@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-17",
+  "scope": "base system presets for the forky xfs_healer root instance (PR #1327)",
+  "correction": "The first fix added `disable xfs_healer@.service` to base's 03-core.preset, but shared/snow/tree and shared/floe/tree ship their own 03-core.preset, which replaces base's in every product, so all 4 products still enabled xfs_healer@-.service. The line now lives in its own base file, 07-xfs-healer.preset, which no product tree ships, and the guard composes the preset directory as the build does: base, then each shared/*/tree with presets, file over file.",
+  "evidence": "Cross-review of PR #1327 at 7eec879 (finding 1). test/xfs-healer-preset-test.sh fails with the line in base 03-core.preset and no 07-xfs-healer.preset: 'base + shared/floe/tree' and 'base + shared/snow/tree' report that the presets enable xfs_healer@-.service; it also has a control run where a tree's 03-core.preset replaces base's.",
+  "promoted_to": "test/xfs-healer-preset-test.sh; docs/design/testing.md"
+}

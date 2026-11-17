@@ -132,10 +132,14 @@ installer creates the only user an installed system has.
 `xfs_healer@.service` disabled
 ([#1326](https://github.com/frostyard/snosi/issues/1326)): its
 `ExecCondition` exits 255 on the composefs overlay root, so the unit fails at
-every boot. The test runs `systemctl --root ... preset-all` on a scratch root
-with the base presets, Debian's `enable *` and stub units, plus a control run
-without the base presets, and checks that `xfs_healer_start.service` stays
-enabled.
+every boot. The line lives in its own base file, `07-xfs-healer.preset`,
+because the product trees (`shared/snow/tree`, `shared/floe/tree`) replace
+base's `03-core.preset`. The test composes the preset directory as the build
+does (base, then each `shared/*/tree` with presets, file over file), runs
+`systemctl --root ... preset-all` on a scratch root with Debian's `enable *`
+and stub units, and checks that `xfs_healer_start.service` stays enabled. Two
+control runs make it fail on purpose: no snosi presets, and a product tree file
+that replaces a base file with the line.
 `test/system-monitor-launcher-test.sh` keeps the Logomenu System Monitor
 item on a shipped program: `shared/packages/snow/mkosi.conf` must install
 `gnome-system-monitor` (no `RemovePackages=` may name it),
