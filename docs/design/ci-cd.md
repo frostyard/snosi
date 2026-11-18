@@ -185,6 +185,13 @@ not publish OS artifacts.
 
 `risk-paths.yml` calls frostyard/core's reusable `pr-triage` workflow (core ADR-0068, ADR-0077, ADR-0078) on `pull_request_target`, pinned to a core commit. It reads `.github/risk-paths.json` at the base SHA, adds 1 level label, `level:L1` to `level:L4`, adds `risk:high` when the PR is L1 or L2, and removes `ready-for-human` when the head commit moves; it is not a required check. The list is schema version 2 (default L3) with a `level` on each glob: the list, the caller and `policies/**` are L2, every other entry L1. Each `why` names a `protectedBoundaries` entry of `policies/agent-governance.json`; `test/risk-paths-test.py` enforces that, the level of the list and caller globs, and rejects stale entries. `build.yml` and `build-images.yml` ignore both files.
 
+Every tracked redirect Worker file except `package-lock.json` stays L1; `test/risk-paths-test.py` checks this coverage, exact npm-registry package/version tarball URLs and SHA-512 integrity.
+Dependabot uses `lockfile-only` for in-range bumps (default L3) and opens no PR for major updates or security fixes outside the caret range.
+Those need a hand PR changing the L1 `package.json`, which gets `risk:high`.
+
+A lockfile-only bump is L3 but changes dev-dependency code (wrangler and its tree) that runs in the deploy job with the Cloudflare token; merging it to main triggers that deploy through the workflow's `paths` filter.
+The registry-URL and SHA-512 checks do not stop a malicious release of a real package.
+
 ## Publishing targets
 
 | Artifact | Destination | Mechanism |

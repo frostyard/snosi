@@ -28,7 +28,8 @@
     { "glob": ".github/workflows/{build,build-images,build-mechanics,build-installer-iso,deploy-native-installer-redirect,forky-publish}.yml", "level": "L1", "why": "publication: the workflows that sign and publish sysexts, OCI images, the QA mechanics images, the forky test images, the installer ISO and the redirect Worker" },
     { "glob": "shared/native-ab/publish/**", "level": "L1", "why": "publication: installer ISO publication, promotion and verification scripts" },
     { "glob": "shared/outformat/image/buildah-package.sh", "level": "L1", "why": "publication: packages the OCI image that is signed and published" },
-    { "glob": "workers/native-installer-redirect/**", "level": "L1", "why": "publication: the stable installer ISO URL redirect Worker" },
+    { "glob": "workers/native-installer-redirect/{src,test}/**", "level": "L1", "why": "publication: deployed redirect Worker code and tests that run in the deploy job with the Cloudflare token" },
+    { "glob": "workers/native-installer-redirect/{package.json,tsconfig.json,vitest.config.ts,worker-configuration.d.ts,wrangler.jsonc}", "level": "L1", "why": "publication: redirect Worker deploy config and scripts that shape what runs in the deploy job with the Cloudflare token" },
     { "glob": "mkosi.profiles/firn-installer/**", "level": "L1", "why": "destructive-disk-operations: the Firn installer ISO profile; the installer erases disks" },
     { "glob": "shared/firn-installer/**", "level": "L1", "why": "installer: the Firn installer catalog, scripts and tree" }
   ]

@@ -278,6 +278,13 @@ required_coverage = {
     ".github/workflows/forky-publish.yml": "publication",
     "shared/native-ab/publish/promote.sh": "publication",
     "shared/outformat/image/buildah-package.sh": "publication",
+    "workers/native-installer-redirect/package.json": "publication",
+    "workers/native-installer-redirect/src/index.ts": "publication",
+    "workers/native-installer-redirect/test/index.test.ts": "publication",
+    "workers/native-installer-redirect/tsconfig.json": "publication",
+    "workers/native-installer-redirect/vitest.config.ts": "publication",
+    "workers/native-installer-redirect/worker-configuration.d.ts": "publication",
+    "workers/native-installer-redirect/wrangler.jsonc": "publication",
     "mkosi.profiles/firn-installer/mkosi.conf": "destructive-disk-operations",
     "shared/firn-installer/catalog.json": "installer",
 }
@@ -320,6 +327,87 @@ for glob in globs:
 for path in required_coverage:
     if path not in tracked_files:
         fail(f"coverage path {path} is not a tracked file; update required_coverage")
+
+# The lockfile is the only Worker file exempt from L1 publication coverage.
+# Check tracked files, not only required_coverage, so a new deploy input fails
+# until its risk-path entry is added.
+worker_prefix = "workers/native-installer-redirect/"
+worker_lockfile = worker_prefix + "package-lock.json"
+worker_files = sorted(path for path in tracked_files if path.startswith(worker_prefix) and path != worker_lockfile)
+if not worker_files:
+    fail("no tracked redirect Worker files found")
+worker_errors = []
+for path in worker_files:
+    if not any(
+        level == "L1" and why.startswith("publication:")
+        and any(glob_matches(expansion, path) for expansion in expand_braces(glob))
+        for glob, level, why in entries
+    ):
+        worker_errors.append(f"{path} must have L1 publication coverage")
+for glob, level, why in entries:
+    if level in ("L1", "L2") and any(
+        glob_matches(expansion, worker_lockfile) for expansion in expand_braces(glob)
+    ):
+        worker_errors.append(f"{worker_lockfile} must not match {level} entry {glob}")
+
+# Read the small Dependabot entry blocks without requiring PyYAML.
+try:
+    dependabot = (ROOT / ".github/dependabot.yml").read_text()
+except OSError as error:
+    fail(f"cannot load .github/dependabot.yml: {error}")
+worker_npm_entries = []
+for block in re.split(r"(?=^  - package-ecosystem:)", dependabot, flags=re.MULTILINE):
+    if not block.startswith("  - package-ecosystem:"):
+        continue
+    fields = {}
+    for line in block.splitlines():
+        match = re.fullmatch(r"(?:  - |    )([a-z-]+):\s*([^#]*?)(?:\s+#.*)?", line)
+        if match:
+            fields[match.group(1)] = match.group(2).strip().strip("\"'")
+    if fields.get("package-ecosystem") == "npm" and fields.get("directory") == "/" + worker_prefix.rstrip("/"):
+        worker_npm_entries.append(fields)
+if len(worker_npm_entries) != 1 or worker_npm_entries[0].get("versioning-strategy") != "lockfile-only":
+    strategies = [entry.get("versioning-strategy") for entry in worker_npm_entries]
+    worker_errors.append(
+        "redirect Worker npm Dependabot entry must set versioning-strategy: lockfile-only; "
+        f"found {len(worker_npm_entries)} matching npm entries, versioning-strategy values read: {strategies!r}"
+    )
+if worker_errors:
+    fail("; ".join(worker_errors))
+
+# Registry-only SHA-512 packages guard lockfile changes that no longer get L1.
+try:
+    lockfile = json.loads((ROOT / worker_lockfile).read_text(), object_pairs_hook=reject_duplicate_keys)
+except (OSError, json.JSONDecodeError, ValueError) as error:
+    fail(f"cannot load {worker_lockfile}: {error}")
+packages = lockfile.get("packages") if isinstance(lockfile, dict) else None
+if not isinstance(packages, dict) or not packages:
+    fail("redirect Worker lockfile must contain packages")
+resolved_packages = 0
+for key, package in packages.items():
+    if not isinstance(package, dict):
+        fail(f"redirect Worker lockfile package {key!r} must be an object")
+    if key == "" or package.get("link") is True:
+        continue
+    name = key.rsplit("node_modules/", 1)[-1]
+    if "name" in package and package["name"] != name:
+        fail(f"redirect Worker lockfile package {key!r} name mismatch: expected {name!r}, got {package['name']!r}")
+    version = package.get("version")
+    if not isinstance(name, str) or not name:
+        fail(f"redirect Worker lockfile package {key!r} must have a non-empty string name")
+    if not isinstance(version, str):
+        fail(f"redirect Worker lockfile package {key!r} must have a string version")
+    basename = name.split("/", 1)[-1] if name.startswith("@") else name
+    expected = f"https://registry.npmjs.org/{name}/-/{basename}-{version}.tgz"
+    resolved = package.get("resolved")
+    if resolved != expected:
+        fail(f"redirect Worker lockfile package {key!r} resolved mismatch: expected {expected!r}, got {resolved!r}")
+    resolved_packages += 1
+    integrity = package.get("integrity")
+    if not isinstance(integrity, str) or not integrity.startswith("sha512-"):
+        fail(f"redirect Worker lockfile package {key!r} integrity must start with sha512-")
+if not resolved_packages:
+    fail("redirect Worker lockfile has no resolved packages to check")
 
 try:
     caller = CALLER_PATH.read_text()
@@ -375,4 +463,4 @@ if validate.count(command) != 1:
     fail("validate.yml must run risk-paths-test.py exactly once")
 
 l1_entries = sum(1 for glob, level, why in entries if level == "L1")
-print(f"risk-paths-test: PASSED ({len(entries)} entries, {l1_entries} at L1, {len(tracked_files)} tracked files, {self_test_cases} self-test cases, {len(required_coverage)} coverage paths)")
+print(f"risk-paths-test: PASSED ({len(entries)} entries, {l1_entries} at L1, {len(tracked_files)} tracked files, {self_test_cases} self-test cases, {len(required_coverage)} coverage paths, {len(worker_files)} Worker L1 files, {resolved_packages} registry/SHA-512 packages)")
