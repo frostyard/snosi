@@ -19,10 +19,10 @@ grep -Fqx 'SandboxTrees=%D/shared/bootc-secure/package-manager' \
 }
 
 conf="$root/shared/firn-installer/mkosi.conf"
-unpinned=$(grep -Fxc 'Packages=frostyard-firn' "$conf" || true)
+pinned=$(grep -Fxc 'Packages=frostyard-firn=0.13.0' "$conf" || true)
 any=$(grep -cE '^(Packages=|[[:space:]]+)frostyard-firn([[:space:]=/]|$)' "$conf" || true)
-if [[ $unpinned -ne 1 || $any -ne 1 ]]; then
-    echo 'Firn ISO must install exactly one unpinned Packages=frostyard-firn' >&2
+if [[ $pinned -ne 1 || $any -ne 1 ]]; then
+    echo 'Firn ISO must install exactly one Packages=frostyard-firn=0.13.0' >&2
     exit 1
 fi
 
@@ -68,12 +68,12 @@ grep -Fqx 'for tool in mkfs.fat mkfs.ext4 mkfs.btrfs btrfs mkfs.xfs; do' \
     exit 1
 }
 
-# The graphical entry's frontend, unpinned like frostyard-firn
+# The graphical entry's frontend pins the same release as frostyard-firn
 # (docs/adr/0022-installer-graphical-and-console-boot-entries.md).
-gui_unpinned=$(grep -Fxc 'Packages=frostyard-firn-gui' "$conf" || true)
+gui_pinned=$(grep -Fxc 'Packages=frostyard-firn-gui=0.13.0' "$conf" || true)
 gui_any=$(grep -cE '^(Packages=|[[:space:]]+)frostyard-firn-gui([[:space:]=/]|$)' "$conf" || true)
-if [[ $gui_unpinned -ne 1 || $gui_any -ne 1 ]]; then
-    echo 'Firn ISO must install exactly one unpinned Packages=frostyard-firn-gui' >&2
+if [[ $gui_pinned -ne 1 || $gui_any -ne 1 ]]; then
+    echo 'Firn ISO must install exactly one Packages=frostyard-firn-gui=0.13.0' >&2
     exit 1
 fi
 
@@ -157,5 +157,20 @@ if grep -qE '^Condition' "$gui_unit" ||
     echo 'firn-gui.service must not be conditional; firn-gui-session exits 77 without a display' >&2
     exit 1
 fi
+
+grep -Fqx 'exec /usr/bin/cage -d -s -- /usr/bin/firn-gui --kiosk' \
+    "$root/shared/firn-installer/tree/usr/lib/firn/firn-gui-session" || {
+    echo 'Firn ISO graphical session must run firn-gui --kiosk under cage' >&2
+    exit 1
+}
+
+# Keep the living test contract aligned with the pinned kiosk integration.
+for claim in 'Packages=frostyard-firn=0.13.0' \
+    'Packages=frostyard-firn-gui=0.13.0' "runs \`firn-gui --kiosk\` under cage"; do
+    grep -Fq "$claim" "$root/docs/design/testing.md" || {
+        echo "docs/design/testing.md must document the Firn ISO contract: $claim" >&2
+        exit 1
+    }
+done
 
 echo 'Firn ISO static sandbox and boot-entry contract passed'

@@ -128,8 +128,9 @@ label, and the on-disk copy each product composition installs and checks.
 untested/waived status, historical status markers and the no-R2-deletion
 boundary; it never accesses R2.
 `test/firn-installer-iso-test.sh --static` checks Firn's Forky sandbox,
-that the ISO installs exactly one unpinned `frostyard-firn` and
-`frostyard-firn-gui`, that it carries the package behind every filesystem
+that the ISO installs exactly one `Packages=frostyard-firn=0.13.0` and
+`Packages=frostyard-firn-gui=0.13.0`, that it runs `firn-gui --kiosk` under cage,
+and that it carries the package behind every filesystem
 Firn offers (ext4, btrfs, xfs and the FAT ESP; the postinst also checks each
 `mkfs` binary), that it removes the build's SSH host keys and generates them
 at boot, and the boot-entry contract of

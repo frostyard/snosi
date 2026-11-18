@@ -12,10 +12,11 @@ because Firn's bootc steps declare them.
 
 ## The firn binaries come from the frostyard apt repo
 
-`mkosi.conf` installs `Packages=frostyard-firn` and
-`Packages=frostyard-firn-gui` unpinned (published by firn's release via
-repogen), so CI needs no sibling firn checkout and each ISO build takes the
-newest Firn release. The image postinst still fails the build loudly if
+`mkosi.conf` installs `Packages=frostyard-firn=0.13.0` and
+`Packages=frostyard-firn-gui=0.13.0` (published by firn's release via
+repogen). CI needs no sibling firn checkout. Both frontends pin the same
+release, which provides firn-gui's `--kiosk` mode. The image postinst still
+fails the build loudly if
 `/usr/bin/firn`, `/usr/libexec/firn-gui/firn-gui`, cage, or a library or
 font firn-gui loads at runtime is missing: `frostyard-firn-gui` declares no
 dependencies, so `mkosi.conf` lists its graphics stack explicitly.
@@ -84,6 +85,8 @@ supports) it exits 77 and `firn-gui.service` hands tty1 to the TUI at once.
 Three crashes in 60 s and a clean exit (Quit or Close) do the same, so tty1
 always ends with an installer. firn-gui runs as root under cage, so it skips
 pkexec, and it draws on the CPU where there is no GPU acceleration.
+The session runs `cage -d -s -- /usr/bin/firn-gui --kiosk`; kiosk mode
+requests fullscreen and removes the window controls.
 
 The graphics stack costs RAM on every boot, because both entries share one
 initramfs. Measured against the TUI-only ISO: 121 more packages, +292 MiB of
