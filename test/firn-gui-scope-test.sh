@@ -231,7 +231,7 @@ expect "a straight copy of the tree" pass "$dir"
 
 # The ISO may install it, from either installer location.
 dir=$(fixture installer)
-mutate "$dir/shared/firn-installer/mkosi.conf" 's/^Packages=frostyard-firn$/&\n         frostyard-firn-gui/'
+mutate "$dir/shared/firn-installer/mkosi.conf" 's/^Packages=frostyard-firn=0\.13\.0$/&\n         frostyard-firn-gui/'
 printf '\n[Content]\nPackages=frostyard-firn-gui\n' >>"$dir/mkosi.profiles/firn-installer/mkosi.conf"
 expect "frostyard-firn-gui in the Firn installer profile" pass "$dir"
 
@@ -309,7 +309,7 @@ expect "dpkg -i in the sunshine postinst" reject "$dir" "mkosi.images/sunshine/m
 
 # The non-vacuity control fires when the installer's package list is unread.
 dir=$(fixture vacuous)
-mutate "$dir/shared/firn-installer/mkosi.conf" 's/^Packages=frostyard-firn$/Packages=/'
+mutate "$dir/shared/firn-installer/mkosi.conf" 's/^Packages=frostyard-firn=0\.13\.0$/Packages=/'
 expect "an unread installer package list" reject "$dir" "parsed "
 
 out=$(scan "$root" 2>&1) || true

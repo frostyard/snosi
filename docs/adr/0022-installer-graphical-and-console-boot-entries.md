@@ -61,7 +61,7 @@ command lines are otherwise identical:
 - `firn-graphical.target` wants `firn-gui.service`, which runs
   `/usr/lib/firn/firn-gui-session`. That wrapper settles udev, waits up to
   10 seconds for `/dev/dri/card*`, then executes `cage -d -s --
-  /usr/bin/firn-gui` as root, so firn-gui skips its pkexec re-exec.
+  /usr/bin/firn-gui --kiosk` as root, so firn-gui skips its pkexec re-exec.
 - The serial TUI kiosk (`firn-kiosk-serial@ttyS0`) and the flatpak seed stay
   in `multi-user.target` and run under both entries. A serial-only machine
   gets the console installer whichever entry boots.
@@ -78,8 +78,9 @@ The unit has no `Condition*` lines, so its `Conflicts=getty@tty1.service`
 is safe. firn-gui chooses OpenGL or CPU drawing itself, so a VM without GPU
 acceleration works.
 
-The ISO lists `frostyard-firn-gui` unpinned, like `frostyard-firn`. It also
-lists the graphics stack explicitly: cage, GTK 3, Pango, Cairo, HarfBuzz,
+The ISO now pins `frostyard-firn-gui` and `frostyard-firn` to 0.13.0,
+which supplies the graphical session's `--kiosk` mode. It also lists the
+graphics stack explicitly: cage, GTK 3, Pango, Cairo, HarfBuzz,
 fontconfig, libepoxy, Mesa EGL, the DejaVu fonts and xkb-data. The postinst
 fails the build if firn-gui, cage, any library firn-gui loads, or the fonts
 are missing. Only this profile may install `frostyard-firn-gui`
@@ -102,9 +103,10 @@ The higher minimum RAM is accepted. Test VMs run with 6 GiB.
   ttyS0 can both run, as tty1 and ttyS0 TUIs already could. Firn has no
   cross-frontend install lock, and both frontends use the same
   `/run/firn/target` mount point and `firn-root` mapper name.
-- **No firn-gui change is required.** cage maximizes firn-gui's window to
-  the output, and every exit hands tty1 to the TUI. A firn-gui kiosk mode
-  (fullscreen request, no Close, Quit) would polish this.
+- **The session now uses firn-gui's kiosk mode.** The original integration
+  needed no firn-gui change: cage maximized its window to the output.
+  With 0.13.0, `--kiosk` requests fullscreen and removes the window controls.
+  Every exit still hands tty1 to the TUI.
 - **Not tested on real hardware yet.** Real-hardware behavior (native DRM
   driver timing, HiDPI, input) is unproven, which is why console stays the
   default.

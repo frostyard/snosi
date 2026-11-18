@@ -36,4 +36,5 @@ done
 # -d: ask clients to leave window decorations to the compositor, which draws
 # none, so GTK drops its titlebar where it honours the request.
 # -s: allow VT switching, as on the TUI kiosk's console.
-exec /usr/bin/cage -d -s -- /usr/bin/firn-gui
+# --kiosk: request fullscreen and remove the window controls in firn-gui.
+exec /usr/bin/cage -d -s -- /usr/bin/firn-gui --kiosk
