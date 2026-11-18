@@ -84,24 +84,49 @@ for shared keys and installer ISO publication references.
 ### Plans
 
 - [plans/2026-02-11-package-version-monitoring-design.md](plans/2026-02-11-package-version-monitoring-design.md)
+  — **Shipped:** daily APT version monitoring.
 - [plans/2026-02-19-bootc-install-testing-design.md](plans/2026-02-19-bootc-install-testing-design.md) / [plan](plans/2026-02-19-bootc-install-testing-plan.md)
+  — **Shipped:** bootc install test harness and workflow.
 - [plans/2026-02-19-cayo-ship-design.md](plans/2026-02-19-cayo-ship-design.md) / [plan](plans/2026-02-19-cayo-ship-plan.md)
+  — **Shipped:** historical Cayo product composition.
 - [plans/2026-02-23-buildah-oci-packaging.md](plans/2026-02-23-buildah-oci-packaging.md)
+  — **Shipped:** Buildah OCI packaging.
 - [plans/2026-02-24-sysupdate-normalize-design.md](plans/2026-02-24-sysupdate-normalize-design.md) / [plan](plans/2026-02-24-sysupdate-normalize-plan.md)
+  — **Shipped with a changed layout:** per-sysext sysupdate drop-in directories.
 - [plans/2026-02-24-tailscale-sysext-design.md](plans/2026-02-24-tailscale-sysext-design.md) / [plan](plans/2026-02-24-tailscale-sysext-plan.md)
+  — **Shipped:** Tailscale sysext and sysupdate transfer.
 - [plans/2026-07-03-bootc-update-validation-plan.md](plans/2026-07-03-bootc-update-validation-plan.md)
+  — **Planned:** secure bootc update validation, rewritten after nbc removal.
 - [plans/2026-07-13-mkosi-native-ab-root-design.md](plans/2026-07-13-mkosi-native-ab-root-design.md)
+  — **Superseded:** bootc remains the supported transport.
 - [plans/2026-07-14-bootc-native-ab-coexistence-plan.md](plans/2026-07-14-bootc-native-ab-coexistence-plan.md)
+  — **Superseded:** coexistence shipped before native A/B and nbc retirement.
 - [plans/2026-07-17-graphical-installer-plan.md](plans/2026-07-17-graphical-installer-plan.md)
+  — **Superseded:** snosi-setup shipped in #424; Firn's firn-gui replaced it.
 - [plans/2026-07-17-native-boot-validation-design.md](plans/2026-07-17-native-boot-validation-design.md) / [plan](plans/2026-07-17-native-boot-validation-plan.md)
+  — **Shipped, partly retired:** native boot validation and the retired nightly lane.
 - [plans/2026-07-20-update-api-daemon-design.md](plans/2026-07-20-update-api-daemon-design.md)
-- [plans/2026-08-26-cayo-floe-rename-plan.md](plans/2026-08-26-cayo-floe-rename-plan.md) — ordered server-product rename across snosi and downstream repos
-- [plans/2026-09-24-native-ab-nbc-retirement-plan.md](plans/2026-09-24-native-ab-nbc-retirement-plan.md) — **Superseded by ADR-0018:** historical exact-object disposal worksheet
-- [plans/2026-10-05-sundog-desktop-completeness-plan.md](plans/2026-10-05-sundog-desktop-completeness-plan.md) — **In progress:** native desktop payload composed and VM package validation recorded; manual laptop/hardware validation deferred
-- [plans/2026-10-05-sundog-flatpak-defaults-plan.md](plans/2026-10-05-sundog-flatpak-defaults-plan.md) — **In progress:** all phases implemented (Firn v0.7.0); post-merge evidence (published images, an out-of-band ISO install) remains
-- [plans/2026-10-05-sundog-printer-support-plan.md](plans/2026-10-05-sundog-printer-support-plan.md) — **Planned:** immediate, independent addition of KDE's recommended printer helpers with package-availability and static checks
-- [plans/2026-10-29-container-policy-scope-plan.md](plans/2026-10-29-container-policy-scope-plan.md) — **Phases 1-3 implemented, Phases 1-2 lab proof passed (Snow and Floe, Secure Boot):** diagnosis of the Floe `qa-controlled` copy, a per-command workaround, the strict container policy scoped to bootc updates (ADR-0025), and removal of the unread rootless provisioning rule (#1265)
-- [plans/ab-deploy-checklist.md](plans/ab-deploy-checklist.md) — native A/B production-deploy checklist
+  — **Closed:** design only; no implementation followed #450.
+- [plans/2026-08-26-cayo-floe-rename-plan.md](plans/2026-08-26-cayo-floe-rename-plan.md)
+  — **In progress:** ordered server-product rename across snosi and downstream repos.
+- [plans/2026-09-24-native-ab-nbc-retirement-plan.md](plans/2026-09-24-native-ab-nbc-retirement-plan.md)
+  — **Superseded by ADR-0018:** historical exact-object disposal worksheet.
+- [plans/2026-10-05-sundog-desktop-completeness-plan.md](plans/2026-10-05-sundog-desktop-completeness-plan.md)
+  — **Done:** native desktop payload composed and VM package validation recorded;
+  manual laptop/hardware validation deferred.
+- [plans/2026-10-05-sundog-flatpak-defaults-plan.md](plans/2026-10-05-sundog-flatpak-defaults-plan.md)
+  — **Done:** all phases implemented (Firn v0.7.0); published image and ISO evidence
+  recorded; an out-of-band ISO install checking Sundog's core set stays deferred.
+- [plans/2026-10-05-sundog-printer-support-plan.md](plans/2026-10-05-sundog-printer-support-plan.md)
+  — **Done:** immediate, independent addition of KDE's recommended printer helpers
+  with package-availability and static checks.
+- [plans/2026-10-29-container-policy-scope-plan.md](plans/2026-10-29-container-policy-scope-plan.md)
+  — **Phases 1-3 implemented, Phases 1-2 lab proof passed (Snow and Floe, Secure Boot):**
+  diagnosis of the Floe `qa-controlled` copy, a per-command workaround, the strict
+  container policy scoped to bootc updates (ADR-0025), and removal of the unread
+  rootless provisioning rule (#1265).
+- [plans/ab-deploy-checklist.md](plans/ab-deploy-checklist.md)
+  — **Superseded:** native A/B production-deploy checklist.
 
 ### Contracts and runbooks (indexed in place)
 

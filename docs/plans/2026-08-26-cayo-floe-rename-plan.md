@@ -1,14 +1,14 @@
 # Plan: Rename the cayo server image to floe
 
 **Status:** In progress
-**Last verified:** 2026-11-13
+**Last verified:** 2026-11-17
 **Progress:** Phases 0 through 4 are complete. In Phase 5 the policy change
 and its lab compatibility change merged on 2026-11-13, and the retirement
 release R is published (see Phase 5). The two migrated hosts are out of
-service, so their Phase 5 steps are dropped. The GHCR `cayo` description,
-the `AGENTS.md` scope count
-([#1298](https://github.com/frostyard/snosi/issues/1298)) and the removal
-of lab's retired-scope allowance are not done.
+service, so their Phase 5 steps are dropped. The `AGENTS.md` scope count
+([#1298](https://github.com/frostyard/snosi/issues/1298)) is corrected.
+The GHCR `cayo` description and the removal of lab's retired-scope
+allowance are not done.
 
 <!--
 Plans are updated as work lands: check off what shipped, renumber what moved.
@@ -637,8 +637,8 @@ because they are absent from this snapshot.
 - [ ] Update the user-memory note (`minisnow` etc.) and close the tracking
       issue with links to the ADR. No tracking issue exists in snosi (search
       of 2026-11-13); only the user-memory note remains.
-- [ ] `AGENTS.md` still says that the system policy keeps "the five"
-      Frostyard scopes. Correct it to four now that #1299 merged:
+- [x] Corrected `AGENTS.md` from "the five" Frostyard scopes to four in
+      this change, now that #1299 merged:
       [#1298](https://github.com/frostyard/snosi/issues/1298).
 - [ ] **Done when:** the retirement release R is published from the merge
       of #1299, the GHCR `cayo` package description says it is frozen and
