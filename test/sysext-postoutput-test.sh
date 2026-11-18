@@ -69,14 +69,6 @@ run_postoutput() {
         bash "$SCRIPT"
 }
 
-# expect_code <expected-exit> <cmd...> — succeeds iff cmd exits with the code.
-expect_code() {
-    local want="$1"; shift
-    local got=0
-    "$@" >/dev/null 2>&1 || got=$?
-    [[ "$got" == "$want" ]]
-}
-
 # --- Input / manifest validation --------------------------------------------
 
 missing_keypackage() {

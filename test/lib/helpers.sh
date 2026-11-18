@@ -21,6 +21,14 @@ check() {
     fi
 }
 
+# expect_code <expected-exit> <cmd...> — succeeds iff cmd exits with the code.
+expect_code() {
+    local want="$1"; shift
+    local got=0
+    "$@" >/dev/null 2>&1 || got=$?
+    [[ "$got" == "$want" ]]
+}
+
 # print_summary - Print results and exit with failure count.
 # Call this at the end of each test script.
 print_summary() {
