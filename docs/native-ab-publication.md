@@ -506,8 +506,10 @@ touches an explicit ISO input such as `shared/firn-installer/**`, its mkosi
 profile, pinned download metadata, trust identities, publication scripts, or
 the ISO smoke test. The generic org dispatch currently carries no source
 component identity, so it cannot yet be narrowed to Firn releases; keeping it
-ensures a newly published `frostyard-firn` package rebuilds the medium. ISO-only
-push changes are ignored by `build-native-images.yml`.
+rebuilds the medium with the currently configured packages. A newer Firn
+package does not change the pinned ISO: updating Firn requires a snosi pin
+edit in `shared/firn-installer/mkosi.conf`. ISO-only push changes are ignored
+by `build-native-images.yml`.
 
 `native-build` must be restricted to protected/default-branch access. This
 keeps production Secure Boot/MOK and PCR signing credentials out of every PR,

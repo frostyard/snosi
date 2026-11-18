@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-18",
+  "scope": "installer docs",
+  "correction": "We assumed the ISO test and dispatch docs still described unpinned Firn and a release automatically rebuilding onto a newer package. The 0.13.0 pins select exact versions, and updating Firn requires a snosi pin edit.",
+  "evidence": "PR #1333, cross-review of 40eb3bf705bbb45ab778486002cd2db00961e5df found stale docs/design/testing.md claim; test/firn-installer-iso-test.sh enforces the pins and --kiosk",
+  "promoted_to": "docs/design/testing.md"
+}

@@ -164,4 +164,13 @@ grep -Fqx 'exec /usr/bin/cage -d -s -- /usr/bin/firn-gui --kiosk' \
     exit 1
 }
 
+# Keep the living test contract aligned with the pinned kiosk integration.
+for claim in 'Packages=frostyard-firn=0.13.0' \
+    'Packages=frostyard-firn-gui=0.13.0' "runs \`firn-gui --kiosk\` under cage"; do
+    grep -Fq "$claim" "$root/docs/design/testing.md" || {
+        echo "docs/design/testing.md must document the Firn ISO contract: $claim" >&2
+        exit 1
+    }
+done
+
 echo 'Firn ISO static sandbox and boot-entry contract passed'
