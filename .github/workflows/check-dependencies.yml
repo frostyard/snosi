@@ -907,7 +907,7 @@ jobs:
         if: steps.update.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
         with:
-          # This job edits .github/workflows/build-images.yml (syft/cosign
+          # This job edits build-images.yml and forky-publish.yml (syft/cosign
           # pins), and GITHUB_TOKEN can NEVER push workflow-file changes: the
           # push is rejected with "refusing to allow a GitHub App to create or
           # update workflow ... without `workflows` permission", and
