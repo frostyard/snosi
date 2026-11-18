@@ -786,14 +786,25 @@ jobs:
             fi
           }
 
-          replace_exactly_once() {
-            local file=$1 pattern=$2 replacement=$3 count
-            count=$(grep -Ec -- "$pattern" "$file" || true)
-            if [[ "$count" != 1 ]]; then
-              echo "::error::Expected one ${pattern} match in ${file}, found ${count}"
-              exit 1
-            fi
-            sed -Ei "s|${pattern}|${replacement}|" "$file"
+          replace_expected_count() {
+            local pattern=$1 replacement=$2 file count expected i
+            shift 2
+            local targets=("$@")
+            # Each target supplies its expected count. Validate all targets
+            # before editing any target (ADR-0038/0039).
+            for ((i = 0; i < ${#targets[@]}; i += 2)); do
+              file=${targets[i]}
+              expected=${targets[i + 1]}
+              count=$(grep -Ec -- "$pattern" "$file" || true)
+              if [[ "$count" != "$expected" ]]; then
+                echo "::error::Expected ${expected} ${pattern} matches in ${file}, found ${count}"
+                exit 1
+              fi
+            done
+            for ((i = 0; i < ${#targets[@]}; i += 2)); do
+              file=${targets[i]}
+              sed -Ei "s|${pattern}|${replacement}|g" "$file"
+            done
           }
 
           if [[ "$BREW_UPDATE" == "true" ]]; then
@@ -846,9 +857,10 @@ jobs:
 
           if [[ "$SYFT_UPDATE" == "true" && "$WORKFLOW_UPDATES_ENABLED" == "true" ]]; then
             validate_update_value "syft-version" "$SYFT_VERSION" '^v[0-9]+\.[0-9]+\.[0-9]+$'
-            replace_exactly_once .github/workflows/build-images.yml \
+            replace_expected_count \
               'syft-version: v[0-9]+\.[0-9]+\.[0-9]+$' \
-              "syft-version: ${SYFT_VERSION}"
+              "syft-version: ${SYFT_VERSION}" \
+              .github/workflows/build-images.yml 1 .github/workflows/forky-publish.yml 1
           fi
 
           # The installer ISO ships the same pinned cosign as a verified
@@ -871,16 +883,18 @@ jobs:
 
           if [[ "$COSIGN_UPDATE" == "true" && "$WORKFLOW_UPDATES_ENABLED" == "true" ]]; then
             validate_update_value "cosign-release" "$COSIGN_VERSION" '^v2\.[0-9]+\.[0-9]+$'
-            replace_exactly_once .github/workflows/build-images.yml \
+            replace_expected_count \
               'cosign-release: "v2\.[0-9]+\.[0-9]+"$' \
-              "cosign-release: \"${COSIGN_VERSION}\""
+              "cosign-release: \"${COSIGN_VERSION}\"" \
+              .github/workflows/build-images.yml 1 .github/workflows/forky-publish.yml 2
           fi
 
           if [[ "$CHUNKAH_UPDATE" == "true" ]]; then
             validate_update_value "chunkah digest" "$CHUNKAH_DIGEST" '^sha256:[a-f0-9]{64}$'
-            replace_exactly_once shared/outformat/image/chunkah-package.sh \
+            replace_expected_count \
               'quay\.io/coreos/chunkah@sha256:[a-f0-9]{64}' \
-              "quay.io/coreos/chunkah@${CHUNKAH_DIGEST}"
+              "quay.io/coreos/chunkah@${CHUNKAH_DIGEST}" \
+              shared/outformat/image/chunkah-package.sh 1
           fi
 
           if git diff --quiet; then
@@ -893,7 +907,7 @@ jobs:
         if: steps.update.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
         with:
-          # This job edits .github/workflows/build-images.yml (syft/cosign
+          # This job edits build-images.yml and forky-publish.yml (syft/cosign
           # pins), and GITHUB_TOKEN can NEVER push workflow-file changes: the
           # push is rejected with "refusing to allow a GitHub App to create or
           # update workflow ... without `workflows` permission", and
