@@ -246,6 +246,68 @@ check_isolation() {
 # (c) smoke: the forky resolution is the one the build needs.
 # ---------------------------------------------------------------------------
 
+# The tools tree resolves from Debian testing even while the target release is
+# Trixie or Forky. snosi uses apt for every supported target, so its optional
+# package-manager profile must not make either suite depend on dnf5. Keep the
+# explicitly required systemd-tpm signer package in that reduced tool set.
+check_tools_tree() { # target-suite
+    local suite=$1 tmp json
+    tmp=$(mktemp -d)
+    # shellcheck disable=SC2064
+    trap "rm -rf '$tmp'" RETURN
+    json=$tmp/tools.json
+    if ! summary "$root" --release "$suite" >"$json" 2>"$tmp/err"; then
+        fail "the $suite tools-tree summary failed: $(tail -n 3 "$tmp/err" | paste -sd' ' -)"
+        return 1
+    fi
+    run_verdicts "$suite tools tree" 3 - "$json" "$suite" <<<"$TOOLS_TREE_VERDICTS_PY"
+}
+
+read -r -d '' TOOLS_TREE_VERDICTS_PY <<'PY' || true
+import json
+import sys
+
+path, suite = sys.argv[1:3]
+tools = json.load(open(path, encoding="utf-8")).get("Tools")
+bad = False
+verdicts = 0
+
+
+def ok(message):
+    global verdicts
+    verdicts += 1
+    print(f"ok - {suite}: {message}")
+
+
+def not_ok(message):
+    global bad, verdicts
+    bad = True
+    verdicts += 1
+    print(f"not ok - {suite}: {message}")
+
+
+if not isinstance(tools, dict):
+    not_ok("the summary has no tools-tree configuration")
+else:
+    profiles = tools.get("Profiles") or []
+    packages = tools.get("Packages") or []
+    if "package-manager" in profiles:
+        not_ok("mkosi's package-manager tools profile is enabled")
+    else:
+        ok("mkosi's package-manager tools profile is disabled")
+    if "dnf5" in packages:
+        not_ok("dnf5 remains in the tools-tree package selection")
+    else:
+        ok("dnf5 is absent from the tools-tree package selection")
+    if "systemd-tpm" in packages:
+        ok("systemd-tpm remains in the tools-tree package selection")
+    else:
+        not_ok("systemd-tpm is missing from the tools-tree package selection")
+
+print(f"# verdicts {verdicts}")
+sys.exit(1 if bad else 0)
+PY
+
 # Run one Python verdict helper (its arguments follow the label and the minimum
 # count; its source comes on stdin) and record every verdict it prints. The
 # helper prints "ok - ..." and "not ok - ..." lines and, as its last line,
@@ -598,6 +660,8 @@ PY
 check_static
 self_check_verdicts
 check_isolation || true
+check_tools_tree trixie || true
+check_tools_tree forky || true
 for entry in "${smoke_products[@]}"; do
     IFS=: read -r smoke_profile smoke_tree smoke_forky <<<"$entry"
     check_forky_smoke "$smoke_profile" "$smoke_tree" "$smoke_forky" || true
