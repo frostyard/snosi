@@ -59,7 +59,13 @@ kernel. Include order controls mkosi list-valued settings (`Packages=`,
 `FinalizeScripts=`, etc.): confirm a changed order with `mkosi summary`.
 `check-profile-dependencies.sh` guards against rebuilding sysexts for every
 profile. mkosi's `ToolsTree=default` uses `mkosi.tools.sandbox/`; target APT
-settings use `mkosi.sandbox/`. Network retry/timeouts need both trees.
+settings use `mkosi.sandbox/`. The tools tree enables only mkosi's `misc` and
+`runtime` profiles: snosi builds Debian packages with apt and does not need the
+optional package-manager profile's `dnf5`, `zypper` and distribution-image
+package managers. `ToolsTreePackages=systemd-tpm` still supplies ukify's PCR
+signer explicitly. `test/suite-isolation-test.sh` resolves both Trixie and Forky
+and rejects a tools-tree selection that restores `dnf5` or drops
+`systemd-tpm`. Network retry/timeouts need both trees.
 
 Snow, Snowfield and Sundog install `fprintd` and `libpam-fprintd` for desktop
 fingerprint authentication. The shared desktop tmpfiles rule creates

@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-18",
+  "scope": "mkosi tools tree for Trixie and Forky builds",
+  "correction": "We assumed the default mkosi package-manager tools profile was harmless for Debian-only builds. Forky removed the dnf5 binary from the archive while the profile still requested it, so every supported target now disables that optional profile and retains only the misc, runtime and explicitly required systemd-tpm packages.",
+  "evidence": "frostyard/snosi#1336 and failed Actions runs 44204947887, 44228846801 and 44228846875; Forky Packages.xz and Sources.xz on 2026-11-18 contained no dnf5 binary or source entry. The pinned mkosi 904357aa summary added dnf5 through the package-manager profile, and test/suite-isolation-test.sh now rejects it for resolved Trixie and Forky builds.",
+  "promoted_to": "docs/design/build-pipeline.md; test/suite-isolation-test.sh"
+}
