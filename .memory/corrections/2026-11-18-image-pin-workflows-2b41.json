@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-18",
+  "scope": ".github/workflows/check-dependencies.yml",
+  "correction": "Syft and Cosign updates must validate each workflow's expected pin count before editing either workflow, then update every validated pin in both. Syft has one pin in each workflow; Cosign has one in build-images.yml and two in forky-publish.yml, for publication and promotion.",
+  "evidence": "Recurring failure in #1339: the dependency updater changed build-images.yml without forky-publish.yml, causing forky-publish drift. test/check-dependencies-workflow-token-test.sh covers all paired pins and rejects zero or expected+1 matches in either workflow before either workflow changes.",
+  "promoted_to": "test/check-dependencies-workflow-token-test.sh"
+}
