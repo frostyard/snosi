@@ -58,7 +58,7 @@ authoritative. The `installer` object defines the requirements below.
   `installer.minimum_versions`. The floor-plus-warning behaviour described here
   belonged to the retired adapter. The systemd floor stays at `261.1-3`. The
   image's own Forky systemd family is validated separately: most recently
-  `262-1` on 2026-09-29 (see the Task 4 paragraph in `AGENTS.md`).
+  `262.2-1` on 2026-11-19 (see the Task 4 paragraph in `AGENTS.md`).
 - The target disk must be at least `32212254720` bytes (30 GiB). This covers
   the online pull, OCI cache, and deployed composefs state; it is not a claim
   about the eventual steady-state free space.

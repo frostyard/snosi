@@ -572,6 +572,9 @@ tpm_case "a lockout fallback" '{"outcome":"other","tpm_rc":"LOCKOUT","retries":0
     'TPM2 operation failed, falling back to traditional unlocking: No locks available'
 tpm_case "exhausted PCR retries" '{"outcome":"other","tpm_rc":"PCR_CHANGED","retries":0}' \
     'TPM2 operation failed, falling back to traditional unlocking: Structure needs cleaning'
+tpm_case "exhausted PCR retries with the systemd v262.2 error text" '{"outcome":"other","tpm_rc":"PCR_CHANGED","retries":0}' \
+    'PCR values kept changing while unsealing the TPM2 secret, giving up. Something on this system extends a PCR continuously.' \
+    'TPM2 operation failed, falling back to traditional unlocking: Structure needs cleaning'
 tpm_case "the systemd debug retry text counts retries" '{"outcome":"ok_after_retry","tpm_rc":"PCR_CHANGED","retries":3}' \
     'A PCR value changed during the TPM2 policy session, restarting HMAC key unsealing (9 tries left).' \
     'A PCR value changed during the TPM2 policy session, restarting HMAC key unsealing (8 tries left).' \

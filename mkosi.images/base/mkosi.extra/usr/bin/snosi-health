@@ -572,7 +572,7 @@ collect_sysext() {
 }
 
 # S5 tpm_unlock -------------------------------------------------------------
-# Texts of systemd v262 (src/cryptsetup/cryptsetup.c,
+# Texts of systemd v262, unchanged in v262.2 (src/cryptsetup/cryptsetup.c,
 # src/shared/cryptsetup-tpm2.c, src/shared/tpm2-util.c) and of tpm2-tss's
 # ESYS logger, which systemd-cryptsetup's stderr carries to the journal. Only
 # the classification leaves this function; no text is copied to problems.json.
