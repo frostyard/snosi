@@ -63,16 +63,20 @@ Sysexts are overlay images that extend the immutable base OS by adding files und
 | **incus** | incus | Incus container/VM manager (Frostyard rebuild of Zabbly's deb, which bundles its own qemu/OVMF/swtpm/virtiofsd under `/usr/incus`), dnsmasq, virt-viewer. Ships no Debian qemu (r4, #1014) |
 | **k3s** | k3s | k3s lightweight Kubernetes node — pinned static binary via `verified_download()` from k3s-io/k3s GitHub releases, dpkg-registered through a build-local stub deb |
 | **lemonade** | lemonade-server | Lemonade local LLM server (lemond) — downloaded via `verified_download()` from lemonade-sdk/lemonade GitHub releases; libcpp-httplib0.41 dep from trixie-backports |
+| **localsend** | localsend | LocalSend file sharing (pinned upstream .deb via verified_download, relocated from /opt; built against gui-base) |
 | **lodge** | frostyard-lodge | Lodge tailnet web shell for the first-party apps (`lodge`, `lodgectl`) — downloaded via `verified_download()` from frostyard/lodge GitHub releases after its build-provenance attestation is checked ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)); the apps arrive as their own sysexts, so enable `lodge` first |
 | **maild** | frostyard-maild | Frostmail mail engine (`maild`, `mailctl`) and Lodge mail app — downloaded via `verified_download()` from frostyard/frostmail GitHub releases after its build-provenance attestation is checked ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)); sealed secrets key made at first start |
+| **moonlight** | moonlight-qt | Moonlight game-streaming client (Frostyard APT package from frostyard/omarchy-apps, repacked upstream AppImage; pairs with the sunshine host; built against gui-base) |
 | **nix** | nix-setup-systemd | Nix package manager with systemd integration |
 | **notesd** | frostyard-notesd | Frostnotes notes daemon (`notesd`, `notesctl`) and Lodge notes app — downloaded via `verified_download()` from frostyard/frostnotes GitHub releases after its build-provenance attestation is checked ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)) |
+| **obsidian** | obsidian | Obsidian desktop app (pinned upstream .deb via verified_download, relocated from /opt; built against gui-base) |
 | **paseo** | paseo | Paseo coding agent workspace desktop app (pinned .deb via verified_download from getpaseo/paseo GitHub releases, relocated from /opt) |
 | **pilothouse** | frostyard-pilothouse | Pilothouse web administration with capability-gated Updex/container backends (web UI + root broker) — downloaded via `verified_download()` from frostyard/pilothouse GitHub releases |
 | **podman** | podman | Podman, distrobox, buildah, crun, slirp4netns |
 | **porterd** | frostyard-porterd | Porter assistant daemon (`porterd`) and Lodge porter app — downloaded via `verified_download()` from frostyard/porter GitHub releases after its build-provenance attestation is checked ([ADR-0024](../adr/0024-verify-attestations-of-first-party-sysext-debs.md)); useful only behind lodge (porter ADR-0003), so enable `lodge` first |
 | **sunshine** | sunshine | Sunshine self-hosted game streaming host (official pinned Trixie .deb via verified_download; trixie builds only) |
 | **tailscale** | tailscale | Tailscale VPN client |
+| **voxtype** | voxtype | Voxtype desktop dictation (Frostyard APT package from frostyard/omarchy-apps; bundles wtype, ydotool and wl-clipboard; built against gui-base) |
 | **vscode** | code | Visual Studio Code desktop application (from packages.microsoft.com) |
 
 ## Sysext Configuration Pattern

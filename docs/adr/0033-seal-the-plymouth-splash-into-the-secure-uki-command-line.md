@@ -1,6 +1,6 @@
 # 0033 — Seal the Plymouth splash into the secure UKI command line
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-09
 
 ## Context

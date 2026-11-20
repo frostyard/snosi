@@ -129,6 +129,15 @@ def glob_matches(glob: str, path: str):
     return match(0, 0)
 
 
+def covering_boundaries(entries, path):
+    return [
+        why.split(":", 1)[0]
+        for glob, level, why in entries
+        if level in ("L1", "L2")
+        and any(glob_matches(expansion, path) for expansion in expand_braces(glob))
+    ]
+
+
 self_test_cases = 0
 validation_cases = {
     "shared/bootc-secure/***": True,
@@ -169,6 +178,17 @@ for glob, path, expected in matcher_cases:
     self_test_cases += 1
     if glob_matches(glob, path) != expected:
         fail(f"self-test failed for matcher {glob!r}, {path!r}")
+
+coverage_cases = [
+    ([("x/**", "L3", "secure-boot: t")], "x/a", []),
+    ([("x/**", "L4", "secure-boot: t")], "x/a", []),
+    ([("x/**", "L2", "signing: t")], "x/a", ["signing"]),
+    ([("x/**", "L1", "tpm: t")], "y/a", []),
+]
+for test_entries, path, expected in coverage_cases:
+    self_test_cases += 1
+    if covering_boundaries(test_entries, path) != expected:
+        fail(f"self-test failed for covering_boundaries({test_entries!r}, {path!r})")
 
 
 try:
@@ -252,24 +272,33 @@ required_coverage = {
     ".github/workflows/risk-paths.yml": "workflow-permissions",
     "policies/agent-governance.json": "workflow-permissions",
     "shared/bootc-secure/mkosi.conf": "secure-boot",
+    "shared/bootc-secure/tree/usr/libexec/snosi-bootc-bootloader-reconcile": "secure-boot",
     "shared/packages/bootc/mkosi.conf": "secure-boot",
     "shared/download/forky-versions.json": "secure-boot",
     "mkosi.profiles/snow/mkosi.conf": "secure-boot",
     "mkosi.profiles/sundog/mkosi.conf": "secure-boot",
     "shared/kernel/scripts/postinst/mkosi.postinst.chroot": "secure-boot",
     "mkosi.images/base/mkosi.extra/usr/bin/snosi-kargs": "tpm",
+    "mkosi.images/base/mkosi.extra/usr/lib/snosi/esp.sh": "secure-boot",
     "mkosi.images/base/mkosi.extra/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf": "tpm",
     "mkosi.images/base/mkosi.extra/usr/lib/dracut/modules.d/95tss-user/module-setup.sh": "tpm",
     "shared/native-ab/keys/mok-2026.crt": "signing",
     "shared/sysext/keys/import-pubring.gpg": "signing",
     "mkosi.sandbox/etc/apt/keyrings/frostyard.gpg": "signing",
+    "mkosi.images/base/mkosi.conf": "signing",
     "cosign.pub": "signing",
     "shared/security/no-private-keys.finalize": "credentials",
     "mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage": "update-verification",
+    "mkosi.images/base/mkosi.extra/usr/lib/systemd/system/bootc-update-stage.service": "update-verification",
+    "mkosi.images/base/mkosi.extra/usr/lib/systemd/system/bootc-update-stage.timer": "update-verification",
     "mkosi.images/base/mkosi.extra/usr/bin/snosi-stream": "update-verification",
     "mkosi.images/base/mkosi.extra/usr/lib/sysupdate.1password.d/1password.transfer": "update-verification",
     "shared/download/verify-attestations.sh": "update-verification",
     "shared/download/verified-download.sh": "update-verification",
+    "shared/download/sysext-checksums.json": "update-verification",
+    "shared/download/image-checksums.json": "update-verification",
+    "shared/snosi-report/tree/usr/libexec/snosi-health-report": "publication",
+    "shared/snosi-report/tree/usr/lib/systemd/system-preset/06-snosi-health-report.preset": "publication",
     ".github/workflows/build.yml": "publication",
     ".github/workflows/build-images.yml": "publication",
     ".github/workflows/build-mechanics.yml": "publication",
@@ -289,11 +318,7 @@ required_coverage = {
     "shared/firn-installer/catalog.json": "installer",
 }
 for path, boundary in required_coverage.items():
-    covering = [
-        why.split(":", 1)[0]
-        for glob, level, why in entries
-        if any(glob_matches(expansion, path) for expansion in expand_braces(glob))
-    ]
+    covering = covering_boundaries(entries, path)
     if boundary not in covering:
         fail(f"{path} must be covered by an entry whose why names {boundary} (got {covering or 'none'})")
 

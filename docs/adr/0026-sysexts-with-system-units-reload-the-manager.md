@@ -1,6 +1,6 @@
 # 0026 — Sysexts with system units reload the manager
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-30
 
 ## Context

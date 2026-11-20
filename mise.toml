@@ -10,3 +10,5 @@ lockfile = true
 # scripts/check-template.mjs and test/*.test.mjs need Node 22 or later.
 # Node 24 LTS, the major that validate.yml uses for the redirect Worker.
 node = "24.22.2"
+# make verify and validate.yml run scripts/shellcheck.sh.
+shellcheck = "0.11.0"

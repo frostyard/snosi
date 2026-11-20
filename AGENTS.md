@@ -21,7 +21,9 @@ Native A/B and NBC build/runtime lanes were removed; see
 
 `make verify` is the credential-free baseline gate and `make ci` is what
 `ci.yml` runs (core ADR-0044; see [testing](docs/design/testing.md#make-gate));
-Node comes from `mise install`. `just` lists targets; `just sysexts`,
+Node and ShellCheck come from `mise install`; `make verify` and
+`validate.yml` run the same `scripts/shellcheck.sh`.
+`just` lists targets; `just sysexts`,
 `just snow`, `just snowfield`, `just sundog`, `just floe`,
 `just test-install` and `just run-qemu` cover local builds and bootc tests.
 The Justfile bootstraps mkosi at the commit pinned in
@@ -357,7 +359,9 @@ for live Firn install, update or rollback evidence. See
 A Done, Shipped or Superseded plan status must state what landed, checked
 against `git log` and `docs/native-ab-prototype-history.md`, not the plan's
 checkboxes. The `docs/README.md` plan index must show the plan file's status;
-`test/docs-claims.test.mjs` checks that agreement and the policy scope count.
+`test/docs-claims.test.mjs` checks that agreement, the ADR index status
+markers against each ADR's status, the sysext table against `mkosi.images/`
+and the policy scope count.
 
 Keep living design and user guidance current with code. New decisions start
 from `docs/adr/TEMPLATE.md`; accepted ADRs are immutable except status and

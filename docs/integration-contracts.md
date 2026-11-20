@@ -167,9 +167,14 @@ verifies candidate bytes over the public HTTP origin, then promotes an
 OpenPGP-signed checksum index signature-first/manifest-last. The public
 `shared/native-ab/keys/import-pubring.gpg` authenticates that index.
 `workers/native-installer-redirect/` derives the uncacheable stable URL
-from the live index, without an independent version pointer. There is no
-automatic ISO retention workflow. Future deletion of published objects is
-subject to [ADR-0018's exact-object gate](adr/0018-remove-native-ab-and-nbc-lanes.md).
+from the live index, without an independent version pointer. After the new
+index and the redirect verify, the promote job prunes installer ISOs
+([ADR-0036](adr/0036-prune-installer-isos-after-promotion.md)): it keeps the
+live ISO, the two versions before it and every object younger than 24 hours,
+and one run deletes at most 30 objects. A versioned ISO URL stops working
+when its version leaves that window, so a consumer links the stable URL.
+Every other deletion of published objects is subject to
+[ADR-0018's exact-object gate](adr/0018-remove-native-ab-and-nbc-lanes.md).
 
 ## Problem records (snosi-health)
 

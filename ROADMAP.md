@@ -25,11 +25,14 @@ cannot convert in place; back up and reinstall using the
 best-effort assistance through 2026-10-31 for four known users does not
 extend product support. Already published artifacts are not deleted by source
 cleanup. Signed `stable` and referenced package bytes remain protected by
-core ADR-0048, and any future R2 deletion requires an exact-object inventory,
+core ADR-0048, and any other R2 deletion requires an exact-object inventory,
 recovery review and separate authorization under ADR-0018 and the
 [retirement plan](docs/plans/2026-09-24-native-ab-nbc-retirement-plan.md).
-The Firn ISO still uses `isos/native/v1/` and its stable redirect. There is
-no automatic ISO retention workflow.
+The Firn ISO still uses `isos/native/v1/` and its stable redirect. After each
+promotion, the ISO promote job prunes installer ISOs outside the keep window
+([ADR-0036](docs/adr/0036-prune-installer-isos-after-promotion.md)): the live
+ISO, the two before it and every object younger than 24 hours stay, and one
+run deletes at most 30 objects.
 
 ## Near term
 
