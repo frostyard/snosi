@@ -12,11 +12,15 @@ instructions.
 
 The root `Makefile` holds the make gate of core ADR-0043 and ADR-0044 (row
 B4 of core's repository baseline, ADR-0071). It needs no root and no
-credentials; `mise install` provides the Node release that `mise.toml` and
-`mise.lock` pin. `make verify` runs `scripts/check-template.mjs` (the agent
-symlinks, the `docs/README.md` index, the risk-path list and caller, the
-record files in `.memory/corrections/` and the two hash-pinned copies of core
-scripts), `node --test test/*.test.mjs`, and the policy tests
+credentials; `mise install` provides the Node and ShellCheck releases that
+`mise.toml` and `mise.lock` pin. `make verify` runs
+`scripts/check-template.mjs` (the agent symlinks, the `docs/README.md` index,
+the risk-path list and caller, the record files in `.memory/corrections/`
+and the two hash-pinned copies of core scripts), `scripts/shellcheck.sh`
+(ShellCheck `-S warning -x` over every tracked shell script found by extension
+or shebang, outside `saved-unused/`; `validate.yml`'s shell-lint job runs the
+same script, and both use the ShellCheck that `mise.toml` pins),
+`node --test test/*.test.mjs`, and the policy tests
 `policy-as-code-test.py`, `risk-paths-test.py`,
 `build-workflow-permissions-test.py`, `workflow-pins-test.py` and
 `forky-publish-workflow-test.py`, the fixture tests
@@ -40,13 +44,17 @@ edits or removes an existing corrections line. `.github/workflows/ci.yml`
 from bketelsen/agentic-template: copy them again, never edit them by hand.
 
 The repository's own `test/docs-claims.test.mjs` checks that `AGENTS.md`
-counts the system policy's Frostyard scopes correctly, and that the first
+counts the system policy's Frostyard scopes correctly, that the first
 word of each plan index status equals the first word of the `**Status:**`
-line of every plan file the entry links. It does not check the rest of the
-status text, or that a status is historically true.
+line of every plan file the entry links, that each ADR index status marker
+equals the first word of its ADR's `**Status:**` line (a Proposed ADR must
+have a marker), and that the "Current Sysexts" table of
+`docs/design/sysexts.md` has exactly 1 row for each `Format=sysext` image in
+`mkosi.images/`. It does not check the rest of the status text, or that a
+status is historically true.
 
-The make gate does not replace `validate.yml`, which runs shellcheck and the
-fixture suites below.
+The make gate does not replace `validate.yml`, which still runs the fixture
+suites below.
 
 ## Test registry and static gates
 
@@ -58,7 +66,7 @@ New tests should be registered alongside their workflow or parent; `unwired`
 describes a known coverage gap, not a passing test. Three tests remain
 `unwired`: `bootc-migration-test.sh` and `bootc-update-test.sh`, which need
 image references, and `dps-luks-cleanup-test.sh`, which needs root. The
-`validate.yml` shell-lint job discovers scripts by extension and shebang.
+shared `scripts/shellcheck.sh` discovers scripts by extension and shebang.
 Runtime `/etc` deletion, `RequiredBy=`, `Upholds=`, publication, sysext and profile
 dependency guards have fixture suites.
 `check-user-tmpfiles-guard.sh` rejects tracked paths at or under

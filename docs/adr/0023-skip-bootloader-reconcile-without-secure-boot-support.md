@@ -1,6 +1,6 @@
 # 0023 — Skip bootloader reconcile without Secure Boot support
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-26
 
 ## Context

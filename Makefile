@@ -5,14 +5,15 @@
 #   make verify  the baseline gate: the template gate (agent symlinks, docs
 #                index, risk-path list, corrections, vendored core copies),
 #                its Node tests, the repository policy tests, the forky tag
-#                promotion fixtures and the snosi-stream fixtures. It does not
-#                change the checkout.
+#                promotion fixtures and the snosi-stream fixtures. It runs
+#                shellcheck through scripts/shellcheck.sh, the same script
+#                that validate.yml runs. It does not change the checkout.
 #   make check   the developer gate; the same as verify.
 #   make ci      verify, plus the corrections records check against BASE
 #                when BASE is set (CI passes the pull request base commit).
 #
-# validate.yml still runs the full static suite (shellcheck and the fixture
-# tests). docs/design/testing.md describes both.
+# validate.yml also runs scripts/shellcheck.sh and still runs the fixture
+# tests. docs/design/testing.md describes both.
 NODE_MAJOR := $(shell node -p "process.versions.node.split('.')[0]" 2>/dev/null)
 
 .PHONY: verify check ci
@@ -22,6 +23,7 @@ verify:
 	@if [ "$(NODE_MAJOR)" = "" ] || [ "$(NODE_MAJOR)" -lt 22 ]; then echo "FAIL: make verify requires Node.js 22 or later (found: $$(node --version 2>/dev/null || echo missing))"; exit 1; fi
 	@if ! command -v python3 >/dev/null 2>&1; then echo "FAIL: make verify requires python3"; exit 1; fi
 	node scripts/check-template.mjs
+	./scripts/shellcheck.sh
 	node --test test/*.test.mjs
 	python3 ./test/policy-as-code-test.py
 	python3 ./test/risk-paths-test.py

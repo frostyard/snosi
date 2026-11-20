@@ -55,41 +55,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify shellcheck is available
-        # ShellCheck ships preinstalled on the ubuntu-latest runner image.
-        # Avoid apt here because host-level apt-get update can fail on
-        # unrelated preconfigured third-party mirrors, as seen in #381.
+      - name: Install pinned tools
+        # mise.toml and mise.lock pin shellcheck.
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        with:
+          install: true
+          cache: true
+
+      - name: Show shellcheck version
         run: shellcheck --version
 
       - name: Lint shell scripts
-        # Discover scripts by first-line shebang instead of extension globs:
-        # the repo has many extensionless scripts (mkosi.finalize, mkosi.clean,
-        # in-image usr/libexec/* runtime scripts, sysext-setup scripts) that
-        # *.sh/*.chroot missed entirely. saved-unused/ is dead code excluded
-        # from builds.
-        run: |
-          set -euo pipefail
-
-          file_list=$(mktemp)
-          trap 'rm -f "$file_list"' EXIT
-
-          {
-            git ls-files '*.sh' '*.chroot'
-            git ls-files -z | while IFS= read -r -d '' file; do
-              if [[ -f "$file" ]]; then
-                awk 'FNR==1 && /^#!\/(usr\/)?bin\/(env )?(ba)?sh/ {print FILENAME} {nextfile}' "$file" 2>/dev/null
-              fi
-            done
-          } | awk '!/^saved-unused\//' | sort -u > "$file_list"
-
-          mapfile -t files < "$file_list"
-          echo "shellcheck: ${#files[@]} files"
-          if (( ${#files[@]} == 0 )); then
-            echo "::error::shellcheck: no shell scripts found"
-            exit 1
-          fi
-
-          shellcheck -S warning -x "${files[@]}"
+        # Discovery lives in the script; make verify runs the same script.
+        run: ./scripts/shellcheck.sh
 
       - name: Validate policy as code
         # Fail closed if agent autonomy, human review, risk classification,

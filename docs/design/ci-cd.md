@@ -142,8 +142,10 @@ hold a job open indefinitely. Range GETs keep their own attempt loop.
 ## Validation and evidence
 
 `.github/workflows/validate.yml` runs on PRs, main pushes and manual
-dispatch. Its shell-lint job discovers tracked shell scripts by extension
-and shebang and runs ShellCheck plus static and non-root fixtures. It checks
+dispatch. Its shell-lint job runs `scripts/shellcheck.sh` (the same script
+as `make verify`), which discovers tracked shell scripts by extension and
+shebang and runs ShellCheck. The job also runs static and non-root fixtures.
+It checks
 the Firn catalog, the ISO publisher, Forky sentinel, the forky known-gap
 classifier, policy as code, build
 permissions, sysext behavior, retirement documentation, and other contracts.
@@ -183,7 +185,7 @@ the four-profile bootc image matrix, not the sysext publisher.
 issue automation, fleet marker, labels and supply-chain reporting; they do
 not publish OS artifacts.
 
-`risk-paths.yml` calls frostyard/core's reusable `pr-triage` workflow (core ADR-0068, ADR-0077, ADR-0078) on `pull_request_target`, pinned to a core commit. It reads `.github/risk-paths.json` at the base SHA, adds 1 level label, `level:L1` to `level:L4`, adds `risk:high` when the PR is L1 or L2, and removes `ready-for-human` when the head commit moves; it is not a required check. The list is schema version 2 (default L3) with a `level` on each glob: the list, the caller and `policies/**` are L2, every other entry L1. Each `why` names a `protectedBoundaries` entry of `policies/agent-governance.json`; `test/risk-paths-test.py` enforces that, the level of the list and caller globs, and rejects stale entries. `build.yml` and `build-images.yml` ignore both files.
+`risk-paths.yml` calls frostyard/core's reusable `pr-triage` workflow (core ADR-0068, ADR-0077, ADR-0078) on `pull_request_target`, pinned to a core commit. It reads `.github/risk-paths.json` at the base SHA, adds 1 level label, `level:L1` to `level:L4`, adds `risk:high` when the PR is L1 or L2, and removes `ready-for-human` when the head commit moves; it is not a required check. The list is schema version 2 (default L3) with a `level` on each glob: the list, the caller and `policies/**` are L2, every other entry L1. Each `why` names a `protectedBoundaries` entry of `policies/agent-governance.json`; `test/risk-paths-test.py` enforces that, the level of the list and caller globs, and that each path of its coverage list (the signing keys, the update stager and its units, the checksum and attestation pins, the ESP library, the publication workflows and others) matches an L1 or L2 entry with the expected boundary, and it rejects stale entries. `build.yml` and `build-images.yml` ignore both files.
 
 Every tracked redirect Worker file except `package-lock.json` stays L1; `test/risk-paths-test.py` checks this coverage, exact npm-registry package/version tarball URLs and SHA-512 integrity.
 Dependabot uses `lockfile-only` for in-range bumps (default L3) and opens no PR for major updates or security fixes outside the caret range.

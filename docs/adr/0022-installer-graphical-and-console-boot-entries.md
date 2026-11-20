@@ -1,6 +1,6 @@
 # 0022 — Offer graphical and console entries on the installer ISO
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-10-26
 
 ## Context

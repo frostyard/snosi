@@ -255,8 +255,12 @@ four OCI profiles and signs immutable digest references before promoting
 `latest`. `build-installer-iso.yml` builds Firn and publishes a signed index
 at `isos/native/v1/`. Its public key and publication scripts remain under
 `shared/native-ab/keys/` and `shared/native-ab/publish/`; the stable URL is
-derived by `workers/native-installer-redirect/`. No automatic ISO retention
-workflow remains and source cleanup deletes no R2 objects (ADR-0018).
+derived by `workers/native-installer-redirect/`. After the index and the
+redirect verify, the promote job prunes installer ISOs outside the keep
+window: the live ISO, the two before it and every object younger than 24
+hours stay, and one run deletes at most 30 objects (ADR-0036). Every other R2
+deletion keeps ADR-0018's exact-object gate, and source cleanup deletes no R2
+objects.
 `shared/native-ab/ci/` retains the mkosi pin helpers for the ISO.
 
 `validate.yml` runs non-root contracts, guards and configuration checks;

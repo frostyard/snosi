@@ -85,9 +85,10 @@ extract_flatpak_bodies() {
     ' "$workflow"
 }
 
-extract_run_step "$VALIDATE" 'Lint shell scripts' "$work/lint.sh"
+lint_script="${VALIDATE%/.github/workflows/validate.yml}/scripts/shellcheck.sh"
 
-mkdir -p "$work/lint-empty"
+mkdir -p "$work/lint-empty/scripts"
+cp "$lint_script" "$work/lint-empty/scripts/shellcheck.sh"
 (
     cd "$work/lint-empty"
     git init -q
@@ -101,7 +102,7 @@ chmod +x "$work/lint-stub-empty/shellcheck"
 set +e
 (
     cd "$work/lint-empty"
-    PATH="$work/lint-stub-empty:$PATH" bash -e "$work/lint.sh"
+    PATH="$work/lint-stub-empty:$PATH" bash -e "$work/lint-empty/scripts/shellcheck.sh"
 ) >"$work/lint-empty.log" 2>&1
 lint_empty_status=$?
 set -e
@@ -112,7 +113,8 @@ else
     fail 'lint exits non-zero for an empty shell-script list'
 fi
 
-mkdir -p "$work/lint-one"
+mkdir -p "$work/lint-one/scripts"
+cp "$lint_script" "$work/lint-one/scripts/shellcheck.sh"
 (
     cd "$work/lint-one"
     git init -q
@@ -134,7 +136,7 @@ chmod +x "$work/lint-stub-one/shellcheck"
 set +e
 (
     cd "$work/lint-one"
-    SHELLCHECK_LOG="$work/shellcheck.args" PATH="$work/lint-stub-one:$PATH" bash -e "$work/lint.sh"
+    SHELLCHECK_LOG="$work/shellcheck.args" PATH="$work/lint-stub-one:$PATH" bash -e "$work/lint-one/scripts/shellcheck.sh"
 ) >"$work/lint-one.log" 2>&1
 lint_one_status=$?
 set -e
@@ -149,8 +151,8 @@ else
 fi
 
 # The '*.sh' listing works and finds fixture.sh; only the full listing (the
-# shebang scan) fails. Without pipefail that failure is masked and the step
-# passes on a partial list.
+# shebang scan) fails. Without pipefail that failure is masked and
+# scripts/shellcheck.sh passes on a partial list.
 mkdir -p "$work/lint-git-failure"
 REAL_GIT=$(command -v git)
 cat >"$work/lint-git-failure/git" <<EOF
@@ -164,7 +166,7 @@ chmod +x "$work/lint-git-failure/git"
 set +e
 (
     cd "$work/lint-one"
-    SHELLCHECK_LOG="$work/shellcheck-git.args" PATH="$work/lint-git-failure:$work/lint-stub-one:$PATH" bash -e "$work/lint.sh"
+    SHELLCHECK_LOG="$work/shellcheck-git.args" PATH="$work/lint-git-failure:$work/lint-stub-one:$PATH" bash -e "$work/lint-one/scripts/shellcheck.sh"
 ) >"$work/lint-git.log" 2>&1
 lint_git_status=$?
 set -e
@@ -178,7 +180,8 @@ fi
 # A tracked dangling symlink sorts before an extensionless script. The old
 # `xargs awk` aborted the whole batch on it ("cannot open file") and silently
 # dropped every later script from the lint.
-mkdir -p "$work/lint-dangling"
+mkdir -p "$work/lint-dangling/scripts"
+cp "$lint_script" "$work/lint-dangling/scripts/shellcheck.sh"
 (
     cd "$work/lint-dangling"
     git init -q
@@ -189,7 +192,7 @@ mkdir -p "$work/lint-dangling"
 set +e
 (
     cd "$work/lint-dangling"
-    SHELLCHECK_LOG="$work/shellcheck-dangling.args" PATH="$work/lint-stub-one:$PATH" bash -e "$work/lint.sh"
+    SHELLCHECK_LOG="$work/shellcheck-dangling.args" PATH="$work/lint-stub-one:$PATH" bash -e "$work/lint-dangling/scripts/shellcheck.sh"
 ) >"$work/lint-dangling.log" 2>&1
 lint_dangling_status=$?
 set -e

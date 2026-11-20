@@ -1,6 +1,6 @@
 # 0034 — Theme Snow's GTK applications and wallpaper from the Frostyard design system
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-09
 
 ## Context
