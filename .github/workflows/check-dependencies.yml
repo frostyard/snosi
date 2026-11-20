@@ -554,7 +554,7 @@ jobs:
 
       - name: Create sysext dependency PR
         if: steps.check.outputs.has_updates == 'true'
-        uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
         with:
           # GITHUB_TOKEN-created PRs do not trigger workflows (validate/build
           # never run on them). Set the WORKFLOW_PAT repo secret (fine-grained
@@ -905,7 +905,7 @@ jobs:
 
       - name: Create image dependency PR
         if: steps.update.outputs.has_changes == 'true'
-        uses: peter-evans/create-pull-request@15733dbdfeedb4f7fdb73d13c6f5ac83b710fab8 # v8.1.2
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
         with:
           # This job edits build-images.yml and forky-publish.yml (syft/cosign
           # pins), and GITHUB_TOKEN can NEVER push workflow-file changes: the
