@@ -41,6 +41,12 @@ The adapter relies on all of the following observed behavior:
    `test/bootc-secure-artifact-test.sh` on floe. Protected main run
    36479923888 had already done the same for floe on 2026-09-28. systemd 262
    changes only `ukify inspect --json` output, which this path does not use.
+   `262.2-1` since 2026-11-19: its `ukify.py` changes (stricter
+   `--pcr-banks` and `--phases` list parsing, zstd zboot decompression, the
+   EFI firmware header magic, key-output conflict checks) do not change the
+   arguments of `assemble-uki.sh`; its `--phases` value has no empty entry.
+   The first secure assembly on `262.2-1` is the next `build-images.yml` run
+   on main (see "Forky systemd family rechecks" below).
 6. Direct ukify runs inside the chunked first-pass candidate; that candidate's
    bootc remains storage-digest authority.
 7. Final host byte comparisons depend on first-pass `cp -a` identity.
@@ -315,6 +321,55 @@ stage-time trigger of the spurious Btrfs fs-verity `FILE CORRUPTED!` reports in
 [#1130](https://github.com/frostyard/snosi/issues/1130). In l6596 the stager
 was still 1.16.8, so the effect is first observable when a 1.17.1 or later host
 stages a later update. The kernel defect stays.
+
+## Forky systemd family rechecks
+
+`shared/download/forky-versions.json` records the Forky `systemd` source
+version whose four rechecks last passed (`shared/download/check-forky-systemd.sh`
+lists them). The family itself is not pinned: every build installs the
+current `<pkg>/forky`.
+
+**262-1 to 262.2-1 (2026-11-19, frostyard/snosi#1349):**
+
+1. Bootc build/root check. The 4 `mechanics-build` jobs of #1349 (run
+   44575109852) installed the whole family at 262.2-1, and
+   `bootc-pair.chroot` passed in each (bootc 1.17.3, libostree-1-1
+   2026.6, storage-digest command present). The published Floe
+   `20261118181423` rootfs, moved to exactly 262.2-1 for all 21 installed
+   packages of the `systemd` source and with nothing else changed, ran
+   `bootc --version` (`bootc 1.17.3`), `bootc container --help` and
+   `bootc container compute-composefs-digest-from-storage --help` in a
+   rootfs-only bwrap sandbox, each with exit 0.
+2. Issue 517. `rules.d/90-image-dissect.rules` is identical in upstream v262
+   and v262.2 and in the 2 rootfs above (it carries the
+   `gpt-auto-root-luks` symlink rules at lines 23-24). The dracut 106 log of
+   the #1349 Floe build lists it in the initramfs.
+3. NvPCR masks. The 4 definitions (`cryptsetup`, `hardware`, `login`,
+   `verity`), the units `systemd-pcrproduct.service` and
+   `systemd-pcrlogin@.service`, and their Debian install lines are unchanged;
+   the image file lists of `usr/lib/nvpcr`, `usr/lib/systemd/system` and
+   `usr/lib/systemd` are unchanged; the #1349 builds report both units
+   masked. v262.2 makes an unauthorized NvPCR initialization a graceful skip
+   (`systemd-tpm2-setup` exits `EX_CONFIG`, `systemd-pcrextend --graceful`
+   skips `ENETDOWN`). That reduces the harm of an unmasked writer but does
+   not make NvPCRs usable: snosi UKIs still carry no initrd NvPCR policy. The
+   masks stay.
+4. snosi-health cryptsetup texts. All texts that `snosi-health` S5 matches
+   are unchanged in `src/cryptsetup/cryptsetup.c`,
+   `src/shared/cryptsetup-tpm2.c` and `src/shared/tpm2-util.c` of v262.2.
+   v262.2 separates `-EUCLEAN` from a policy mismatch: it now logs "PCR
+   values kept changing while unsealing the TPM2 secret, giving up..."
+   followed by "TPM2 operation failed, falling back to traditional
+   unlocking: Structure needs cleaning" (v262 logged "TPM policy does not
+   match current system state"). The existing "Structure needs cleaning"
+   match classifies that as `PCR_CHANGED`; `test/snosi-health-test.sh` has a
+   case with the v262.2 lines.
+
+Not yet shown on 262.2-1: the Task 1-3 rootfs proof and the Task 5 artifact
+tests, which need the protected secure build. The first `build-images.yml`
+run on main after 2026-11-19 runs them; `Validate locally assembled secure
+artifact` runs before `Push immutable version tag`, so a failure publishes
+nothing.
 
 ## Credentials and rotation
 

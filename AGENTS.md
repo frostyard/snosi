@@ -201,6 +201,14 @@ Brian accepted the post-merge revalidation, T846a); the 1.17.1 evidence (run 403
 `docs/bootc-secure-assembly-compatibility.md`. bootc 1.17.3 stages global UKI
 addons with an update and swaps them in at finalize, so `snosi-kargs` mirrors
 `apply` and `revert` into `<ESP>/loader/addons.staged`.
+**Last repeated for the Forky systemd family 2026-11-19 (262-1 to 262.2-1):**
+the published Floe `20261118181423` rootfs, moved to exactly the 262.2-1
+family with bootc 1.17.3 / libostree 2026.6 unchanged, ran `bootc --version`,
+`bootc container --help` and the hidden command's `--help` in a rootfs-only
+bwrap sandbox; `bootc-pair.chroot` passed in all four `mechanics-build` jobs
+on 262.2-1. The other three rechecks are recorded in
+`docs/bootc-secure-assembly-compatibility.md`. Secure assembly on 262.2-1
+runs first on main after the sentinel merge; its validation precedes the push.
 
 **Issue 517:** Forky moved `gpt-auto-root-luks` udev rules to
 `90-image-dissect.rules`, which dracut 106 did not automatically include.
