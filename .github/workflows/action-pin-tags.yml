@@ -1,0 +1,36 @@
+name: Action pin tags
+
+# Online check of every action pin (core ADR-0088, ADR-0090): each
+# `# vX.Y[.Z]` comment names the tag of the pinned commit upstream, and each
+# branch or frostyard/core pin is a commit on that upstream branch. It needs
+# the network, so it stays outside `make ci`: it runs on pull requests that
+# change a workflow or the script, and nightly from nightly-compliance.yml.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+      - "scripts/check-action-pin-tags.sh"
+  workflow_call:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  pin-tags:
+    name: Online action pin tag check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check each action pin against its upstream tag or branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/check-action-pin-tags.sh

@@ -134,6 +134,11 @@ Every workflow has exactly one top-level `permissions:` of `{}` or read-only
 grants, and every `actions/checkout` step sets `persist-credentials: false`.
 `test/workflow-pins-test.py` enforces all of it and runs in `make verify`,
 `validate.yml` and `nightly-compliance.yml` (core ADR-0021, ADR-0090, #1274).
+`action-pin-tags.yml` runs core's online tag check,
+`scripts/check-action-pin-tags.sh` (a byte copy of ADR-0090's script, pinned
+by sha256 in `test/workflow-pins-test.py`: copy it again, never edit it), on
+pull requests that change a workflow and nightly from
+`nightly-compliance.yml`; it needs the network, so it stays out of `make ci`.
 A test or guard that checks a pin reads it from the workflow and asserts its
 form; it never holds a literal SHA (core ADR-0088), and a self-test takes the
 pin it edits from its copy. `check-bootc-publication-guard.sh` checks the
