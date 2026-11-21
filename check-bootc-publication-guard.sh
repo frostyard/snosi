@@ -21,6 +21,24 @@ require_text() {
     grep -Fqx "$marker" <<<"$text" >/dev/null || fail_check "$context: missing $marker"
 }
 
+# require_pin CONTEXT STEP_TEXT ACTION: the step has exactly 1 uses: line, and it
+# pins ACTION (a plain OWNER/REPO) to a full 40-hex commit SHA with a `# vX.Y.Z`
+# or `# vX.Y` version comment. The pin is read from the workflow, never compared
+# with a SHA written here (core ADR-0088, ADR-0090): a Dependabot bump that keeps
+# these properties passes, and the owner reviews the upstream diff in the bump
+# pull request.
+require_pin() {
+    local context=$1 text=$2 action=$3 uses
+    uses=$(grep -E '^[[:space:]]*(-[[:space:]]+)?["'\'']?uses["'\'']?[[:space:]]*:' <<<"$text" || true)
+    if [[ -z $uses || $(wc -l <<<"$uses") -ne 1 ]]; then
+        fail_check "$context: expected exactly one uses: line pinning $action"
+        return
+    fi
+    if ! grep -Eqx "        uses: $action@[0-9a-f]{40} # v[0-9]+\.[0-9]+(\.[0-9]+)?" <<<"$uses"; then
+        fail_check "$context: $uses must pin $action to a 40-hex commit SHA with a # vX.Y.Z or # vX.Y comment"
+    fi
+}
+
 step_line() {
     local workflow=$1 name=$2 lines
     lines=$(grep -n -F -- "- name: $name" "$workflow" || true)
@@ -231,8 +249,7 @@ EOF
             capture && /^      - name: / && $0 != "      - name: Log in to ghcr.io" { exit }
             capture { print }
         ' <<<"$secure_job")
-        require_text "$workflow secure registry login" "$login_step" \
-            '        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0'
+        require_pin "$workflow secure registry login" "$login_step" docker/login-action
         # shellcheck disable=SC2016 # GitHub expression is an exact literal marker.
         require_text "$workflow secure registry token" "$login_step" \
             '          password: ${{ secrets.GITHUB_TOKEN }}'
@@ -335,8 +352,7 @@ EOF
             capture { print }
         ' <<<"$release_job")
         require_text "$workflow release checkout" "$release_checkout" "        if: steps.current.outputs.tag != ''"
-        require_text "$workflow release checkout" "$release_checkout" \
-            '        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1'
+        require_pin "$workflow release checkout" "$release_checkout" actions/checkout
         require_text "$workflow release checkout" "$release_checkout" '          persist-credentials: false'
 
         release_oras_login=$(awk '

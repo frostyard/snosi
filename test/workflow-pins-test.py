@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Static gate for frostyard/core ADR-0021 across .github/workflows/ (#1274).
+"""Static gate for frostyard/core ADR-0021, ADR-0088 and ADR-0090 across
+.github/workflows/ (#1274).
 
 Every workflow must keep three properties:
 
   1. every remote `uses:` pins a 40-character lowercase commit SHA and carries
-     a trailing `# vX[.Y[.Z]]` release comment; only the untagged repositories
-     in BRANCH_PIN_ALLOW may name a default-branch commit, with its own
-     dated comment, because they publish no release tags;
+     a trailing `# vX.Y.Z` or `# vX.Y` release comment (a major-only `# vN`
+     names a moving tag and is refused); only the untagged repositories in
+     BRANCH_PIN_ALLOW may name a default-branch commit, with its own dated
+     comment, because they publish no release tags. Each OWNER/REPO has 1 SHA
+     across all workflows (ADR-0090), so no test needs to hold a literal SHA
+     to keep an action on 1 commit;
   2. each workflow declares exactly one top-level `permissions:` of `{}` or
      read-only (`read`/`none`) grants, so a job opts in to write scope itself;
   3. every `actions/checkout@` step sets `persist-credentials: false` in its
@@ -32,7 +36,7 @@ COMMAND = "python3 ./test/workflow-pins-test.py"
 PREFIX = "workflow-pins-test:"
 
 # Action repositories pinned to an untagged default-branch commit. Each entry
-# accepts its own dated branch comment beside the usual `# vX[.Y[.Z]]` form.
+# accepts its own dated branch comment beside the usual `# vX.Y[.Z]` form.
 BRANCH_PIN_ALLOW = {
     "systemd/mkosi": {
         "comment": r"^# main \d{4}-\d{2}-\d{2}$",
@@ -76,8 +80,12 @@ BLOCK_KEY = re.compile(
 PERMISSIONS = re.compile(r"^permissions\s*:")
 PERMISSIONS_VALUE = re.compile(r"^permissions\s*:\s*(.*)$")
 PERMISSION_ENTRY = re.compile(r"^[ ]+([A-Za-z0-9_-]+)\s*:\s*(\S+)\s*(?:#.*)?$")
-PIN_COMMENT = re.compile(r"# v\d+(\.\d+){0,2}")
+PIN_COMMENT = re.compile(r"# v\d+\.\d+(\.\d+)?")
 COMMIT = re.compile(r"[0-9a-f]{40}")
+# Placeholder SHAs for synthetic fixtures (core ADR-0088): a search for live
+# pins does not find them.
+PLACEHOLDER = "0123456789abcdef0123456789abcdef01234567"
+OTHER_PLACEHOLDER = "fedcba9876543210fedcba9876543210fedcba98"
 DOCKER_DIGEST = re.compile(r"docker://[^\s@]+@sha256:[0-9a-f]{64}")
 PERSIST_KEY = re.compile(r"persist-credentials\s*:")
 PERSIST = re.compile(r"persist-credentials\s*:\s*false\s*(?:#.*)?")
@@ -220,8 +228,14 @@ def block_scalar_lines(lines: list[str]) -> set[int]:
     return inside
 
 
-def check_workflow(name: str, text: str) -> list[str]:
-    """Return one error string per violation of the 3 ADR-0021 rules."""
+def check_workflow(
+    name: str, text: str, shas: dict[str, dict[str, list[str]]] | None = None
+) -> list[str]:
+    """Return one error string per violation of the 3 ADR-0021 rules.
+
+    When `shas` is given, add each pinned OWNER/REPO, its SHA and the
+    file:line of the pin to it, for check_one_sha().
+    """
     lines = text.splitlines()
     errors: list[str] = []
 
@@ -373,12 +387,16 @@ def check_workflow(name: str, text: str) -> list[str]:
                 f"SHA, not `{pin}`",
             )
             continue
+        if shas is not None:
+            shas.setdefault(repo, {}).setdefault(pin, []).append(
+                f"{name}:{index + 1}"
+            )
         allowed = BRANCH_PIN_ALLOW.get(repo)
         if comment is None:
             error(
                 index,
-                f"pinned action `{repo}` needs a trailing `# vX[.Y[.Z]]` "
-                "comment",
+                f"pinned action `{repo}` needs a trailing `# vX.Y.Z` or "
+                "`# vX.Y` comment",
             )
         elif PIN_COMMENT.fullmatch(comment):
             pass
@@ -395,7 +413,8 @@ def check_workflow(name: str, text: str) -> list[str]:
             error(
                 index,
                 f"pinned action `{repo}` has an unrecognized pin comment "
-                f"`{comment}`; expected `# vX[.Y[.Z]]`",
+                f"`{comment}`; expected `# vX.Y.Z` or `# vX.Y` (a major-only "
+                "`# vN` names a moving tag)",
             )
         if not reference.startswith("actions/checkout@"):
             continue
@@ -471,6 +490,34 @@ def check_workflow(name: str, text: str) -> list[str]:
             )
 
     return errors
+
+
+def check_one_sha(shas: dict[str, dict[str, list[str]]]) -> list[str]:
+    """One error for each OWNER/REPO pinned to more than 1 SHA (ADR-0090).
+
+    The key is OWNER/REPO, not OWNER/REPO/PATH: 2 actions of 1 repository
+    (or 2 reusable workflows of frostyard/core) share 1 commit.
+    """
+    errors = []
+    for repo, pins in sorted(shas.items()):
+        if len(pins) > 1:
+            where = "; ".join(
+                f"{pin} at {', '.join(places)}" for pin, places in sorted(pins.items())
+            )
+            errors.append(
+                f"action `{repo}` has {len(pins)} SHAs across the workflows, "
+                f"want 1: {where}"
+            )
+    return errors
+
+
+def check_workflows(files: dict[str, str]) -> list[str]:
+    """Check every workflow, then 1 SHA for each OWNER/REPO across them all."""
+    errors: list[str] = []
+    shas: dict[str, dict[str, list[str]]] = {}
+    for name, text in files.items():
+        errors.extend(check_workflow(name, text, shas))
+    return errors + check_one_sha(shas)
 
 
 def self_test() -> int:
@@ -793,6 +840,64 @@ def self_test() -> int:
     }
     for label, (fixture, expected) in fixtures.items():
         run(label, fixture, expected)
+
+    # The version comment (ADR-0090): `# vX.Y.Z` or `# vX.Y`, never `# vN`.
+    # New fixtures use the ADR-0088 placeholder SHA, not a live pin.
+    def pinned(comment: str, action: str = "owner/repo") -> str:
+        return (
+            "permissions: {}\njobs:\n  a:\n    steps:\n"
+            f"      - uses: {action}@{PLACEHOLDER}{comment}\n"
+        )
+
+    run("comment-vX.Y.Z", pinned(" # v2.0.3"), None)
+    run("comment-vX.Y", pinned(" # v1.5"), None)
+    for label, comment in (
+        ("comment-major-only", " # v2"),
+        ("comment-four-parts", " # v1.2.3.4"),
+        ("comment-no-v", " # 1.2.3"),
+        ("comment-pre-release", " # v1.2.3-rc1"),
+    ):
+        run(label, pinned(comment), "unrecognized pin comment")
+
+    # 1 SHA for each OWNER/REPO across all workflows (ADR-0090).
+    def run_files(label: str, files: dict[str, str], expected: str | None) -> None:
+        nonlocal cases
+        cases += 1
+        found = check_workflows(files)
+        if expected is None:
+            if found:
+                fail(f"self-test {label} must pass but reported: {found[0]}")
+        elif not any(expected in item for item in found):
+            fail(f"self-test {label} must fail with {expected!r} but reported: {found}")
+
+    def other(text: str) -> str:
+        return text.replace(PLACEHOLDER, OTHER_PLACEHOLDER)
+
+    one = pinned(" # v1.2.3")
+    core = pinned(
+        " # frostyard/core main, 2026-11-14",
+        "frostyard/core/.github/workflows/pr-triage.yml",
+    )
+    run_files("one-sha-in-many-places", {"a.yml": one, "b.yml": one + one[one.index("      - "):]}, None)
+    run_files(
+        "one-sha-for-2-paths",
+        {"a.yml": pinned(" # v1.2.3", "owner/repo/one"), "b.yml": pinned(" # v1.2.3", "owner/repo/two")},
+        None,
+    )
+    run_files(
+        "one-sha-for-each-repository",
+        {"a.yml": one, "b.yml": other(pinned(" # v1.2.3", "owner/other"))},
+        None,
+    )
+    two = "has 2 SHAs across the workflows"
+    run_files("two-shas-in-2-files", {"a.yml": one, "b.yml": other(one)}, two)
+    run_files("two-shas-in-1-file", {"a.yml": one + other(one)[one.index("      - "):]}, two)
+    run_files(
+        "two-shas-for-2-paths",
+        {"a.yml": pinned(" # v1.2.3", "owner/repo/one"), "b.yml": other(pinned(" # v1.2.3", "owner/repo/two"))},
+        two,
+    )
+    run_files("two-shas-for-core", {"a.yml": core, "b.yml": other(core)}, two)
     return cases
 
 
@@ -817,11 +922,9 @@ def main() -> None:
     if not workflow_paths:
         fail("no workflow files found in .github/workflows")
 
-    errors: list[str] = []
-    for path in workflow_paths:
-        errors.extend(
-            check_workflow(str(path.relative_to(ROOT)), path.read_text())
-        )
+    errors = check_workflows(
+        {str(path.relative_to(ROOT)): path.read_text() for path in workflow_paths}
+    )
 
     if errors:
         for message in errors:

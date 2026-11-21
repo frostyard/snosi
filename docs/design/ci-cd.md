@@ -22,9 +22,15 @@ workflows are documented only in
 
 Every workflow pins its remote actions the way core ADR-0021 asks, and
 `test/workflow-pins-test.py` enforces it for every file in
-`.github/workflows/`: a 40-character commit SHA with a trailing release
-comment, one top-level `permissions:` of `{}` or read-only grants, and
-`persist-credentials: false` on each `actions/checkout` step. The test holds
+`.github/workflows/`: a 40-character commit SHA with a trailing `# vX.Y.Z`
+or `# vX.Y` release comment, 1 SHA for each OWNER/REPO across all workflows
+(core ADR-0090), one top-level `permissions:` of `{}` or read-only grants, and
+`persist-credentials: false` on each `actions/checkout` step. No test or guard
+holds a literal action SHA (core ADR-0088): `check-bootc-publication-guard.sh`
+reads the registry login and release checkout pins from their steps and checks
+the action, the 40-hex SHA and the version comment, so a Dependabot bump that
+keeps them passes, and the owner reviews the upstream diff in the bump pull
+request. The test holds
 the 2 allow lists: `BRANCH_PIN_ALLOW` for the untagged repositories whose
 pins name a dated default-branch commit, and `READ_ALL_ALLOW` for
 `scorecard.yml`, whose job replaces the top-level `read-all` grant.
