@@ -140,7 +140,7 @@ jobs:
         run: echo "tag=$(date +%Y%m%d%H%M%S)" >> "$GITHUB_OUTPUT"
 
       - name: setup-mkosi
-        uses: systemd/mkosi@80a0310a45ec668e02a24f60551bed380ec89a76 # main 2026-11-09
+        uses: systemd/mkosi@80a0310a45ec668e02a24f60551bed380ec89a76 # main 2026-11-20
 
       - name: Build forky image
         # continue-on-error so the next step can tell a known forky gap from a
