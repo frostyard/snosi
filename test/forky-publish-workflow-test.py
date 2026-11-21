@@ -644,6 +644,18 @@ def _replace_nth(text: str, old: str, new: str, nth: int) -> str:
     return text[:index] + new + text[index + len(old):]
 
 
+def _pin_line(text: str, action: str) -> str:
+    """The first `uses: ACTION@SHA # COMMENT` text of the copy (core ADR-0088).
+
+    Self-tests take a pin from the workflow they mutate, never from a SHA
+    written here, so their anchors survive a Dependabot bump.
+    """
+    match = re.search(rf"uses: {re.escape(action)}@[0-9a-f]{{40}}[^\n]*", text)
+    if match is None:
+        raise SystemExit(f"{PREFIX} FAIL self-test anchor is missing: uses: {action}@<sha>")
+    return match.group()
+
+
 def _swap_steps(text: str, first: str, second: str) -> str:
     """Swap 2 uniquely named step blocks (not the last step of the file)."""
     def span(name: str) -> tuple[int, int]:
@@ -689,10 +701,10 @@ def self_test(forky_text: str, images_text: str) -> int:
         "all products in one run": sub(SELECT_JSON, "'[{profile: \"floe\"}, {profile: $profile, description: $description}]')"),
         "static matrix entry": sub(MATRIX_INCLUDE + "\n", "        include:\n          - profile: floe\n            description: \"Floe Linux Server Image\"\n"),
         "select job with a token": sub("    permissions: {}\n    outputs:", "    permissions:\n      contents: read\n    outputs:"),
-        "select job with a checkout": sub(
+        "select job with a checkout": lambda t: sub(
             "      - name: Select the product\n",
-            "      - name: Checkout\n        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n      - name: Select the product\n",
-        ),
+            f"      - name: Checkout\n        {_pin_line(t, 'actions/checkout')}\n      - name: Select the product\n",
+        )(t),
         "publish job without needs": sub("    needs: select\n", ""),
         "input not required": sub("        required: true\n", "        required: false\n"),
         "environment removed": sub("    environment: native-build\n", ""),
@@ -736,10 +748,10 @@ def self_test(forky_text: str, images_text: str) -> int:
             'cosign sign --key env://COSIGN_PRIVATE_KEY --yes \\\n            "$IMAGE@${{ steps.push.outputs.digest }}"',
             'cosign sign --key env://OTHER_KEY --yes \\\n            "$IMAGE@${{ steps.push.outputs.digest }}"',
         ),
-        "action pin drift": sub(
-            "uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8",
-            "uses: actions/attest-build-provenance@0000000000000000000000000000000000000000",
-        ),
+        "action pin drift": lambda t: sub(
+            pin := _pin_line(t, "actions/attest-build-provenance"),
+            re.sub(r"@[0-9a-f]{40}", "@" + "0" * 40, pin),
+        )(t),
         # ADR-0040: the promote input and the forky-promote job.
         "promote input not boolean": sub("        type: boolean\n", "        type: string\n"),
         "promote input default true": sub("        type: boolean\n        default: false\n", "        type: boolean\n        default: true\n"),

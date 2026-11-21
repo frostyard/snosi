@@ -131,7 +131,7 @@ jobs:
           printf '%s' "$GH_TOKEN" | sudo buildah login -u "$GHCR_USER" --password-stdin ghcr.io
           DIGEST=$(sudo TMPDIR="$TMPDIR" ./shared/bootc-secure/ci/push-immutable-image.sh "$IMAGE" "${{ steps.version.outputs.tag }}")
        - name: Log in to ghcr.io
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        uses: docker/login-action@0123456789abcdef0123456789abcdef01234567 # v4.8.0
         with:
           password: ${{ secrets.GITHUB_TOKEN }}
        - name: Sign immutable image digest
@@ -170,11 +170,11 @@ jobs:
       - name: Read snow tag
       - name: Checkout repository
         if: steps.current.outputs.tag != ''
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@0123456789abcdef0123456789abcdef01234567 # v7.0.1
         with:
           persist-credentials: false
       - name: Install ORAS
-        uses: oras-project/setup-oras@38de303aac69abb66f3e6255b7198bff35f323e3 # v2
+        uses: oras-project/setup-oras@0123456789abcdef0123456789abcdef01234567 # v2.0.3
       - name: Login to GHCR with ORAS
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -310,8 +310,11 @@ move_promotion_early() {
 remove_login() { perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n//' "$1/.github/workflows/build-images.yml"; }
 remove_push_helper() { perl -0pi -e 's/^          DIGEST=.*push-immutable-image\.sh.*\n//m' "$1/.github/workflows/build-images.yml"; }
 replace_push_helper_bare() { perl -0pi -e 's/(^          DIGEST=.*push-immutable-image\.sh.*\n)/$1          sudo TMPDIR="\$TMPDIR" buildah push --compression-format=zstd:chunked --digestfile=\/tmp\/image-digest "\$IMAGE:\$TAG" "docker:\/\/\$IMAGE:\$TAG"\n/m' "$1/.github/workflows/build-images.yml"; }
+# The mutations below take the pin they move or remove from the fixture (core
+# ADR-0088): a missing anchor leaves the fixture unchanged, so the guard passes
+# and the case fails.
 move_login_after_verification() {
-    perl -0pi -e 's/      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n//; s/(      - name: Validate policy-copied secure artifact\n)/$1      - name: Log in to ghcr.io\n        uses: docker\/login-action\@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0\n/' "$1/.github/workflows/build-images.yml"
+    perl -0pi -e 'my $step; $step = $1 if s/(      - name: Log in to ghcr\.io\n        uses: docker\/login-action\@[^\n]+\n)//; s/(      - name: Validate policy-copied secure artifact\n)/$1$step/ if defined $step' "$1/.github/workflows/build-images.yml"
 }
 remove_promotion_src_authfile() { perl -0pi -e 's/ --src-authfile "\$AUTH_FILE"//' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
 remove_promotion_dest_authfile() { perl -0pi -e 's/ --dest-authfile "\$AUTH_FILE"//' "$1/shared/bootc-secure/ci/promote-published-image.sh"; }
@@ -332,13 +335,22 @@ add_oras_tag_fallback() {
     printf "          oras repo tags \"\$IMAGE\"\n" >>"$1/.github/workflows/build-images.yml"
 }
 remove_release_checkout() {
-    perl -0pi -e 's/^        uses: actions\/checkout\@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\.0\.1\n//m' "$1/.github/workflows/build-images.yml"
+    perl -0pi -e 's/^        uses: actions\/checkout\@[0-9a-f]{40} # v[^\n]*\n//m' "$1/.github/workflows/build-images.yml"
 }
 remove_snow_tag_record_condition() {
     perl -0pi -e "s/(      - name: Record snow tag for release job\\n)        if: matrix\\.profile == 'snow'\\n/\$1/" "$1/.github/workflows/build-images.yml"
 }
 remove_snow_tag_artifact_condition() {
     perl -0pi -e "s/(      - name: Upload snow tag artifact\\n)        if: matrix\\.profile == 'snow'\\n/\$1/" "$1/.github/workflows/build-images.yml"
+}
+# mutate_workflow PERL_EXPR FIXTURE: apply the expression to the fixture's
+# build-images.yml. An expression that changes nothing (a missing anchor)
+# removes the workflow, so the guard fails and an expected pass fails too.
+mutate_workflow() {
+    local workflow="$2/.github/workflows/build-images.yml" before
+    before=$(<"$workflow")
+    perl -0pi -e "$1" "$workflow"
+    [[ $(<"$workflow") != "$before" ]] || rm "$workflow"
 }
 corrupt_release_resolver_arguments() {
     perl -0pi -e 's/"\$GITHUB_REPOSITORY" "\$IMAGE" "\$CURRENT" "\$GITHUB_OUTPUT"/"\$GITHUB_REPOSITORY" "\$IMAGE" "\$BROKEN" "\$GITHUB_OUTPUT"/' "$1/.github/workflows/build-images.yml"
@@ -409,6 +421,38 @@ assert_guard 'missing release checkout fails' 1 remove_release_checkout
 assert_guard 'missing Snow record condition fails' 1 remove_snow_tag_record_condition
 assert_guard 'missing Snow artifact condition fails' 1 remove_snow_tag_artifact_condition
 assert_guard 'corrupt release resolver arguments fails' 1 corrupt_release_resolver_arguments
+# The registry login and release checkout pins: the guard reads each pin from
+# its step and checks its form, not its SHA (core ADR-0088, ADR-0090).
+login='secure registry login'
+checkout='release checkout'
+assert_guard 'bumped registry login pin passes' 0 mutate_workflow \
+    's/docker\/login-action\@[0-9a-f]{40} # v4\.8\.0/docker\/login-action\@fedcba9876543210fedcba9876543210fedcba98 # v4.9.1/'
+assert_guard 'registry login pin with a vX.Y comment passes' 0 mutate_workflow \
+    's/(docker\/login-action\@[0-9a-f]{40}) # v4\.8\.0/$1 # v4.9/'
+assert_guard_message 'wrong action in the registry login step fails' 1 "$login" mutate_workflow \
+    's/uses: docker\/login-action\@/uses: evil\/login-action\@/'
+assert_guard_message 'checkout action in the registry login step fails' 1 "$login" mutate_workflow \
+    's/uses: docker\/login-action\@/uses: actions\/checkout\@/'
+assert_guard_message 'registry login pin without a comment fails' 1 "$login" mutate_workflow \
+    's/(docker\/login-action\@[0-9a-f]{40}) # v4\.8\.0/$1/'
+assert_guard_message 'registry login pin with a major-only # v4 fails' 1 "$login" mutate_workflow \
+    's/(docker\/login-action\@[0-9a-f]{40}) # v4\.8\.0/$1 # v4/'
+assert_guard_message 'registry login pinned to a tag fails' 1 "$login" mutate_workflow \
+    's/docker\/login-action\@[0-9a-f]{40}/docker\/login-action\@v4.8.0/'
+assert_guard_message 'registry login pinned to a short SHA fails' 1 "$login" mutate_workflow \
+    's/docker\/login-action\@([0-9a-f]{7})[0-9a-f]{33}/docker\/login-action\@$1/'
+assert_guard_message 'second uses: line in the registry login step fails' 1 "$login" mutate_workflow \
+    's/(        uses: docker\/login-action\@[^\n]+\n)/$1        uses: evil\/login-action\@0123456789abcdef0123456789abcdef01234567 # v1.0.0\n/'
+assert_guard 'bumped release checkout pin passes' 0 mutate_workflow \
+    's/(  release:.*?uses: actions\/checkout\@)[0-9a-f]{40} # v7\.0\.1/$1fedcba9876543210fedcba9876543210fedcba98 # v7.1.0/s'
+assert_guard_message 'wrong action in the release checkout step fails' 1 "$checkout" mutate_workflow \
+    's/(  release:.*?uses: )actions\/checkout\@/$1evil\/checkout\@/s'
+assert_guard_message 'release checkout pin without a comment fails' 1 "$checkout" mutate_workflow \
+    's/(  release:.*?uses: actions\/checkout\@[0-9a-f]{40}) # v7\.0\.1/$1/s'
+assert_guard_message 'release checkout pin with a major-only # v7 fails' 1 "$checkout" mutate_workflow \
+    's/(  release:.*?uses: actions\/checkout\@[0-9a-f]{40}) # v7\.0\.1/$1 # v7/s'
+assert_guard_message 'release checkout without persist-credentials: false fails' 1 "$checkout" mutate_workflow \
+    's/(  release:.*?)          persist-credentials: false\n/$1/s'
 
 printf '%d passing assertions, %d failures\n' "$pass" "$fail"
 ((fail == 0))

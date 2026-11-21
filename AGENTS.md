@@ -126,12 +126,22 @@ the base copy, so `shared/bootc-secure/mkosi.conf` restores it. Build-time enabl
 is normalized into `/usr/share/snosi/enablement-manifest.txt`; presets
 recreate links on true first boot (`/etc/machine-id` is `uninitialized`).
 Every remote `uses:` in `.github/workflows/` pins a 40-hex commit SHA with a
-`# vX[.Y[.Z]]` comment; the dated branch-comment form is only for the
-untagged repositories in the test's allow list. Every workflow has exactly
-one top-level `permissions:` of `{}` or read-only grants, and every
-`actions/checkout` step sets `persist-credentials: false`.
-`test/workflow-pins-test.py` enforces all three and runs in `make verify`,
-`validate.yml` and `nightly-compliance.yml` (core ADR-0021, #1274).
+`# vX.Y.Z` comment, or `# vX.Y` when upstream tags releases with 2 parts
+(`ryand56/r2-upload-action`); a major-only `# vN` names a moving tag and is
+refused. The dated branch-comment form is only for the untagged repositories
+in the test's allow list. Each OWNER/REPO has 1 SHA across all workflows.
+Every workflow has exactly one top-level `permissions:` of `{}` or read-only
+grants, and every `actions/checkout` step sets `persist-credentials: false`.
+`test/workflow-pins-test.py` enforces all of it and runs in `make verify`,
+`validate.yml` and `nightly-compliance.yml` (core ADR-0021, ADR-0090, #1274).
+A test or guard that checks a pin reads it from the workflow and asserts its
+form; it never holds a literal SHA (core ADR-0088), and a self-test takes the
+pin it edits from its copy. `check-bootc-publication-guard.sh` checks the
+`docker/login-action` and release `actions/checkout` pins this way. The owner
+reviews each new commit of every action in the publication workflows
+(`build.yml`, `build-images.yml`, `forky-publish.yml`: their jobs hold the
+signing, registry and R2 credentials) in its bump pull request (L2,
+`risk:high`), reading the upstream diff before the merge.
 
 **Second suite (ADR-0037):** the Debian release is a build input.
 Trixie is the default and stays unchanged; `mkosi --release forky` builds the

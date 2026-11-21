@@ -31,8 +31,9 @@ an `&&` chain: a strict-policy Podman pull, then a switch of the same image
 with `--transport containers-storage`, then optionally `systemctl reboot`, as the
 last command of its code block, so it fails closed as `bootc-update-stage`
 does. It does not change the checkout. `workflow-pins-test.py` enforces core ADR-0021 for every
-workflow in `.github/workflows/`: a 40-character commit SHA with a release
-comment on each remote action, one top-level `permissions:` of `{}` or
+workflow in `.github/workflows/`: a 40-character commit SHA with a `# vX.Y.Z`
+or `# vX.Y` release comment on each remote action and 1 SHA for each
+OWNER/REPO across all workflows (core ADR-0090), one top-level `permissions:` of `{}` or
 read-only grants, and `persist-credentials: false` on each `actions/checkout`
 step. `validate.yml` and `nightly-compliance.yml` also run it.
 `make check` is the same gate. `make ci` adds
