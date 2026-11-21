@@ -35,7 +35,12 @@ workflow in `.github/workflows/`: a 40-character commit SHA with a `# vX.Y.Z`
 or `# vX.Y` release comment on each remote action and 1 SHA for each
 OWNER/REPO across all workflows (core ADR-0090), one top-level `permissions:` of `{}` or
 read-only grants, and `persist-credentials: false` on each `actions/checkout`
-step. `validate.yml` and `nightly-compliance.yml` also run it.
+step. `validate.yml` and `nightly-compliance.yml` also run it. It compares
+OWNER/REPO in lower case, as GitHub does. It also checks the wiring of the
+online tag check: `scripts/check-action-pin-tags.sh` matches its sha256 pin
+(a copy of core ADR-0090's script), `action-pin-tags.yml` runs it on pull
+requests that change a workflow, `nightly-compliance.yml` calls that workflow,
+and neither the Makefile, `ci.yml` nor `validate.yml` runs it.
 `make check` is the same gate. `make ci` adds
 `scripts/check-corrections.mjs --base BASE`, which fails when a pull request
 edits or removes an existing corrections line. `.github/workflows/ci.yml`

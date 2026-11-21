@@ -166,7 +166,13 @@ mkosi-config-sanity job runs summaries and
 Worker job runs Node checks and a dry-run bundle deployment.
 
 `nightly-compliance.yml` repeats secretless runtime `/etc`, ISO publication,
-bootc publication and signed-sysext policy tests. `test-bootc-secure.yml`
+bootc publication and signed-sysext policy tests. It also calls
+`action-pin-tags.yml`, which runs on pull requests that change
+`.github/workflows/**`, `.github/actions/**` or the script itself:
+`scripts/check-action-pin-tags.sh`, core ADR-0090's online check, resolves
+each `# vX.Y[.Z]` pin comment to its upstream tag and checks each branch or
+frostyard/core pin with GitHub's compare API. It needs the network and the
+job token, so `make ci` does not run it. `test-bootc-secure.yml`
 and `bootc-secure-nightly.yml` provide fixture coverage; fixtures do not
 prove secure install or update on hardware. `test-install.yml` is a manual,
 signature-verified bootc QEMU/KVM install test. Minideb lab runs

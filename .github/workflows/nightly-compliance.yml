@@ -42,3 +42,9 @@ jobs:
 
       - name: Validate workflow action pins and permissions
         run: python3 ./test/workflow-pins-test.py
+
+  action-pin-tags:
+    name: Online action pin tag check
+    permissions:
+      contents: read
+    uses: ./.github/workflows/action-pin-tags.yml

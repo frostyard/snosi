@@ -10,11 +10,18 @@ Every workflow must keep three properties:
      BRANCH_PIN_ALLOW may name a default-branch commit, with its own dated
      comment, because they publish no release tags. Each OWNER/REPO has 1 SHA
      across all workflows (ADR-0090), so no test needs to hold a literal SHA
-     to keep an action on 1 commit;
+     to keep an action on 1 commit; OWNER/REPO is compared in lower case,
+     as GitHub compares it;
   2. each workflow declares exactly one top-level `permissions:` of `{}` or
      read-only (`read`/`none`) grants, so a job opts in to write scope itself;
   3. every `actions/checkout@` step sets `persist-credentials: false` in its
      `with:` block, so the job token never stays in `.git/config`.
+
+It also checks the wiring of the online tag check (ADR-0088, ADR-0090):
+scripts/check-action-pin-tags.sh is core's script byte for byte (a sha256
+pin), action-pin-tags.yml runs it on pull requests that change a workflow,
+nightly-compliance.yml calls that workflow, and the offline gate (Makefile,
+ci.yml, validate.yml) never runs it, because it needs the network.
 
 The parse is line based on purpose: CI python may not ship PyYAML, and the
 shapes this gate reads (`uses:` keys, top-level `permissions:`) are simple.
@@ -22,6 +29,7 @@ Anything it cannot parse it reports instead of skipping, so the gate fails
 closed.
 """
 
+import hashlib
 import re
 import sys
 from pathlib import Path
@@ -33,6 +41,20 @@ MAKEFILE = ROOT / "Makefile"
 VALIDATE = WORKFLOWS / "validate.yml"
 NIGHTLY = WORKFLOWS / "nightly-compliance.yml"
 COMMAND = "python3 ./test/workflow-pins-test.py"
+# The online tag check (ADR-0088, ADR-0090): core's script, run by its own
+# workflow on pull requests that change a workflow and nightly from
+# nightly-compliance.yml. It needs the network, so the Makefile, ci.yml and
+# validate.yml never run it.
+TAG_SCRIPT = ROOT / "scripts/check-action-pin-tags.sh"
+TAG_SCRIPT_SOURCE = (
+    "frostyard/core@e5d16bb034cdd6c5a21a1cc041fb991dfde79793:"
+    "docs/adr/0090-scope-action-pins-and-check-them-repository-wide.md "
+    "(its bash block)"
+)
+TAG_SCRIPT_SHA256 = "3815a1d93f9e86a26d7376c0bf724501f8d4536bdeed0583d953916428414786"
+TAG_WORKFLOW = WORKFLOWS / "action-pin-tags.yml"
+TAG_COMMAND = "run: ./scripts/check-action-pin-tags.sh"
+TAG_CALL = "uses: ./.github/workflows/action-pin-tags.yml"
 PREFIX = "workflow-pins-test:"
 
 # Action repositories pinned to an untagged default-branch commit. Each entry
@@ -388,7 +410,9 @@ def check_workflow(
             )
             continue
         if shas is not None:
-            shas.setdefault(repo, {}).setdefault(pin, []).append(
+            # GitHub owner and repository names are case-insensitive, so
+            # `Owner/Repo` and `owner/repo` are 1 action repository.
+            shas.setdefault(repo.lower(), {}).setdefault(pin, []).append(
                 f"{name}:{index + 1}"
             )
         allowed = BRANCH_PIN_ALLOW.get(repo)
@@ -495,8 +519,9 @@ def check_workflow(
 def check_one_sha(shas: dict[str, dict[str, list[str]]]) -> list[str]:
     """One error for each OWNER/REPO pinned to more than 1 SHA (ADR-0090).
 
-    The key is OWNER/REPO, not OWNER/REPO/PATH: 2 actions of 1 repository
-    (or 2 reusable workflows of frostyard/core) share 1 commit.
+    The key is OWNER/REPO in lower case, not OWNER/REPO/PATH: 2 actions of 1
+    repository (or 2 reusable workflows of frostyard/core) share 1 commit,
+    and `Owner/Repo` names the same repository as `owner/repo`.
     """
     errors = []
     for repo, pins in sorted(shas.items()):
@@ -898,10 +923,116 @@ def self_test() -> int:
         two,
     )
     run_files("two-shas-for-core", {"a.yml": core, "b.yml": other(core)}, two)
+    run_files(
+        "two-shas-mixed-case",
+        {"a.yml": pinned(" # v1.2.3", "Owner/Repo"), "b.yml": other(one)},
+        two,
+    )
+
+    # The online tag check wiring: the real files pass, and each edit fails.
+    script = TAG_SCRIPT.read_bytes()
+    workflow = TAG_WORKFLOW.read_text()
+    nightly = NIGHTLY.read_text()
+    offline = {"Makefile": "verify:\n\tpython3 ./test/workflow-pins-test.py\n"}
+
+    def run_wiring(label: str, expected: str | None, **edits) -> None:
+        nonlocal cases
+        cases += 1
+        args = {"script": script, "workflow": workflow, "nightly": nightly, "offline": offline}
+        args.update(edits)
+        found = tag_wiring_errors(**args)
+        if expected is None:
+            if found:
+                fail(f"self-test {label} must pass but reported: {found[0]}")
+        elif not any(expected in item for item in found):
+            fail(f"self-test {label} must fail with {expected!r} but reported: {found}")
+
+    run_wiring("tag-wiring-good", None)
+    run_wiring("tag-script-edited", "never edit it", script=script + b"\n")
+    run_wiring(
+        "tag-no-pull-request",
+        "`pull_request:`",
+        workflow=workflow.replace("  pull_request:\n", "  push:\n"),
+    )
+    run_wiring(
+        "tag-no-workflow-path",
+        '`- ".github/workflows/**"`',
+        workflow=workflow.replace('      - ".github/workflows/**"\n', ""),
+    )
+    run_wiring(
+        "tag-no-token",
+        "GH_TOKEN",
+        workflow=workflow.replace("          GH_TOKEN: ${{ github.token }}\n", ""),
+    )
+    run_wiring("tag-not-run", "exactly once", workflow=workflow.replace(TAG_COMMAND, "run: true"))
+    run_wiring("tag-not-nightly", "nightly-compliance.yml", nightly=nightly.replace(TAG_CALL, ""))
+    run_wiring(
+        "tag-in-offline-gate",
+        "stays outside the offline gate",
+        offline={"Makefile": "verify:\n\t./scripts/check-action-pin-tags.sh\n"},
+    )
     return cases
 
 
+def tag_wiring_errors(
+    script: bytes, workflow: str, nightly: str, offline: dict[str, str]
+) -> list[str]:
+    """Errors in the wiring of the online tag check (ADR-0088, ADR-0090).
+
+    `offline` maps the name of each file of the offline gate (Makefile,
+    ci.yml, validate.yml) to its text: none of them may run the script.
+    """
+    errors = []
+    if hashlib.sha256(script).hexdigest() != TAG_SCRIPT_SHA256:
+        errors.append(
+            f"{TAG_SCRIPT.relative_to(ROOT)} is a copy of {TAG_SCRIPT_SOURCE}; "
+            "copy it again from core and update TAG_SCRIPT_SHA256, never edit it"
+        )
+    lines = workflow.splitlines()
+    for wanted in (
+        "  pull_request:",
+        "  workflow_call:",
+        '      - ".github/workflows/**"',
+        '      - ".github/actions/**"',
+        "          GH_TOKEN: ${{ github.token }}",
+    ):
+        if wanted not in lines:
+            errors.append(f"action-pin-tags.yml lacks the line `{wanted.strip()}`")
+    if workflow.count(TAG_COMMAND) != 1:
+        errors.append(f"action-pin-tags.yml must `{TAG_COMMAND}` exactly once")
+    if nightly.count(TAG_CALL) != 1:
+        errors.append(f"nightly-compliance.yml must `{TAG_CALL}` exactly once")
+    for name, text in offline.items():
+        if "check-action-pin-tags" in text:
+            errors.append(
+                f"{name} runs the online tag check; it needs the network and "
+                "stays outside the offline gate"
+            )
+    return errors
+
+
+def check_tag_wiring() -> None:
+    for path in (TAG_SCRIPT, TAG_WORKFLOW):
+        if not path.is_file():
+            fail(f"{path.relative_to(ROOT)} is missing: the online tag check needs it")
+    errors = tag_wiring_errors(
+        TAG_SCRIPT.read_bytes(),
+        TAG_WORKFLOW.read_text(),
+        NIGHTLY.read_text(),
+        {
+            "Makefile": MAKEFILE.read_text(),
+            "ci.yml": (WORKFLOWS / "ci.yml").read_text(),
+            "validate.yml": VALIDATE.read_text(),
+        },
+    )
+    if errors:
+        for message in errors:
+            print(message, file=sys.stderr)
+        fail(f"{len(errors)} error(s) in the online tag check wiring")
+
+
 def main() -> None:
+    check_tag_wiring()
     cases = self_test()
 
     # Wiring self-check: the gate must run in the make gate and in both
