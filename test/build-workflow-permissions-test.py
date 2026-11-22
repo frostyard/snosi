@@ -302,6 +302,17 @@ def in_forky(text: str, old: str, new: str) -> str:
     return head + mutate(tail, old, new)
 
 
+def forky_mkosi_pin(text: str) -> str:
+    """The build-forky setup-mkosi ref, read from the workflow so a pin bump
+    does not stale the fixture."""
+    _, tail = forky_part(text)
+    for line in tail.splitlines():
+        match = MKOSI_PATTERN.match(line)
+        if match:
+            return match.group(1).split()[0]
+    raise SystemExit("build-workflow-permissions-test: self-test needs a setup-mkosi pin in build-forky")
+
+
 def move_name_check_after_publish(text: str) -> str:
     head, tail = forky_part(text)
     lines = tail.splitlines(keepends=True)
@@ -374,8 +385,7 @@ def self_tests(text: str) -> int:
          lambda t: in_forky(t, "persist-credentials: false", "persist-credentials: true"),
          "persist-credentials"),
         ("another setup-mkosi pin in the forky job",
-         lambda t: in_forky(t, "systemd/mkosi@904357aa12013e3adbb4857cc4bf8840c6c83682",
-                            "systemd/mkosi@0000000000000000000000000000000000000000"),
+         lambda t: in_forky(t, forky_mkosi_pin(t), "systemd/mkosi@" + "0" * 40),
          "setup-mkosi pin"),
         ("a third job that writes to R2",
          lambda t: t + "\n  extra:\n    runs-on: ubuntu-latest\n    steps:\n"
