@@ -234,7 +234,8 @@ family with bootc 1.17.3 / libostree 2026.6 unchanged, ran `bootc --version`,
 bwrap sandbox; `bootc-pair.chroot` passed in all four `mechanics-build` jobs
 on 262.2-1. The other three rechecks are recorded in
 `docs/bootc-secure-assembly-compatibility.md`. Secure assembly on 262.2-1
-runs first on main after the sentinel merge; its validation precedes the push.
+passed in `build-images.yml` run 44613355607 on main (all four `secure-build`
+jobs, validation before the push).
 
 **Issue 517:** Forky moved `gpt-auto-root-luks` udev rules to
 `90-image-dissect.rules`, which dracut 106 did not automatically include.
