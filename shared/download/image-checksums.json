@@ -5,14 +5,14 @@
     "version": "c9c975046f78"
   },
   "hotedge": {
-    "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/d65489cc5352d72701a40d7e2dabacc25701ce68",
-    "sha256": "79c060dc0caa0beda05824047cadc6365af4931220b509e737cd94cf56ee3622",
-    "version": "d65489cc5352d72701a40d7e2dabacc25701ce68"
+    "url": "https://codeload.github.com/frostyard/hotedge/tar.gz/861614636da151c3177b3c9c89bc9ddb217094c4",
+    "sha256": "7f3018349b98c88ca5b62c21c940fb90558647278dc6d05e8ab06b8bd71cbab8",
+    "version": "861614636da151c3177b3c9c89bc9ddb217094c4"
   },
   "logomenu": {
-    "url": "https://codeload.github.com/frostyard/logomenu/tar.gz/c194ee6b55f039bd8cf5071e89ea28a795d4e870",
-    "sha256": "ecaf7a9fd00aaabbda4fe11d79eade9fc2bae59de9439f37bfbfb6bf78ff07e5",
-    "version": "c194ee6b55f039bd8cf5071e89ea28a795d4e870"
+    "url": "https://codeload.github.com/frostyard/logomenu/tar.gz/67184661da1d25e3e3fba7acfad1e434e3e92063",
+    "sha256": "a7c078db753a955482d7f52a0261d8928beea33b7843b96ae5a829845352909e",
+    "version": "67184661da1d25e3e3fba7acfad1e434e3e92063"
   },
   "bazaar": {
     "url": "https://codeload.github.com/AlexanderVanhee/bazaar-companion/tar.gz/0d3af1137b1b2407499c72d1e7aecc528eebccf5",
