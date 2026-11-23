@@ -195,9 +195,8 @@ when the forky fragments are cut out. The suite-specific content today:
 
 | Content | Trixie | Forky |
 | --- | --- | --- |
-| bootc/libostree pair and libgpgme | `shared/packages/bootc/trixie.conf`: 1.17.3 `~deb13`, `libgpgme11t64` | `shared/packages/bootc/forky.conf`: 1.17.4 `~deb14`, `libgpgme45` |
+| bootc/libostree pair and libgpgme | `shared/packages/bootc/trixie.conf`: 1.17.4 / 2026.7 `~deb13`, `libgpgme11t64` | `shared/packages/bootc/forky.conf`: 1.17.4 / 2026.7 `~deb14`, `libgpgme45` |
 | Secure assembly contract (`/usr/lib/snosi/bootc-secure.json`) | `shared/bootc-secure/tree` | `shared/bootc-secure/suite/forky/tree`, added after the shared tree by `shared/bootc-secure/forky.conf` |
-| systemd-boot `loader.conf` at install | bootc 1.17.3 writes `timeout 5` itself | the forky tree ships `/usr/lib/bootc/install/systemd-boot/loader.conf` (`timeout 5`); bootc 1.17.4 copies it |
 | Isolation pin (forky source, `n=forky` at 50) | `shared/bootc-secure/trixie.conf` adds `shared/bootc-secure/package-manager` | not read: the forky suite sandbox gives the forky source |
 | dracut TPM module list (`20-tpm-luks.conf`) | `systemd-pcrphase` (dracut 106) | `systemd-pcrextend` (dracut 112), in `shared/suite/forky/{base,floe,snow}-tree` |
 | Product APT backports source and pin (`shared/floe/tree`, `shared/snow/tree`) | `trixie-backports` | `forky-backports`, in `shared/suite/forky/floe-tree` (Floe and Sundog, added last by `shared/suite/forky/floe.conf`) and `shared/suite/forky/snow-tree` (Snow and Snowfield, added last by `shared/suite/forky/snow.conf`) |
@@ -209,6 +208,10 @@ when the forky fragments are cut out. The suite-specific content today:
 | Sysext set | `mkosi.conf.d/trixie.conf` adds `sunshine` to the root `Dependencies=` | no `sunshine`: upstream publishes no forky deb, and the pinned `debiantrixie` deb depends on `libminiupnpc18`, which forky does not ship |
 | Sysext publication (`build.yml`) | the `build` job: `_13_` files, `himmelblau` from its scoped invocation (ADR-0020), manifests to `manifests/` | the `build-forky` job (`needs: build`; on a pull request it builds and checks but uploads nothing): `_14_` files after the name check, no `himmelblau` yet (a known gap), manifests to `manifests/forky/` |
 | Host-side contract and tag form (`SNOSI_BOOTC_SECURE_SUITE`, ADR-0038) | unset, empty or `trixie`: the `shared/bootc-secure/tree` contract and `^[0-9]{14}$` tags | `forky`: the forky contract copy and `^forky-[0-9]{14}$` tags; the packager requires rootfs `VERSION_CODENAME=forky`; promotion to `latest` refuses |
+
+`shared/bootc-secure/tree` ships
+`/usr/lib/bootc/install/systemd-boot/loader.conf` (`timeout 5`) for both
+suites, which bootc 1.17.4 copies to the ESP at install.
 
 `test/bootc-secure-static-test.sh` requires the forky contract to equal the
 trixie contract except the three bootc version fields.

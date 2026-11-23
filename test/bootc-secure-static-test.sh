@@ -10,6 +10,24 @@ tree="$root/shared/bootc-secure/tree"
 package_manager="$root/shared/bootc-secure/package-manager"
 artifact_validator="$root/test/bootc-secure-artifact-test.sh"
 
+# bootc 1.17.4 (upstream commit cbd34248659c3c95de03032de3d2c5f6a1f92e1b,
+# "sd-boot: Pick loader.conf from the image") copies this image file after
+# `bootctl install` and no longer writes `timeout 5`. Without the file the
+# systemd-boot menu is hidden. Both suites pin 1.17.4, so the shared tree
+# ships it once.
+loader_conf_path=usr/lib/bootc/install/systemd-boot/loader.conf
+shared_loader_conf="$tree/$loader_conf_path"
+forky_loader_conf="$root/shared/bootc-secure/suite/forky/tree/$loader_conf_path"
+if [[ ! -f $shared_loader_conf || "$(cat "$shared_loader_conf")" != "timeout 5" ]] ||
+        [[ $(wc -l <"$shared_loader_conf") -ne 1 ]]; then
+    echo "the shared secure tree must ship $loader_conf_path with exactly 'timeout 5'" >&2
+    exit 1
+fi
+if [[ -e $forky_loader_conf || -L $forky_loader_conf ]]; then
+    echo "the forky secure tree must not ship $loader_conf_path; the shared tree reaches both suites" >&2
+    exit 1
+fi
+
 # Upstream sysupdate timers have no default OS transfer on bootc images, and
 # sysexts update through updex. All three masks (systemd 262 adds
 # systemd-sysupdate-update.timer) must be unconditional, not hidden in a branch.
@@ -327,8 +345,9 @@ grep -Fq '/usr/lib/snosi/esp.sh' "$reconciler"
 # keeps one validated Frostyard bootc/libostree package pair under its signed
 # contract: a floating entry lets an APT index advance change the package
 # without review. Each suite pins its pair in its own fragment (ADR-0037).
-# Trixie pins 1.17.3/2026.6 in shared/packages/bootc/trixie.conf, with the
-# contract in shared/bootc-secure/tree. Forky pins 1.17.4/2026.6 in
+# Both suites pin 1.17.4/2026.7 (build 202611180102). Trixie pins its pair
+# in shared/packages/bootc/trixie.conf, with the contract in
+# shared/bootc-secure/tree. Forky pins its pair in
 # shared/packages/bootc/forky.conf, with its own contract copy in
 # shared/bootc-secure/suite/forky/tree. The evidence of each pair is in
 # docs/bootc-secure-assembly-compatibility.md.
@@ -338,8 +357,9 @@ grep -Fq '/usr/lib/snosi/esp.sh' "$reconciler"
 # 1.17.1/2026.5 pair (runs 40315411491 and 40370164077, lab run
 # run-snow-bootc-lifecycle-l6596) is history too. The 1.17.3/2026.6 pair
 # carries ostree 2026.6's ostree#3681 static-delta Flatpak fix, and main run
-# 41939252558 was its secure revalidation. Revalidate the complete pair of a
-# suite whenever either package of that suite changes.
+# 41939252558 was its secure revalidation. That trixie 1.17.3/2026.6 pair
+# and the forky 1.17.4/2026.6 pair are history too. Revalidate the complete
+# pair of a suite whenever either package of that suite changes.
 #
 # These checks enforce selector values and agreement with
 # assembly.bootc_version only; they cannot show that revalidation happened.
@@ -347,10 +367,10 @@ bootc_packages="$root/shared/packages/bootc/mkosi.conf"
 bootc_trixie="$root/shared/packages/bootc/trixie.conf"
 bootc_forky="$root/shared/packages/bootc/forky.conf"
 forky_contract="$root/shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json"
-trixie_bootc_pin=1.17.3-frostyard202611042030~deb13
-trixie_libostree_pin=2026.6-frostyard202611042030~deb13
-forky_bootc_pin=1.17.4-frostyard202611132023~deb14
-forky_libostree_pin=2026.6-frostyard202611132023~deb14
+trixie_bootc_pin=1.17.4-frostyard202611180102~deb13
+trixie_libostree_pin=2026.7-frostyard202611180102~deb13
+forky_bootc_pin=1.17.4-frostyard202611180102~deb14
+forky_libostree_pin=2026.7-frostyard202611180102~deb14
 
 bootc_package_entries() { # mkosi-conf
     # Entries of the fragment's Packages= list, one per line. Indented comments
@@ -464,25 +484,6 @@ snosi_bootc_secure_load_compatibility "$forky_contract"
 [[ $BOOTC_SECURE_VERSION == "${forky_bootc_pin%%-*}" ]]
 check_contract_twin "$contract" "$forky_contract"
 
-# bootc 1.17.4 (upstream commit cbd34248659c3c95de03032de3d2c5f6a1f92e1b,
-# "sd-boot: Pick loader.conf from the image") no longer writes `timeout 5` to
-# the ESP loader/loader.conf at install. It copies this image file verbatim
-# after `bootctl install`. Without the file, the commented bootctl template
-# stays and the systemd-boot menu is hidden. bootc 1.17.3 (trixie) writes
-# `timeout 5` itself, so only the forky tree ships the file, and a forky
-# install shows the same 5-second menu as a trixie install.
-loader_conf_path=usr/lib/bootc/install/systemd-boot/loader.conf
-forky_loader_conf="$root/shared/bootc-secure/suite/forky/tree/$loader_conf_path"
-if [[ ! -f $forky_loader_conf || "$(cat "$forky_loader_conf")" != "timeout 5" ]] ||
-        [[ $(wc -l <"$forky_loader_conf") -ne 1 ]]; then
-    echo "the forky secure tree must ship $loader_conf_path with exactly 'timeout 5'" >&2
-    exit 1
-fi
-if [[ -e $tree/$loader_conf_path || -L $tree/$loader_conf_path ]]; then
-    echo "the trixie secure tree must not ship $loader_conf_path; bootc 1.17.3 writes the timeout" >&2
-    exit 1
-fi
-
 # The forky contract tree is a forky-only fragment that comes after
 # shared/bootc-secure/tree, so its bootc-secure.json wins on forky. The
 # isolation pin (the low-priority forky source) applies to trixie builds only.
@@ -529,10 +530,8 @@ if check_bootc_contract_version "$pin_fixture" "$contract" 2>/dev/null; then
     echo "a bootc pin that disagrees with the assembly contract was accepted" >&2
     exit 1
 fi
-if check_bootc_contract_version "$bootc_forky" "$contract" 2>/dev/null; then
-    echo "the forky bootc pin was accepted against the trixie contract" >&2
-    exit 1
-fi
+# Both suites now use the same upstream bootc version and contract.
+check_bootc_contract_version "$bootc_forky" "$contract"
 sed 's/^Release=forky$/Release=trixie/' "$bootc_forky" >"$pin_fixture"
 if check_suite_fragment_match "$pin_fixture" forky 2>/dev/null; then
     echo "a forky fragment that matches trixie was accepted" >&2
@@ -549,7 +548,7 @@ if check_shared_bootc_fragment "$pin_fixture" 2>/dev/null; then
     echo "a libgpgme entry in the shared bootc fragment was accepted" >&2
     exit 1
 fi
-sed 's/^Packages=bubblewrap$/Packages=bootc=1.17.3-frostyard202611042030~deb13\n          bubblewrap/' \
+sed 's/^Packages=bubblewrap$/Packages=bootc=1.17.4-frostyard202611180102~deb13\n          bubblewrap/' \
     "$bootc_packages" >"$pin_fixture"
 if check_shared_bootc_fragment "$pin_fixture" 2>/dev/null; then
     echo "a bootc pin in the shared bootc fragment was accepted" >&2

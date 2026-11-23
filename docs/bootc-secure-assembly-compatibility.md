@@ -108,27 +108,32 @@ profile. `shared/packages/bootc/mkosi.conf` includes the two suite fragments,
 and the fragment of the build's suite applies (ADR-0037). The shared fragment
 holds no bootc, libostree-1-1 or libgpgme entry.
 
-Trixie is unchanged. `shared/packages/bootc/trixie.conf` selects:
+Both suites pin bootc 1.17.4 / libostree 2026.7 from the
+[frostyard/bootc-debian release `bootc-1.17.4-ostree-2026.7-202611180102`](https://github.com/frostyard/bootc-debian/releases/tag/bootc-1.17.4-ostree-2026.7-202611180102)
+(source `ea7c3c22d445b80dd692e001fd8e5d84854a9d0d`), each its own
+`~deb13`/`~deb14` build, read from the `image` component of each suite's
+index at repository.frostyard.org on 2026-11-22.
+`shared/packages/bootc/trixie.conf` selects:
 
-- `bootc=1.17.3-frostyard202611042030~deb13`
-- `libostree-1-1=2026.6-frostyard202611042030~deb13`
+- `bootc=1.17.4-frostyard202611180102~deb13`
+- `libostree-1-1=2026.7-frostyard202611180102~deb13`
 - `libgpgme11t64`
 
 Its contract is `shared/bootc-secure/tree/usr/lib/snosi/bootc-secure.json`.
 
 Forky pins its own pair. `shared/packages/bootc/forky.conf` selects:
 
-- `bootc=1.17.4-frostyard202611132023~deb14`
-- `libostree-1-1=2026.6-frostyard202611132023~deb14`
+- `bootc=1.17.4-frostyard202611180102~deb14`
+- `libostree-1-1=2026.7-frostyard202611180102~deb14`
 - `libgpgme45` (the forky name of `libgpgme11t64`; the forky libostree
   depends on it)
 
-The forky pair comes from frostyard/bootc-debian run 43501170071, read from
-the `image` component of the forky index. Forky has its own contract copy,
+Forky has its own contract copy,
 `shared/bootc-secure/suite/forky/tree/usr/lib/snosi/bootc-secure.json`.
 `shared/bootc-secure/forky.conf` adds that tree after
 `shared/bootc-secure/tree`, so the forky file replaces the trixie file in a
-forky image. The copy differs from the trixie contract in 3 fields only:
+forky image. The copy now equals the trixie contract in all fields. The
+copy and its 3 movable fields stay so the suites can diverge again:
 `assembly.bootc_version` (`1.17.4`), `assembly.compatibility`
 (`bootc-1.17.4-storage-digest-v1`) and `installer.minimum_versions.bootc`
 (`1.17.4`). Host-side secure assembly reads the contract of the suite that
@@ -143,18 +148,23 @@ install (upstream commit `cbd34248659c3c95de03032de3d2c5f6a1f92e1b`,
 "sd-boot: Pick loader.conf from the image"). It copies
 `/usr/lib/bootc/install/systemd-boot/loader.conf` from the image after
 `bootctl install`. Without that file, the systemd-boot menu is hidden. The
-forky tree ships
-`shared/bootc-secure/suite/forky/tree/usr/lib/bootc/install/systemd-boot/loader.conf`
-with the single line `timeout 5`, so a forky install shows the same 5-second
-menu as a trixie install. The trixie tree does not ship it: bootc 1.17.3 writes
-the timeout itself.
+shared tree ships
+`shared/bootc-secure/tree/usr/lib/bootc/install/systemd-boot/loader.conf`
+with the single line `timeout 5`, reaching both suites for the same
+5-second menu.
 
-The trixie pair comes from the frostyard/bootc-debian release
-`bootc-1.17.3-ostree-2026.6-202611042030` (Build run 41907166706), read from the
-`image` component of the trixie index at repository.frostyard.org on
-2026-11-04. ostree 2026.6 fixes
+ostree 2026.6 fixes
 [ostree#3681](https://github.com/ostreedev/ostree/issues/3681): with libostree
 2026.5, a system Flatpak update that applies a static delta fails.
+libostree 2026.7 fixes
+[GHSA-phq3-47fg-9gvv](https://github.com/ostreedev/ostree/security/advisories/GHSA-phq3-47fg-9gvv)
+(a pull with `sign-verify-summary=true` skipped the summary signature check
+when the remote served no summary) and
+[GHSA-67f3-qw4m-mv3w](https://github.com/ostreedev/ostree/security/advisories/GHSA-67f3-qw4m-mv3w)
+(an unsigned static delta index could make a mirror abort the pulling
+process), and [ostree#3690](https://github.com/ostreedev/ostree/pull/3690)
+(finalize through the boot fd), which changes the ostree backend's
+finalize; snosi installs with `--composefs-backend`.
 
 The pin scope is those fragments only. They add no global APT preference and
 change no sysext or base package selection; every other entry in the shared
@@ -180,7 +190,63 @@ guard shows that the fixed library is in the image. It does not run a
 static-delta Flatpak update; that needs a booted image and a remote that
 serves static deltas, which is lab work.
 
-Evidence for the trixie pair (2026-11-04):
+### Pair evidence: 1.17.4 / 2026.7 (2026-11-22)
+
+- Packages: the 4 debs were downloaded from repository.frostyard.org and
+  matched the SHA256 of the `image` index of trixie and forky, whose
+  InRelease files verify with the Frostyard key.
+- Rootfs probe: the published trixie Floe `20261122174320` and forky Floe
+  `forky-20261117162644` rootfs were each moved to exactly the new pair with
+  `dpkg -i` and run in a rootfs-only bwrap sandbox. Before the move, each
+  ran its old pair (trixie 1.17.3/2026.6, forky 1.17.4/2026.6). After it,
+  `bootc --version` printed `bootc 1.17.4` in both, `bootc container --help`
+  and `bootc container compute-composefs-digest-from-storage --help` exited
+  0, and `ldd` resolved `libostree-1.so.1` from the new package. Both help
+  texts are byte-identical to the old pair of each suite and between the
+  suites (trixie 1.17.3 to 1.17.4 included).
+- `bootc-pair.chroot` passed in both rootfs against the new contract
+  (`bootc 1.17.4, libostree-1-1 2026.7-frostyard202611180102~deb13` and
+  `~deb14`, storage-digest command present), and failed on trixie against
+  the old 1.17.3 contract (`expected bootc 1.17.3, observed bootc 1.17.4`).
+- Digest stability: on one fixed tree (784 MiB, 3607 entries: `etc`,
+  `usr/bin`, `usr/lib/systemd`, `usr/lib/os-release`, empty `boot` and
+  `sysroot`, all mtimes 0), all four combinations (trixie 1.17.3/2026.6,
+  forky 1.17.4/2026.6, trixie 1.17.4/2026.7, forky 1.17.4/2026.7) print
+  the same `compute-composefs-digest` value for `--erofs-version v1` and
+  for `v2`, in 2 runs each. Agreement for that tree only, not a source-level
+  proof.
+- Upstream: bootc v1.17.3..v1.17.4 was read for the forky pair (below);
+  for trixie it adds the `loader.conf` change (handled with the shared
+  `loader.conf`), `install: Reject a config stateroot on composefs-only
+  images` (snosi ships no install config with a stateroot) and
+  `generator: skip fstab editor for read-only root`. libostree
+  v2026.6..v2026.7: the 2 advisories, `bootconfig: reject newlines when
+  writing loader entries`, `lib/refs: Validate collection IDs read from
+  summaries and repos` and ostree#3690; the package depends on the same
+  libraries as 2026.6.
+- Secure assembly on bootc 1.17.4 (with libostree 2026.6) already passed on
+  forky for all four products: forky-publish runs
+  [44125211959](https://github.com/frostyard/snosi/actions/runs/44125211959)
+  (floe `forky-20261117162644`),
+  [44125233050](https://github.com/frostyard/snosi/actions/runs/44125233050)
+  (snow `forky-20261117162606`),
+  [44125259062](https://github.com/frostyard/snosi/actions/runs/44125259062)
+  (snowfield `forky-20261117162734`) and
+  [44125281364](https://github.com/frostyard/snosi/actions/runs/44125281364)
+  (sundog `forky-20261117162653`), 2026-11-17, each with
+  `bootc-pair: bootc 1.17.4, libostree-1-1 2026.6-frostyard202611132023~deb14`
+  and both `Image packaged` lines.
+- Not yet shown: the Task 1-3 rootfs proof and the Task 5 artifact tests on
+  the new pair, which need the protected secure build on main
+  (`native-build` allows only `main`); the first `build-images.yml` run on
+  main after the merge runs them for trixie, and `Validate locally
+  assembled secure artifact` runs before `Push immutable version tag`, so
+  a failure publishes nothing. The forky pair is first shown in secure
+  assembly by the next `forky-publish.yml` dispatch. A lab install showing
+  the 5-second menu on trixie, and a booted static-delta Flatpak update,
+  are not done.
+
+Evidence for the earlier trixie pair 1.17.3 / 2026.6 (2026-11-04, history):
 
 - Rootfs probe: a clean `debian:trixie` container installed exactly this pair
   from the Frostyard repository. `bootc --version` printed `bootc 1.17.3`,
@@ -238,7 +304,7 @@ promoted to `latest`:
 Not done yet: an N (1.17.1) to N+1 (1.17.3) lab lifecycle run, and a booted
 static-delta Flatpak update (ostree#3681).
 
-### Forky pair evidence
+### Forky pair evidence (1.17.4 / 2026.6, history)
 
 The forky pair is the frostyard/bootc-debian release
 `bootc-1.17.4-ostree-2026.6-202611132023` (Build run 43501170071, source
@@ -261,7 +327,7 @@ of the forky index at repository.frostyard.org on 2026-11-13. Evidence
 - Upstream v1.17.3..v1.17.4 (27 commits, read by subject, and by diff where a
   subject touches an install path that snosi uses): `sd-boot: Pick loader.conf
   from the image` changes the installed menu timeout (handled above with the
-  forky `loader.conf`). `prepare-install: Check for composefs cmdline in UKI
+  shared `loader.conf`). `prepare-install: Check for composefs cmdline in UKI
   Addons` rejects a composefs command line in a global addon at install prep;
   `snosi-kargs` refuses every `composefs=` argument (`dangerous_reason`), and
   Firn installs no addon.
@@ -278,14 +344,19 @@ dispatch from main) builds the 1 forky product that the dispatch selects
 assembles and validates the secure artifact against the forky contract, and
 publishes only an immutable `forky-<version>` test tag (ADR-0038, ADR-0039).
 
-Not done yet: forky secure-assembly evidence. No dispatch of that workflow has
-run, so nothing yet shows a forky secure assembly (Task 1-3 rootfs proof and
-Task 5 artifact and negative tests on a forky rootfs) or a published forky
-image. The first dispatch run is that evidence; record its run here. A lab
-install, update and rollback on forky is not done either.
+The forky-publish runs listed above (2026-11-17) were the secure-assembly
+and publication evidence for 1.17.4/2026.6. A lab install, update and rollback
+on forky is not recorded here.
 
 Previous pins (history):
 
+- Trixie `bootc=1.17.3-frostyard202611042030~deb13` with
+  `libostree-1-1=2026.6-frostyard202611042030~deb13`, from the
+  frostyard/bootc-debian release `bootc-1.17.3-ostree-2026.6-202611042030`
+  (Build run 41907166706; evidence above, main run 41939252558).
+- Forky `bootc=1.17.4-frostyard202611132023~deb14` with
+  `libostree-1-1=2026.6-frostyard202611132023~deb14`
+  (frostyard/bootc-debian run 43501170071).
 - `bootc=1.17.1-frostyard202610252315~deb13` with
   `libostree-1-1=2026.5-frostyard202610252315~deb13`, from source SHA
   `7927290da94822f05a0b2ae9cb15c67187db7e4a` (draft PR #1151, never merged).

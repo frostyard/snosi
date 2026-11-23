@@ -206,18 +206,26 @@ upstream part of the bootc package version matches
 does not equal that field), and that all four profiles consume the fragment. It cannot show that
 revalidation happened: do that work when either package or the systemd family
 changes. See `docs/bootc-secure-assembly-compatibility.md`.
-**Last repeated 2026-11-04 (trixie):** bootc 1.17.3 / libostree 2026.6 (the
-ostree#3681 static-delta Flatpak fix). A clean Trixie rootfs with exactly that
-pair ran `bootc --version`, `bootc container --help` and the hidden
-`compute-composefs-digest-from-storage --help` (help unchanged from 1.17.1),
-and 1.17.1 and 1.17.3 gave the same composefs digest for one fixed tree.
+**Last repeated 2026-11-22 (both suites):** bootc 1.17.4 / libostree 2026.7
+(build 202611180102; 2026.7 fixes GHSA-phq3-47fg-9gvv and
+GHSA-67f3-qw4m-mv3w and keeps the ostree#3681 fix). Published trixie and
+forky Floe rootfs moved to exactly that pair ran `bootc --version`,
+`bootc container --help` and the hidden
+`compute-composefs-digest-from-storage --help` in a rootfs-only bwrap sandbox
+(help unchanged from 1.17.3), and the old and new pairs of both suites gave
+the same composefs digest for one fixed tree.
 `shared/packages/bootc/finalize/bootc-pair.chroot` repeats the version,
-hidden-command and libostree-floor checks in every OCI build. Secure assembly
-on 1.17.3 passed on all four products in main run 41939252558 (2026-11-05;
-Brian accepted the post-merge revalidation, T846a); the 1.17.1 evidence (run 40370164077, lab `l6596`) is history in
-`docs/bootc-secure-assembly-compatibility.md`. bootc 1.17.3 stages global UKI
-addons with an update and swaps them in at finalize, so `snosi-kargs` mirrors
-`apply` and `revert` into `<ESP>/loader/addons.staged`.
+hidden-command and libostree-floor checks in every OCI build. Secure
+assembly on 1.17.4 passed on forky for all four products (forky-publish,
+2026-11-17) and on 1.17.3 on trixie in main run 41939252558. Secure assembly
+of the new pair runs first on main after the merge, with validation before
+the push. bootc 1.17.4 copies
+`/usr/lib/bootc/install/systemd-boot/loader.conf` at install instead of
+writing `timeout 5`, so `shared/bootc-secure/tree` ships it for both suites.
+bootc 1.17.3 and later stage global UKI addons with an update and swap them
+in at finalize, so `snosi-kargs` mirrors `apply` and `revert` into
+`<ESP>/loader/addons.staged`. See
+`docs/bootc-secure-assembly-compatibility.md` for the history.
 **Last repeated for the Forky systemd family 2026-11-19 (262-1 to 262.2-1):**
 the published Floe `20261118181423` rootfs, moved to exactly the 262.2-1
 family with bootc 1.17.3 / libostree 2026.6 unchanged, ran `bootc --version`,
