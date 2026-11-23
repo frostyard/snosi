@@ -22,6 +22,7 @@
 # here, so that in-flight branches adding tests do not break on merge.
 1password-links-test.sh	ci	validate.yml
 base-hardware-utils-test.sh	ci	validate.yml
+bitwarden-asset-name-test.sh	ci	validate.yml
 bootc-bootloader-reconcile-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
 bootc-container-policy-test.sh	ci	bootc-secure-nightly.yml,test-bootc-secure.yml,validate.yml
 bootc-install-test.sh	ci	test-install.yml
