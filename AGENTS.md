@@ -216,10 +216,11 @@ forky Floe rootfs moved to exactly that pair ran `bootc --version`,
 the same composefs digest for one fixed tree.
 `shared/packages/bootc/finalize/bootc-pair.chroot` repeats the version,
 hidden-command and libostree-floor checks in every OCI build. Secure
-assembly on 1.17.4 passed on forky for all four products (forky-publish,
-2026-11-17) and on 1.17.3 on trixie in main run 41939252558. Secure assembly
-of the new pair runs first on main after the merge, with validation before
-the push. bootc 1.17.4 copies
+assembly of the new pair passed on trixie for all four products in main run
+45111303366 (2026-11-23, published and promoted to `latest`); on forky,
+1.17.4 with libostree 2026.6 passed for all four (forky-publish,
+2026-11-17), and the new pair runs first at the next forky-publish
+dispatch of each product. bootc 1.17.4 copies
 `/usr/lib/bootc/install/systemd-boot/loader.conf` at install instead of
 writing `timeout 5`, so `shared/bootc-secure/tree` ships it for both suites.
 bootc 1.17.3 and later stage global UKI addons with an update and swap them
