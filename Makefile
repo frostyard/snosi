@@ -27,6 +27,7 @@ verify:
 	node --test test/*.test.mjs
 	python3 ./test/policy-as-code-test.py
 	python3 ./test/risk-paths-test.py
+	python3 ./test/pr-triage-dispatch-test.py
 	python3 ./test/build-workflow-permissions-test.py
 	python3 ./test/workflow-pins-test.py
 	python3 ./test/forky-publish-workflow-test.py

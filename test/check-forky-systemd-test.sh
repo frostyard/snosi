@@ -320,8 +320,8 @@ permissions=$(awk '
     in_perm && /^      [[:alnum:]_-]+:/ { print; next }
     in_perm { exit }
 ' <<<"$job")
-check 'job token is exactly contents+pull-requests write' \
-    test "$permissions" = $'      contents: write\n      pull-requests: write'
+check 'job token is exactly actions+contents+pull-requests write' \
+    test "$permissions" = $'      actions: write\n      contents: write\n      pull-requests: write'
 check 'checkout does not persist credentials' job_has '          persist-credentials: false'
 check 'job runs the script with a RUNNER_TEMP PR body' \
     job_has '        run: ./shared/download/check-forky-systemd.sh "$RUNNER_TEMP/forky-systemd-pr-body.md"'

@@ -21,7 +21,7 @@ and the two hash-pinned copies of core scripts), `scripts/shellcheck.sh`
 or shebang, outside `saved-unused/`; `validate.yml`'s shell-lint job runs the
 same script, and both use the ShellCheck that `mise.toml` pins),
 `node --test test/*.test.mjs`, and the policy tests
-`policy-as-code-test.py`, `risk-paths-test.py`,
+`policy-as-code-test.py`, `risk-paths-test.py`, `pr-triage-dispatch-test.py`,
 `build-workflow-permissions-test.py`, `workflow-pins-test.py` and
 `forky-publish-workflow-test.py`, the fixture tests
 `bootc-secure-forky-promotion-test.sh` and `snosi-stream-test.sh`, and

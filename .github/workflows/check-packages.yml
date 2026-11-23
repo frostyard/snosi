@@ -13,6 +13,7 @@ jobs:
     # Bound repository-write token exposure if an external APT request stalls.
     timeout-minutes: 15
     permissions:
+      actions: write
       contents: write
       pull-requests: write
 
@@ -104,6 +105,7 @@ jobs:
           fi
 
       - name: Create Pull Request
+        id: cpr
         if: steps.compare.outputs.has_updates == 'true'
         uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
         with:
@@ -122,6 +124,15 @@ jobs:
           branch: auto-update-packages
           delete-branch: true
 
+      # A PR that GITHUB_TOKEN opens or updates starts no pull_request_target
+      # run; dispatch PR triage so it gets its level label (core ADR-0087).
+      - name: Run PR triage
+        if: steps.cpr.outputs.pull-request-operation == 'created' || steps.cpr.outputs.pull-request-operation == 'updated'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        run: gh workflow run pr-triage-dispatch.yml --repo "$GITHUB_REPOSITORY" -f pr="$PR_NUMBER"
+
   # Monitor the secure bootc/Firn systemd family and Snow's deliberate wsdd
   # exception. Source migrations change later builds without a repository
   # change; one sentinel PR names the applicable compatibility rechecks.
@@ -130,6 +141,7 @@ jobs:
     # Bound repository-write token exposure if the Debian mirror stalls.
     timeout-minutes: 15
     permissions:
+      actions: write
       contents: write
       pull-requests: write
 
@@ -144,6 +156,7 @@ jobs:
         run: ./shared/download/check-forky-systemd.sh "$RUNNER_TEMP/forky-systemd-pr-body.md"
 
       - name: Create Pull Request
+        id: cpr
         if: steps.forky.outputs.has_update == 'true'
         uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
         with:
@@ -156,3 +169,12 @@ jobs:
           body-path: ${{ runner.temp }}/forky-systemd-pr-body.md
           branch: auto-update-forky-systemd
           delete-branch: true
+
+      # A PR that GITHUB_TOKEN opens or updates starts no pull_request_target
+      # run; dispatch PR triage so it gets its level label (core ADR-0087).
+      - name: Run PR triage
+        if: steps.cpr.outputs.pull-request-operation == 'created' || steps.cpr.outputs.pull-request-operation == 'updated'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        run: gh workflow run pr-triage-dispatch.yml --repo "$GITHUB_REPOSITORY" -f pr="$PR_NUMBER"

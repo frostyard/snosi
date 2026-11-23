@@ -79,6 +79,11 @@ jobs:
         # caller stays on pull_request_target with least privilege.
         run: python3 ./test/risk-paths-test.py
 
+      - name: Validate PR triage dispatch for bot PRs
+        # core ADR-0087: every bot PR step dispatches pr-triage-dispatch.yml,
+        # and that caller pins the same core commit as risk-paths.yml.
+        run: python3 ./test/pr-triage-dispatch-test.py
+
       - name: Validate PR-facing build permissions
         # build.yml executes PR-controlled mkosi configuration as root, so its
         # build job must never regain package, OIDC, or attestation write scope.

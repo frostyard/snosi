@@ -1,0 +1,30 @@
+# PR triage dispatch caller (frostyard/core ADR-0087, docs/specs/pr-triage.md
+# rule A2). A pull request that a workflow opens or updates with GITHUB_TOKEN
+# starts no pull_request_target run, so risk-paths.yml never labels it. The
+# bot jobs of check-packages.yml and check-dependencies.yml dispatch this file
+# with the PR number after their PR step; core's workflow then runs only its
+# levels step: it reads .github/risk-paths.json at the PR's base SHA and adds
+# the level label (and risk:high at L1 or L2). The job checks out nothing and
+# runs no pull request code. The pin equals the risk-paths.yml pin
+# (test/pr-triage-dispatch-test.py).
+name: PR triage dispatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: The number of the pull request to triage
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  pr-triage:
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: frostyard/core/.github/workflows/pr-triage.yml@f99acfddee0a5466990b72e6292a5b1642444a25 # frostyard/core main, 2026-11-22 (core#288)
+    with:
+      pr: ${{ inputs.pr }}
+      dependabot-shadow: false
