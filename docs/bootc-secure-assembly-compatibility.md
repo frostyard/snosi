@@ -236,15 +236,39 @@ serves static deltas, which is lab work.
   (sundog `forky-20261117162653`), 2026-11-17, each with
   `bootc-pair: bootc 1.17.4, libostree-1-1 2026.6-frostyard202611132023~deb14`
   and both `Image packaged` lines.
-- Not yet shown: the Task 1-3 rootfs proof and the Task 5 artifact tests on
-  the new pair, which need the protected secure build on main
-  (`native-build` allows only `main`); the first `build-images.yml` run on
-  main after the merge runs them for trixie, and `Validate locally
-  assembled secure artifact` runs before `Push immutable version tag`, so
-  a failure publishes nothing. The forky pair is first shown in secure
-  assembly by the next `forky-publish.yml` dispatch. A lab install showing
+- Not yet shown: the forky pair in secure assembly, which the next
+  `forky-publish.yml` dispatch of each product shows (until then the forky
+  secure evidence is the 1.17.4/2026.6 runs above). A lab install showing
   the 5-second menu on trixie, and a booted static-delta Flatpak update,
   are not done.
+
+**Secure revalidation (trixie, 2026-11-23):** as for 1.17.3 (below), no
+pre-merge build could run the full Task 1-3 rootfs proof and the Task 5
+artifact and negative tests that Mandatory revalidation (below) requires,
+because secure-build runs only on `main` (the `native-build` environment
+allows only `main`). The first main `build-images.yml` run after the pin
+([#1368](https://github.com/frostyard/snosi/pull/1368)) is that
+revalidation; `Validate locally assembled secure artifact` runs before
+`Push immutable version tag`, so a failure would have published nothing. It
+passed:
+[run 45111303366](https://github.com/frostyard/snosi/actions/runs/45111303366)
+at `95298263227a6a057f93a403a42948a589207188` (2026-11-23). In each of the
+four secure-build legs, `bootc-pair.chroot` reported `bootc 1.17.4,
+libostree-1-1 2026.7-frostyard202611180102~deb13, storage-digest command
+present`, the second storage-digest probe matched the first (the build
+prints `Image packaged` for the version tag only after that comparison), the
+locally assembled and the published secure artifact validations passed, and
+the initramfs gpt-auto structural validation passed. Published, signed and
+attested, with
+`io.snosi.bootc.secureboot-assembly=bootc-1.17.4-storage-digest-v1`, and
+promoted to `latest`:
+
+| Product | Version | Digest |
+| --- | --- | --- |
+| floe | `20261123042359` | `sha256:5996f1b8743578e0c2d65c266cd69d28fca7f31a960415b6f8cf4135a3a4107e` |
+| snow | `20261123042417` | `sha256:59bf3480f795b3f09f3fd851760b3976212c3742330380cec66cfaa04133c0a2` |
+| snowfield | `20261123042348` | `sha256:8cbe202d504e317ee403fe8d91c1eba7cf7f7b9110d76d5b42f53ebf193740f2` |
+| sundog | `20261123042324` | `sha256:59b7bd814266bc065437ffa7efc670b36aaf43482d0352dfcfd23aea966558df` |
 
 Evidence for the earlier trixie pair 1.17.3 / 2026.6 (2026-11-04, history):
 
