@@ -65,9 +65,9 @@
     "version": "0.10.1"
   },
   "notesd": {
-    "url": "https://github.com/frostyard/frostnotes/releases/download/v0.7.0/frostyard-notesd_0.7.0_amd64.deb",
-    "sha256": "60279edf3f4d3dd53fdaea5b07ae28dc176ab19ade41588eb0a2aff2a8a98df5",
-    "version": "0.7.0",
+    "url": "https://github.com/frostyard/frostnotes/releases/download/v0.7.1/frostyard-notesd_0.7.1_amd64.deb",
+    "sha256": "cd5b4adb14988acef3d70237a6c8363e6e8802bb0083e6463b806ead0cbc5482",
+    "version": "0.7.1",
     "attestation": {
       "repository": "frostyard/frostnotes",
       "signer_workflow": ".github/workflows/release.yml"
@@ -83,9 +83,9 @@
     }
   },
   "lodge": {
-    "url": "https://github.com/frostyard/lodge/releases/download/v0.6.0/frostyard-lodge_0.6.0_amd64.deb",
-    "sha256": "bd5d06fa2b7deed40f0334e2fc40341a9b40f0456a4c582b365e811725440f6d",
-    "version": "0.6.0",
+    "url": "https://github.com/frostyard/lodge/releases/download/v0.6.1/frostyard-lodge_0.6.1_amd64.deb",
+    "sha256": "5f82367ef9fc7793650b6e07ffaff8a9c1342e03b39a4b8fbc11ef3d7b6c804d",
+    "version": "0.6.1",
     "attestation": {
       "repository": "frostyard/lodge",
       "signer_workflow": ".github/workflows/release.yml"
