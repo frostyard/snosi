@@ -74,9 +74,9 @@
     }
   },
   "maild": {
-    "url": "https://github.com/frostyard/frostmail/releases/download/v0.8.0/frostyard-maild_0.8.0_amd64.deb",
-    "sha256": "a0d06b32883d02d8d28829b8046d68cca98453f23f6c1fa9c93210b2f9d755e0",
-    "version": "0.8.0",
+    "url": "https://github.com/frostyard/frostmail/releases/download/v0.9.0/frostyard-maild_0.9.0_amd64.deb",
+    "sha256": "e7b7c0cbba0972b1b30128a0ffd03cd0c33d0d182c7206977c89688880783970",
+    "version": "0.9.0",
     "attestation": {
       "repository": "frostyard/frostmail",
       "signer_workflow": ".github/workflows/release.yml"
