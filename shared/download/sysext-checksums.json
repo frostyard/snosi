@@ -92,9 +92,9 @@
     }
   },
   "porterd": {
-    "url": "https://github.com/frostyard/porter/releases/download/v0.3.0/frostyard-porterd_0.3.0_amd64.deb",
-    "sha256": "6a45d5419c16aae625fcb380c34b0709ecfd321c082ca7bddfaac872a39e11cd",
-    "version": "0.3.0",
+    "url": "https://github.com/frostyard/porter/releases/download/v0.4.0/frostyard-porterd_0.4.0_amd64.deb",
+    "sha256": "9c99adf166f88835403ea748d7b5831fbb16120b461d35dbe87ab6bd8b4bbeb5",
+    "version": "0.4.0",
     "attestation": {
       "repository": "frostyard/porter",
       "signer_workflow": ".github/workflows/release.yml"
