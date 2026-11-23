@@ -65,36 +65,36 @@
     "version": "0.10.1"
   },
   "notesd": {
-    "url": "https://github.com/frostyard/frostnotes/releases/download/v0.6.0/frostyard-notesd_0.6.0_amd64.deb",
-    "sha256": "c360974ea24000b4bd1eeb76115b45a0a0f8e1af46702780d20866d8be1a4031",
-    "version": "0.6.0",
+    "url": "https://github.com/frostyard/frostnotes/releases/download/v0.7.1/frostyard-notesd_0.7.1_amd64.deb",
+    "sha256": "cd5b4adb14988acef3d70237a6c8363e6e8802bb0083e6463b806ead0cbc5482",
+    "version": "0.7.1",
     "attestation": {
       "repository": "frostyard/frostnotes",
       "signer_workflow": ".github/workflows/release.yml"
     }
   },
   "maild": {
-    "url": "https://github.com/frostyard/frostmail/releases/download/v0.8.0/frostyard-maild_0.8.0_amd64.deb",
-    "sha256": "a0d06b32883d02d8d28829b8046d68cca98453f23f6c1fa9c93210b2f9d755e0",
-    "version": "0.8.0",
+    "url": "https://github.com/frostyard/frostmail/releases/download/v0.9.0/frostyard-maild_0.9.0_amd64.deb",
+    "sha256": "e7b7c0cbba0972b1b30128a0ffd03cd0c33d0d182c7206977c89688880783970",
+    "version": "0.9.0",
     "attestation": {
       "repository": "frostyard/frostmail",
       "signer_workflow": ".github/workflows/release.yml"
     }
   },
   "lodge": {
-    "url": "https://github.com/frostyard/lodge/releases/download/v0.6.0/frostyard-lodge_0.6.0_amd64.deb",
-    "sha256": "bd5d06fa2b7deed40f0334e2fc40341a9b40f0456a4c582b365e811725440f6d",
-    "version": "0.6.0",
+    "url": "https://github.com/frostyard/lodge/releases/download/v0.6.1/frostyard-lodge_0.6.1_amd64.deb",
+    "sha256": "5f82367ef9fc7793650b6e07ffaff8a9c1342e03b39a4b8fbc11ef3d7b6c804d",
+    "version": "0.6.1",
     "attestation": {
       "repository": "frostyard/lodge",
       "signer_workflow": ".github/workflows/release.yml"
     }
   },
   "porterd": {
-    "url": "https://github.com/frostyard/porter/releases/download/v0.3.0/frostyard-porterd_0.3.0_amd64.deb",
-    "sha256": "6a45d5419c16aae625fcb380c34b0709ecfd321c082ca7bddfaac872a39e11cd",
-    "version": "0.3.0",
+    "url": "https://github.com/frostyard/porter/releases/download/v0.4.0/frostyard-porterd_0.4.0_amd64.deb",
+    "sha256": "9c99adf166f88835403ea748d7b5831fbb16120b461d35dbe87ab6bd8b4bbeb5",
+    "version": "0.4.0",
     "attestation": {
       "repository": "frostyard/porter",
       "signer_workflow": ".github/workflows/release.yml"

@@ -377,6 +377,43 @@ policy checks. Secure bootc install and update fixtures do not substitute
 for live Firn install, update or rollback evidence. See
 [CI/CD](docs/design/ci-cd.md) and [testing](docs/design/testing.md).
 
+## Releases and dependencies
+
+- Tag format: `YYYY-MM-DD.N` (for example `2026-11-22.1`), a GitHub release
+  per published Snow image; image tags are `YYYYMMDDhhmmss` timestamps. The
+  `native-*` tags are history.
+- How a release starts: a push to `main` runs
+  `.github/workflows/build-images.yml`; after the images publish, its
+  `release` job (`github.event_name == 'push'` only) counts the day's
+  releases and runs `shared/bootc-secure/ci/create-github-release.sh` with
+  the changelog from `frostyard/changelog-generator`. A `build` repository
+  dispatch builds and publishes the images but creates no GitHub release.
+- Who tags: that workflow only. Agents never tag, push tags or release.
+- Version rule: the build date plus the next free daily counter `N`.
+- Internal dependencies:
+  - attested first-party sysext debs in `shared/download/sysext-checksums.json`:
+    `lodge` (frostyard/lodge), `notesd` (frostyard/frostnotes), `maild`
+    (frostyard/frostmail), `porterd` (frostyard/porter), checked by
+    `shared/download/verify-attestations.sh` (ADR-0024); `pilothouse`
+    (frostyard/pilothouse) in the same file has no attestation entry.
+    `check-dependencies.yml` (weekly) opens the bump PR for these pins.
+  - the newest Frostyard APT version at build time, unpinned:
+    `frostyard-updex` (`mkosi.images/base/mkosi.conf`), `frostyard-chairlift`
+    and `frostyard-intuneme` (`shared/packages/{snow,sundog}/mkosi.conf`).
+  - exact Frostyard APT pins: `frostyard-firn` and `frostyard-firn-gui` in
+    `shared/firn-installer/mkosi.conf` (`test/firn-installer-iso-test.sh`
+    holds the same version); the Frostyard bootc and libostree builds in
+    `shared/packages/bootc/{trixie,forky}.conf`, whose move needs the
+    revalidation above.
+  - commit pins in `shared/download/image-checksums.json`: `hotedge` and
+    `logomenu` (frostyard).
+  - workflow pins: `frostyard/core` pr-triage (`risk-paths.yml`),
+    `frostyard/repogen` publish-to-r2 (`build.yml`) and
+    `frostyard/changelog-generator` (`build-images.yml`).
+- Who uses this repository: frostyard/firn installs the four products,
+  frostyard/lab runs QA on the published images and fetches
+  `shared/native-ab/keys/` from `main`.
+
 ## Documentation
 
 A Done, Shipped or Superseded plan status must state what landed, checked
