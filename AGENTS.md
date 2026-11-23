@@ -374,11 +374,12 @@ for live Firn install, update or rollback evidence. See
 - Tag format: `YYYY-MM-DD.N` (for example `2026-11-22.1`), a GitHub release
   per published Snow image; image tags are `YYYYMMDDhhmmss` timestamps. The
   `native-*` tags are history.
-- How a release starts: a push to `main` (or a `build` repository dispatch)
-  runs `.github/workflows/build-images.yml`; after the images publish, its
-  `release` job counts the day's releases and runs
-  `shared/bootc-secure/ci/create-github-release.sh` with the changelog from
-  `frostyard/changelog-generator`.
+- How a release starts: a push to `main` runs
+  `.github/workflows/build-images.yml`; after the images publish, its
+  `release` job (`github.event_name == 'push'` only) counts the day's
+  releases and runs `shared/bootc-secure/ci/create-github-release.sh` with
+  the changelog from `frostyard/changelog-generator`. A `build` repository
+  dispatch builds and publishes the images but creates no GitHub release.
 - Who tags: that workflow only. Agents never tag, push tags or release.
 - Version rule: the build date plus the next free daily counter `N`.
 - Internal dependencies:
