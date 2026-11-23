@@ -12,6 +12,7 @@ jobs:
     name: Check sysext dependency updates
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
       pull-requests: write
 
@@ -553,6 +554,7 @@ jobs:
           echo "attestation_failed=${ATTESTATION_FAILED% }" >> "$GITHUB_OUTPUT"
 
       - name: Create sysext dependency PR
+        id: cpr
         if: steps.check.outputs.has_updates == 'true'
         uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
         with:
@@ -572,6 +574,15 @@ jobs:
             **Please verify the sysext build works before merging.**
           branch: auto-update-sysext-checksums
           delete-branch: true
+
+      # A PR that GITHUB_TOKEN opens or updates starts no pull_request_target
+      # run; dispatch PR triage so it gets its level label (core ADR-0087).
+      - name: Run PR triage
+        if: steps.cpr.outputs.pull-request-operation == 'created' || steps.cpr.outputs.pull-request-operation == 'updated'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        run: gh workflow run pr-triage-dispatch.yml --repo "$GITHUB_REPOSITORY" -f pr="$PR_NUMBER"
 
       - name: Fail when an attestation did not verify
         # Runs after the PR step, so a failed attestation holds back only its
@@ -595,6 +606,7 @@ jobs:
     name: Check image dependency updates
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
       pull-requests: write
 
@@ -904,6 +916,7 @@ jobs:
           fi
 
       - name: Create image dependency PR
+        id: cpr
         if: steps.update.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
         with:
@@ -929,6 +942,15 @@ jobs:
             **Please verify the image builds work before merging.**
           branch: auto-update-image-checksums
           delete-branch: true
+
+      # A PR that GITHUB_TOKEN opens or updates starts no pull_request_target
+      # run; dispatch PR triage so it gets its level label (core ADR-0087).
+      - name: Run PR triage
+        if: steps.cpr.outputs.pull-request-operation == 'created' || steps.cpr.outputs.pull-request-operation == 'updated'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+        run: gh workflow run pr-triage-dispatch.yml --repo "$GITHUB_REPOSITORY" -f pr="$PR_NUMBER"
 
       - name: Fail when dependency latest values could not be read
         if: ${{ !cancelled() && steps.check.outputs.check_failed != '' }}

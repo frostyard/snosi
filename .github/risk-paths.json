@@ -4,6 +4,7 @@
   "paths": [
     { "glob": ".github/risk-paths.json", "level": "L2", "why": "workflow-permissions: this list sets the level labels and risk:high" },
     { "glob": ".github/workflows/risk-paths.yml", "level": "L2", "why": "workflow-permissions: the caller that runs core's pr-triage workflow with pull-requests: write" },
+    { "glob": ".github/workflows/pr-triage-dispatch.yml", "level": "L2", "why": "workflow-permissions: the dispatch caller that runs core's pr-triage workflow with pull-requests: write for PRs that a workflow opens" },
     { "glob": "policies/**", "level": "L2", "why": "workflow-permissions: the agent-governance policy that sets agent actions and protected boundaries" },
     { "glob": "shared/bootc-secure/**", "level": "L1", "why": "secure-boot: secure bootc composition, UKI assembly, the signed PCR-11 policy and published-image verification" },
     { "glob": "shared/packages/bootc/**", "level": "L1", "why": "secure-boot: the exact bootc and libostree pin that the secure UKI assembly is validated against" },

@@ -252,9 +252,9 @@ for glob, level, why in entries:
     if not text:
         fail(f"why text must not be empty: {glob}")
 
-required_globs = {".github/risk-paths.json", ".github/workflows/risk-paths.yml"}
+required_globs = {".github/risk-paths.json", ".github/workflows/risk-paths.yml", ".github/workflows/pr-triage-dispatch.yml"}
 if not required_globs.issubset(set(globs)):
-    fail("risk list must include the list and caller globs")
+    fail("risk list must include the list and both caller globs")
 # Rule C of core's risk-paths spec: in a version 2 list, every glob that matches
 # the list or the caller is L1 or L2.
 for glob, level, why in entries:
@@ -270,6 +270,7 @@ for glob, level, why in entries:
 required_coverage = {
     ".github/risk-paths.json": "workflow-permissions",
     ".github/workflows/risk-paths.yml": "workflow-permissions",
+    ".github/workflows/pr-triage-dispatch.yml": "workflow-permissions",
     "policies/agent-governance.json": "workflow-permissions",
     "shared/bootc-secure/mkosi.conf": "secure-boot",
     "shared/bootc-secure/tree/usr/libexec/snosi-bootc-bootloader-reconcile": "secure-boot",
