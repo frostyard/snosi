@@ -95,6 +95,7 @@ inert_ci_paths=(
     '.github/workflows/claude.yml'
     '.github/workflows/forky-publish.yml'
     '.github/workflows/nightly-compliance.yml'
+    '.github/workflows/pr-triage-dispatch.yml'
     '.github/workflows/scorecard.yml'
     '.github/workflows/test-install.yml'
     '.github/workflows/triage.yml'
@@ -122,6 +123,45 @@ for name in build-images.yml build.yml test-bootc-secure.yml; do
             assert_ignored "$name $event ignores inert $path" "$workflow" "$event" "$path"
         done
     done
+done
+
+# forky-mechanics.yml runs on pull_request only (plus dispatch and schedule).
+for path in "${inert_ci_paths[@]}"; do
+    assert_ignored "forky-mechanics.yml pull_request ignores inert $path" \
+        "$WORKFLOWS/forky-mechanics.yml" pull_request "$path"
+done
+
+# A new workflow that never runs on push or a pull request (scheduled,
+# dispatch-only or issue-event) must join inert_ci_paths, so that the lists
+# above stay complete: an edit of it alone starts no image build.
+workflow_events() { # workflow: print the event names under the top-level on:
+    awk '/^on:/ { in_on=1; next }
+        in_on && /^[^ #]/ { exit }
+        in_on && /^  [a-z_]+:/ { sub(/:.*/, ""); gsub(/ /, ""); print }' "$1"
+}
+for workflow in "$WORKFLOWS"/*.yml; do
+    path=.github/workflows/$(basename "$workflow")
+    mapfile -t events < <(workflow_events "$workflow")
+    if ((${#events[@]} == 0)); then
+        fail "$path names its trigger events"
+        continue
+    fi
+    runs_on_change=0
+    for event in "${events[@]}"; do
+        case $event in
+            push | pull_request | pull_request_target | merge_group) runs_on_change=1 ;;
+        esac
+    done
+    ((runs_on_change)) && continue
+    listed=0
+    for inert in "${inert_ci_paths[@]}"; do
+        [[ $inert == "$path" ]] && listed=1
+    done
+    if ((listed)); then
+        pass "inert workflow $path is in inert_ci_paths"
+    else
+        fail "inert workflow $path is in inert_ci_paths"
+    fi
 done
 
 # The risk-paths list and its caller run only through pull_request_target,
