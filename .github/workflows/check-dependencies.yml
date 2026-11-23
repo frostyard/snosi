@@ -357,7 +357,13 @@ jobs:
 
           if [[ "$BITWARDEN_UPDATE" == "true" ]]; then
             VER="$BITWARDEN_VERSION"
-            URL="https://github.com/bitwarden/clients/releases/download/desktop-v${VER}/Bitwarden-${VER}-amd64.deb"
+            # From desktop-v2026.11.0 every asset carries a license prefix:
+            # `oss-` is the open-source build (before: no prefix, the build
+            # snosi pinned), `bit-` the commercial one (before: `commercial-`).
+            # Only releases newer than the pin reach this step, so only the
+            # new name is needed. test/bitwarden-asset-name-test.sh checks it
+            # against the recorded 2026.11.0 asset list.
+            URL="https://github.com/bitwarden/clients/releases/download/desktop-v${VER}/oss-Bitwarden-${VER}-amd64.deb"
             TMP=$(mktemp)
             curl -fsSL --max-time 120 -o "$TMP" "$URL"
             SHA=$(sha256sum "$TMP" | cut -d' ' -f1)

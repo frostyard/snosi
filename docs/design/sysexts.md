@@ -262,6 +262,7 @@ Some sysexts include extra files via their own `mkosi.images/<name>/mkosi.extra/
 
 ### bitwarden
 - No `mkosi.extra/` — everything comes from the shared package fragment and postinst script (`shared/packages/bitwarden/`)
+- Pins the open-source desktop build. From desktop-v2026.11.0 upstream prefixes every asset with its license: `oss-Bitwarden-<v>-amd64.deb` (open source, unprefixed before) or `bit-` (commercial, `commercial-` before), so `check-dependencies.yml` downloads the `oss-` name; `test/bitwarden-asset-name-test.sh` runs its update step against the recorded 2026.11.0 asset list
 - Desktop app with no systemd service: no preset, no `Upholds=` drop-in
 - Ships hicolor icons — depends on the no-icon-cache pattern (see Desktop Applications in Sysexts below)
 
