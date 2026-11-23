@@ -45,8 +45,9 @@ The adapter relies on all of the following observed behavior:
    `--pcr-banks` and `--phases` list parsing, zstd zboot decompression, the
    EFI firmware header magic, key-output conflict checks) do not change the
    arguments of `assemble-uki.sh`; its `--phases` value has no empty entry.
-   The first secure assembly on `262.2-1` is the next `build-images.yml` run
-   on main (see "Forky systemd family rechecks" below).
+   The first secure assembly on `262.2-1` was `build-images.yml` run
+   [44613355607](https://github.com/frostyard/snosi/actions/runs/44613355607) on main, 2026-11-19 (see "Forky systemd family rechecks"
+   below).
 6. Direct ukify runs inside the chunked first-pass candidate; that candidate's
    bootc remains storage-digest authority.
 7. Final host byte comparisons depend on first-pass `cp -a` identity.
@@ -436,11 +437,13 @@ current `<pkg>/forky`.
    match classifies that as `PCR_CHANGED`; `test/snosi-health-test.sh` has a
    case with the v262.2 lines.
 
-Not yet shown on 262.2-1: the Task 1-3 rootfs proof and the Task 5 artifact
-tests, which need the protected secure build. The first `build-images.yml`
-run on main after 2026-11-19 runs them; `Validate locally assembled secure
-artifact` runs before `Push immutable version tag`, so a failure publishes
-nothing.
+Secure assembly on 262.2-1: `build-images.yml` run [44613355607](https://github.com/frostyard/snosi/actions/runs/44613355607) on main
+(head `d8318d6f`, the merge of #1339, 2026-11-19). All 4 `secure-build` jobs
+installed systemd 262.2-1 and passed. Each ran `bootc-pair.chroot` and secure
+assembly, and `test/bootc-secure-artifact-test.sh` passed on the locally
+assembled and on the policy-copied artifact before the promotion (`Validate
+locally assembled secure artifact` runs before `Push immutable version tag`).
+That run installed bootc 1.17.3, not the 1.17.4 pair pinned afterwards.
 
 ## Credentials and rotation
 
