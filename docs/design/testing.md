@@ -19,7 +19,8 @@ the risk-path list and caller, the record files in `.memory/corrections/`
 and the two hash-pinned copies of core scripts), `scripts/shellcheck.sh`
 (ShellCheck `-S warning -x` over every tracked shell script found by extension
 or shebang, outside `saved-unused/`; `validate.yml`'s shell-lint job runs the
-same script, and both use the ShellCheck that `mise.toml` pins),
+same script, which fails when the running ShellCheck differs from the
+`mise.toml` pin),
 `node --test test/*.test.mjs`, and the policy tests
 `policy-as-code-test.py`, `risk-paths-test.py`, `pr-triage-dispatch-test.py`,
 `build-workflow-permissions-test.py`, `workflow-pins-test.py` and
@@ -56,7 +57,9 @@ line of every plan file the entry links, that each ADR index status marker
 equals the first word of its ADR's `**Status:**` line (a Proposed ADR must
 have a marker), and that the "Current Sysexts" table of
 `docs/design/sysexts.md` has exactly 1 row for each `Format=sysext` image in
-`mkosi.images/`. It does not check the rest of the status text, or that a
+`mkosi.images/`. It reads `Format=` from `mkosi.conf` and sorted
+`mkosi.conf.d/*.conf` files and fails on any image directory it cannot
+classify. It does not check the rest of the status text, or that a
 status is historically true.
 
 The make gate does not replace `validate.yml`, which still runs the fixture
