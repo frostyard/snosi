@@ -27,6 +27,7 @@
     { "glob": "**/etc/containers/policy.json", "level": "L1", "why": "update-verification: the system container policy that keeps the Frostyard scopes signed" },
     { "glob": "**/libexec/bootc-update-stage", "level": "L1", "why": "update-verification: pulls and stages updates under the strict policy" },
     { "glob": "mkosi.images/base/mkosi.extra/usr/lib/systemd/system/bootc-update-stage.{service,timer}", "level": "L1", "why": "update-verification: the units that run the strict-policy update stager and set its schedule" },
+    { "glob": "mkosi.images/base/mkosi.extra/usr/lib/systemd/system-preset/{04-bootc-update,05-updex}.preset", "level": "L1", "why": "update-verification: the presets that enable the strict-policy update stager timer and the updex sysext update timer" },
     { "glob": "**/usr/bin/snosi-stream", "level": "L1", "why": "update-verification: switches the OS image between the trixie and forky streams with a strict-policy pull and locked staging" },
     { "glob": "shared/download/verif*.sh", "level": "L1", "why": "update-verification: checksum and build-provenance attestation checks of downloads" },
     { "glob": "shared/download/{image,sysext}-checksums.json", "level": "L1", "why": "update-verification: the URL, SHA-256 and attestation signer pins that verified_download and verify-attestations.sh trust (ADR-0024)" },

@@ -22,7 +22,8 @@ Native A/B and NBC build/runtime lanes were removed; see
 `make verify` is the credential-free baseline gate and `make ci` is what
 `ci.yml` runs (core ADR-0044; see [testing](docs/design/testing.md#make-gate));
 Node and ShellCheck come from `mise install`; `make verify` and
-`validate.yml` run the same `scripts/shellcheck.sh`.
+`validate.yml` run the same `scripts/shellcheck.sh`, which fails unless
+`shellcheck --version` equals the `mise.toml` pin (`test/shellcheck-gate.test.mjs`).
 `just` lists targets; `just sysexts`,
 `just snow`, `just snowfield`, `just sundog`, `just floe`,
 `just test-install` and `just run-qemu` cover local builds and bootc tests.

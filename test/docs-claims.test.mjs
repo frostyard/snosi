@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 const root = new URL("../", import.meta.url);
@@ -22,14 +25,13 @@ test("AGENTS.md counts the Frostyard policy scopes", () => {
 });
 
 test("the Current Sysexts table lists every sysext image", () => {
-  const images = [];
-  for (const entry of readdirSync(new URL("mkosi.images/", root), { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const config = new URL(`mkosi.images/${entry.name}/mkosi.conf`, root);
-    if (existsSync(config) && /^Format=sysext\s*$/m.test(readFileSync(config, "utf8"))) {
-      images.push(entry.name);
-    }
+  const formats = imageFormats(new URL("mkosi.images/", root));
+  for (const [name, format] of formats) {
+    assert.notEqual(format, null,
+      `cannot classify mkosi.images/${name}: no Format= in mkosi.conf or mkosi.conf.d/*.conf`);
   }
+  const images = [...formats].filter(([, format]) => format === "sysext")
+    .map(([name]) => name);
   assert.ok(images.length > 0, "mkosi.images must contain sysext images");
 
   const doc = read("docs/design/sysexts.md");
@@ -104,5 +106,55 @@ test("the Plans index agrees with every linked plan status", () => {
       assert.equal(indexedWord, planWord,
         `Plans entry ${entry}\nIndex word '${indexedWord}' differs from ${path} word '${planWord}'`);
     }
+  }
+});
+
+export function imageFormats(imagesDir) {
+  const dir = imagesDir instanceof URL ? fileURLToPath(imagesDir) : imagesDir;
+  const formats = new Map();
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const config = join(dir, entry.name, "mkosi.conf");
+    const fragments = join(dir, entry.name, "mkosi.conf.d");
+    const files = [config];
+    if (existsSync(fragments)) {
+      files.push(...readdirSync(fragments).filter((name) => name.endsWith(".conf"))
+        .sort().map((name) => join(fragments, name)));
+    }
+    let format = null;
+    for (const file of files) {
+      if (!existsSync(file)) continue;
+      for (const match of readFileSync(file, "utf8").matchAll(/^Format=(\S+)\s*$/gm)) {
+        format = match[1];
+      }
+    }
+    formats.set(entry.name, format);
+  }
+  return formats;
+}
+
+test("imageFormats reads ordered fragments and retains unclassified images", () => {
+  const dir = mkdtempSync(join(tmpdir(), "snosi-image-formats-"));
+  try {
+    const configs = {
+      "a/mkosi.conf": "Format=sysext\n",
+      "b/mkosi.conf": "[Output]\n",
+      "b/mkosi.conf.d/10-format.conf": "Format=sysext\n",
+      "c/mkosi.conf": "Format=directory\n",
+      "d/mkosi.conf": "[Output]\n",
+      "e/mkosi.conf": "Format=directory\n",
+      "e/mkosi.conf.d/20.conf": "Format=sysext\n",
+    };
+    for (const [name, text] of Object.entries(configs)) {
+      const file = join(dir, name);
+      mkdirSync(join(file, ".."), { recursive: true });
+      writeFileSync(file, text);
+    }
+    assert.deepEqual(imageFormats(dir), new Map([
+      ["a", "sysext"], ["b", "sysext"], ["c", "directory"],
+      ["d", null], ["e", "sysext"],
+    ]));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

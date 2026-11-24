@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const root = new URL("../", import.meta.url);
@@ -39,4 +40,37 @@ test("shellcheck --list includes tracked shell scripts and excludes saved-unused
   assert.ok(files.includes("scripts/shellcheck.sh"), "the shared script must lint itself");
   assert.ok(files.every((path) => !path.startsWith("saved-unused/")),
     "saved-unused scripts must remain excluded");
+});
+
+test("shellcheck lint mode enforces the mise.toml version pin", () => {
+  const pin = /^shellcheck = "([^"]+)"$/m.exec(read("mise.toml"))?.[1];
+  assert.ok(pin, "mise.toml must pin ShellCheck");
+  const dir = mkdtempSync(join(tmpdir(), "snosi-shellcheck-"));
+  try {
+    for (const version of [pin, "0.0.1", `${pin}.1`, null]) {
+      writeFileSync(join(dir, "shellcheck"), `#!/bin/sh
+if [ "$1" = --version ]; then
+  echo 'ShellCheck - shell script analysis tool'
+  ${version === null ? ":" : `echo 'version: ${version}'`}
+fi
+exit 0
+`, { mode: 0o755 });
+      const result = spawnSync("bash", ["scripts/shellcheck.sh"], {
+        cwd: root, encoding: "utf8",
+        env: { ...process.env, PATH: `${dir}:/usr/bin:/bin` },
+      });
+      assert.ifError(result.error);
+      if (version === pin) {
+        assert.equal(result.status, 0, result.stderr);
+      } else {
+        assert.notEqual(result.status, 0, `must reject version ${version}`);
+        assert.ok(result.stderr.includes(`mise.toml pins ${pin}`), result.stderr);
+        if (version === null) {
+          assert.ok(result.stderr.includes("found version unknown"), result.stderr);
+        }
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

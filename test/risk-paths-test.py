@@ -292,6 +292,8 @@ required_coverage = {
     "mkosi.images/base/mkosi.extra/usr/libexec/bootc-update-stage": "update-verification",
     "mkosi.images/base/mkosi.extra/usr/lib/systemd/system/bootc-update-stage.service": "update-verification",
     "mkosi.images/base/mkosi.extra/usr/lib/systemd/system/bootc-update-stage.timer": "update-verification",
+    "mkosi.images/base/mkosi.extra/usr/lib/systemd/system-preset/04-bootc-update.preset": "update-verification",
+    "mkosi.images/base/mkosi.extra/usr/lib/systemd/system-preset/05-updex.preset": "update-verification",
     "mkosi.images/base/mkosi.extra/usr/bin/snosi-stream": "update-verification",
     "mkosi.images/base/mkosi.extra/usr/lib/sysupdate.1password.d/1password.transfer": "update-verification",
     "shared/download/verify-attestations.sh": "update-verification",
