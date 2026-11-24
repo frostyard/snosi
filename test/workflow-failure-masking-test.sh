@@ -85,10 +85,18 @@ extract_flatpak_bodies() {
     ' "$workflow"
 }
 
-lint_script="${VALIDATE%/.github/workflows/validate.yml}/scripts/shellcheck.sh"
+repo="${VALIDATE%/.github/workflows/validate.yml}"
+lint_script="$repo/scripts/shellcheck.sh"
+sc_pin=$(sed -n 's/^shellcheck = "\([^"]*\)"$/\1/p' "$repo/mise.toml")
+if [[ -z "$sc_pin" ]]; then
+    echo 'workflow-failure-masking-test: no shellcheck pin in mise.toml' >&2
+    exit 1
+fi
+export SC_PIN="$sc_pin"
 
 mkdir -p "$work/lint-empty/scripts"
 cp "$lint_script" "$work/lint-empty/scripts/shellcheck.sh"
+printf 'shellcheck = "%s"\n' "$sc_pin" >"$work/lint-empty/mise.toml"
 (
     cd "$work/lint-empty"
     git init -q
@@ -96,6 +104,10 @@ cp "$lint_script" "$work/lint-empty/scripts/shellcheck.sh"
 mkdir -p "$work/lint-stub-empty"
 cat >"$work/lint-stub-empty/shellcheck" <<'EOF'
 #!/bin/bash
+if [[ "$1" == --version ]]; then
+    printf 'ShellCheck - shell script analysis tool\nversion: %s\n' "$SC_PIN"
+    exit 0
+fi
 exit 99
 EOF
 chmod +x "$work/lint-stub-empty/shellcheck"
@@ -115,6 +127,7 @@ fi
 
 mkdir -p "$work/lint-one/scripts"
 cp "$lint_script" "$work/lint-one/scripts/shellcheck.sh"
+printf 'shellcheck = "%s"\n' "$sc_pin" >"$work/lint-one/mise.toml"
 (
     cd "$work/lint-one"
     git init -q
@@ -129,6 +142,10 @@ EOF
 mkdir -p "$work/lint-stub-one"
 cat >"$work/lint-stub-one/shellcheck" <<'EOF'
 #!/bin/bash
+if [[ "$1" == --version ]]; then
+    printf 'ShellCheck - shell script analysis tool\nversion: %s\n' "$SC_PIN"
+    exit 0
+fi
 printf '%s\n' "$*" >"${SHELLCHECK_LOG}"
 exit 0
 EOF
@@ -182,6 +199,7 @@ fi
 # dropped every later script from the lint.
 mkdir -p "$work/lint-dangling/scripts"
 cp "$lint_script" "$work/lint-dangling/scripts/shellcheck.sh"
+printf 'shellcheck = "%s"\n' "$sc_pin" >"$work/lint-dangling/mise.toml"
 (
     cd "$work/lint-dangling"
     git init -q
