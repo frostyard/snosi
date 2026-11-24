@@ -35,9 +35,9 @@
     "version": "2.38.10"
   },
   "github-copilot": {
-    "url": "https://github.com/github/app/releases/download/v1.4.3/GitHub-Copilot-linux-x64.deb",
-    "sha256": "288abfd5e910115b99211041c0ad3ee18ef97c7448b2270f6358a90be9a243df",
-    "version": "1.4.3"
+    "url": "https://github.com/github/app/releases/download/v1.5.0/GitHub-Copilot-linux-x64.deb",
+    "sha256": "474b55803adea1d7b28db20cfe25ec5158542ea2259795b44b49d338bf8d32c3",
+    "version": "1.5.0"
   },
   "gitdesktop": {
     "url": "https://github.com/theBGuy/GitDesktop/releases/download/v0.16.0/GitDesktop_0.16.0_amd64.deb",
