@@ -110,6 +110,11 @@ readonly LAST_RUN="$ROOT/var/lib/updex/last-run.json"
 # string with a newline first (core spec rule 8).
 read -r -d '' JQ_LIB <<'JQ' || true
 def re($p): type == "string" and (contains("\n") | not) and test($p);
+# An unlock that succeeds after fewer than 10 PCR_CHANGED retries is systemd's
+# designed retry (IMA measures module loads into PCR 10 under Secure Boot);
+# it stays a local record and is not reportable (frostyard/snosi#1358).
+def tpm_report_retries: 10;
+def local_only($kind): $kind == "tpm_unlock" and .outcome == "ok_after_retry" and .tpm_rc == "PCR_CHANGED" and (.retries | type) == "number" and .retries < tpm_report_retries;
 def oneof($a): . as $v | any($a[]; . == $v);
 def semver: re("^(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})\\.(0|[1-9][0-9]{0,5})(-(alpha|beta|rc)\\.(0|[1-9][0-9]{0,3}))?$");
 def imgver: re("^[0-9]{14}$");
@@ -816,7 +821,7 @@ jq -n \
     | sort_by(.last_seen) | reverse | .[:200]
     | map((.last_seen | week_of) as $week
           | {id, kind, detail, week: $week, first_seen, last_seen, occurrences,
-             reportable: (.kind as $kind | envelope_ok($env; $week) and (.detail | detail_valid($kind)))}) as $problems
+             reportable: (.kind as $kind | envelope_ok($env; $week) and (.detail | detail_valid($kind)) and ((.detail | local_only($kind)) | not))}) as $problems
     | ($problems | map(.id)) as $keep
     | {problems: ({format: 1, schema: $schema, generated: $now} + $env + {problems: $problems}),
        details: {format: 1, generated: $now,
