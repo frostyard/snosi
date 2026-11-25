@@ -274,7 +274,8 @@ detail_is() { # jq-selector expected-detail-json
 
 # validate_problems -- every reportable record validates against v1 as a full
 # envelope; every field of every record matches its v1 property schema; and
-# reportable is true exactly when the full envelope validates.
+# reportable is true exactly when the full envelope validates and the record is
+# not a local-only successful TPM unlock with fewer than 10 PCR_CHANGED retries.
 validate_problems() {
     python3 - "$SCHEMA" "$PROBLEMS" "$VALIDATOR" <<'PY'
 import importlib.util, json, sys
@@ -298,7 +299,11 @@ for p in doc["problems"]:
         "client": doc["client"], "kind": p["kind"], "detail": p["detail"],
     }
     errors = v.validate(schema, envelope)
-    if bool(p["reportable"]) != (not errors):
+    detail = p["detail"]
+    local_only = (p["kind"] == "tpm_unlock" and detail.get("outcome") == "ok_after_retry"
+                  and detail.get("tpm_rc") == "PCR_CHANGED"
+                  and type(detail.get("retries")) is int and detail["retries"] < 10)
+    if bool(p["reportable"]) != ((not errors) and not local_only):
         bad.append(f"{p['id']} {p['kind']}: reportable={p['reportable']} but errors={errors}")
     props = schema["$defs"][p["kind"]]["properties"]
     for field, value in p["detail"].items():
@@ -370,7 +375,7 @@ check "chown to root:sudo is skipped only under the test hooks" \
 check "details.json is chowned to root:sudo" grep -qF 'stage .details details.json 0640 sudo' "$COLLECTOR"
 check "no staged file is left" test ! -e "$STATE/.pending"
 if validate_problems; then
-    pass "records validate against the v1 schema copy (reportable exactly when the envelope is valid)"
+    pass "records validate against the v1 schema copy (reportable when valid and not local-only)"
 else
     fail "records validate against the v1 schema copy"
 fi
@@ -413,6 +418,8 @@ check "S4: an updated feature is not recorded" test "$(count_of '.detail.feature
 # S5 and S6
 check "S5: 2 PCR_CHANGED retries then a TPM unlock" \
     detail_is '.kind == "tpm_unlock"' '{"outcome":"ok_after_retry","tpm_rc":"PCR_CHANGED","retries":2}'
+check "S5: 2 PCR_CHANGED retries stay local, not reportable" \
+    test "$(jq -c '[.problems[] | select(.kind == "tpm_unlock") | .reportable]' "$PROBLEMS")" = '[false]'
 check "S6: 2 fs-verity errors give the 2-10 bucket" \
     detail_is '.kind == "integrity_error" and .detail.subsystem == "fs-verity"' '{"subsystem":"fs-verity","count":"2-10"}'
 check "S6: 1 dm-verity error gives the 1 bucket" \
@@ -451,6 +458,9 @@ check "--list names the unit, the result and the reportable flag" \
     grep -qF 'user@.service failed (exit-code)' <<<"$list"
 check "--list shows reportable yes and no" \
     bash -c 'grep -q "reportable: yes" <<<"$1" && grep -q "reportable: no" <<<"$1"' _ "$list"
+
+check "--list shows the TPM unlock as reportable: no" \
+    grep -qE 'tpm_unlock .*reportable: no$' <<<"$list"
 
 # --- 3c. a second run adds no duplicate ----------------------------------
 before=$(jq -c '[.problems[] | [.id, .occurrences]] | sort' "$PROBLEMS")
@@ -562,8 +572,12 @@ tpm_case() { # description expected-detail-or-empty jsonl-messages...
         check "S5: $description" detail_is '.kind == "tpm_unlock"' "$expected"
     fi
 }
+tpm_reportable() { # description expected-reportable
+    check "S5: $1 reportable=$2" \
+        test "$(jq -c '[.problems[] | select(.kind == "tpm_unlock") | .reportable]' "$PROBLEMS")" = "[$2]"
+}
 tpm_case "a clean first-try unlock is not recorded" '' \
-    'Automatically discovered security TPM2 token unlocks volume luks-brian.'
+    'Automatically discovered security TPM2 token unlocks volume.'
 tpm_case "a policy mismatch and a passphrase fallback" '{"outcome":"other","tpm_rc":"POLICY_FAIL","retries":0}' \
     'TPM policy does not match current system state. Either system has been tampered with or policy out-of-date: Operation not permitted' \
     'TPM2 operation failed, falling back to traditional unlocking: Operation not permitted'
@@ -572,6 +586,7 @@ tpm_case "a lockout fallback" '{"outcome":"other","tpm_rc":"LOCKOUT","retries":0
     'TPM2 operation failed, falling back to traditional unlocking: No locks available'
 tpm_case "exhausted PCR retries" '{"outcome":"other","tpm_rc":"PCR_CHANGED","retries":0}' \
     'TPM2 operation failed, falling back to traditional unlocking: Structure needs cleaning'
+tpm_reportable "exhausted PCR retries" true
 tpm_case "exhausted PCR retries with the systemd v262.2 error text" '{"outcome":"other","tpm_rc":"PCR_CHANGED","retries":0}' \
     'PCR values kept changing while unsealing the TPM2 secret, giving up. Something on this system extends a PCR continuously.' \
     'TPM2 operation failed, falling back to traditional unlocking: Structure needs cleaning'
@@ -586,6 +601,20 @@ tpm_case "no TPM2 metadata for this boot state" '{"outcome":"other","tpm_rc":"PO
     'No TPM2 metadata matching the current system state found in LUKS2 header, falling back to traditional unlocking.'
 mapfile -t many < <(for _ in $(seq 1 14); do echo 'ERROR:esys:src/tss2-esys/api/Esys_PolicyPCR.c:103:Esys_PolicyPCR() Esys Finish ErrorCode (0x00000128) '; done)
 tpm_case "retries are capped at 10" '{"outcome":"ok_after_retry","tpm_rc":"PCR_CHANGED","retries":10}' "${many[@]}"
+tpm_reportable "retries are capped at 10 (14 retries)" true
+
+mapfile -t unseal_retries < <(for _ in $(seq 1 10); do echo 'ERROR:esys:src/tss2-esys/api/Esys_Unseal.c:98:Esys_Unseal() Esys Finish ErrorCode (0x00000128) '; done)
+for retries in 1 9 10; do
+    tpm_case "$retries PCR_CHANGED retries then an unlock" \
+        "{\"outcome\":\"ok_after_retry\",\"tpm_rc\":\"PCR_CHANGED\",\"retries\":$retries}" "${unseal_retries[@]:0:retries}"
+    expected_reportable=false
+    if [[ $retries -ge 10 ]]; then expected_reportable=true; fi
+    tpm_reportable "$retries PCR_CHANGED retries then an unlock" "$expected_reportable"
+done
+tpm_case "a passphrase fallback after 2 PCR_CHANGED retries" '{"outcome":"other","tpm_rc":"PCR_CHANGED","retries":2}' \
+    "${unseal_retries[@]:0:2}" \
+    'TPM2 operation failed, falling back to traditional unlocking: Operation not permitted'
+tpm_reportable "a passphrase fallback after 2 PCR_CHANGED retries" true
 
 TPM_UID=1000 tpm_case "a user entry with the fallback text is not recorded" '' \
     'TPM2 operation failed, falling back to traditional unlocking: Operation not permitted' \
@@ -674,6 +703,8 @@ jq -n --argjson now "$now_s" '
     {format: 1, schema: "frostyard.problem/1", generated: ($now | todate), image: null, secure: false, client: null,
      problems: ([range(0; 250) | rec(.; . * 3600)]
                 + [range(250; 255) | rec(.; 91 * 86400 + .)]
+                + [{id: "eeeeeeeeeeeeeeee", kind: "tpm_unlock", detail: {outcome: "ok_after_retry", tpm_rc: "PCR_CHANGED", retries: 3},
+                    week: "2026-W01", first_seen: ($now | todate), last_seen: ($now | todate), occurrences: 1, reportable: true}]
                 + [{id: "ffffffffffffffff", kind: "unit_failed", detail: {unit: "user@1000.service", result: "exit-code", shipped: true, message: "/home/brian"},
                     week: "2026-W01", first_seen: ($now | todate), last_seen: ($now | todate), occurrences: 1, reportable: true, MESSAGE: "leak"}])}
 ' >"$PROBLEMS"
@@ -683,6 +714,9 @@ check "records older than 90 days are dropped" \
     test "$(jq --argjson now "$now_s" '[.problems[] | select((.last_seen | fromdateiso8601) < $now - 90 * 86400)] | length' "$PROBLEMS")" -eq 0
 check "the newest records are the ones kept" \
     test "$(jq --argjson now "$now_s" '[.problems[] | select((.last_seen | fromdateiso8601) < $now - 199 * 3600)] | length' "$PROBLEMS")" -eq 0
+check "a previous local-only TPM unlock is kept and re-marked not reportable" \
+    test "$(jq -c '[.problems[] | select(.id == "eeeeeeeeeeeeeeee") | [.detail, .reportable]]' "$PROBLEMS")" = \
+    '[[{"outcome":"ok_after_retry","tpm_rc":"PCR_CHANGED","retries":3},false]]'
 check "a previous record is re-sanitized (no extra key, no instance, no unknown field)" \
     test "$(jq -c '.problems[] | select(.id == "ffffffffffffffff") | [keys, .detail, .reportable]' "$PROBLEMS")" = \
     '[["detail","first_seen","id","kind","last_seen","occurrences","reportable","week"],{"result":"exit-code","shipped":true},false]'

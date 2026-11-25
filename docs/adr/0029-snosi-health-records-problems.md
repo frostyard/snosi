@@ -1,6 +1,6 @@
 # 0029 — snosi-health records problems; Floe sends with admin consent
 
-- **Status:** Accepted; the Floe sender is decided in [0030](0030-floe-sends-problem-reports-with-admin-consent.md); the core-file override consequence is amended by [ADR-0032](0032-sent-jsonl-pruning-and-core-file-override.md)
+- **Status:** Accepted; the Floe sender is decided in [0030](0030-floe-sends-problem-reports-with-admin-consent.md); the core-file override consequence is amended by [ADR-0032](0032-sent-jsonl-pruning-and-core-file-override.md); the `reportable` rule is amended by [ADR-0043](0043-keep-routine-tpm-unlock-retries-local.md) (a `tpm_unlock` that succeeds after fewer than 10 `PCR_CHANGED` retries stays local)
 - **Date:** 2026-11-05
 
 ## Context

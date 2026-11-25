@@ -209,6 +209,35 @@ After approval in the same firmware state, verify `mokutil --sb-state`, the
 enrolled public certificate fingerprint, and MOK signatures on systemd-boot and
 unlock test result as evidence.
 
+## TPM Unlock Retries At Boot
+
+On Secure Boot hardware, the root TPM unseal often retries 1 to 4 times and
+then unlocks. The journal of `systemd-cryptsetup@root.service` shows each
+retry as a pair of lines after `Automatically discovered security TPM2 token
+unlocks volume.`:
+
+```text
+WARNING:esys:src/tss2-esys/api/Esys_Unseal.c:295:Esys_Unseal_Finish() Received TPM Error
+ERROR:esys:src/tss2-esys/api/Esys_Unseal.c:98:Esys_Unseal() Esys Finish ErrorCode (0x00000128)
+```
+
+`0x128` is `TPM_RC_PCR_CHANGED`: a PCR changed while the policy session was
+open. Any PCR counts, not only the signed PCR 11. The cause is the kernel: under
+Secure Boot, the IMA arch policy measures each module's first load into PCR 10
+while udev loads modules, and on a hardware TPM each unseal attempt takes
+about 1 s. No systemd PCR extend lands in the unseal, and no unit order can
+hold off a kernel measurement. systemd retries by design, up to 30 times
+([#1358](https://github.com/frostyard/snosi/issues/1358)).
+
+snosi-health records these boots as `tpm_unlock` `ok_after_retry`
+`PCR_CHANGED`. Under 10 retries the record stays local (`reportable: no` in
+`snosi-health --list`); from 10 retries, or on any fallback to the passphrase
+or recovery key, it is reportable
+([ADR-0043](adr/0043-keep-routine-tpm-unlock-retries-local.md)). Investigate a
+host that reaches 10 retries or falls back: `journalctl -b -o short-monotonic
+-u 'systemd-cryptsetup@*' -u 'systemd-pcr*'` shows whether a `systemd-pcrextend`
+line lands between the token line and the last retry.
+
 ## TPM Replacement And Recovery Reenrollment
 
 TPM replacement and reenrollment are installed-image responsibilities. Snosi
