@@ -1445,8 +1445,8 @@ the delta. A copy shadows the base file for the whole merged `/usr`.
 
 `test/sysext-no-base-owned-test.sh` (`validate.yml`) covers both checks:
 VM runtime families, the incus bundle, base-tree copies and resolution,
-dangling symlinks, the empty-list and missing-base refusals, the report
-limit, and wiring. `test/sysext-authoring-contract-test.sh` requires the
+dangling symlinks, the empty-list, missing-base and unmapped-`BaseTrees=`
+refusals, an unlistable delta, the report limit, and wiring. `test/sysext-authoring-contract-test.sh` requires the
 finalizer for any new sysext.
 
 ## Adding a New Sysext

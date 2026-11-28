@@ -84,6 +84,18 @@ else
     printf '# %s\n' "$out"
 fi
 
+# A command-line --preset-vendor= or a PresetVendor= in a workflow or script
+# would override the pin for the whole build.
+grep_status=0
+out=$(git grep -n -I -E -e '--preset-vendor' -e 'PresetVendor' -- .github Justfile shared scripts 2>&1) ||
+    grep_status=$?
+if ((grep_status == 1)); then
+    ok 'no workflow, Justfile, shared or scripts file sets --preset-vendor or PresetVendor'
+else
+    fail 'no workflow, Justfile, shared or scripts file sets --preset-vendor or PresetVendor'
+    printf '# %s\n' "$out"
+fi
+
 cp mkosi.conf "$work/original.conf"
 sed '/^PresetVendor=no$/d' "$work/original.conf" >"$work/missing.conf"
 cp "$work/missing.conf" "$work/misplaced.conf"

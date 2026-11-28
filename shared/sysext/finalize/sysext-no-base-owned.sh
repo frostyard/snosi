@@ -94,6 +94,11 @@ elif [[ -n ${MKOSI_CONFIG:-} && -f ${MKOSI_CONFIG} ]]; then
             fi
         done < <(jq -r '(.BuildSources // [])[] | select(.Target == null) | .Source' "$MKOSI_CONFIG")
     fi
+    # A BaseTrees= entry that no BuildSources= source holds must not fall back
+    # to output/base: a gui-base sysext would then pass against base alone.
+    if [[ -n $host_base && -z $base ]]; then
+        die "BaseTrees= entry $host_base is not under a BuildSources= source; refusing to pass vacuously"
+    fi
 fi
 if [[ -z $base ]]; then
     [[ -n $SRC ]] || die "cannot locate the base tree: SRCDIR is not set"
@@ -104,6 +109,7 @@ fi
 check_base_tree_copies() {
     local rel count=0
     while IFS= LC_ALL=C read -r -d '' rel; do
+        # Same test as mkosi's duplicate removal (Path.exists() or is_symlink()).
         [[ -e "$base/usr/$rel" || -L "$base/usr/$rel" ]] || continue
         count=$((count + 1))
         if (( count == 1 )); then
@@ -130,10 +136,18 @@ EOF
 
 # Keep symlinks (even broken ones) and devices; skip only real directories.
 # Sort before filtering: the subset of copies stays in the same byte order.
-if find -P "$BUILDROOT/usr" -mindepth 1 ! -type d -printf '%P\0' |
-    LC_ALL=C sort -z | check_base_tree_copies; then
-    echo "sysext-no-base-owned: ${IMAGE_ID:-sysext} delta clean (no base-tree copies)"
-else
+# Only /usr is checked: sysexts ship no /opt (sysext-usr-only.sh).
+set +e
+find -P "$BUILDROOT/usr/" -mindepth 1 ! -type d -printf '%P\0' |
+    LC_ALL=C sort -z | check_base_tree_copies
+pipe=("${PIPESTATUS[@]}")
+set -e
+if (( pipe[0] != 0 || pipe[1] != 0 )); then
+    echo "sysext-no-base-owned: ${IMAGE_ID:-sysext} could not list the delta under $BUILDROOT/usr; refusing to pass" >&2
     status=1
+elif (( pipe[2] != 0 )); then
+    status=1
+else
+    echo "sysext-no-base-owned: ${IMAGE_ID:-sysext} delta clean (no base-tree copies against $base)"
 fi
 exit "$status"

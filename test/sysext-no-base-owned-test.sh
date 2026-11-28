@@ -75,7 +75,7 @@ new_copy_case() { # name
     base=$(make_delta "$1" base)
 }
 copy_header='sysext-no-base-owned: testext delta ships copies of base-tree paths:'
-copy_success='sysext-no-base-owned: testext delta clean (no base-tree copies)'
+copy_success_re='^sysext-no-base-owned: testext delta clean \(no base-tree copies against .+\)$'
 copy_paths() {
     grep '^  /usr/' <<<"$1" || true
 }
@@ -229,7 +229,7 @@ expect_duplicate "delta file over a dangling base symlink fails" "$rel" run_guar
 
 new_copy_case shared-directory
 touch "$delta/usr/lib/unique"
-if out=$(run_guard "$delta" "$src" "$base") && grep -Fxq "$copy_success" <<<"$out"; then
+if out=$(run_guard "$delta" "$src" "$base") && grep -Eq "$copy_success_re" <<<"$out"; then
     ok "shared real directory with a unique file passes"
 else
     fail "shared real directory with a unique file passes" "$out"
@@ -270,6 +270,46 @@ jq -n --arg h "$work/mkosi-config/host-checkout" \
 expect_duplicate "duplicate in the gui-base tree mapped from MKOSI_CONFIG fails" \
     "$rel" run_guard_env "$delta" "$src" MKOSI_CONFIG="$config"
 
+# The mapped tree is the one checked: a clean delta names it in the success line.
+rm "$delta/usr/$rel"
+if out=$(run_guard_env "$delta" "$src" MKOSI_CONFIG="$config") &&
+    grep -Fxq "sysext-no-base-owned: testext delta clean (no base-tree copies against $src/output/gui-base)" <<<"$out"; then
+    ok "a clean delta names the gui-base tree mapped from MKOSI_CONFIG"
+else
+    fail "a clean delta names the gui-base tree mapped from MKOSI_CONFIG" "$out"
+fi
+
+# An unmapped BaseTrees= entry must not fall back to $SRCDIR/output/base.
+src=$(make_srcdir unmapped-config)
+delta=$(make_delta unmapped-config)
+mkdir -p "$src/output/base/usr"
+config="$work/unmapped-config/config.json"
+jq -n --arg h "$work/unmapped-config/host-checkout" \
+    '{BaseTrees: ["/nowhere/output/gui-base"], BuildSources: [{Source: $h, Target: null}]}' >"$config"
+status=0
+out=$(run_guard_env "$delta" "$src" MKOSI_CONFIG="$config") || status=$?
+if ((status == 1)) && grep -Fq 'is not under a BuildSources= source; refusing to pass vacuously' <<<"$out"; then
+    ok "an unmapped BaseTrees= entry refuses to fall back to output/base"
+else
+    fail "an unmapped BaseTrees= entry refuses to fall back to output/base" "$out"
+fi
+
+# A delta that cannot be listed fails closed with a reason.
+new_copy_case unlistable
+mkdir -p "$delta/usr/lib/locked"
+touch "$delta/usr/lib/locked/file"
+chmod 000 "$delta/usr/lib/locked"
+status=0
+out=$(run_guard "$delta" "$src" "$base") || status=$?
+chmod 755 "$delta/usr/lib/locked"
+if [[ $(id -u) -eq 0 ]]; then
+    ok "unlistable delta check skipped as root (root reads mode-000 directories)"
+elif ((status == 1)) && grep -Fq 'could not list the delta' <<<"$out"; then
+    ok "a delta that cannot be listed fails closed with a reason"
+else
+    fail "a delta that cannot be listed fails closed with a reason" "$out"
+fi
+
 new_copy_case copy-limit
 for i in {50..1}; do
     printf -v rel 'lib/copy-%02d' "$i"
@@ -295,7 +335,7 @@ fi
 
 new_copy_case both-clean
 touch "$base/usr/lib/base-only" "$delta/usr/lib/delta-only"
-if out=$(run_guard "$delta" "$src" "$base") && grep -Fxq "$copy_success" <<<"$out" &&
+if out=$(run_guard "$delta" "$src" "$base") && grep -Eq "$copy_success_re" <<<"$out" &&
     grep -Eq '^sysext-no-base-owned: testext delta clean \([0-9]+ base-owned patterns checked\)$' <<<"$out"; then
     ok "clean delta with a non-empty base prints both success lines"
 else
