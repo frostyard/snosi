@@ -215,6 +215,18 @@ EOF
         return 1
     }
 
+    # The real validation path must reject an initrd with unmasked NvPCR
+    # definitions, as dracut 113 builds it without 90snosi-nvpcr-mask (#1378).
+    set +e
+    output=$(PATH="$fixture/bin:$PATH" SNOSI_GPT_AUTO_FIXTURE=1 \
+        FIXTURE_NVPCR=unmasked validate_gpt_auto_cryptsetup 2>&1)
+    status=$?
+    set -e
+    [[ $status -eq 1 && $output == *"has no etc/nvpcr/cryptsetup.nvpcr -> /dev/null mask"* ]] || {
+        echo "Error: unmasked initramfs NvPCR definitions were not diagnosed" >&2
+        return 1
+    }
+
     cat >"$fixture/bin/lsinitrd" <<'EOF'
 #!/bin/bash
 echo "Need 'zstd' to unpack the initramfs." >&2

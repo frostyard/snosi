@@ -105,7 +105,9 @@ grep -Fq 'ln -sfn /dev/null "$initdir/etc/nvpcr/' "$nvpcr_dracut_module" || {
     echo "issue 1378: the initrd NvPCR module must create /dev/null masks" >&2
     exit 1
 }
-nvpcr_module_code=$(sed 's/#.*//' "$nvpcr_dracut_module")
+# Strip only comments that start a line or follow whitespace: a bare '#'
+# also appears in parameter expansions such as ${definition##*/}.
+nvpcr_module_code=$(sed -E 's/(^|[[:space:]])#.*//' "$nvpcr_dracut_module")
 if grep -Fq 'systemd-tpm2-setup' <<<"$nvpcr_module_code"; then
     echo "the initrd NvPCR module must not touch systemd-tpm2-setup; SRK setup is required" >&2
     exit 1
@@ -122,7 +124,8 @@ if grep -Eq '^[[:space:]]*echo' <<<"$nvpcr_module_code"; then
     echo "the initrd NvPCR module must not print dracut dependencies" >&2
     exit 1
 fi
-grep -Fq 'validate_initrd_nvpcr_masks "$initrd_root"' "$artifact_validator"
+grep -Fqx '    validate_initrd_nvpcr_masks "$initrd_root" || return 1' "$artifact_validator"
+grep -Fq 'FIXTURE_NVPCR=unmasked validate_gpt_auto_cryptsetup' "$artifact_validator"
 grep -Fq 'has no etc/nvpcr/' "$artifact_validator"
 grep -Fq 'nvpcr_mask_negative_fixture' "$artifact_validator"
 grep -Fq -- '--nvpcr-negative-fixtures' "$root/test/bootc-secure-artifact-negative-test.sh"
