@@ -253,7 +253,7 @@ Some sysexts include extra files via their own `mkosi.images/<name>/mkosi.extra/
 
 ### 1password
 - Desktop app installed from a pinned `.deb` (`sysext-checksums.json`) via `verified_download()` in `mkosi.images/1password/mkosi.postinst.chroot` — NOT `Packages=1password` from the apt repo, because the deb postinst unconditionally curls its signing key and dpkg maintainer scripts run in the buildroot without DNS; the script strips the `installAutoupdateChannel` call and the helper-binary `chgrp` lines from the postinst (edge-style `dpkg-deb -R`/`-b` repack — the chgrps target dynamic GIDs that get re-pinned anyway and EINVAL in rootless builds) and keeps the rest of the offline `installFiles` half. The deb tracks the same `downloads.1password.com` stable channel as 1password-cli
-- The deb installs to `/opt/1Password`, relocated to `/usr/lib/1Password` with `/usr/bin/1password` and `/usr/bin/op-ssh-sign` symlinks and a desktop-file `Exec=` rewrite; the deb postinst also leaves its own absolute `1password-mcp` links (`/usr/bin/1password-mcp`, `/usr/lib/1Password/onepassword-mcp`) naming `/opt/1Password`, so `mkosi.images/1password/opt-links.sh rewrite` re-points every link under `/usr` that names `/opt/1Password`, and `mkosi.finalize` fails the build on a link that still names `/opt/1Password` or does not resolve inside the buildroot (snosi#1279); the deb's `Depends` are kept explicit in `Packages=` so `dpkg -i` configures cleanly (base currently satisfies all but gnupg2)
+- The deb installs to `/opt/1Password`, relocated to `/usr/lib/1Password` with `/usr/bin/1password` and `/usr/bin/op-ssh-sign` symlinks and a desktop-file `Exec=` rewrite; the deb postinst also leaves its own absolute `1password-mcp` links (`/usr/bin/1password-mcp`, `/usr/lib/1Password/onepassword-mcp`) naming `/opt/1Password`, so `mkosi.images/1password/opt-links.sh rewrite` re-points every link under `/usr` that names `/opt/1Password`, and `mkosi.finalize` fails the build on a link that still names `/opt/1Password` or does not resolve inside the buildroot (snosi#1279); `Packages=` lists only `gnupg2` and `xdg-utils`. The postinst's `dpkg -i` finds the other `Depends` in `gui-base`
 - Ships SUID `chrome-sandbox` (Electron) and hicolor icons → `sysext-strip-icon-cache.sh` required; rootless dev builds drop the SUID bit, publish only from CI
 - The deb postinst creates `onepassword`/`onepassword-mcp` groups and setgid's `1Password-BrowserSupport`/`1password-mcp`; the chroot `/etc/group` is stripped from the delta, so the postinst pins the GIDs (1936/1938 — 1937 reserved for onepassword-cli) to match the shipped `mkosi.images/1password/mkosi.extra/usr/lib/sysusers.d/1password.conf`, which recreates the groups at boot via `reload-sysext.service`
 - The polkit system-auth policy is regenerated with `unix-group:onepassword` as owner — the deb template fills in build-time human users, of which the chroot has none; users join the `onepassword` group to enable CLI/SSH-agent system-auth integration
@@ -278,7 +278,7 @@ Some sysexts include extra files via their own `mkosi.images/<name>/mkosi.extra/
 - Trixie builds only: `mkosi.conf.d/trixie.conf` adds it to the root `Dependencies=`, and a forky build has no `sunshine` image. Upstream publishes only `debiantrixie` and Ubuntu debs, and the `debiantrixie` deb depends on `libminiupnpc18`, which forky does not ship ([ADR-0037](../adr/0037-build-forky-as-a-second-suite.md); `test/suite-isolation-test.sh` checks the forky sysext set)
 - `mkosi.postinst.chroot` downloads Sunshine's official pinned Trixie `.deb` with `verified_download()` and installs it with `dpkg -i`; its payload already uses the native `/usr` layout, so no relocation is needed
 - Release asset naming changed in v2026.906.222525: `sunshine_<VER>-1+debiantrixie_amd64.deb` replaced `sunshine-debian-trixie-amd64.deb` (the old name 404s, which broke `check-dependencies.yml` on 2026-09-08; the workflow's URL template pins the new shape)
-- The same release moved the tray from GTK3/appindicator/libnotify to Qt6 (`readelf -d /usr/bin/sunshine`: libQt6Widgets/Gui/Core + libXtst, no GTK, no Qt5). `Packages=` therefore carries libqt6core6t64/gui6/widgets6/svg6, libxtst6, and `qt6-qpa-plugins` + `qt6-wayland` — those two are libqt6gui6 *Recommends*, which mkosi never installs, but QGuiApplication aborts the whole process when no platform plugin loads, so they are hard requirements of the sysext
+- The same release moved the tray from GTK3/appindicator/libnotify to Qt6 (`readelf -d /usr/bin/sunshine`: libQt6Widgets/Gui/Core + libXtst, no GTK, no Qt5). `Packages=` therefore carries libqt6core6t64/gui6/widgets6/svg6 and `qt6-qpa-plugins` + `qt6-wayland` (`gui-base` supplies `libxtst6`) — those two are libqt6gui6 *Recommends*, which mkosi never installs, but QGuiApplication aborts the whole process when no platform plugin loads, so they are hard requirements of the sysext
 - Through v2026.906.222525 upstream's CPack Depends (`cmake/packaging/linux.cmake`, Qt5 branch of `TRAY_QT_VERSION`) also listed `libqt5widgets5, libqt5svg5`, which dpkg would enforce (~35 MB of never-loaded Qt5 in the delta); the postinst unpacked the deb with `dpkg-deb -R`, stripped exactly that pair, `chmod 0755`'d the mode-0644 maintainer scripts (which `dpkg -i` tolerates but `dpkg-deb -b` refuses), rebuilt, and failed closed when the pair was absent. v2026.914.233613 fixed the Depends to `libqt6widgets6, libqt6svg6`; the guard fired on the 2026-09-15 checksum-update PR and the workaround was removed. The postinst now runs `assert_deb_dependencies_satisfied` on the pristine deb and installs it as-is, failing closed if any `libqt5` reference reappears in Depends — do not add Qt5 to `Packages=`. `test/sunshine-capabilities-test.sh` fixtures the clean install, the Qt5 tripwire, and the unsatisfied-Depends branch with real `dpkg-deb`/`dpkg-checkbuilddeps`
 - Desktop-only self-hosted game streaming host for Moonlight; retain the package's `cap_sys_admin,cap_sys_nice` file capability on `/usr/bin/sunshine`, `uhid` modules-load entry, and udev access rules
 - The `uhid` modules-load entry and virtual-input udev rules reach udev only via `snosi-sysext-udev-reload.service` (`ExtraTrees=%D/shared/sysext/tree` + the `Upholds=` drop-in). udev parses its rules before `systemd-sysext.service` merges the overlay, so without that reload they were applied on *no* boot, not merely a delayed one — see [udev Rules and Kernel Modules in Sysexts](#udev-rules-and-kernel-modules-in-sysexts)
@@ -397,7 +397,7 @@ shape under real systemd, with a negative control without the `-`.
 
 ### lemonade
 - `mkosi.postinst.chroot` — Downloads the lemonade-server .deb (GitHub release, no apt repo) via `verified_download()`, installs with `dpkg -i`. Everything ships natively under `/usr`; no relocation
-- `Packages=` carries the deb's runtime Depends (`dpkg -i` can't resolve them; the chroot has no apt), including `libcpp-httplib0.41` which exists only in trixie-backports — the sandbox's low backports pin still selects it as the sole candidate
+- `Packages=` carries the deb's runtime `Depends` that `base` lacks, including `libcpp-httplib0.41`. On trixie, the sandbox's low backports pin still selects it as the sole candidate. The postinst's `dpkg -i` finds the other dependencies in `base`
 - `mkosi.finalize` — Captures `/etc/default/lemond` to factory defaults; Lemonade 11.8's `lemond.service` reads `EnvironmentFile=-/etc/default/lemond` (HF_TOKEN, LEMONADE_API_KEY — the deb ships only a commented template, no real secrets)
 - `usr/lib/sysusers.d/lemonade-groups.conf` — Adds the `lemonade` user (created at boot by the deb's own sysusers fragment) to `systemd-journal` and `render` (GPU access), mirroring the deb postinst's build-time-only `usermod` calls
 - `usr/lib/tmpfiles.d/lemonade.conf` — Factory `/etc/default/lemond` injection
@@ -1188,9 +1188,9 @@ and each product supplies its own suite's version at merge time.
 
 **The contract** (stated in gui-base's own conf): every package in
 gui-base must be in the installed closure of EVERY desktop product.
-Package *presence* is what drives delta omission — versions are
-irrelevant, so gui-base installs plain trixie even where products use
-backports. A package some desktop product lacks must stay OUT (it would
+For packages that the sysext does not list in `Packages=`, presence in
+`gui-base` drives delta omission. Their versions are irrelevant, so gui-base
+installs plain trixie even where products use backports. A package some desktop product lacks must stay OUT (it would
 strip that lib from deltas and break the app on that product): today
 libxss1 and xdg-utils (absent from snow), zenity / fonts-liberation /
 the ayatana-appindicator+dbusmenu stack and gnupg2 / libminiupnpc18
@@ -1260,11 +1260,11 @@ without changing its KEYPACKAGE version, so each moved sysext carries a
 
 ## A Sysext Delta Is Only Valid Against the Base It Was Built On
 
-An `Overlay=yes` sysext ships the *difference* between its buildroot and
-its base tree. Every package the base already had is omitted at apt level.
-That makes the published `.raw` a **frozen assertion about the base's
-transitive closure at build time** — and nothing re-validates it when the
-base later changes.
+An `Overlay=yes` sysext ships a delta against its base tree. It uses
+installed base packages without copying them, provided they are not listed
+in the sysext's `Packages=`. That makes the published `.raw` a **frozen
+assertion about the base's transitive closure at build time** — and nothing
+re-validates it when the base later changes.
 
 This bit incus on Cayo (root-caused 2026-09-01). Until
 33455fc (2026-08-25, #771) the base image transitively pulled an entire
@@ -1311,10 +1311,10 @@ Rules that follow:
   see "Automatic sysext updates (updex-update.timer)".
 - **Pin load-bearing library paths in `required-paths.txt`.** The check runs
   against the delta, so listing `/usr/lib/x86_64-linux-gnu/libepoxy.so.0`
-  asserts "the delta ships it" — precisely the invariant that broke. Adding
-  the package to `Packages=` does *not* help: delta omission is decided by
-  presence in the base, not by how the package got requested. incus pins
-  `libepoxy.so.0`, `libopus.so.0`, `libgstreamer-1.0.so.0` and
+  asserts "the delta ships it" — precisely the invariant that broke. Do not
+  list the package in `Packages=` while the base still ships it: mkosi
+  would reinstall it and the base-tree copy guard would reject the delta.
+  incus pins `libepoxy.so.0`, `libopus.so.0`, `libgstreamer-1.0.so.0` and
   `libgtk-3.so.0` for this reason.
 - **Diagnose with `ldd`, not with the package list.** On a merged system,
   `for f in /usr/bin/* /usr/sbin/* /usr/libexec/*; do ldd "$f" 2>/dev/null |
@@ -1434,15 +1434,24 @@ the sysext pulled a family member base lacks (another emulator,
 one qemu build), apt upgraded a base package into the delta, or base stopped
 shipping it. The incus bundle under `/usr/incus` matches none of the globs. A
 pattern without wildcards (`bin/kvm`) is checked for existence explicitly,
-since the shell yields it even when absent. `test/sysext-no-base-owned-test.sh`
-(validate.yml) fixtures pass/fail per family, the incus bundle, dangling
-symlinks, the empty-list refusal, base still shipping the runtime, and wiring
-in every sysext; `test/sysext-authoring-contract-test.sh` requires the
+since the shell yields it even when absent.
+
+The finalizer also rejects every non-directory entry under the delta's
+`/usr` that has the same path in its base tree (`base` or `gui-base`). This
+includes dangling symlinks. mkosi
+[00c7f0bc8](https://github.com/systemd/mkosi/commit/00c7f0bc8) reinstalls
+every `Packages=` entry of an `Overlay=yes` image and keeps its files in
+the delta. A copy shadows the base file for the whole merged `/usr`.
+
+`test/sysext-no-base-owned-test.sh` (`validate.yml`) covers both checks:
+VM runtime families, the incus bundle, base-tree copies and resolution,
+dangling symlinks, the empty-list, missing-base and unmapped-`BaseTrees=`
+refusals, an unlistable delta, the report limit, and wiring. `test/sysext-authoring-contract-test.sh` requires the
 finalizer for any new sysext.
 
 ## Adding a New Sysext
 
-1. Create `mkosi.images/<name>/mkosi.conf` following the pattern above
+1. Create `mkosi.images/<name>/mkosi.conf` following the pattern above. In `Packages=`, list only packages that the build base (`base` or `gui-base`) does not ship. A postinst that runs `dpkg -i` finds the other `Depends` in the base tree.
 2. Set `KEYPACKAGE` to the primary package name
 3. Wire `sysext-usr-only.sh`, `sysext-strip-product-mesa.sh` (base-built sysexts only — never a gui-base one), `sysext-required-paths.sh`, `sysext-strip-icon-cache.sh`, `sysext-no-base-owned.sh`, `sysext-upholds-guard.sh`, and `sysext-reload-manager-guard.sh` through `FinalizeScripts=`, then create `mkosi.images/<name>/required-paths.txt` listing the paths that prove the sysext is complete (main binaries, dependency payload, unit files, activation drop-in, and `usr/lib/extension-release.d/extension-release.<name>` when the sysext ships a system unit); the shared checks fail the build on `/opt` payload or a missing manifest path
 4. Add any extra files in `mkosi.images/<name>/mkosi.extra/`

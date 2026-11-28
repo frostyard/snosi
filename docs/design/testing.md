@@ -25,8 +25,8 @@ same script, which fails when the running ShellCheck differs from the
 `policy-as-code-test.py`, `risk-paths-test.py`, `pr-triage-dispatch-test.py`,
 `build-workflow-permissions-test.py`, `workflow-pins-test.py` and
 `forky-publish-workflow-test.py`, the fixture tests
-`bootc-secure-forky-promotion-test.sh` and `snosi-stream-test.sh`, and
-`docs-bootc-switch-test.py`,
+`bootc-secure-forky-promotion-test.sh`, `snosi-stream-test.sh` and
+`preset-vendor-pin-test.sh`, and `docs-bootc-switch-test.py`,
 which requires every documented `bootc switch` command to be the 2nd step of
 an `&&` chain: a strict-policy Podman pull, then a switch of the same image
 with `--transport containers-storage`, then optionally `systemctl reboot`, as the
@@ -78,6 +78,12 @@ image references, and `dps-luks-cleanup-test.sh`, which needs root. The
 shared `scripts/shellcheck.sh` discovers scripts by extension and shebang.
 Runtime `/etc` deletion, `RequiredBy=`, `Upholds=`, publication, sysext and profile
 dependency guards have fixture suites.
+`test/preset-vendor-pin-test.sh` runs in `validate.yml`
+(`publication-guard-tests`) and `make verify`. It requires `PresetVendor=no`
+in `[Content]` of the main image and each non-overlay subimage, and
+rejects other values in tracked `.conf` files. Fixtures reject a missing,
+misplaced or `auto` setting. This keeps build-time preset links in `/etc`
+for the enablement manifest and first-boot parity even with systemd v263.
 `check-user-tmpfiles-guard.sh` rejects tracked paths at or under
 `usr/lib/user-tmpfiles.d`, which `systemd-tmpfiles --user` never reads, and
 tracked rules under any `user-tmpfiles.d/` that name `.config/containers`.

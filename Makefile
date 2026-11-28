@@ -5,7 +5,8 @@
 #   make verify  the baseline gate: the template gate (agent symlinks, docs
 #                index, risk-path list, corrections, vendored core copies),
 #                its Node tests, the repository policy tests, the forky tag
-#                promotion fixtures and the snosi-stream fixtures. It runs
+#                promotion fixtures, the snosi-stream fixtures, and the
+#                preset vendor pin test. It runs
 #                shellcheck through scripts/shellcheck.sh, the same script
 #                that validate.yml runs. It does not change the checkout.
 #   make check   the developer gate; the same as verify.
@@ -33,6 +34,7 @@ verify:
 	python3 ./test/forky-publish-workflow-test.py
 	./test/bootc-secure-forky-promotion-test.sh
 	./test/snosi-stream-test.sh
+	./test/preset-vendor-pin-test.sh
 	python3 ./test/docs-bootc-switch-test.py
 
 check: verify

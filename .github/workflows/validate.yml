@@ -509,6 +509,9 @@ jobs:
       - name: Test base-owned VM runtime sysext guard
         run: ./test/sysext-no-base-owned-test.sh
 
+      - name: Test build-time preset vendor pin
+        run: ./test/preset-vendor-pin-test.sh
+
       - name: Test journald configuration discovery
         run: python3 ./test/journald-config-test.py
 
@@ -650,7 +653,7 @@ jobs:
           persist-credentials: false
 
       - name: setup-mkosi
-        uses: systemd/mkosi@80a0310a45ec668e02a24f60551bed380ec89a76 # main 2026-11-20
+        uses: systemd/mkosi@636e3c2c547f1c7898ccd1bc0000558badc90e7f # main 2026-11-26
 
       - name: Validate mkosi configuration summaries
         run: |
