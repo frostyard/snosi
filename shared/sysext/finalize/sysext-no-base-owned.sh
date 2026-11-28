@@ -1,7 +1,8 @@
 #!/bin/bash
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # Shared finalize script for every sysext: fail the build if the delta ships
-# any path the base image owns (shared/sysext/base-owned-paths.txt).
+# any path reserved to the base image (shared/sysext/base-owned-paths.txt)
+# or any non-directory copy of a path in its base tree.
 #
 # Why (#1011, #1015): base carries the VM runtime (qemu, OVMF, SeaBIOS) that
 # systemd-vmspawn needs on every product. Because every sysext builds against
@@ -48,6 +49,7 @@ if (( patterns == 0 )); then
     exit 1
 fi
 
+status=0
 if (( ${#offenders[@]} > 0 )); then
     echo "sysext-no-base-owned: ${IMAGE_ID:-sysext} delta ships paths the base image owns:" >&2
     printf '  %s\n' "${offenders[@]}" >&2
@@ -60,7 +62,78 @@ from the sysext, add it to base, or re-triage the pattern in
 shared/sysext/base-owned-paths.txt -- do not remove the pattern to make the
 build pass.
 EOF
-    exit 1
+    status=1
+else
+    echo "sysext-no-base-owned: ${IMAGE_ID:-sysext} delta clean ($patterns base-owned patterns checked)"
 fi
 
-echo "sysext-no-base-owned: ${IMAGE_ID:-sysext} delta clean ($patterns base-owned patterns checked)"
+# Base-tree resolution mirrors sysext-upholds-guard.sh. The overlay is
+# unmounted before FinalizeScripts run, so BUILDROOT contains only the delta.
+die() {
+    echo "sysext-no-base-owned: $*" >&2
+    exit 1
+}
+
+SRC=${SRCDIR:-}
+base=""
+if [[ -n ${SNOSI_SYSEXT_BASE_TREE:-} ]]; then
+    base=$SNOSI_SYSEXT_BASE_TREE
+elif [[ -n ${MKOSI_CONFIG:-} && -f ${MKOSI_CONFIG} ]]; then
+    command -v jq >/dev/null || die "jq is required to read \$MKOSI_CONFIG ($MKOSI_CONFIG)"
+    host_base=$(jq -r '(.BaseTrees // [])[0] // "" | if type == "object" then (.Source // "") else . end' "$MKOSI_CONFIG")
+    if [[ -n $host_base && -n $SRC ]]; then
+        while IFS= read -r source; do
+            [[ -n $source ]] || continue
+            source=${source%/}
+            if [[ $host_base == "$source" ]]; then
+                base=$SRC
+                break
+            elif [[ $host_base == "$source"/* ]]; then
+                base=$SRC/${host_base#"$source"/}
+                break
+            fi
+        done < <(jq -r '(.BuildSources // [])[] | select(.Target == null) | .Source' "$MKOSI_CONFIG")
+    fi
+fi
+if [[ -z $base ]]; then
+    [[ -n $SRC ]] || die "cannot locate the base tree: SRCDIR is not set"
+    base=$SRC/output/base
+fi
+[[ -d $base ]] || die "base tree $base is not a directory; refusing to pass vacuously (is the base image built to \$SRCDIR/output/base?)"
+
+check_base_tree_copies() {
+    local rel count=0
+    while IFS= LC_ALL=C read -r -d '' rel; do
+        [[ -e "$base/usr/$rel" || -L "$base/usr/$rel" ]] || continue
+        count=$((count + 1))
+        if (( count == 1 )); then
+            echo "sysext-no-base-owned: ${IMAGE_ID:-sysext} delta ships copies of base-tree paths:" >&2
+        fi
+        if (( count <= 50 )); then
+            printf '  /usr/%s\n' "$rel" >&2
+        fi
+    done
+    if (( count == 0 )); then
+        return 0
+    fi
+    if (( count > 50 )); then
+        printf '  ... and %d more\n' "$((count - 50))" >&2
+    fi
+    cat >&2 <<'EOF'
+mkosi keeps the files of every reinstalled Packages= entry of an Overlay=yes
+image (mkosi 00c7f0bc8). Drop from this sysext's Packages= each package that
+its base tree (base or gui-base) already ships. Never add a base package to
+a sysext's Packages=.
+EOF
+    return 1
+}
+
+# Keep symlinks (even broken ones) and devices; skip only real directories.
+# Sort before filtering: the subset of copies stays in the same byte order.
+if find -P "$BUILDROOT/usr" -mindepth 1 ! -type d -printf '%P\0' |
+    LC_ALL=C sort -z | check_base_tree_copies; then
+    echo "sysext-no-base-owned: ${IMAGE_ID:-sysext} delta clean (no base-tree copies)"
+else
+    status=1
+fi
+exit "$status"
