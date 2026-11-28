@@ -113,6 +113,10 @@ file at a path base ships: mkosi drops it from the delta (#1111).
 Base owns the host VM runtime (`qemu-system-x86`, `qemu-utils`, `ovmf`);
 every sysext runs `shared/sysext/finalize/sysext-no-base-owned.sh`, which
 fails a delta that ships any glob in `shared/sysext/base-owned-paths.txt`.
+It also rejects a non-directory copy of any path in the sysext's base tree.
+mkosi 00c7f0bc8 keeps the files of every reinstalled `Packages=` entry for
+an `Overlay=yes` image, so a sysext must list only packages that its base
+tree (`base` or `gui-base`) does not ship.
 Every base-built sysext also runs
 `shared/sysext/finalize/sysext-strip-product-mesa.sh`, which removes the Mesa
 runtime listed in `shared/sysext/product-mesa-paths.txt` from the delta,
@@ -126,6 +130,8 @@ The Frostyard repository key must be the content of
 the base copy, so `shared/bootc-secure/mkosi.conf` restores it. Build-time enablement
 is normalized into `/usr/share/snosi/enablement-manifest.txt`; presets
 recreate links on true first boot (`/etc/machine-id` is `uninitialized`).
+`base`, `gui-base` and the main image set `PresetVendor=no`
+(`test/preset-vendor-pin-test.sh`) to keep build-time enablement in `/etc`.
 Every remote `uses:` in `.github/workflows/` pins a 40-hex commit SHA with a
 `# vX.Y.Z` comment, or `# vX.Y` when upstream tags releases with 2 parts
 (`ryand56/r2-upload-action`); a major-only `# vN` names a moving tag and is

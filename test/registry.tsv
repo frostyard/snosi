@@ -94,6 +94,7 @@ package-metadata-test.py	ci	validate.yml
 pilothouse-sysext-test.sh	ci	validate.yml
 podman-socket-policy-test.py	ci	validate.yml
 policy-as-code-test.py	ci	validate.yml
+preset-vendor-pin-test.sh	ci	validate.yml
 publication-guards.bats	ci	validate.yml
 required-by-guard-test.sh	ci	validate.yml
 retirement-plan-test.py	ci	validate.yml
