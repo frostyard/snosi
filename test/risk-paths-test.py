@@ -283,6 +283,7 @@ required_coverage = {
     "mkosi.images/base/mkosi.extra/usr/lib/snosi/esp.sh": "secure-boot",
     "mkosi.images/base/mkosi.extra/usr/lib/dracut/dracut.conf.d/20-tpm-luks.conf": "tpm",
     "mkosi.images/base/mkosi.extra/usr/lib/dracut/modules.d/95tss-user/module-setup.sh": "tpm",
+    "shared/bootc-secure/tree/usr/lib/dracut/modules.d/90snosi-nvpcr-mask/module-setup.sh": "tpm",
     "shared/native-ab/keys/mok-2026.crt": "signing",
     "shared/sysext/keys/import-pubring.gpg": "signing",
     "mkosi.sandbox/etc/apt/keyrings/frostyard.gpg": "signing",

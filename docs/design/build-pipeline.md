@@ -299,8 +299,10 @@ when Debian's systemd source advances. Rebuild a secure profile and execute
 `bootc --version` plus `bootc container --help` in its isolated root; also
 recheck the Issue 517 `90-image-dissect.rules` inclusion through
 `shared/bootc-secure/tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf`
-and NvPCR masks in `shared/bootc-secure/finalize/disable-nvpcr.chroot`,
 and the systemd-cryptsetup texts that `snosi-health` parses (ADR-0029).
+Recheck the rootfs NvPCR masks in
+`shared/bootc-secure/finalize/disable-nvpcr.chroot` and the initrd masks from
+`90snosi-nvpcr-mask` (#1378).
 `test/check-forky-systemd-test.sh` enforces the sentinel consumer and PR
 obligations. Signed-PCR-11 LUKS unlock is retained while unused NvPCR writers
 are masked. The most recent build-root compatibility recheck is in `AGENTS.md`.

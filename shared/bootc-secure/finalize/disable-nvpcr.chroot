@@ -20,13 +20,15 @@ set -euo pipefail
 # systemd 262 (Forky, 2026-09-28) removed the anchor secret: NvPCRs are now
 # created in the initrd under a write policy, which requires every definition
 # inside the UKI and an initrd-phase signed PCR policy (ukify
-# --sign-initrd-pcrs). snosi UKIs carry neither. Per the 262 NEWS, an NvPCR not
-# initialized in the initrd fails when something extends it at runtime, so
-# unmasked consumers would be expected to fail on every boot, not only after a
-# key or TPM change. That is inferred, not observed on a booted 262 image. The
-# masks are therefore still required. The unit and definition names are unchanged in 262,
-# and systemd-tpm2-setup still skips masked definitions
-# (CONF_FILES_FILTER_MASKED). Re-checked 2026-09-29.
+# --sign-initrd-pcrs). snosi UKIs do not carry that policy. In the Forky lab
+# boots of 2026-11-25, `systemd-tpm2-setup-early.service` logged "Failed to
+# initialize NvPCR index: Device not a stream" 4 times and exited 1.
+# `snosi-health` reported `unit_failed` (issue #1378).
+# `systemd-tpm2-setup` skips masked definitions (`CONF_FILES_FILTER_MASKED`).
+#
+# This script masks definitions in the rootfs only. The kernel postinst builds
+# the initramfs before this script runs. The `90snosi-nvpcr-mask` dracut
+# module adds the initrd masks.
 mkdir -p /etc/nvpcr /etc/systemd/system
 for definition in /usr/lib/nvpcr/*.nvpcr; do
     [[ -e "$definition" ]] || continue

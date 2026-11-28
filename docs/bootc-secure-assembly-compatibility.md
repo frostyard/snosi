@@ -469,6 +469,31 @@ assembled and on the policy-copied artifact before the promotion (`Validate
 locally assembled secure artifact` runs before `Push immutable version tag`).
 That run installed bootc 1.17.3, not the 1.17.4 pair pinned afterwards.
 
+**NvPCR definitions in the forky initrd (2026-11-27, frostyard/snosi#1378):**
+
+[Issue #1378](https://github.com/frostyard/snosi/issues/1378) records the
+Forky lab boots of 2026-11-25: Snow `20261117162606` and Floe `20261117162644`.
+In each boot, `systemd-tpm2-setup-early.service` logged
+"Failed to initialize NvPCR index: Device not a stream" 4 times and exited 1.
+`snosi-health` reported `unit_failed`.
+
+Forky dracut 113 uses [`11systemd-pcrextend`](https://github.com/dracut-ng/dracut-ng/blob/113/modules.d/11systemd-pcrextend/module-setup.sh)
+to install `/usr/lib/nvpcr/*.nvpcr` in the initrd. Trixie dracut 106 uses
+`01systemd-pcrphase`, which does not install those definitions. The kernel
+postinst builds the initramfs before `disable-nvpcr.chroot`, a
+`FinalizeScript`, makes the rootfs masks. Those masks never reach the initrd.
+
+`36-nvpcr-mask.conf` enables the `90snosi-nvpcr-mask` dracut module. For each
+NvPCR definition in the initrd, the module links `etc/nvpcr/<name>.nvpcr`
+to `/dev/null`. The Trixie initrd has no definitions, so the module adds
+nothing. `validate_initrd_nvpcr_masks` in `test/bootc-secure-artifact-test.sh`
+rejects a UKI if its initrd has an NvPCR definition without a `/dev/null`
+mask. `build-images.yml` and `forky-publish.yml` run this check before any push.
+
+After merge, dispatch `forky-publish.yml` from `main`. Boot the resulting
+Forky image in the lab. Make sure `systemd-tpm2-setup-early.service` does not
+fail. Forky boot proof: pending.
+
 ## Credentials and rotation
 
 The public positional interface is:

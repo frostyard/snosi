@@ -242,11 +242,12 @@ jobs, validation before the push).
 `90-image-dissect.rules`, which dracut 106 did not automatically include.
 `shared/bootc-secure/tree/usr/lib/dracut/dracut.conf.d/35-gpt-auto-udev-rules.conf`
 installs the required rule; `test/bootc-secure-artifact-test.sh` verifies it
-inside the UKI. Recheck when dracut or systemd moves the rule. NvPCR definitions
-and writers are masked by `shared/bootc-secure/finalize/disable-nvpcr.chroot`:
-our UKIs lack the initrd NvPCR definitions and `--sign-initrd-pcrs` policy,
-while signed-PCR-11 LUKS unlock remains active. Recheck mask coverage on
-Forky updates. The daily sentinel `shared/download/forky-versions.json`
+inside the UKI. Recheck when dracut or systemd moves the rule.
+`shared/bootc-secure/finalize/disable-nvpcr.chroot` masks rootfs definitions.
+`shared/bootc-secure/tree/usr/lib/dracut/modules.d/90snosi-nvpcr-mask/` masks
+the NvPCR definitions that Forky dracut 113 copies into the initrd (#1378).
+`test/bootc-secure-artifact-test.sh` checks the initrd masks. Recheck both
+sets of masks on Forky updates. The daily sentinel `shared/download/forky-versions.json`
 opens a review PR when the source version advances; `test/check-forky-systemd-test.sh`
 guards its systemd consumers and four recheck obligations (the fourth,
 "snosi-health systemd-cryptsetup text", rechecks the v262 texts that
