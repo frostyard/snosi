@@ -13,4 +13,5 @@ fi
 
 "$ASSEMBLER" --negative-self-test
 "$ASSEMBLER" --credential-negative-self-test
+"$ROOT_DIR/test/bootc-secure-artifact-test.sh" --nvpcr-negative-fixtures
 echo "bootc secure negative artifact fixtures passed"

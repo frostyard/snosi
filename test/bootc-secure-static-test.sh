@@ -92,6 +92,44 @@ grep -Fqx 'install_items+=" /usr/lib/udev/rules.d/90-image-dissect.rules "' \
 grep -Fq 'SYMLINK+="gpt-auto-root-luks"' "$artifact_validator"
 grep -Fq 'no udev rule creating /dev/gpt-auto-root-luks' "$artifact_validator"
 
+# Issue 1378: dracut 113 copies NvPCR definitions before the rootfs masks
+# exist. The module masks those definitions without disabling TPM setup or
+# PCR units, and the artifact validator checks the masks in the UKI.
+nvpcr_dracut_conf="$tree/usr/lib/dracut/dracut.conf.d/36-nvpcr-mask.conf"
+[[ -f "$nvpcr_dracut_conf" ]]
+grep -Fqx 'add_dracutmodules+=" snosi-nvpcr-mask "' "$nvpcr_dracut_conf"
+nvpcr_dracut_module="$tree/usr/lib/dracut/modules.d/90snosi-nvpcr-mask/module-setup.sh"
+[[ -x "$nvpcr_dracut_module" ]]
+grep -Fq '"$initdir"/usr/lib/nvpcr/*.nvpcr' "$nvpcr_dracut_module"
+grep -Fq 'ln -sfn /dev/null "$initdir/etc/nvpcr/' "$nvpcr_dracut_module" || {
+    echo "issue 1378: the initrd NvPCR module must create /dev/null masks" >&2
+    exit 1
+}
+# Strip only comments that start a line or follow whitespace: a bare '#'
+# also appears in parameter expansions such as ${definition##*/}.
+nvpcr_module_code=$(sed -E 's/(^|[[:space:]])#.*//' "$nvpcr_dracut_module")
+if grep -Fq 'systemd-tpm2-setup' <<<"$nvpcr_module_code"; then
+    echo "the initrd NvPCR module must not touch systemd-tpm2-setup; SRK setup is required" >&2
+    exit 1
+fi
+if grep -Fq 'pcrphase' <<<"$nvpcr_module_code"; then
+    echo "the initrd NvPCR module must not touch pcrphase; the signed PCR 11 policy is required" >&2
+    exit 1
+fi
+if grep -Fq 'pcrextend' <<<"$nvpcr_module_code"; then
+    echo "the initrd NvPCR module must not touch pcrextend; the signed PCR 11 policy is required" >&2
+    exit 1
+fi
+if grep -Eq '^[[:space:]]*echo' <<<"$nvpcr_module_code"; then
+    echo "the initrd NvPCR module must not print dracut dependencies" >&2
+    exit 1
+fi
+grep -Fqx '    validate_initrd_nvpcr_masks "$initrd_root" || return 1' "$artifact_validator"
+grep -Fq 'FIXTURE_NVPCR=unmasked validate_gpt_auto_cryptsetup' "$artifact_validator"
+grep -Fq 'has no etc/nvpcr/' "$artifact_validator"
+grep -Fq 'nvpcr_mask_negative_fixture' "$artifact_validator"
+grep -Fq -- '--nvpcr-negative-fixtures' "$root/test/bootc-secure-artifact-negative-test.sh"
+
 # systemd 261 cannot migrate its NvPCR anchor between PCR signing keys, and a
 # replaced TPM makes the anchor unreadable outright. The secure bootc profiles
 # do not consume NvPCR attestation, so the stale-anchor consumers are masked --

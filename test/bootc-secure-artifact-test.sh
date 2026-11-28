@@ -6,6 +6,28 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ASSEMBLER="$ROOT_DIR/shared/bootc-secure/assemble-uki.sh"
 
+validate_initrd_nvpcr_masks() {
+    local initrd_root=$1 dir definition name mask target count=0
+    local -A seen=()
+    for dir in etc/nvpcr run/nvpcr usr/local/lib/nvpcr usr/lib/nvpcr; do
+        for definition in "$initrd_root/$dir/"*.nvpcr; do
+            [[ -f $definition || -L $definition ]] || continue
+            name=${definition##*/}
+            [[ -z ${seen[$name]+x} ]] || continue
+            seen[$name]=1
+            mask="$initrd_root/etc/nvpcr/$name"
+            if [[ ! -L $mask ]] ||
+                ! IFS= read -r -d '' target < <(readlink -z -- "$mask") ||
+                [[ $target != /dev/null ]]; then
+                echo "Error: initramfs NvPCR definition $name has no etc/nvpcr/$name -> /dev/null mask (issue 1378)" >&2
+                return 1
+            fi
+            count=$((count + 1))
+        done
+    done
+    echo "bootc secure initramfs NvPCR masks validated ($count definitions)"
+}
+
 # This is a structural initramfs check. Forced discovery proves that the exact
 # embedded generator can emit a root cryptsetup unit and has cryptsetup support;
 # it does not exercise production EFI discovery or reproduce issue 517's VM
@@ -66,6 +88,11 @@ validate_gpt_auto_cryptsetup() (
         echo "Error: initramfs has no udev rule creating /dev/gpt-auto-root-luks (issue 517)" >&2
         return 1
     }
+
+    # Dracut 113 copies /usr/lib/nvpcr into the Forky initrd. The rootfs
+    # masks from disable-nvpcr.chroot come later, so 90snosi-nvpcr-mask
+    # adds the initrd masks (issue #1378).
+    validate_initrd_nvpcr_masks "$initrd_root" || return 1
 
     generator_root=/run/snosi-gpt-auto-generator-test
     mkdir -p \
@@ -132,6 +159,18 @@ if [[ ${FIXTURE_OMIT_GPT_AUTO_RULE:-0} != 1 ]]; then
     printf 'ENV{ID_PART_GPT_AUTO_ROOT}=="1", ENV{ID_FS_TYPE}=="crypto_LUKS", SYMLINK+="gpt-auto-root-luks"\n' \
         >usr/lib/udev/rules.d/90-image-dissect.rules
 fi
+case ${FIXTURE_NVPCR:-} in
+    masked|unmasked)
+        mkdir -p usr/lib/nvpcr
+        for name in cryptsetup hardware; do
+            printf '{}\n' >"usr/lib/nvpcr/$name.nvpcr"
+            if [[ $FIXTURE_NVPCR == masked ]]; then
+                mkdir -p etc/nvpcr
+                ln -s /dev/null "etc/nvpcr/$name.nvpcr"
+            fi
+        done
+        ;;
+esac
 EOF
     cat >"$fixture/bin/chroot" <<'EOF'
 #!/bin/bash
@@ -156,7 +195,10 @@ EOF
     chmod +x "$fixture/bin/objcopy" "$fixture/bin/lsinitrd" "$fixture/bin/chroot" "$fixture/bin/zstd"
 
     ROOTFS="$fixture/root"
-    PATH="$fixture/bin:$PATH" SNOSI_GPT_AUTO_FIXTURE=1 validate_gpt_auto_cryptsetup
+    PATH="$fixture/bin:$PATH" SNOSI_GPT_AUTO_FIXTURE=1 \
+        FIXTURE_NVPCR='' validate_gpt_auto_cryptsetup
+    PATH="$fixture/bin:$PATH" SNOSI_GPT_AUTO_FIXTURE=1 \
+        FIXTURE_NVPCR=masked validate_gpt_auto_cryptsetup
     after=$(sha256sum "$fixture/root/boot/EFI/Linux/test.efi")
     [[ $after == "$before" ]] || {
         echo "Error: gpt-auto validation modified the signed UKI" >&2
@@ -170,6 +212,18 @@ EOF
     set -e
     [[ $status -eq 1 && $output == *"no udev rule creating /dev/gpt-auto-root-luks"* ]] || {
         echo "Error: missing gpt-auto-root-luks udev rule was not diagnosed" >&2
+        return 1
+    }
+
+    # The real validation path must reject an initrd with unmasked NvPCR
+    # definitions, as dracut 113 builds it without 90snosi-nvpcr-mask (#1378).
+    set +e
+    output=$(PATH="$fixture/bin:$PATH" SNOSI_GPT_AUTO_FIXTURE=1 \
+        FIXTURE_NVPCR=unmasked validate_gpt_auto_cryptsetup 2>&1)
+    status=$?
+    set -e
+    [[ $status -eq 1 && $output == *"has no etc/nvpcr/cryptsetup.nvpcr -> /dev/null mask"* ]] || {
+        echo "Error: unmasked initramfs NvPCR definitions were not diagnosed" >&2
         return 1
     }
 
@@ -429,6 +483,65 @@ suite_contract_fixture() (
     fi
     echo "bootc secure suite contract fixtures passed"
 )
+
+nvpcr_mask_negative_fixture() (
+    local fixture scenario initrd_root dir name status output expected
+    fixture=$(mktemp -d)
+    trap 'rm -rf "$fixture"' EXIT
+
+    for scenario in missing partial regular relative wrong-target local-lib run; do
+        initrd_root="$fixture/$scenario"
+        dir=usr/lib/nvpcr
+        name=cryptsetup.nvpcr
+        case $scenario in
+            local-lib) dir=usr/local/lib/nvpcr ;;
+            run) dir=run/nvpcr ;;
+        esac
+        mkdir -p "$initrd_root/$dir" "$initrd_root/etc/nvpcr"
+        printf '{}\n' >"$initrd_root/$dir/$name"
+        case $scenario in
+            partial)
+                ln -s /dev/null "$initrd_root/etc/nvpcr/$name"
+                name=hardware.nvpcr
+                printf '{}\n' >"$initrd_root/$dir/$name"
+                ;;
+            regular) : >"$initrd_root/etc/nvpcr/$name" ;;
+            relative) ln -s ../../dev/null "$initrd_root/etc/nvpcr/$name" ;;
+            wrong-target) ln -s /dev/zero "$initrd_root/etc/nvpcr/$name" ;;
+        esac
+        status=0
+        output=$(validate_initrd_nvpcr_masks "$initrd_root" 2>&1 >/dev/null) || status=$?
+        expected="Error: initramfs NvPCR definition $name has no etc/nvpcr/$name -> /dev/null mask (issue 1378)"
+        if [[ $status -ne 1 || $output != "$expected" ]]; then
+            echo "Error: NvPCR mask fixture '$scenario': expected status 1 and '$expected', got status $status and '$output'" >&2
+            return 1
+        fi
+    done
+
+    mkdir -p "$fixture/empty"
+    output=$(validate_initrd_nvpcr_masks "$fixture/empty")
+    [[ $output == 'bootc secure initramfs NvPCR masks validated (0 definitions)' ]] || {
+        echo "Error: empty NvPCR mask fixture: unexpected output '$output'" >&2
+        return 1
+    }
+    initrd_root="$fixture/masked"
+    mkdir -p "$initrd_root/usr/lib/nvpcr" "$initrd_root/etc/nvpcr"
+    for name in cryptsetup hardware login verity; do
+        printf '{}\n' >"$initrd_root/usr/lib/nvpcr/$name.nvpcr"
+        ln -s /dev/null "$initrd_root/etc/nvpcr/$name.nvpcr"
+    done
+    output=$(validate_initrd_nvpcr_masks "$initrd_root")
+    [[ $output == 'bootc secure initramfs NvPCR masks validated (4 definitions)' ]] || {
+        echo "Error: masked NvPCR fixture: unexpected output '$output'" >&2
+        return 1
+    }
+    echo "bootc secure NvPCR mask negative fixtures passed"
+)
+
+if [[ ${1:-} == --nvpcr-negative-fixtures ]]; then
+    nvpcr_mask_negative_fixture
+    exit 0
+fi
 
 if [[ ${1:-} == --fixtures ]]; then
     "$ASSEMBLER" --self-test

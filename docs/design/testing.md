@@ -257,9 +257,12 @@ when the live index is missing, tampered or ambiguous (ADR-0036). It
 replays the scenario through rclone's local backend when rclone is present.
 `test/bootc-secure-docs-test.sh` guards the normative secure operations
 runbook; `test/bootc-secure-artifact-test.sh --fixtures` covers the
-Issue 517 GPT-auto udev-rule check, the sealed `lockdown=integrity`
-command-line check (ADR-0027) and the per-product `splash quiet` check
-(ADR-0033). `test/check-forky-systemd-test.sh`
+Issue 517 GPT-auto udev-rule check, the initrd NvPCR mask check (#1378),
+the sealed `lockdown=integrity` command-line check (ADR-0027) and the
+per-product `splash quiet` check (ADR-0033).
+`test/bootc-secure-artifact-negative-test.sh --fixtures` checks that the
+validator rejects missing or incorrect NvPCR masks.
+`test/check-forky-systemd-test.sh`
 exercises the Forky sentinel and its four systemd recheck obligations.
 
 ### Suite isolation
